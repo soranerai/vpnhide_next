@@ -29,6 +29,31 @@ MAKE_ARGS := -C $(KERNEL_SRC) M=$(CURDIR) \
 all:
 	$(MAKE) $(MAKE_ARGS) modules
 
+KP_DIR := $(CURDIR)/../kernels/KernelPatch
+
+# KPM build flags
+KPM_INCLUDE_DIRS := . include patch/include
+KPM_INCLUDE_FLAGS := $(foreach dir,$(KPM_INCLUDE_DIRS),-I$(KP_DIR)/kernel/$(dir))
+# No extra kernel include flags for stable mock build
+KPM_INCLUDE_FLAGS += -I$(KERNEL_SRC)/include/generated \
+                     -I$(KERNEL_SRC)/include/generated/uapi
+
+kpm:
+	$(CC) -target aarch64-linux-android \
+		-O3 -fno-pic -fno-pie -fno-plt \
+		-fvisibility=hidden -mno-outline-atomics \
+		-mcmodel=small \
+		-fno-stack-protector -fno-common -fno-builtin \
+		-ffreestanding -fno-asynchronous-unwind-tables -fno-unwind-tables \
+		-fno-stack-check -fno-stack-protector \
+		-nostdinc \
+		$(KPM_INCLUDE_FLAGS) \
+		-I$(CURDIR)/generated \
+		-D__KERNEL__ -DMODNAME=\"vpnhide\" \
+		-DCONFIG_ARM64 \
+		-r \
+		-o vpnhide.kpm vpnhide_kpm.c
+
 strip: all
 	$(STRIP) -d $(CURDIR)/vpnhide_kmod.ko
 

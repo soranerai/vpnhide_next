@@ -77,9 +77,15 @@ DEFAULT_KMI = "android14-6.1"
 
 
 def detect_clang_dir() -> str | None:
-    """Pick the highest-versioned `clang-r*/bin` under `/opt/ddk/clang`,
-    matching what the DDK image lays out. Used only when the user
-    didn't pass --clang-dir or set CLANG_DIR."""
+    """Check for Android NDK clang first, then FALLBACK to DDK image layout."""
+    # Android NDK check
+    ndk_home = os.environ.get("ANDROID_NDK_HOME") or os.environ.get("ANDROID_NDK_ROOT")
+    if ndk_home:
+        clang_path = Path(ndk_home) / "toolchains" / "llvm" / "prebuilt" / "linux-x86_64" / "bin"
+        if (clang_path / "clang").exists():
+            return str(clang_path)
+
+    # DDK layout
     clang_base = Path("/opt/ddk/clang")
     if not clang_base.is_dir():
         return None
@@ -91,7 +97,13 @@ def detect_clang_dir() -> str | None:
 
 
 def detect_kdir(kmi: str) -> str | None:
-    """`/opt/ddk/kdir/<kmi>` is laid out by the DDK image."""
+    """Check for local kernels directory first, then fallback to DDK image layout."""
+    # Local clone check
+    local_kdir = Path(__file__).resolve().parent.parent / "kernels" / "oneplus_9rt"
+    if local_kdir.is_dir():
+        return str(local_kdir)
+    
+    # DDK layout
     kdir = Path("/opt/ddk/kdir") / kmi
     return str(kdir) if kdir.is_dir() else None
 
@@ -102,8 +114,9 @@ def native_build_one(
     kdir: str,
     clang_dir: str | None,
     out: Path | None,
+    is_kpm: bool = False,
 ) -> int:
-    """Compile + package one .ko into one zip, in the current process."""
+    """Compile + package one .ko into one zip, or build one .kpm ELF."""
     print(f"[{kmi}] kdir={kdir}")
     print(f"[{kmi}] clang-dir={clang_dir or '(system PATH)'}")
 
@@ -111,6 +124,14 @@ def native_build_one(
     env["KERNEL_SRC"] = kdir
     if clang_dir:
         env["CLANG_DIR"] = clang_dir
+
+    if is_kpm:
+        print(f"[{kmi}] building KPM module...")
+        subprocess.run(["make", "-C", str(kmod_dir), "kpm"], env=env, check=True)
+        out_kpm = out if out else kmod_dir.parent / f"vpnhide-{kmi}.kpm"
+        shutil.copy(kmod_dir / "vpnhide.kpm", out_kpm)
+        print(f"[{kmi}] built {out_kpm} ({out_kpm.stat().st_size / 1024:.1f} KB)")
+        return 0
 
     # `make strip` does the actual kernel-module build. Let make decide
     # whether anything needs rebuilding — its dependency tracking covers
@@ -191,7 +212,7 @@ def run_native_mode(args: argparse.Namespace, kmod_dir: Path) -> int:
             )
             return 1
         clang_dir = explicit_clang or detect_clang_dir()
-        rc = native_build_one(kmod_dir, kmi, kdir, clang_dir, args.out)
+        rc = native_build_one(kmod_dir, kmi, kdir, clang_dir, args.out, args.kpm)
         if rc:
             return rc
     return 0
@@ -326,6 +347,11 @@ def main() -> int:
         type=Path,
         help="Output zip path (single --kmi only). Default: vpnhide-kmod-<kmi>.zip in repo root.",
     )
+    parser.add_argument(
+        "--kpm",
+        action="store_true",
+        help="Build APatch KPM (.kpm) instead of LKM (.ko) zip.",
+    )
     args = parser.parse_args()
 
     if args.all and args.kmi:
@@ -334,14 +360,15 @@ def main() -> int:
     kmod_dir = Path(__file__).resolve().parent
     repo_root = kmod_dir.parent
 
-    # Native conditions: explicit flag, explicit kernel source, or we're
-    # already in a DDK image.
+    # Native conditions: explicit flag, explicit kernel source, we're
+    # already in a DDK image, or we auto-detected a local kernel.
     native = (
         args.inside_container
         or bool(args.kdir)
         or "KDIR" in os.environ
         or "KERNEL_SRC" in os.environ
         or detect_clang_dir() is not None
+        or detect_kdir(args.kmi[0] if args.kmi else DEFAULT_KMI) is not None
     )
     if native:
         return run_native_mode(args, kmod_dir)

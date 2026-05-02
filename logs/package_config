@@ -1,0 +1,9 @@
+pkg,exclude,allow,uid,to_uid,sctx
+com.dergoogler.mmrl,0,1,10322,0,u:r:magisk:s0
+com.github.capntrips.kernelflasher,0,1,10308,0,u:r:magisk:s0
+com.dergoogler.mmrl.wx,0,1,10325,0,u:r:magisk:s0
+io.github.a13e300.ksuwebui,0,1,10329,0,u:r:magisk:s0
+icu.nullptr.nativetest,1,0,10331,0,u:r:untrusted_app:s0
+dev.okhsunrog.vpnhide,0,1,10364,0,u:r:magisk:s0
+com.reveny.nativecheck,1,0,10334,0,u:r:untrusted_app:s0
+com.termux,0,1,10350,0,u:r:magisk:s0

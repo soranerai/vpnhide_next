@@ -1,0 +1,19 @@
+Kernel: 5.4.254-qgki-g8f3522f9ccd3
+BRAND: OnePlus
+MODEL: MT2111
+PRODUCT: MT2111_IND
+MANUFACTURER: OnePlus
+SDK: 34
+PREVIEW_SDK: 0
+FINGERPRINT: OnePlus/MT2111_IND/OP5155L1:14/UKQ1.230924.001/R.1994b5c-1-2:user/release-keys
+DEVICE: OP5155L1
+Manager: (166daa0, 11142)
+SELinux: Enforcing
+KernelRelease: 5.4.254-qgki-g8f3522f9ccd3
+KernelVersion: #1 SMP PREEMPT Sun Aug 18 22:26:58 CST 2024
+Mahcine: aarch64
+Nodename: localhost
+Sysname: Linux
+KPatch: 0.12.2
+APatch: 11142
+SafeMode: false

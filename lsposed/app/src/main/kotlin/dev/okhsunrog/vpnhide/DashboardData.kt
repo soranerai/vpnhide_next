@@ -641,14 +641,14 @@ internal fun loadDashboardState(
     // kmod
     val kmodProp = parseModuleProp(KMOD_MODULE_DIR)
     val (_, procExists) = suExec("[ -f $PROC_TARGETS ] && echo 1 || echo 0")
-    val kmodActive = kmodProp.installed && procExists.trim() == "1"
-    val kmodTargetCount = if (kmodProp.installed) countTargets(KMOD_TARGETS) else 0
-    // Built without brokenReason — populated below after kernelRecommendation
-    // and kmodLoadStatus are ready.
+    val kmodActive = procExists.trim() == "1"
+    val kmodInstalled = kmodProp.installed || kmodActive
+    val kmodTargetCount = if (kmodInstalled) countTargets(KMOD_TARGETS) else 0
+
     val kmodRaw: ModuleState =
-        if (kmodProp.installed) {
+        if (kmodInstalled) {
             ModuleState.Installed(
-                version = kmodProp.version,
+                version = kmodProp.version ?: if (kmodActive && !kmodProp.installed) BuildConfig.VERSION_NAME else null,
                 active = kmodActive,
                 targetCount = kmodTargetCount,
                 gkiVariant = kmodProp.gkiVariant,

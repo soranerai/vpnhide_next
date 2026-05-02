@@ -1,0 +1,36 @@
+make: Entering directory '/home/sorane/projects/vpnhide/kmod'
+/home/sorane/android-sdk/ndk/28.0.13004108/toolchains/llvm/prebuilt/linux-x86_64/bin/clang -target aarch64-linux-android \
+	-O3 -flto -fno-stack-protector -fno-common -fno-builtin \
+	-ffreestanding -fno-asynchronous-unwind-tables \
+	-fno-stack-check -fno-stack-protector \
+	-nostdinc \
+	-I/home/sorane/projects/vpnhide/kmod/../kernels/KernelPatch/kernel/. -I/home/sorane/projects/vpnhide/kmod/../kernels/KernelPatch/kernel/include -I/home/sorane/projects/vpnhide/kmod/../kernels/KernelPatch/kernel/patch/include -I/home/sorane/projects/vpnhide/kmod/../kernels/KernelPatch/kernel/linux/include -I/home/sorane/projects/vpnhide/kmod/../kernels/KernelPatch/kernel/linux/arch/arm64/include -I/home/sorane/projects/vpnhide/kmod/../kernels/KernelPatch/kernel/linux/tools/arch/arm64/include \
+	-I/home/sorane/projects/vpnhide/kmod/generated \
+	-D__KERNEL__ -DMODNAME=\"vpnhide\" \
+	-DCONFIG_ARM64 \
+	-r \
+	-o vpnhide.kpm vpnhide_kpm.c
+vpnhide_kpm.c:183:5: error: call to undeclared function 'pr_info'; ISO C99 and later do not support implicit function declarations [-Wimplicit-function-declaration]
+  183 |     pr_info(MODNAME ": module initializing (v1.4.0 safe)\n");
+      |     ^
+1 error generated.
+make: *** [Makefile:38: kpm] Error 1
+make: Leaving directory '/home/sorane/projects/vpnhide/kmod'
+[android14-6.1] kdir=/home/sorane/projects/vpnhide/kernels/oneplus_9rt
+[android14-6.1] clang-dir=/home/sorane/android-sdk/ndk/28.0.13004108/toolchains/llvm/prebuilt/linux-x86_64/bin
+[android14-6.1] building KPM module...
+Traceback (most recent call last):
+  File "/home/sorane/projects/vpnhide/./kmod/build.py", line 379, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/home/sorane/projects/vpnhide/./kmod/build.py", line 374, in main
+    return run_native_mode(args, kmod_dir)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sorane/projects/vpnhide/./kmod/build.py", line 215, in run_native_mode
+    rc = native_build_one(kmod_dir, kmi, kdir, clang_dir, args.out, args.kpm)
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/sorane/projects/vpnhide/./kmod/build.py", line 130, in native_build_one
+    subprocess.run(["make", "-C", str(kmod_dir), "kpm"], env=env, check=True)
+  File "/usr/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '['make', '-C', '/home/sorane/projects/vpnhide/kmod', 'kpm']' returned non-zero exit status 2.

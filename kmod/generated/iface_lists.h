@@ -3,15 +3,55 @@
 #define VPNHIDE_GENERATED_IFACE_LISTS_H
 
 #ifdef __KERNEL__
-# include <linux/string.h>
-# include <linux/ctype.h>
-# include <linux/types.h>
+# include <ktypes.h>
 #else
 # include <ctype.h>
 # include <stdbool.h>
 # include <stddef.h>
 # include <string.h>
 #endif
+
+/* Manual tolower to avoid ctype.h dependency in minimal KPM */
+/* Manual string helpers for minimal KPM */
+static inline size_t vpnhide_strlen(const char *s) {
+    size_t len = 0;
+    while (s[len]) len++;
+    return len;
+}
+static inline int vpnhide_strncmp(const char *s1, const char *s2, size_t n) {
+    while (n && *s1 && (*s1 == *s2)) {
+        s1++; s2++; n--;
+    }
+    if (n == 0) return 0;
+    return *(unsigned char *)s1 - *(unsigned char *)s2;
+}
+static inline void *vpnhide_memchr(const void *s, int c, size_t n) {
+    const unsigned char *p = s;
+    while (n--) {
+        if (*p == (unsigned char)c) return (void *)p;
+        p++;
+    }
+    return 0;
+}
+static inline void *vpnhide_memmove(void *dest, const void *src, size_t n) {
+    unsigned char *d = dest;
+    const unsigned char *s = src;
+    if (d < s) {
+        while (n--) *d++ = *s++;
+    } else {
+        d += n; s += n;
+        while (n--) *--d = *--s;
+    }
+    return dest;
+}
+#define strlen vpnhide_strlen
+#define strncmp vpnhide_strncmp
+
+static inline int vpnhide_tolower(int c) {
+    if (c >= 'A' && c <= 'Z') return c + ('a' - 'A');
+    return c;
+}
+#define tolower vpnhide_tolower
 
 static inline bool vpnhide_iface_starts_with_ci(
 	const char *name, const char *prefix)
