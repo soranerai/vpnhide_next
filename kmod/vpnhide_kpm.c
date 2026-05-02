@@ -21,7 +21,7 @@ struct inode;
 struct net;
 
 KPM_NAME("vpnhide");
-KPM_VERSION("1.4.5");
+KPM_VERSION("1.4.6");
 KPM_LICENSE("MIT");
 KPM_AUTHOR("soranerai");
 KPM_DESCRIPTION("Hide VPN interfaces");
@@ -29,6 +29,10 @@ KPM_DESCRIPTION("Hide VPN interfaces");
 #define MODNAME "vpnhide"
 #define MAX_TARGET_UIDS 64
 #define IFNAMSIZ 16
+
+/* Dynamic offsets for sk_buff (depends on CONFIG_NF_CONNTRACK) */
+static int skb_len_off = 112;
+static int skb_cb_off = 40;
 
 /* Minimal Mocks for 5.4.254 */
 struct net_device {
@@ -87,6 +91,7 @@ static ssize_t (*_seq_read)(struct file *file, char __user *buf, size_t size, lo
 static loff_t (*_seq_lseek)(struct file *file, loff_t offset, int whence) = 0;
 static void (*_seq_printf)(struct seq_file *m, const char *f, ...) = 0;
 static unsigned long (*_copy_from_user)(void *to, const void __user *from, unsigned long n) = 0;
+static void (*_skb_trim)(void *skb, unsigned int len) = 0;
 
 extern unsigned long (*kallsyms_lookup_name)(const char *name);
 extern uid_t current_uid(void);
@@ -104,8 +109,16 @@ static int is_target_uid(void) {
     return 0;
 }
 
-static int is_vpn_iface(const char *name) {
-    return vpnhide_iface_is_vpn(name);
+static int is_vpn_iface_safe(const char *name) {
+    char buf[IFNAMSIZ + 1];
+    int i;
+    if (!name) return 0;
+    for (i = 0; i < IFNAMSIZ; i++) {
+        buf[i] = name[i];
+        if (buf[i] == '\0') break;
+    }
+    buf[i] = '\0';
+    return vpnhide_iface_is_vpn(buf);
 }
 
 enum filter_ifconf_result {
@@ -118,14 +131,9 @@ static enum filter_ifconf_result filter_ifconf_buf(struct ifreq __user *usr_ifr,
     struct ifreq tmp;
     int i, dst = 0;
     for (i = 0; i < n; i++) {
-        /*
-         * Внимание: здесь мы используем _copy_from_user, найденный через kallsyms.
-         * Если он будет работать некорректно (как copy_from_user для строк), 
-         * фильтрация ifconf может сломаться. Но strncpy здесь использовать нельзя (бинарные данные).
-         */
         if (_copy_from_user && _copy_from_user(&tmp, &usr_ifr[i], sizeof(tmp))) return FILTER_IFCONF_COPY_FAULT;
         tmp.ifr_name[IFNAMSIZ-1] = '\0';
-        if (is_vpn_iface(tmp.ifr_name)) continue;
+        if (is_vpn_iface_safe(tmp.ifr_name)) continue;
         if (dst != i) {
             if (compat_copy_to_user(&usr_ifr[dst], &tmp, sizeof(tmp))) return FILTER_IFCONF_COPY_FAULT;
         }
@@ -140,7 +148,7 @@ static enum filter_ifconf_result filter_ifconf_buf(struct ifreq __user *usr_ifr,
 static void dev_ioctl_after(hook_fargs4_t *fargs, void *udata) {
     struct ifreq *ifr = (struct ifreq *)fargs->arg2;
     if (fargs->ret != 0 || !fargs->arg0 || !ifr || !is_target_uid()) return;
-    if (is_vpn_iface(ifr->ifr_name)) fargs->ret = -19;
+    if (is_vpn_iface_safe(ifr->ifr_name)) fargs->ret = -19;
 }
 
 static void sock_ioctl_after(hook_fargs3_t *fargs, void *udata) {
@@ -160,11 +168,36 @@ static void sock_ioctl_after(hook_fargs3_t *fargs, void *udata) {
     }
 }
 
+/* Netlink Filtering Helpers using skb->cb to pass data between before/after */
+static void skb_save_len(void *skb) {
+    if (!skb) return;
+    unsigned int *len_ptr = (unsigned int *)((char *)skb + skb_len_off);
+    unsigned int *cb_ptr = (unsigned int *)((char *)skb + skb_cb_off + 40);
+    *cb_ptr = *len_ptr;
+}
+
+static void skb_restore_len(void *skb) {
+    if (!skb || !_skb_trim) return;
+    unsigned int *cb_ptr = (unsigned int *)((char *)skb + skb_cb_off + 40);
+    _skb_trim(skb, *cb_ptr);
+}
+
+static void rtnl_fill_ifinfo_before(hook_fargs12_t *fargs, void *udata) {
+    if (is_target_uid()) skb_save_len((void *)fargs->arg0);
+}
+
 static void rtnl_fill_ifinfo_after(hook_fargs12_t *fargs, void *udata) {
     if (fargs->ret >= 0 && is_target_uid()) {
         struct net_device *dev = (struct net_device *)fargs->arg1;
-        if (dev && is_vpn_iface(dev->name)) fargs->ret = -19;
+        if (dev && is_vpn_iface_safe(dev->name)) {
+            skb_restore_len((void *)fargs->arg0);
+            fargs->ret = 0; /* Return success with trimmed buffer to advance iterator */
+        }
     }
+}
+
+static void inet_fill_before(hook_fargs4_t *fargs, void *udata) {
+    if (is_target_uid()) skb_save_len((void *)fargs->arg0);
 }
 
 static void inet_fill_after(hook_fargs4_t *fargs, void *udata) {
@@ -174,7 +207,10 @@ static void inet_fill_after(hook_fargs4_t *fargs, void *udata) {
             void *idev = *(void **)((char *)ifa + 24);
             if (idev && *(void **)idev) {
                 struct net_device *dev = *(struct net_device **)idev;
-                if (dev && is_vpn_iface(dev->name)) fargs->ret = -19;
+                if (dev && is_vpn_iface_safe(dev->name)) {
+                    skb_restore_len((void *)fargs->arg0);
+                    fargs->ret = 0;
+                }
             }
         }
     }
@@ -183,11 +219,6 @@ static void inet_fill_after(hook_fargs4_t *fargs, void *udata) {
 /* Procfs */
 static ssize_t targets_write(struct file *file, const char __user *ubuf, size_t count, loff_t *ppos) {
     char buf[512];
-    /* 
-     * Ручное обнуление через volatile. 
-     * Это гарантирует, что компилятор не вставит вызов внешней функции memset,
-     * которой нет в окружении KPM, и при этом буфер будет чист.
-     */
     {
         volatile char *vbuf = buf;
         for (int i = 0; i < 512; i++) vbuf[i] = 0;
@@ -198,9 +229,6 @@ static ssize_t targets_write(struct file *file, const char __user *ubuf, size_t 
    
     if (count > sizeof(buf) - 1) count = sizeof(buf) - 1;
 
-    /* 
-     * compat_strncpy_from_user — нативная функция APatch, работает стабильно.
-     */
     long copied = compat_strncpy_from_user(buf, ubuf, count);
     if (copied < 0) return -14;
     buf[count] = '\0';
@@ -263,7 +291,7 @@ static struct file_operations targets_fops = {
 
 /* Module Lifecycle */
 static long vpnhide_kpm_init(const char *args, const char *event, void *__user reserved) {
-    logki(MODNAME ": module initializing (v1.4.5 stack reset)\n");
+    logki(MODNAME ": module initializing (v1.4.6 skb_trim logic)\n");
    
     _proc_create = (void*)kallsyms_lookup_name("proc_create_data");
     _remove_proc_entry = (void*)kallsyms_lookup_name("remove_proc_entry");
@@ -273,10 +301,20 @@ static long vpnhide_kpm_init(const char *args, const char *event, void *__user r
     _seq_lseek = (void*)kallsyms_lookup_name("seq_lseek");
     _seq_printf = (void*)kallsyms_lookup_name("seq_printf");
     
-    _copy_from_user = (void*)kallsyms_lookup_name("_copy_from_user");
-    if (!_copy_from_user) _copy_from_user = (void*)kallsyms_lookup_name("copy_from_user");
-    if (!_copy_from_user) _copy_from_user = (void*)kallsyms_lookup_name("__arch_copy_from_user");
+    _copy_from_user = (void*)kallsyms_lookup_name("__arch_copy_from_user");
     if (!_copy_from_user) _copy_from_user = (void*)kallsyms_lookup_name("raw_copy_from_user");
+    if (!_copy_from_user) _copy_from_user = (void*)kallsyms_lookup_name("_copy_from_user");
+    if (!_copy_from_user) _copy_from_user = (void*)kallsyms_lookup_name("copy_from_user");
+    
+    _skb_trim = (void*)kallsyms_lookup_name("__skb_trim");
+    if (!_skb_trim) _skb_trim = (void*)kallsyms_lookup_name("skb_trim");
+
+    /* Detect sk_buff layout */
+    if (kallsyms_lookup_name("nf_conntrack_destroy") || kallsyms_lookup_name("_nfct")) {
+        skb_len_off = 112;
+    } else {
+        skb_len_off = 104;
+    }
 
     targets_fops.read = _seq_read;
     targets_fops.llseek = _seq_lseek;
@@ -293,8 +331,13 @@ static long vpnhide_kpm_init(const char *args, const char *event, void *__user r
 
     if (dev_ioctl_addr) hook_wrap((void*)dev_ioctl_addr, 4, 0, dev_ioctl_after, 0);
     if (sock_ioctl_addr) hook_wrap((void*)sock_ioctl_addr, 3, 0, sock_ioctl_after, 0);
-    if (rtnl_addr) hook_wrap((void*)rtnl_addr, 12, 0, rtnl_fill_ifinfo_after, 0);
-    if (inet_addr) hook_wrap((void*)inet_addr, 3, 0, inet_fill_after, 0);
+    
+    if (rtnl_addr) {
+        hook_wrap((void*)rtnl_addr, 12, rtnl_fill_ifinfo_before, rtnl_fill_ifinfo_after, 0);
+    }
+    if (inet_addr) {
+        hook_wrap((void*)inet_addr, 4, inet_fill_before, inet_fill_after, 0);
+    }
 
     return 0;
 }
