@@ -111,17 +111,18 @@ def detect_kdir(kmi: str) -> str | None:
 def native_build_one(
     kmod_dir: Path,
     kmi: str,
-    kdir: str,
+    kdir: str | None,
     clang_dir: str | None,
     out: Path | None,
     is_kpm: bool = False,
 ) -> int:
     """Compile + package one .ko into one zip, or build one .kpm ELF."""
-    print(f"[{kmi}] kdir={kdir}")
+    print(f"[{kmi}] kdir={kdir or '(none, KPM build)'}")
     print(f"[{kmi}] clang-dir={clang_dir or '(system PATH)'}")
 
     env = os.environ.copy()
-    env["KERNEL_SRC"] = kdir
+    if kdir:
+        env["KERNEL_SRC"] = kdir
     if clang_dir:
         env["CLANG_DIR"] = clang_dir
 
@@ -204,7 +205,7 @@ def run_native_mode(args: argparse.Namespace, kmod_dir: Path) -> int:
 
     for kmi in kmis:
         kdir = explicit_kdir or detect_kdir(kmi)
-        if not kdir:
+        if not kdir and not args.kpm:
             print(
                 f"error[{kmi}]: no kernel source. Pass --kdir, set KDIR/KERNEL_SRC, "
                 f"or run inside ghcr.io/ylarod/ddk-min where /opt/ddk/kdir/{kmi} exists.",
