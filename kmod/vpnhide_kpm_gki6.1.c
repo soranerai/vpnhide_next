@@ -25,25 +25,15 @@ KPM_DESCRIPTION("Hide VPN interfaces (GKI 6.1 Safe)");
 #define MAX_TARGET_UIDS 64
 #define IFNAMSIZ 16
 
-/* =========================================================================
- * FORWARD DECLARATIONS
- * ========================================================================= */
 struct file;
 struct inode;
 struct seq_file_mock;
-
-/* =========================================================================
- * MINIMAL GKI 6.1 MOCKS
- * ========================================================================= */
 
 struct net_device {
     char name[IFNAMSIZ];
 };
 
-/* 
- * Safe proc_ops for Linux 6.1. 
- * Reverted back to the correct layout (no proc_write_iter).
- */
+
 struct proc_ops_mock {
     unsigned int   proc_flags;
     int            (*proc_open)(struct inode *, struct file *);
@@ -124,16 +114,8 @@ static uint32_t target_uids[MAX_TARGET_UIDS];
 static int num_targets = 0;
 static bool debug_enabled = false;
 
-/* Restored dynamic offsets to avoid strict struct config mismatches */
 static int skb_len_off = 112;
-/* skb_cb_off is no longer used — we switched to per-CPU storage */
 
-/*
- * Per-CPU saved skb->len. Passes pre-fill length from before→after handler
- * WITHOUT touching skb->cb, which is owned by NETLINK_CB on netlink skbs.
- * 16 slots covers any current Android SoC (Aff0 field from MPIDR_EL1).
- * before/after run on the same CPU so the slot is always consistent.
- */
 #define VPNHIDE_MAX_CPUS 16
 static volatile unsigned int g_saved_len[VPNHIDE_MAX_CPUS];
 static volatile void       *g_saved_skb[VPNHIDE_MAX_CPUS];
@@ -159,6 +141,8 @@ static unsigned long (*_copy_to_user)(void __user *, const void *, unsigned long
 static char *(*_strchr)(const char *, int) = 0;
 static void *(*_memmove)(void *, const void *, size_t) = 0;
 static void (*_skb_trim)(void *, unsigned int) = 0;
+
+
 
 static void skb_save_len(void *skb) {
     if (!skb) return;
@@ -205,6 +189,50 @@ static int is_vpn_iface_safe(const char *name) {
     }
     buf[i] = '\0';
     return vpnhide_iface_is_vpn(buf);
+}
+
+/*
+ * inet_sk_diag_fill(sk, icsk, skb, cb, req, nlmsg_flags, net_admin) — 7 args in 6.1.
+ */
+static void inet_diag_fill_before(hook_fargs7_t *fargs, void *udata) {
+    if (is_target_uid()) skb_save_len((void *)fargs->arg2);
+}
+
+static void inet_diag_fill_after(hook_fargs7_t *fargs, void *udata) {
+    if (fargs->ret >= 0 && is_target_uid()) {
+        skb_restore_len((void *)fargs->arg2);
+        fargs->ret = 0;
+    }
+}
+
+/*
+ * fib_dump_info(skb, portid, seq, event, fri, flags) — 6 args in 6.1.
+ * arg0=skb, arg4=fri (struct fib_rt_info *).
+ */
+static void fib_dump_before(hook_fargs6_t *fargs, void *udata) {
+    if (is_target_uid()) skb_save_len((void *)fargs->arg0);
+}
+
+static void fib_dump_after(hook_fargs6_t *fargs, void *udata) {
+    if (fargs->ret >= 0 && is_target_uid()) {
+        skb_restore_len((void *)fargs->arg0);
+        fargs->ret = 0;
+    }
+}
+
+/*
+ * rt6_fill_node(net, skb, rt, dst, dest, src, iif, type, portid, seq, flags) — 11 args in 6.1.
+ * arg1=skb, arg2=rt (struct fib6_info *).
+ */
+static void rt6_fill_before(hook_fargs11_t *fargs, void *udata) {
+    if (is_target_uid()) skb_save_len((void *)fargs->arg1);
+}
+
+static void rt6_fill_after(hook_fargs11_t *fargs, void *udata) {
+    if (fargs->ret >= 0 && is_target_uid()) {
+        skb_restore_len((void *)fargs->arg1);
+        fargs->ret = 0;
+    }
 }
 
 enum filter_ifconf_result {
@@ -266,9 +294,9 @@ static void rtnl_fill_ifinfo_before(hook_fargs12_t *fargs, void *udata) {
 }
 
 static void rtnl_fill_ifinfo_after(hook_fargs12_t *fargs, void *udata) {
-    if (fargs->ret >= 0 && is_target_uid()) {
-        struct net_device *dev = (struct net_device *)fargs->arg1;
-        if (dev && is_vpn_iface_safe(dev->name)) {
+    struct net_device *dev = (struct net_device *)fargs->arg1;
+    if (dev && is_vpn_iface_safe(dev->name)) {
+        if (fargs->ret >= 0 && is_target_uid()) {
             skb_restore_len((void *)fargs->arg0);
             fargs->ret = 0;
         }
@@ -484,6 +512,9 @@ static long vpnhide_kpm_init(const char *args, const char *event, void *__user r
     unsigned long rtnl_addr = kallsyms_lookup_name("rtnl_fill_ifinfo");
     unsigned long inet_addr = kallsyms_lookup_name("inet_fill_ifaddr");
     unsigned long inet6_addr = kallsyms_lookup_name("inet6_fill_ifaddr");
+    unsigned long diag_fill_addr = kallsyms_lookup_name("inet_sk_diag_fill");
+    unsigned long fib_dump_addr = kallsyms_lookup_name("fib_dump_info");
+    unsigned long rt6_fill_addr = kallsyms_lookup_name("rt6_fill_node");
     unsigned long fib_route_addr = kallsyms_lookup_name("fib_route_seq_show");
 
     if (dev_ioctl_addr) hook_wrap((void*)dev_ioctl_addr, 5, 0, dev_ioctl_after, 0);
@@ -495,6 +526,12 @@ static long vpnhide_kpm_init(const char *args, const char *event, void *__user r
         hook_wrap((void*)inet_addr, 3, inet_fill_before, inet_fill_after, 0);
     if (inet6_addr)
         hook_wrap((void*)inet6_addr, 3, inet6_fill_before, inet6_fill_after, 0);
+    if (diag_fill_addr)
+        hook_wrap((void*)diag_fill_addr, 7, inet_diag_fill_before, inet_diag_fill_after, 0);
+    if (fib_dump_addr)
+        hook_wrap((void*)fib_dump_addr, 6, fib_dump_before, fib_dump_after, 0);
+    if (rt6_fill_addr)
+        hook_wrap((void*)rt6_fill_addr, 11, rt6_fill_before, rt6_fill_after, 0);
     if (fib_route_addr) hook_wrap((void*)fib_route_addr, 2, 0, fib_route_after, 0);
 
     return 0;
