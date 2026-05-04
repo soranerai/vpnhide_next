@@ -47,6 +47,22 @@ KPM_INCLUDE_FLAGS := $(foreach dir,$(KPM_INCLUDE_DIRS),-I$(KP_DIR)/kernel/$(dir)
 
 KPM_SRC ?= vpnhide_kpm.c
 
+kpm414:
+	$(CC) -target aarch64-linux-android \
+		-O3 -fno-pic -fno-pie -fno-plt \
+		-fvisibility=hidden -mno-outline-atomics \
+		-mcmodel=small \
+		-fno-stack-protector -fno-common -fno-builtin \
+		-ffreestanding -fno-asynchronous-unwind-tables -fno-unwind-tables \
+		-fno-stack-check -fno-stack-protector \
+		-nostdinc \
+		$(KPM_INCLUDE_FLAGS) \
+		-I$(CURDIR)/generated \
+		-D__KERNEL__ -DMODNAME=\"vpnhide\" \
+		-DCONFIG_ARM64 \
+		-r \
+		-o vpnhide_4.14.kpm $(KPM_SRC)
+
 kpm54:
 	$(CC) -target aarch64-linux-android \
 		-O3 -fno-pic -fno-pie -fno-plt \
