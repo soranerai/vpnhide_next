@@ -16,7 +16,7 @@
 #include "generated/iface_lists.h"
 
 KPM_NAME("vpnhide");
-KPM_VERSION("1.5.3");
+KPM_VERSION("1.5.4");
 KPM_LICENSE("MIT");
 KPM_AUTHOR("soranerai");
 KPM_DESCRIPTION("Hide VPN interfaces (GKI 6.1 Safe)");
@@ -206,23 +206,62 @@ static void inet_diag_fill_after(hook_fargs7_t *fargs, void *udata) {
 }
 
 /*
- * fib_dump_info(skb, portid, seq, event, fri, flags) — 6 args in 6.1.
+ * fib_dump_info(skb, portid, seq, event, fri, flags) — 6 args in GKI 6.1.
  * arg0=skb, arg4=fri (struct fib_rt_info *).
+ * Targeted: fri->fi->fib_nh[0].nh_common.nhc_dev.
+ *
+ * GKI 6.1 fib_info layout (confirmed from include/net/ip_fib.h v6.1):
+ *   +0   hlist_node fib_hash   (16)
+ *   +16  hlist_node fib_lhash  (16)
+ *   +32  list_head  nh_list    (16)
+ *   +48  net*       fib_net    (8)
+ *   +56  refcount_t fib_treeref(4)
+ *   +60  refcount_t fib_clntref(4)
+ *   +64  unsigned   fib_flags  (4)
+ *   +68  uchar x4   dead/proto/scope/type (4)
+ *   +72  __be32     fib_prefsrc(4)
+ *   +76  u32        fib_tb_id  (4)
+ *   +80  u32        fib_priority(4)
+ *   +84  pad(4)
+ *   +88  dst_metrics* fib_metrics(8)
+ *   +96  int        fib_nhs    (4)
+ *   +100 bool       fib_nh_is_v6(1)
+ *   +101 bool       nh_updated (1)
+ *   +102 pad(6) -> align 8
+ *   +104 nexthop*   nh         (8) [may be null]
+ *   +112 rcu_head   rcu        (16)
+ *   +128 fib_nh[]              <- flexible array start
+ *
+ * fib_nh.nh_common (= fib_nh_common) is first member.
+ * fib_nh_common.nhc_dev is first member → offset 0 in fib_nh.
  */
+#define FIB_NH0_OFF 128u   /* offset of fib_nh[0] inside fib_info */
+
 static void fib_dump_before(hook_fargs6_t *fargs, void *udata) {
     if (is_target_uid()) skb_save_len((void *)fargs->arg0);
 }
 
 static void fib_dump_after(hook_fargs6_t *fargs, void *udata) {
     if (fargs->ret >= 0 && is_target_uid()) {
-        skb_restore_len((void *)fargs->arg0);
-        fargs->ret = 0;
+        /* fri = arg4 (struct fib_rt_info *); fi is first field at offset 0 */
+        void *fri = (void *)fargs->arg4;
+        if (!fri) return;
+        void *fi = *(void **)fri;           /* fri->fi */
+        if (!fi) return;
+        /* nhc_dev is the first pointer in fib_nh[0] which starts at FIB_NH0_OFF */
+        struct net_device *dev = *(struct net_device **)((char *)fi + FIB_NH0_OFF);
+        if (dev && is_vpn_iface_safe(dev->name)) {
+            vpnhide_dbg("fib_dump_info: hiding route via %s\n", dev->name);
+            skb_restore_len((void *)fargs->arg0);
+            fargs->ret = 0;
+        }
     }
 }
 
 /*
  * rt6_fill_node(net, skb, rt, dst, dest, src, iif, type, portid, seq, flags) — 11 args in 6.1.
- * arg1=skb, arg2=rt (struct fib6_info *).
+ * arg1=skb, arg3=dst (struct dst_entry *). dst_entry.dev is at offset 0 (first field).
+ * Targeted: hide only VPN interfaces. When dst==NULL (bulk dump path), skip.
  */
 static void rt6_fill_before(hook_fargs11_t *fargs, void *udata) {
     if (is_target_uid()) skb_save_len((void *)fargs->arg1);
@@ -230,8 +269,36 @@ static void rt6_fill_before(hook_fargs11_t *fargs, void *udata) {
 
 static void rt6_fill_after(hook_fargs11_t *fargs, void *udata) {
     if (fargs->ret >= 0 && is_target_uid()) {
-        skb_restore_len((void *)fargs->arg1);
-        fargs->ret = 0;
+        void *dst = (void *)fargs->arg3;
+        struct net_device *dev = dst ? *(struct net_device **)dst : NULL;
+        if (dev && is_vpn_iface_safe(dev->name)) {
+            vpnhide_dbg("rt6_fill_node: hiding IPv6 route via %s\n", dev->name);
+            skb_restore_len((void *)fargs->arg1);
+            fargs->ret = 0;
+        }
+    }
+}
+
+/*
+ * rt_fill_info(skb, dst, src, rt, table_id, fl4, skb_in, portid, seq, nlh) — 10 args in GKI 6.1.
+ * arg0=skb, arg3=rt (struct rtable *). struct rtable starts with dst_entry,
+ * dst_entry.dev is the very first field (offset 0) — confirmed from linux/v6.1/include/net/dst.h.
+ * IPv6 RTM_GETROUTE already covered by the existing rt6_fill_node (11 args) hook.
+ */
+static void rt_fill_info_before(hook_fargs10_t *fargs, void *udata) {
+    if (is_target_uid()) skb_save_len((void *)fargs->arg0);
+}
+
+static void rt_fill_info_after(hook_fargs10_t *fargs, void *udata) {
+    if (fargs->ret >= 0 && is_target_uid()) {
+        /* rtable -> dst_entry -> dev is at offset 0 */
+        void *rt = (void *)fargs->arg3;
+        struct net_device *dev = rt ? *(struct net_device **)rt : NULL;
+        if (dev && is_vpn_iface_safe(dev->name)) {
+            vpnhide_dbg("RTM_GETROUTE: hiding route via %s\n", dev->name);
+            skb_restore_len((void *)fargs->arg0);
+            fargs->ret = 0;
+        }
     }
 }
 
@@ -516,6 +583,7 @@ static long vpnhide_kpm_init(const char *args, const char *event, void *__user r
     unsigned long fib_dump_addr = kallsyms_lookup_name("fib_dump_info");
     unsigned long rt6_fill_addr = kallsyms_lookup_name("rt6_fill_node");
     unsigned long fib_route_addr = kallsyms_lookup_name("fib_route_seq_show");
+    unsigned long rt_fill_info_addr = kallsyms_lookup_name("rt_fill_info");
 
     if (dev_ioctl_addr) hook_wrap((void*)dev_ioctl_addr, 5, 0, dev_ioctl_after, 0);
     if (sock_ioctl_addr) hook_wrap((void*)sock_ioctl_addr, 3, 0, sock_ioctl_after, 0);
@@ -530,9 +598,12 @@ static long vpnhide_kpm_init(const char *args, const char *event, void *__user r
         hook_wrap((void*)diag_fill_addr, 7, inet_diag_fill_before, inet_diag_fill_after, 0);
     if (fib_dump_addr)
         hook_wrap((void*)fib_dump_addr, 6, fib_dump_before, fib_dump_after, 0);
+
     if (rt6_fill_addr)
         hook_wrap((void*)rt6_fill_addr, 11, rt6_fill_before, rt6_fill_after, 0);
     if (fib_route_addr) hook_wrap((void*)fib_route_addr, 2, 0, fib_route_after, 0);
+    if (rt_fill_info_addr)
+        hook_wrap((void*)rt_fill_info_addr, 10, rt_fill_info_before, rt_fill_info_after, 0);
 
     return 0;
 }
