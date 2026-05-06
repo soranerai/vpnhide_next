@@ -92,28 +92,57 @@ static bool debug_enabled;
 
 #define is_vpn_ifname(name) vpnhide_iface_is_vpn(name)
 
-/* ------------------------------------------------------------------ */
-/*  Target UID list                                                   */
-/* ------------------------------------------------------------------ */
+struct vpnhide_targets {
+	uid_t uids[MAX_TARGET_UIDS];
+	int count;
+	struct rcu_head rcu;
+};
 
-static uid_t target_uids[MAX_TARGET_UIDS];
-static int nr_target_uids;
-static DEFINE_SPINLOCK(uids_lock);
+static struct vpnhide_targets __rcu *global_targets;
+static DEFINE_SPINLOCK(targets_update_lock);
+
+static struct vpnhide_targets __rcu *global_direct_targets;
+static DEFINE_SPINLOCK(direct_targets_update_lock);
 
 static bool is_target_uid(void)
 {
 	uid_t uid = from_kuid(&init_user_ns, current_uid());
+	struct vpnhide_targets *t;
 	bool found = false;
 	int i;
 
-	spin_lock(&uids_lock);
-	for (i = 0; i < nr_target_uids; i++) {
-		if (target_uids[i] == uid) {
-			found = true;
-			break;
+	rcu_read_lock();
+	t = rcu_dereference(global_targets);
+	if (t) {
+		for (i = 0; i < t->count; i++) {
+			if (t->uids[i] == uid) {
+				found = true;
+				break;
+			}
 		}
 	}
-	spin_unlock(&uids_lock);
+	rcu_read_unlock();
+	return found;
+}
+
+static bool is_direct_target_uid(void)
+{
+	uid_t uid = from_kuid(&init_user_ns, current_uid());
+	struct vpnhide_targets *t;
+	bool found = false;
+	int i;
+
+	rcu_read_lock();
+	t = rcu_dereference(global_direct_targets);
+	if (t) {
+		for (i = 0; i < t->count; i++) {
+			if (t->uids[i] == uid) {
+				found = true;
+				break;
+			}
+		}
+	}
+	rcu_read_unlock();
 	return found;
 }
 
@@ -121,12 +150,18 @@ static bool is_target_uid(void)
 /*  /proc/vpnhide_targets                                             */
 /* ------------------------------------------------------------------ */
 
+static void free_targets_rcu(struct rcu_head *rcu)
+{
+	struct vpnhide_targets *t = container_of(rcu, struct vpnhide_targets, rcu);
+	kfree(t);
+}
+
 static ssize_t targets_write(struct file *file, const char __user *ubuf,
 			     size_t count, loff_t *ppos)
 {
 	char *buf, *line, *next;
+	struct vpnhide_targets *new_t, *old_t;
 	int new_count = 0;
-	uid_t new_uids[MAX_TARGET_UIDS];
 
 	if (count > PAGE_SIZE)
 		return -EINVAL;
@@ -140,6 +175,12 @@ static ssize_t targets_write(struct file *file, const char __user *ubuf,
 		return -EFAULT;
 	}
 	buf[count] = '\0';
+
+	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
+	if (!new_t) {
+		kfree(buf);
+		return -ENOMEM;
+	}
 
 	for (line = buf; line && *line && new_count < MAX_TARGET_UIDS;
 	     line = next) {
@@ -155,13 +196,18 @@ static ssize_t targets_write(struct file *file, const char __user *ubuf,
 			continue;
 
 		if (kstrtoul(line, 10, &uid) == 0)
-			new_uids[new_count++] = (uid_t)uid;
+			new_t->uids[new_count++] = (uid_t)uid;
 	}
+	new_t->count = new_count;
 
-	spin_lock(&uids_lock);
-	memcpy(target_uids, new_uids, new_count * sizeof(uid_t));
-	nr_target_uids = new_count;
-	spin_unlock(&uids_lock);
+	spin_lock(&targets_update_lock);
+	old_t = rcu_dereference_protected(global_targets,
+					  lockdep_is_held(&targets_update_lock));
+	rcu_assign_pointer(global_targets, new_t);
+	spin_unlock(&targets_update_lock);
+
+	if (old_t)
+		call_rcu(&old_t->rcu, free_targets_rcu);
 
 	kfree(buf);
 	pr_info(MODNAME ": loaded %d target UIDs\n", new_count);
@@ -170,12 +216,16 @@ static ssize_t targets_write(struct file *file, const char __user *ubuf,
 
 static int targets_show(struct seq_file *m, void *v)
 {
+	struct vpnhide_targets *t;
 	int i;
 
-	spin_lock(&uids_lock);
-	for (i = 0; i < nr_target_uids; i++)
-		seq_printf(m, "%u\n", target_uids[i]);
-	spin_unlock(&uids_lock);
+	rcu_read_lock();
+	t = rcu_dereference(global_targets);
+	if (t) {
+		for (i = 0; i < t->count; i++)
+			seq_printf(m, "%u\n", t->uids[i]);
+	}
+	rcu_read_unlock();
 	return 0;
 }
 
@@ -188,6 +238,90 @@ static const struct proc_ops targets_proc_ops = {
 	.proc_open = targets_open,
 	.proc_read = seq_read,
 	.proc_write = targets_write,
+	.proc_lseek = seq_lseek,
+	.proc_release = single_release,
+};
+
+/* ------------------------------------------------------------------ */
+/*  /proc/vpnhide_direct_targets                                      */
+/* ------------------------------------------------------------------ */
+
+static ssize_t direct_targets_write(struct file *file, const char __user *ubuf,
+				    size_t count, loff_t *ppos)
+{
+	char *buf, *line, *next;
+	struct vpnhide_targets *new_t, *old_t;
+	int new_count = 0;
+
+	if (count > PAGE_SIZE)
+		return -EINVAL;
+
+	buf = kmalloc(count + 1, GFP_KERNEL);
+	if (!buf)
+		return -ENOMEM;
+
+	if (copy_from_user(buf, ubuf, count)) {
+		kfree(buf);
+		return -EFAULT;
+	}
+	buf[count] = '\0';
+
+	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
+	if (!new_t) {
+		kfree(buf);
+		return -ENOMEM;
+	}
+
+	for (line = buf; line && *line && new_count < MAX_TARGET_UIDS;
+	     line = next) {
+		unsigned long uid;
+		next = strchr(line, '\n');
+		if (next) *next++ = '\0';
+		while (*line == ' ' || *line == '\t') line++;
+		if (!*line || *line == '#') continue;
+		if (kstrtoul(line, 10, &uid) == 0)
+			new_t->uids[new_count++] = (uid_t)uid;
+	}
+	new_t->count = new_count;
+
+	spin_lock(&direct_targets_update_lock);
+	old_t = rcu_dereference_protected(global_direct_targets,
+					  lockdep_is_held(&direct_targets_update_lock));
+	rcu_assign_pointer(global_direct_targets, new_t);
+	spin_unlock(&direct_targets_update_lock);
+
+	if (old_t)
+		call_rcu(&old_t->rcu, free_targets_rcu);
+
+	kfree(buf);
+	pr_info(MODNAME ": loaded %d direct target UIDs\n", new_count);
+	return count;
+}
+
+static int direct_targets_show(struct seq_file *m, void *v)
+{
+	struct vpnhide_targets *t;
+	int i;
+
+	rcu_read_lock();
+	t = rcu_dereference(global_direct_targets);
+	if (t) {
+		for (i = 0; i < t->count; i++)
+			seq_printf(m, "%u\n", t->uids[i]);
+	}
+	rcu_read_unlock();
+	return 0;
+}
+
+static int direct_targets_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, direct_targets_show, NULL);
+}
+
+static const struct proc_ops direct_targets_proc_ops = {
+	.proc_open = direct_targets_open,
+	.proc_read = seq_read,
+	.proc_write = direct_targets_write,
 	.proc_lseek = seq_lseek,
 	.proc_release = single_release,
 };
@@ -1018,10 +1152,203 @@ static struct kretprobe rt_fill_krp = {
 };
 
 /* ================================================================== */
+/*  Optimized Routing State Cache                                     */
+/* ================================================================== */
+
+struct vpnhide_cache {
+	bool vpn_active;
+	int direct_idx;
+	unsigned long last_update;
+};
+
+static struct vpnhide_cache routing_cache;
+static DEFINE_SPINLOCK(cache_lock);
+
+#define CACHE_TTL (HZ) /* 1 second */
+
+static void update_routing_cache(struct net *net, struct vpnhide_cache *c)
+{
+	struct net_device *dev;
+	int best_idx = 0;
+	int current_prio = -1;
+	bool vpn_found = false;
+
+	rcu_read_lock();
+	for_each_netdev_rcu(net, dev) {
+		bool up = !!(dev->flags & IFF_UP);
+		bool vpn = is_vpn_ifname(dev->name);
+
+		if (up && vpn)
+			vpn_found = true;
+
+		if (up && !vpn && !(dev->flags & IFF_LOOPBACK) &&
+		    !(dev->flags & IFF_POINTOPOINT)) {
+			int prio = 0;
+			if (vpnhide_iface_starts_with_ci(dev->name, "wlan"))
+				prio = 10;
+			else if (vpnhide_iface_starts_with_ci(dev->name, "rmnet") ||
+				 vpnhide_iface_starts_with_ci(dev->name, "ccmni") ||
+				 vpnhide_iface_starts_with_ci(dev->name, "pdp"))
+				prio = 5;
+
+			if (prio > current_prio) {
+				best_idx = dev->ifindex;
+				current_prio = prio;
+			}
+		}
+	}
+	rcu_read_unlock();
+
+	c->vpn_active = vpn_found;
+	c->direct_idx = best_idx;
+	c->last_update = jiffies;
+}
+
+static void get_routing_info(struct net *net, bool *vpn_active, int *direct_idx)
+{
+	unsigned long now = jiffies;
+
+	/* We use a simple spinlock for the cache update. Since it only happens
+	 * once per second, there is no meaningful contention. */
+	if (time_after(now, READ_ONCE(routing_cache.last_update) + CACHE_TTL)) {
+		if (spin_trylock(&cache_lock)) {
+			update_routing_cache(net, &routing_cache);
+			spin_unlock(&cache_lock);
+		}
+	}
+
+	*vpn_active = READ_ONCE(routing_cache.vpn_active);
+	*direct_idx = READ_ONCE(routing_cache.direct_idx);
+}
+
+/* ================================================================== */
+/*  Hook 10: ip_route_output_flow — IPv4 routing bypass               */
+/*                                                                    */
+/*  ip_route_output_flow(net, flp4, sk)                               */
+/*  arm64: x1=flp4 (struct flowi4*)                                  */
+/*                                                                    */
+/*  For target UIDs, we set the 'protectedFromVpn' bit in the mark.   */
+/*  On Android, this bit (typically 1 << 17) tells the routing        */
+/*  rules to skip VPN tables and use physical ones.                   */
+/* ================================================================== */
+
+#define ANDROID_PROTECTED_FROM_VPN_BIT (1 << 17)
+#define ANDROID_EXPLICITLY_SELECTED_BIT (1 << 16)
+
+static int ip_route_output_flow_entry(struct kretprobe_instance *ri,
+				      struct pt_regs *regs)
+{
+	struct net *net = (struct net *)regs->regs[0];
+	struct flowi4 *flp4 = (struct flowi4 *)regs->regs[1];
+
+	if (flp4 && is_direct_target_uid()) {
+		bool vpn_active;
+		int phys_idx;
+
+		get_routing_info(net, &vpn_active, &phys_idx);
+		if (!vpn_active)
+			return 0;
+
+		/* Force marks to bypass VPN. */
+		flp4->flowi4_mark &= ~0xFFFF;
+		flp4->flowi4_mark |= (ANDROID_PROTECTED_FROM_VPN_BIT |
+				      ANDROID_EXPLICITLY_SELECTED_BIT);
+		flp4->saddr = 0;
+		if (phys_idx > 0)
+			flp4->flowi4_oif = phys_idx;
+
+		vpnhide_dbg("ip_route_output_flow: forced bypass (oif=%d) for uid=%u\n",
+			    flp4->flowi4_oif, from_kuid(&init_user_ns, current_uid()));
+	}
+	return 0;
+}
+
+static struct kretprobe ip_route_output_flow_krp = {
+	.entry_handler = ip_route_output_flow_entry,
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "ip_route_output_flow",
+};
+
+/* __ip_route_output_key is the inner routing function. */
+static int ip_route_output_key_entry(struct kretprobe_instance *ri,
+				     struct pt_regs *regs)
+{
+	struct net *net = (struct net *)regs->regs[0];
+	struct flowi4 *flp4 = (struct flowi4 *)regs->regs[1];
+
+	if (flp4 && is_direct_target_uid()) {
+		bool vpn_active;
+		int phys_idx;
+
+		get_routing_info(net, &vpn_active, &phys_idx);
+		if (!vpn_active)
+			return 0;
+
+		flp4->flowi4_mark &= ~0xFFFF;
+		flp4->flowi4_mark |= (ANDROID_PROTECTED_FROM_VPN_BIT |
+				      ANDROID_EXPLICITLY_SELECTED_BIT);
+		flp4->saddr = 0;
+		if (phys_idx > 0)
+			flp4->flowi4_oif = phys_idx;
+		
+		vpnhide_dbg("__ip_route_output_key: forced bypass (oif=%d) for uid=%u\n",
+			    flp4->flowi4_oif, from_kuid(&init_user_ns, current_uid()));
+	}
+	return 0;
+}
+
+static struct kretprobe ip_route_output_key_krp = {
+	.entry_handler = ip_route_output_key_entry,
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__ip_route_output_key",
+};
+
+/* ================================================================== */
+/*  Hook 11: ip6_route_output — IPv6 routing bypass                   */
+/*                                                                    */
+/*  ip6_route_output(net, sk, fl6)                                    */
+/*  arm64: x2=fl6 (struct flowi6*)                                   */
+/* ================================================================== */
+
+static int ip6_route_output_entry(struct kretprobe_instance *ri,
+				  struct pt_regs *regs)
+{
+	struct net *net = (struct net *)regs->regs[0];
+	struct flowi6 *fl6 = (struct flowi6 *)regs->regs[2];
+
+	if (fl6 && is_direct_target_uid()) {
+		bool vpn_active;
+		int phys_idx;
+
+		get_routing_info(net, &vpn_active, &phys_idx);
+		if (!vpn_active)
+			return 0;
+
+		fl6->flowi6_mark &= ~0xFFFF;
+		fl6->flowi6_mark |= (ANDROID_PROTECTED_FROM_VPN_BIT |
+				     ANDROID_EXPLICITLY_SELECTED_BIT);
+		fl6->saddr = in6addr_any;
+		if (phys_idx > 0)
+			fl6->flowi6_oif = phys_idx;
+		
+		vpnhide_dbg("ip6_route_output: forced bypass (oif=%d) for uid=%u\n",
+			    fl6->flowi6_oif, from_kuid(&init_user_ns, current_uid()));
+	}
+	return 0;
+}
+
+static struct kretprobe ip6_route_output_krp = {
+	.entry_handler = ip6_route_output_entry,
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "ip6_route_output",
+};
+
+/* ================================================================== */
 /*  Module init / exit                                                */
 /* ================================================================== */
 
 static struct proc_dir_entry *targets_entry;
+static struct proc_dir_entry *direct_targets_entry;
 static struct proc_dir_entry *debug_entry;
 
 struct kretprobe_reg {
@@ -1040,11 +1367,18 @@ static struct kretprobe_reg probes[] = {
 	{ &fib_dump_krp, "fib_dump_info", false },
 	{ &rt6_fill_krp, "rt6_fill_node", false },
 	{ &rt_fill_krp, "rt_fill_info", false },
+	{ &ip_route_output_flow_krp, "ip_route_output_flow", false },
+	{ &ip_route_output_key_krp, "__ip_route_output_key", false },
+	{ &ip6_route_output_krp, "ip6_route_output", false },
 };
 
 static int __init vpnhide_init(void)
 {
 	int i, ret, ok = 0;
+
+	/* Initialize RCU targets pointers */
+	rcu_assign_pointer(global_targets, NULL);
+	rcu_assign_pointer(global_direct_targets, NULL);
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		ret = register_kretprobe(probes[i].krp);
@@ -1073,9 +1407,6 @@ static int __init vpnhide_init(void)
 	targets_entry =
 		proc_create("vpnhide_targets", 0600, NULL, &targets_proc_ops);
 	if (!targets_entry) {
-		/* Without /proc/vpnhide_targets userspace cannot configure
-		 * the target UID list, so the module would silently filter
-		 * nothing — fail loudly instead of pretending to work. */
 		pr_err(MODNAME
 		       ": proc_create(vpnhide_targets) failed; aborting\n");
 		for (i = 0; i < ARRAY_SIZE(probes); i++)
@@ -1083,23 +1414,33 @@ static int __init vpnhide_init(void)
 				unregister_kretprobe(probes[i].krp);
 		return -ENOMEM;
 	}
+
+	direct_targets_entry =
+		proc_create("vpnhide_direct_targets", 0600, NULL, &direct_targets_proc_ops);
+	if (!direct_targets_entry)
+		pr_warn(MODNAME
+			": proc_create(vpnhide_direct_targets) failed; direct routing configuration unavailable\n");
+
 	debug_entry = proc_create("vpnhide_debug", 0600, NULL, &debug_proc_ops);
 	if (!debug_entry)
 		pr_warn(MODNAME
 			": proc_create(vpnhide_debug) failed; debug toggle unavailable\n");
 
-	pr_info(MODNAME ": loaded — write UIDs to /proc/vpnhide_targets\n");
+	pr_info(MODNAME ": loaded — write UIDs to /proc/vpnhide_targets and /proc/vpnhide_direct_targets\n");
 	return 0;
 }
 
 static void __exit vpnhide_exit(void)
 {
+	struct vpnhide_targets *t;
 	int i;
 
 	if (debug_entry)
 		proc_remove(debug_entry);
 	if (targets_entry)
 		proc_remove(targets_entry);
+	if (direct_targets_entry)
+		proc_remove(direct_targets_entry);
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		if (probes[i].registered) {
@@ -1108,6 +1449,30 @@ static void __exit vpnhide_exit(void)
 					"(missed %d)\n",
 				probes[i].name, probes[i].krp->nmissed);
 		}
+	}
+
+	/* Cleanup RCU targets */
+	spin_lock(&targets_update_lock);
+	t = rcu_dereference_protected(global_targets,
+				      lockdep_is_held(&targets_update_lock));
+	rcu_assign_pointer(global_targets, NULL);
+	spin_unlock(&targets_update_lock);
+
+	if (t) {
+		synchronize_rcu();
+		kfree(t);
+	}
+
+	/* Cleanup RCU direct targets */
+	spin_lock(&direct_targets_update_lock);
+	t = rcu_dereference_protected(global_direct_targets,
+				      lockdep_is_held(&direct_targets_update_lock));
+	rcu_assign_pointer(global_direct_targets, NULL);
+	spin_unlock(&direct_targets_update_lock);
+
+	if (t) {
+		synchronize_rcu();
+		kfree(t);
 	}
 
 	pr_info(MODNAME ": unloaded\n");
