@@ -112,23 +112,34 @@ fi
     ) &
 
     last_idx=""
-    heartbeat=0
+    heartbeat_counter=0
+    HEARTBEAT_MAX=75 
 
     while true; do
-        if [ -f "$TRIGGER" ] || [ -z "$last_idx" ] || [ "$heartbeat" -ge 5 ]; then
+        if [ -f "$TRIGGER" ] || [ -z "$last_idx" ] || [ "$heartbeat_counter" -ge "$HEARTBEAT_MAX" ]; then
             rm -f "$TRIGGER"
-            heartbeat=0
+            heartbeat_counter=0
+
+            sleep 0.3
             
-            sleep 0.5
+            phys_iface=""
+
+            net_id=$(dumpsys connectivity | grep "Active default network:" | grep -oE "[0-9]+")
             
-            phys_iface=$(ip route show table all | grep "default via" | grep -vE "tun|wg|dummy|p2p" | head -n1 | awk '{print $5}')
-            
+            if [ -n "$net_id" ]; then
+                phys_iface=$(dumpsys connectivity | grep -E "network\{$net_id\}|NetID.*$net_id" | grep -oE "InterfaceName: [^ ]+" | head -n1 | awk -F': ' '{print $2}' | tr -d '},')
+            fi
+    
+            if [ -z "$phys_iface" ]; then
+                phys_iface=$(ip route show table all | grep "default via" | grep -vE "tun|wg|dummy|p2p|ccmni2" | head -n1 | awk '{print $5}')
+            fi
+
             if [ -n "$phys_iface" ]; then
                 phys_ifindex=$(cat "/sys/class/net/$phys_iface/ifindex" 2>/dev/null)
                 
                 if [ -n "$phys_ifindex" ]; then
                     echo "$phys_ifindex" > /proc/vpnhide_phys_ifindex
-
+                    
                     if [ "$phys_ifindex" != "$last_idx" ]; then
                         log -t vpnhide "routing: active physical interface changed to $phys_iface ($phys_ifindex)"
                         last_idx="$phys_ifindex"
@@ -136,9 +147,9 @@ fi
                 fi
             fi
         fi
-        
-        sleep 1
-        heartbeat=$((heartbeat + 1))
+
+        sleep 0.2 
+        heartbeat_counter=$((heartbeat_counter + 1))
     done
 ) &
 
