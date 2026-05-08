@@ -152,6 +152,7 @@ fun AppHidingScreen(
                         observer = finalObserver,
                     )
                 }
+            .sortedWith(compareByDescending<HidingEntry> { it.anySelected }.thenBy { it.label })
         dirty = autoFixedConflict
     }
 
@@ -360,8 +361,6 @@ fun AppHidingScreen(
                 val (exitCode, _) =
                     suExecAsync(buildHidingSaveCommand(header, hiddenPkgs, observerPkgs))
                 if (exitCode == 0) {
-                    snackMessage =
-                        context.getString(R.string.hiding_save_success, hiddenCount, observerCount)
                     DashboardCache.invalidate()
                     TargetsCache.refresh(scope, context)
                 } else if (exitCode == -1) {

@@ -12,7 +12,7 @@ import android.content.Context
  *  - Zygisk module → [ZYGISK_DEBUG_LOGGING_FILE] (read when the module
  *    is injected into a forked app, so target apps need to be restarted
  *    before a flip takes effect for them — identical to targets.txt)
- *  - Kernel module → [KMOD_DEBUG_PROC] (in-kernel volatile; per-boot
+ *  - Kernel module → [KMOD_CTL] (stealthy IOCTL; per-boot
  *    only, re-seeded from [SS_DEBUG_LOGGING_FILE] by `kmod/module/
  *    service.sh` at boot so the persistent toggle survives reboots
  *    even when the app isn't opened)
@@ -99,7 +99,7 @@ private fun writeDebugFlagFiles(enabled: Boolean) {
             "[ -d $ZYGISK_MODULE_DIR ] &&" +
             " echo '$value' > $ZYGISK_DEBUG_LOGGING_FILE" +
             " && chmod 644 $ZYGISK_DEBUG_LOGGING_FILE 2>/dev/null; " +
-            "[ -e $KMOD_DEBUG_PROC ] && echo '$value' > $KMOD_DEBUG_PROC; " +
+            "[ -c $DEV_NODE ] && $KMOD_CTL debug $value; " +
             "true",
     )
 }

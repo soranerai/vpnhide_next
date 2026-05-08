@@ -128,6 +128,7 @@ fun PortsHidingScreen(
                         observer = app.packageName in t.portsObservers,
                     )
                 }
+            .sortedWith(compareByDescending<PortsEntry> { it.observer }.thenBy { it.label })
         dirty = false
     }
 
@@ -315,7 +316,6 @@ fun PortsHidingScreen(
             try {
                 val (exitCode, _) = suExecAsync(buildPortsSaveCommand(header, observerPkgs))
                 if (exitCode == 0) {
-                    snackMessage = context.getString(R.string.ports_save_success, observerPkgs.size)
                     DashboardCache.invalidate()
                     TargetsCache.refresh(scope, context)
                 } else if (exitCode == -1) {

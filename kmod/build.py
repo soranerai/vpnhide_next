@@ -126,6 +126,99 @@ def native_build_one(
         shutil.rmtree(staging)
     shutil.copytree(kmod_dir / "module", staging)
     shutil.copy(kmod_dir / KMOD_KO, staging / KMOD_KO)
+    
+    # Compile the stealthy configuration tool (aarch64 static)
+    cc = "aarch64-linux-gnu-gcc"
+    strip_tool = "strip"
+    if clang_dir:
+        cc_path = Path(clang_dir) / "clang"
+        if cc_path.exists():
+            cc = str(cc_path)
+            strip_tool = str(Path(clang_dir) / "llvm-strip")
+    
+def build_ctl_host(repo_root: Path, kmod_dir: Path) -> Path:
+    """Build the vpnhide-ctl tool on the host using the Android NDK."""
+    ndk_home = os.environ.get("ANDROID_NDK_HOME")
+    if not ndk_home:
+        # Check standard locations (Astra/Linux)
+        ndk_base = Path.home() / "android-sdk" / "ndk"
+        if not ndk_base.exists():
+            ndk_base = Path.home() / "Android" / "Sdk" / "ndk"
+        
+        if ndk_base.exists():
+            # Use the latest version
+            versions = sorted([d.name for d in ndk_base.iterdir() if d.is_dir()])
+            if versions:
+                ndk_home = str(ndk_base / versions[-1])
+    
+    if not ndk_home:
+        raise RuntimeError("ANDROID_NDK_HOME not set and NDK not found in standard locations")
+
+    print(f"Using NDK to build ctl: {ndk_home}")
+    
+    # Locate clang in NDK
+    clang_glob = list(Path(ndk_home).glob("**/bin/aarch64-linux-android*-clang"))
+    if not clang_glob:
+        raise RuntimeError(f"Could not find aarch64 clang in {ndk_home}")
+    
+    # Pick a stable API version (e.g., 31 for Android 12)
+    clang = str(clang_glob[0])
+    for c in clang_glob:
+        if "android31" in c.name:
+            clang = str(c)
+            break
+            
+    out_bin = kmod_dir / "vpnhide-ctl-host"
+    cmd = [
+        clang,
+        "-O2", "-Wall",
+        str(kmod_dir / "vpnhide_ctl.c"),
+        "-o", str(out_bin)
+    ]
+    
+    # Try -static first for zero dependencies
+    try:
+        subprocess.run(cmd + ["-static"], check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        # Fallback to dynamic if -static fails (Android always has libc)
+        subprocess.run(cmd, check=True)
+    
+    # Strip the binary to reduce size
+    strip_bin = Path(clang).parent / "llvm-strip"
+    if strip_bin.exists():
+        subprocess.run([str(strip_bin), str(out_bin)], check=True)
+    
+    return out_bin
+
+def native_build_one(
+    kmod_dir: Path,
+    kmi: str,
+    kdir: str,
+    clang_dir: str,
+    out_root: Path,
+) -> int:
+    staging = kmod_dir / "module-staging"
+    if staging.exists():
+        shutil.rmtree(staging)
+    shutil.copytree(kmod_dir / "module", staging)
+
+    env = os.environ.copy()
+    env["KDIR"] = kdir
+    env["CLANG_DIR"] = clang_dir
+
+    # `make strip` does the actual kernel-module build. Let make decide
+    # whether anything needs rebuilding — its dependency tracking covers
+    # all sources, headers, and the kernel .config, not just our .c file.
+    subprocess.run(["make", "-C", str(kmod_dir), "strip"], env=env, check=True)
+    shutil.copy(kmod_dir / "vpnhide_kmod.ko", staging / "vpnhide_kmod.ko")
+    
+    # Copy the host-built ctl binary (visible in /work/kmod/)
+    ctl_src = kmod_dir / "vpnhide-ctl-host"
+    if ctl_src.exists():
+        shutil.copy(ctl_src, staging / "vpnhide-ctl")
+        os.chmod(staging / "vpnhide-ctl", 0o755)
+    else:
+        print(f"[{kmi}] warning: vpnhide-ctl-host not found, module will be missing the ctl tool")
 
     build_version = get_build_version(kmod_dir.parent)
 
@@ -149,7 +242,7 @@ def native_build_one(
     module_prop.write_text(content, encoding="utf-8")
     print(f"[{kmi}] stamped module.prop version=v{build_version} gkiVariant={kmi}")
 
-    out_zip = out if out else kmod_dir.parent / f"vpnhide-kmod-{kmi}.zip"
+    out_zip = out_root if out_root else kmod_dir.parent / f"vpnhide-kmod-{kmi}.zip"
     if out_zip.exists():
         out_zip.unlink()
     make_zip(staging, out_zip)
@@ -219,6 +312,12 @@ def find_runtime() -> tuple[str, bool]:
 
 
 def container_build_one(runtime: str, is_podman: bool, repo_root: Path, kmi: str) -> None:
+    # Build ctl utility on host first
+    try:
+        build_ctl_host(repo_root, repo_root / "kmod")
+    except Exception as e:
+        print(f"[{kmi}] warning: could not build ctl utility on host: {e}")
+
     image = f"ghcr.io/ylarod/ddk-min:{kmi}-{DDK_IMAGE_TAG}"
     mount_spec = f"{repo_root}:/work"
     cmd = [runtime, "run", "--rm"]

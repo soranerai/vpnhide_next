@@ -124,6 +124,7 @@ fun AppPickerScreen(
                         lsposed = app.packageName in t.lsposedTargets,
                     )
                 }
+            .sortedWith(compareByDescending<AppEntry> { it.anySelected }.thenBy { it.label })
         dirty = false
     }
 
@@ -336,7 +337,6 @@ fun AppPickerScreen(
                     )
                 val totalSelected = allApps.count { it.anySelected }
                 if (exitCode == 0) {
-                    snackMessage = context.getString(R.string.save_success, totalSelected)
                     // Target counts shown on the Dashboard just changed;
                     // invalidate so next open reflects them without a
                     // manual refresh tap.
@@ -364,54 +364,22 @@ private fun buildSaveCommand(
     zygiskPkgs: List<String>,
     lsposedPkgs: List<String>,
 ): String {
-    fun encodeBody(pkgs: List<String>): String {
-        val body = "$header\n" + pkgs.joinToString("\n") + if (pkgs.isNotEmpty()) "\n" else ""
-        return android.util.Base64.encodeToString(body.toByteArray(), android.util.Base64.NO_WRAP)
-    }
-
     val parts = mutableListOf<String>()
 
-    // Write kmod targets
-    val kmodB64 = encodeBody(kmodPkgs)
-    parts += "if [ -d /data/adb/vpnhide_kmod ]; then echo '$kmodB64' | base64 -d > $KMOD_TARGETS && chmod 644 $KMOD_TARGETS; fi"
+    // Persistent saves
+    parts += buildWriteTargetsCommand(KMOD_TARGETS, header, kmodPkgs)
+    parts += buildWriteTargetsCommand(ZYGISK_TARGETS, header, zygiskPkgs)
+    parts += buildWriteTargetsCommand(LSPOSED_TARGETS, header, lsposedPkgs)
 
-    // Write zygisk targets
-    val zygiskB64 = encodeBody(zygiskPkgs)
-    parts += "if [ -d /data/adb/vpnhide_zygisk ]; then echo '$zygiskB64' | base64 -d > $ZYGISK_TARGETS && chmod 644 $ZYGISK_TARGETS; fi"
-    parts += "cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null; true"
+    // Sync zygisk module dir
+    parts += "if [ -d $ZYGISK_MODULE_DIR ]; then cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null; fi"
 
-    // Write lsposed targets (always — the dir is created by service.sh or us)
-    val lsposedB64 = encodeBody(lsposedPkgs)
-    parts += "mkdir -p /data/adb/vpnhide_lsposed"
-    parts += "echo '$lsposedB64' | base64 -d > $LSPOSED_TARGETS && chmod 644 $LSPOSED_TARGETS"
-
-    // Resolve kmod UIDs -> /proc/vpnhide_targets
-    if (kmodPkgs.isNotEmpty()) {
-        parts += buildUidResolver(kmodPkgs, PROC_TARGETS)
-    } else {
-        parts += "echo > $PROC_TARGETS 2>/dev/null; true"
-    }
-
-    // Resolve lsposed UIDs -> /data/system/vpnhide_uids.txt
-    // Mode 0640 + group=system: system_server reads via the group bit;
-    // untrusted apps get EACCES because /data/system/ is mode 0775 (parent
-    // is traversable, file's "other" bits decide). Prevents apps from
-    // enumerating the target UID list to fingerprint vpnhide.
-    if (lsposedPkgs.isNotEmpty()) {
-        parts += buildUidResolver(lsposedPkgs, SS_UIDS_FILE)
-        parts += "chmod 640 $SS_UIDS_FILE 2>/dev/null"
-        parts += "chown root:system $SS_UIDS_FILE 2>/dev/null"
-        parts += "chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null"
-    } else {
-        parts +=
-            "echo > $SS_UIDS_FILE 2>/dev/null" +
-            " && chmod 640 $SS_UIDS_FILE 2>/dev/null" +
-            " && chown root:system $SS_UIDS_FILE 2>/dev/null; true"
-    }
+    // Live apply
+    parts += buildKmodApplyCommand(kmodPkgs)
+    parts += buildLsposedApplyCommand(lsposedPkgs)
 
     return parts.joinToString(" ; ")
 }
-
 @Composable
 private fun AppRow(
     app: AppEntry,

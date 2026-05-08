@@ -141,11 +141,16 @@ private fun MainScreen(onReady: () -> Unit = {}) {
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
-        selfNeedsRestart =
+        val added = withContext(Dispatchers.IO) {
+            cleanupStaleZygiskStatus(context)
+            ensureSelfInTargets(context.packageName)
+        }
+        if (added) {
             withContext(Dispatchers.IO) {
-                cleanupStaleZygiskStatus(context)
-                ensureSelfInTargets(context.packageName)
+                applyKmodTargets(context)
             }
+        }
+        selfNeedsRestart = added
     }
 
     // Kick off both Protection caches as early as possible so tab
