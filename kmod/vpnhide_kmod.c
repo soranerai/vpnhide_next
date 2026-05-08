@@ -39,6 +39,8 @@
 #include <linux/rtnetlink.h>
 #include <linux/skbuff.h>
 #include <linux/inetdevice.h>
+#include <linux/miscdevice.h>
+#include <linux/fs.h>
 #include <net/if_inet6.h>
 #include <net/ip_fib.h>
 #include <net/ip6_fib.h>
@@ -52,7 +54,19 @@
 #endif
 
 #define MODNAME "vpnhide"
-#define MAX_TARGET_UIDS 64
+#define MAX_TARGET_UIDS 512
+
+/* --- IOCTL definitions for stealthy configuration --- */
+#define VH_IOCTL_MAGIC 0x56
+struct vpnhide_ioctl_data {
+	int count;
+	uid_t uids[MAX_TARGET_UIDS];
+};
+
+#define VH_SET_TARGETS        _IOW(VH_IOCTL_MAGIC, 0x01, struct vpnhide_ioctl_data)
+#define VH_SET_DIRECT_TARGETS _IOW(VH_IOCTL_MAGIC, 0x02, struct vpnhide_ioctl_data)
+#define VH_SET_DEBUG          _IOW(VH_IOCTL_MAGIC, 0x03, int)
+#define VH_SET_PHYS_IFINDEX    _IOW(VH_IOCTL_MAGIC, 0x04, int)
 
 /*
  * Pre-allocated kretprobe instance pool size, applied to every probe.
@@ -146,224 +160,6 @@ static bool is_direct_target_uid(void)
 	return found;
 }
 
-/* ------------------------------------------------------------------ */
-/*  /proc/vpnhide_targets                                             */
-/* ------------------------------------------------------------------ */
-
-static void free_targets_rcu(struct rcu_head *rcu)
-{
-	struct vpnhide_targets *t = container_of(rcu, struct vpnhide_targets, rcu);
-	kfree(t);
-}
-
-static ssize_t targets_write(struct file *file, const char __user *ubuf,
-			     size_t count, loff_t *ppos)
-{
-	char *buf, *line, *next;
-	struct vpnhide_targets *new_t, *old_t;
-	int new_count = 0;
-
-	if (count > PAGE_SIZE)
-		return -EINVAL;
-
-	buf = kmalloc(count + 1, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	if (copy_from_user(buf, ubuf, count)) {
-		kfree(buf);
-		return -EFAULT;
-	}
-	buf[count] = '\0';
-
-	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
-	if (!new_t) {
-		kfree(buf);
-		return -ENOMEM;
-	}
-
-	for (line = buf; line && *line && new_count < MAX_TARGET_UIDS;
-	     line = next) {
-		unsigned long uid;
-
-		next = strchr(line, '\n');
-		if (next)
-			*next++ = '\0';
-
-		while (*line == ' ' || *line == '\t')
-			line++;
-		if (!*line || *line == '#')
-			continue;
-
-		if (kstrtoul(line, 10, &uid) == 0)
-			new_t->uids[new_count++] = (uid_t)uid;
-	}
-	new_t->count = new_count;
-
-	spin_lock(&targets_update_lock);
-	old_t = rcu_dereference_protected(global_targets,
-					  lockdep_is_held(&targets_update_lock));
-	rcu_assign_pointer(global_targets, new_t);
-	spin_unlock(&targets_update_lock);
-
-	if (old_t)
-		call_rcu(&old_t->rcu, free_targets_rcu);
-
-	kfree(buf);
-	pr_info(MODNAME ": loaded %d target UIDs\n", new_count);
-	return count;
-}
-
-static int targets_show(struct seq_file *m, void *v)
-{
-	struct vpnhide_targets *t;
-	int i;
-
-	rcu_read_lock();
-	t = rcu_dereference(global_targets);
-	if (t) {
-		for (i = 0; i < t->count; i++)
-			seq_printf(m, "%u\n", t->uids[i]);
-	}
-	rcu_read_unlock();
-	return 0;
-}
-
-static int targets_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, targets_show, NULL);
-}
-
-static const struct proc_ops targets_proc_ops = {
-	.proc_open = targets_open,
-	.proc_read = seq_read,
-	.proc_write = targets_write,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
-};
-
-/* ------------------------------------------------------------------ */
-/*  /proc/vpnhide_direct_targets                                      */
-/* ------------------------------------------------------------------ */
-
-static ssize_t direct_targets_write(struct file *file, const char __user *ubuf,
-				    size_t count, loff_t *ppos)
-{
-	char *buf, *line, *next;
-	struct vpnhide_targets *new_t, *old_t;
-	int new_count = 0;
-
-	if (count > PAGE_SIZE)
-		return -EINVAL;
-
-	buf = kmalloc(count + 1, GFP_KERNEL);
-	if (!buf)
-		return -ENOMEM;
-
-	if (copy_from_user(buf, ubuf, count)) {
-		kfree(buf);
-		return -EFAULT;
-	}
-	buf[count] = '\0';
-
-	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
-	if (!new_t) {
-		kfree(buf);
-		return -ENOMEM;
-	}
-
-	for (line = buf; line && *line && new_count < MAX_TARGET_UIDS;
-	     line = next) {
-		unsigned long uid;
-		next = strchr(line, '\n');
-		if (next) *next++ = '\0';
-		while (*line == ' ' || *line == '\t') line++;
-		if (!*line || *line == '#') continue;
-		if (kstrtoul(line, 10, &uid) == 0)
-			new_t->uids[new_count++] = (uid_t)uid;
-	}
-	new_t->count = new_count;
-
-	spin_lock(&direct_targets_update_lock);
-	old_t = rcu_dereference_protected(global_direct_targets,
-					  lockdep_is_held(&direct_targets_update_lock));
-	rcu_assign_pointer(global_direct_targets, new_t);
-	spin_unlock(&direct_targets_update_lock);
-
-	if (old_t)
-		call_rcu(&old_t->rcu, free_targets_rcu);
-
-	kfree(buf);
-	pr_info(MODNAME ": loaded %d direct target UIDs\n", new_count);
-	return count;
-}
-
-static int direct_targets_show(struct seq_file *m, void *v)
-{
-	struct vpnhide_targets *t;
-	int i;
-
-	rcu_read_lock();
-	t = rcu_dereference(global_direct_targets);
-	if (t) {
-		for (i = 0; i < t->count; i++)
-			seq_printf(m, "%u\n", t->uids[i]);
-	}
-	rcu_read_unlock();
-	return 0;
-}
-
-static int direct_targets_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, direct_targets_show, NULL);
-}
-
-static const struct proc_ops direct_targets_proc_ops = {
-	.proc_open = direct_targets_open,
-	.proc_read = seq_read,
-	.proc_write = direct_targets_write,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
-};
-
-/* ------------------------------------------------------------------ */
-/*  /proc/vpnhide_debug                                               */
-/* ------------------------------------------------------------------ */
-
-static ssize_t debug_write(struct file *file, const char __user *ubuf,
-			   size_t count, loff_t *ppos)
-{
-	char c;
-
-	if (count == 0)
-		return 0;
-	if (get_user(c, ubuf))
-		return -EFAULT;
-
-	WRITE_ONCE(debug_enabled, c == '1' || c == 'Y' || c == 'y');
-	pr_info(MODNAME ": debug %s\n",
-		READ_ONCE(debug_enabled) ? "enabled" : "disabled");
-	return count;
-}
-
-static int debug_show(struct seq_file *m, void *v)
-{
-	seq_printf(m, "%d\n", READ_ONCE(debug_enabled) ? 1 : 0);
-	return 0;
-}
-
-static int debug_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, debug_show, NULL);
-}
-
-static const struct proc_ops debug_proc_ops = {
-	.proc_open = debug_open,
-	.proc_read = seq_read,
-	.proc_write = debug_write,
-	.proc_lseek = seq_lseek,
-	.proc_release = single_release,
-};
 
 /* ================================================================== */
 /*  Hook 1: dev_ioctl — all per-interface ioctls                      */
@@ -477,24 +273,8 @@ struct sock_ioctl_data {
 	bool target;
 };
 
-static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
-{
-	struct sock_ioctl_data *data = (void *)ri->data;
-	unsigned int cmd = (unsigned int)regs->regs[1];
 
-	data->target = false;
-
-	if (cmd != SIOCGIFCONF)
-		return 0;
-	if (!is_target_uid())
-		return 0;
-
-	data->target = true;
-	data->argp = (void __user *)regs->regs[2];
-	vpnhide_dbg("sock_ioctl_entry: uid=%u SIOCGIFCONF argp=%px\n",
-		    from_kuid(&init_user_ns, current_uid()), data->argp);
-	return 0;
-}
+/* Handle SIOCGIFCONF filtering */
 
 /*
  * Why user-memory access is OK here:
@@ -600,13 +380,7 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 	return 0;
 }
 
-static struct kretprobe sock_ioctl_krp = {
-	.handler = sock_ioctl_ret,
-	.entry_handler = sock_ioctl_entry,
-	.data_size = sizeof(struct sock_ioctl_data),
-	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "sock_ioctl",
-};
+
 
 /* ================================================================== */
 /*  Hook 2b: sock_setsockopt — Aikido Bind Sabotage                   */
@@ -1412,61 +1186,156 @@ static struct kretprobe ip6_route_output_krp = {
 	.kp.symbol_name = "ip6_route_output",
 };
 
-/* ------------------------------------------------------------------ */
-/*  /proc/vpnhide_phys_ifindex                                        */
-/* ------------------------------------------------------------------ */
+/* ================================================================== */
+/*  UID List Update Logic                                              */
+/* ================================================================== */
 
-static ssize_t vpnhide_phys_ifindex_write(struct file *file, const char __user *buf,
-					  size_t count, loff_t *ppos)
+static int update_targets(uid_t *uids, int count, bool direct)
 {
-	char kbuf[16];
-	int val;
+	struct vpnhide_targets *new_t, *old_t;
+	spinlock_t *lock = direct ? &direct_targets_update_lock : &targets_update_lock;
+	struct vpnhide_targets __rcu **global_ptr = direct ? &global_direct_targets : &global_targets;
 
-	if (count >= sizeof(kbuf))
-		return -EINVAL;
+	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
+	if (!new_t)
+		return -ENOMEM;
 
-	if (copy_from_user(kbuf, buf, count))
-		return -EFAULT;
+	new_t->count = count;
+	if (count > 0)
+		memcpy(new_t->uids, uids, count * sizeof(uid_t));
 
-	kbuf[count] = '\0';
-	if (kstrtoint(kbuf, 10, &val) == 0) {
+	spin_lock(lock);
+	old_t = rcu_dereference_protected(*global_ptr, lockdep_is_held(lock));
+	rcu_assign_pointer(*global_ptr, new_t);
+	spin_unlock(lock);
+
+	if (old_t) {
+		synchronize_rcu();
+		kfree(old_t);
+	}
+
+	vpnhide_dbg("%s targets updated: %d UIDs\n", direct ? "Direct" : "Normal", count);
+	return 0;
+}
+
+/* Handle configuration IOCTLs from root manager/app */
+static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
+{
+	struct vpnhide_ioctl_data *kdata;
+	int val, ret = 0;
+
+	if (!capable(CAP_NET_ADMIN))
+		return -EPERM;
+
+	switch (cmd) {
+	case VH_SET_TARGETS:
+	case VH_SET_DIRECT_TARGETS:
+		kdata = kmalloc(sizeof(*kdata), GFP_KERNEL);
+		if (!kdata)
+			return -ENOMEM;
+
+		if (copy_from_user(kdata, (void __user *)arg, sizeof(*kdata))) {
+			kfree(kdata);
+			return -EFAULT;
+		}
+
+		if (kdata->count < 0 || kdata->count > MAX_TARGET_UIDS) {
+			kfree(kdata);
+			return -EINVAL;
+		}
+
+		if (cmd == VH_SET_TARGETS)
+			ret = update_targets(kdata->uids, kdata->count, false);
+		else
+			ret = update_targets(kdata->uids, kdata->count, true);
+
+		kfree(kdata);
+		break;
+
+	case VH_SET_DEBUG:
+		if (get_user(val, (int __user *)arg))
+			return -EFAULT;
+		WRITE_ONCE(debug_enabled, !!val);
+		pr_info(MODNAME ": debug logging %s\n",
+			READ_ONCE(debug_enabled) ? "enabled" : "disabled");
+		break;
+
+	case VH_SET_PHYS_IFINDEX:
+		if (get_user(val, (int __user *)arg))
+			return -EFAULT;
 		WRITE_ONCE(manual_phys_ifindex, val);
 		/* Force immediate cache update on next request */
 		WRITE_ONCE(routing_cache.last_update, 0);
+		vpnhide_dbg("manual_phys_ifindex set to %d\n", val);
+		break;
+
+	default:
+		return -ENOIOCTLCMD;
 	}
 
-	return count;
+	return ret;
 }
 
-static ssize_t vpnhide_phys_ifindex_read(struct file *file, char __user *buf,
-					 size_t count, loff_t *ppos)
+/* Misc device IOCTL wrapper */
+static long vpnhide_dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
-	char kbuf[16];
-	int len;
-
-	len = snprintf(kbuf, sizeof(kbuf), "%d\n", READ_ONCE(manual_phys_ifindex));
-	return simple_read_from_buffer(buf, count, ppos, kbuf, len);
+	return handle_vpnhide_ioctl(cmd, arg);
 }
 
-static const struct proc_ops vpnhide_phys_ifindex_ops = {
-	.proc_read = vpnhide_phys_ifindex_read,
-	.proc_write = vpnhide_phys_ifindex_write,
+static const struct file_operations vpnhide_fops = {
+	.owner = THIS_MODULE,
+	.unlocked_ioctl = vpnhide_dev_ioctl,
+#ifdef CONFIG_COMPAT
+	.compat_ioctl = vpnhide_dev_ioctl,
+#endif
 };
+
+static struct miscdevice vpnhide_misc = {
+	.minor = MISC_DYNAMIC_MINOR,
+	.name = "vpnhide_ctrl",
+	.fops = &vpnhide_fops,
+	.mode = 0660,
+};
+
+static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct sock_ioctl_data *data = (void *)ri->data;
+	unsigned int cmd = (unsigned int)regs->regs[1];
+	unsigned long arg = (unsigned long)regs->regs[2];
+
+	data->target = false;
+
+	if (cmd != SIOCGIFCONF)
+		return 0;
+	if (!is_target_uid())
+		return 0;
+
+	data->target = true;
+	data->argp = (void __user *)arg;
+	vpnhide_dbg("sock_ioctl_entry: uid=%u SIOCGIFCONF argp=%px\n",
+		    from_kuid(&init_user_ns, current_uid()), data->argp);
+	return 0;
+}
 
 
 /* ================================================================== */
 /*  Module init / exit                                                */
 /* ================================================================== */
 
-static struct proc_dir_entry *targets_entry;
-static struct proc_dir_entry *direct_targets_entry;
-static struct proc_dir_entry *phys_ifindex_entry;
-static struct proc_dir_entry *debug_entry;
+/* Stealthy IOCTL interface replaces /proc files */
 
 struct kretprobe_reg {
 	struct kretprobe *krp;
 	const char *name;
 	bool registered;
+};
+
+static struct kretprobe sock_ioctl_krp = {
+	.handler = sock_ioctl_ret,
+	.entry_handler = sock_ioctl_entry,
+	.data_size = sizeof(struct sock_ioctl_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "sock_ioctl",
 };
 
 static struct kretprobe_reg probes[] = {
@@ -1506,45 +1375,13 @@ static int __init vpnhide_init(void)
 		}
 	}
 
-	if (ok == 0) {
-		pr_err(MODNAME ": no kretprobes registered, aborting\n");
-		return -ENOENT;
-	}
-	if (ok < ARRAY_SIZE(probes))
-		pr_warn(MODNAME ": only %d/%zu kretprobes registered — "
-				"some detection paths are not covered\n",
-			ok, ARRAY_SIZE(probes));
-
-	/* 0600: root-only read/write. UIDs are written here by service.sh
-	 * and the VPN Hide app (both root). Apps must not see the target list. */
-	targets_entry =
-		proc_create("vpnhide_targets", 0600, NULL, &targets_proc_ops);
-	if (!targets_entry) {
-		pr_err(MODNAME
-		       ": proc_create(vpnhide_targets) failed; aborting\n");
-		for (i = 0; i < ARRAY_SIZE(probes); i++)
-			if (probes[i].registered)
-				unregister_kretprobe(probes[i].krp);
-		return -ENOMEM;
+	ret = misc_register(&vpnhide_misc);
+	if (ret) {
+		pr_err(MODNAME ": failed to register misc device\n");
+		/* Don't abort yet, kprobes might still work for passive hiding */
 	}
 
-	direct_targets_entry =
-		proc_create("vpnhide_direct_targets", 0600, NULL, &direct_targets_proc_ops);
-	if (!direct_targets_entry)
-		pr_warn(MODNAME
-			": proc_create(vpnhide_direct_targets) failed; direct routing configuration unavailable\n");
-
-	debug_entry = proc_create("vpnhide_debug", 0600, NULL, &debug_proc_ops);
-	if (!debug_entry)
-		pr_warn(MODNAME
-			": proc_create(vpnhide_debug) failed; debug toggle unavailable\n");
-
-	phys_ifindex_entry = proc_create("vpnhide_phys_ifindex", 0600, NULL, &vpnhide_phys_ifindex_ops);
-	if (!phys_ifindex_entry)
-		pr_warn(MODNAME
-			": proc_create(vpnhide_phys_ifindex) failed\n");
-
-	pr_info(MODNAME ": loaded — write UIDs to /proc/vpnhide_targets and /proc/vpnhide_direct_targets\n");
+	pr_info(MODNAME ": loaded\n");
 	return 0;
 }
 
@@ -1553,14 +1390,7 @@ static void __exit vpnhide_exit(void)
 	struct vpnhide_targets *t;
 	int i;
 
-	if (debug_entry)
-		proc_remove(debug_entry);
-	if (targets_entry)
-		proc_remove(targets_entry);
-	if (direct_targets_entry)
-		proc_remove(direct_targets_entry);
-	if (phys_ifindex_entry)
-		proc_remove(phys_ifindex_entry);
+	/* No proc entries to remove anymore */
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		if (probes[i].registered) {
@@ -1594,6 +1424,8 @@ static void __exit vpnhide_exit(void)
 		synchronize_rcu();
 		kfree(t);
 	}
+
+	misc_deregister(&vpnhide_misc);
 
 	pr_info(MODNAME ": unloaded\n");
 }

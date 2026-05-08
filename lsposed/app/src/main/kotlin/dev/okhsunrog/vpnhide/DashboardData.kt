@@ -640,8 +640,8 @@ internal fun loadDashboardState(
 
     // kmod
     val kmodProp = parseModuleProp(KMOD_MODULE_DIR)
-    val (_, procExists) = suExec("[ -f $PROC_TARGETS ] && echo 1 || echo 0")
-    val kmodActive = kmodProp.installed && procExists.trim() == "1"
+    val (_, modLoaded) = suExec("lsmod | grep -q vpnhide_kmod && echo 1 || echo 0")
+    val kmodActive = kmodProp.installed && modLoaded.trim() == "1"
     val kmodTargetCount = if (kmodProp.installed) countTargets(KMOD_TARGETS) else 0
     // Built without brokenReason — populated below after kernelRecommendation
     // and kmodLoadStatus are ready.

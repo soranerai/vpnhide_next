@@ -2,6 +2,7 @@ package dev.okhsunrog.vpnhide
 
 import android.util.Base64
 import android.util.Log
+import android.content.Context
 import dev.okhsunrog.vpnhide.generated.IfaceLists
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -16,13 +17,12 @@ internal const val KMOD_DIRECT_TARGETS = "/data/adb/vpnhide_kmod/direct_targets.
 internal const val ZYGISK_TARGETS = "/data/adb/vpnhide_zygisk/targets.txt"
 internal const val ZYGISK_MODULE_TARGETS = "/data/adb/modules/vpnhide_zygisk/targets.txt"
 internal const val LSPOSED_TARGETS = "/data/adb/vpnhide_lsposed/targets.txt"
-internal const val PROC_TARGETS = "/proc/vpnhide_targets"
-internal const val PROC_DIRECT_TARGETS = "/proc/vpnhide_direct_targets"
-internal const val KMOD_DEBUG_PROC = "/proc/vpnhide_debug"
+internal const val KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
 internal const val SS_UIDS_FILE = "/data/system/vpnhide_uids.txt"
 internal const val SS_HIDDEN_PKGS_FILE = "/data/system/vpnhide_hidden_pkgs.txt"
 internal const val SS_OBSERVER_UIDS_FILE = "/data/system/vpnhide_observer_uids.txt"
 internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt"
+internal const val DEV_NODE = "/dev/vpnhide_ctrl"
 internal const val PORTS_APPLY_SCRIPT = "/data/adb/modules/vpnhide_ports/vpnhide_ports_apply.sh"
 internal const val PORTS_MODULE_DIR = "/data/adb/modules/vpnhide_ports"
 internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
@@ -240,15 +240,12 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
             )
             append("; if [ -n \"\$SELF_UIDS\" ]; then")
             append("   for U in \$SELF_UIDS; do")
-            append("     if [ -f $PROC_TARGETS ]; then")
-            append("       EXISTING=\$(cat $PROC_TARGETS 2>/dev/null)")
-            append(";      echo \"\$EXISTING\" | grep -q \"^\$U\$\" || echo \"\$U\" >> $PROC_TARGETS")
-            append("     ; fi")
-            append("   ; EXISTING2=\$(cat $SS_UIDS_FILE 2>/dev/null)")
+            append("     EXISTING2=\$(cat $SS_UIDS_FILE 2>/dev/null)")
             append(
                 "   ; echo \"\$EXISTING2\" | grep -q \"^\$U\$\" || { echo \"\$U\" >> $SS_UIDS_FILE; chmod 640 $SS_UIDS_FILE; chown root:system $SS_UIDS_FILE; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; }",
             )
             append("   ; done")
+
             append("; fi")
         }
     suExec(uidCmd)
@@ -283,3 +280,46 @@ internal fun buildUidResolver(
         append("; if [ -n \"\$UIDS\" ]; then echo \"\$UIDS\" > $outputFile 2>/dev/null")
         append("; else echo > $outputFile 2>/dev/null; fi")
     }
+internal fun buildWriteTargetsCommand(path: String, header: String, pkgs: List<String>): String {
+    val body = "$header\n" + pkgs.joinToString("\n") + if (pkgs.isNotEmpty()) "\n" else ""
+    val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
+    val dir = path.substringBeforeLast('/')
+    return "mkdir -p $dir ; echo '$b64' | base64 -d > $path && chmod 644 $path"
+}
+
+internal fun buildKmodApplyCommand(pkgs: List<String>, isDirect: Boolean = false): String {
+    val targetType = if (isDirect) "direct" else "targets"
+    if (pkgs.isEmpty()) {
+        return "[ -c $DEV_NODE ] && $KMOD_CTL $targetType; true"
+    }
+
+    val pkgList = pkgs.joinToString("|") { it.replace(".", "\\.") }
+    return "if [ -c $DEV_NODE ]; then " +
+            "UIDS=\$(pm list packages -U | awk -v p=\"^package:($pkgList) \" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); " +
+            "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
+}
+
+internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
+    if (pkgs.isEmpty()) {
+        return "echo > $SS_UIDS_FILE; chmod 640 $SS_UIDS_FILE; chown root:system $SS_UIDS_FILE; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; true"
+    }
+
+    return buildString {
+        append(buildUidResolver(pkgs, SS_UIDS_FILE))
+        append(" ; chmod 640 $SS_UIDS_FILE")
+        append(" ; chown root:system $SS_UIDS_FILE")
+        append(" ; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null")
+    }
+}
+
+internal fun applyKmodTargets(context: Context) {
+    val kmodFile = readPackageList(KMOD_TARGETS)
+    suExec(buildKmodApplyCommand(kmodFile, isDirect = false))
+}
+
+internal fun readPackageList(path: String): List<String> {
+    val (_, raw) = suExec("cat $path 2>/dev/null || true")
+    return raw.lines()
+        .map { it.trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("#") }
+}

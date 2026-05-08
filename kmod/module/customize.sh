@@ -22,6 +22,7 @@ fi
 set_perm "$PERSIST_TARGETS" 0 0 0644
 
 set_perm "$MODPATH/vpnhide_kmod.ko" 0 0 0644
+set_perm "$MODPATH/vpnhide-ctl" 0 0 0770
 
 ui_print "- Targets: $PERSIST_TARGETS (preserved across updates)"
 ui_print "- Pick target apps via the VPN Hide app."

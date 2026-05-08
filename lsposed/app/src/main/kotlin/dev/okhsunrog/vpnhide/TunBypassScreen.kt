@@ -86,7 +86,7 @@ fun TunBypassScreen(
                 userIds = app.userIds,
                 kmod = app.packageName in t.kmodDirectTargets,
             )
-        }
+        }.sortedWith(compareByDescending<BypassEntry> { it.kmod }.thenBy { it.label })
         dirty = false
     }
 
@@ -206,7 +206,6 @@ fun TunBypassScreen(
             try {
                 val (exitCode, _) = suExecAsync(buildBypassSaveCommand(header, kmodPkgs))
                 if (exitCode == 0) {
-                    snackMessage = context.getString(R.string.save_success, selectedCount)
                     DashboardCache.invalidate()
                     TargetsCache.refresh(scope, context)
                 } else {
@@ -223,17 +222,10 @@ fun TunBypassScreen(
 }
 
 private fun buildBypassSaveCommand(header: String, kmodPkgs: List<String>): String {
-    val body = "$header\n" + kmodPkgs.joinToString("\n") + if (kmodPkgs.isNotEmpty()) "\n" else ""
-    val b64 = android.util.Base64.encodeToString(body.toByteArray(), android.util.Base64.NO_WRAP)
-    
     val parts = mutableListOf<String>()
-    parts += "if [ -d /data/adb/vpnhide_kmod ]; then echo '$b64' | base64 -d > $KMOD_DIRECT_TARGETS && chmod 644 $KMOD_DIRECT_TARGETS; fi"
     
-    if (kmodPkgs.isNotEmpty()) {
-        parts += buildUidResolver(kmodPkgs, PROC_DIRECT_TARGETS)
-    } else {
-        parts += "echo > $PROC_DIRECT_TARGETS 2>/dev/null; true"
-    }
+    parts += buildWriteTargetsCommand(KMOD_DIRECT_TARGETS, header, kmodPkgs)
+    parts += buildKmodApplyCommand(kmodPkgs, isDirect = true)
     
     return parts.joinToString(" ; ")
 }
