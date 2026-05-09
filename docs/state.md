@@ -184,20 +184,20 @@ in Kotlin. Keys currently in use:
 
 > ⚠️ **Vector LSPosed redirects this storage.**
 >
-> Because `dev.okhsunrog.vpnhide` is registered in LSPosed as its own
+> Because `dev.soranerai.vpnhidenext` is registered in LSPosed as its own
 > module, the Vector framework hooks `Context.getSharedPreferences()`
 > for the app's process and **transparently redirects reads/writes**
 > to:
 >
 > ```
-> /data/misc/<vector-uuid>/prefs/dev.okhsunrog.vpnhide/vpnhide_prefs.xml
+> /data/misc/<vector-uuid>/prefs/dev.soranerai.vpnhidenext/vpnhide_prefs.xml
 > ```
 >
 > The `<vector-uuid>` is a row in `/data/adb/lspd/config/modules_config.db`.
 > Owner is the app uid, SELinux label `xposed_data`.
 >
 > **Consequence when debugging:**
-> `/data/data/dev.okhsunrog.vpnhide/shared_prefs/` will be empty even
+> `/data/data/dev.soranerai.vpnhidenext/shared_prefs/` will be empty even
 > when the user has touched the toggle. Writing a fake `vpnhide_prefs.xml`
 > at `/data/data/<pkg>/shared_prefs/` from a root shell has **no
 > effect** — Vector ignores that path. To inspect or seed prefs:
@@ -210,17 +210,17 @@ in Kotlin. Keys currently in use:
 > classic `XSharedPreferences` mechanism), not a vpnhide-specific
 > quirk.
 
-### `filesDir` — `/data/user/0/dev.okhsunrog.vpnhide/files/`
+### `filesDir` — `/data/user/0/dev.soranerai.vpnhidenext/files/`
 
 | File | Format | Writer | Reader | Lifetime |
 |---|---|---|---|---|
-| `vpnhide_zygisk_active` | `key=value`: `version`, `boot_id`, `pid`, `timestamp` | Zygisk module (`zygisk/src/lib.rs`) when the VPN Hide app itself is forked under zygisk hooks | App reads from its own `filesDir` to verify zygisk is hooking the app process; compared against current `boot_id` to detect stale heartbeats; `cleanupStaleZygiskStatus` (`ShellUtils.kt:113`) deletes if stale | per-app-launch (overwritten on each fork) |
+| `vpnhide_zygisk_active` | `key=value`: `version`, `boot_id`, `pid`, `timestamp` | Zygisk module (`zygisk/src/lib.rs`) when the VPNHide Next app itself is forked under zygisk hooks | App reads from its own `filesDir` to verify zygisk is hooking the app process; compared against current `boot_id` to detect stale heartbeats; `cleanupStaleZygiskStatus` (`ShellUtils.kt:113`) deletes if stale | per-app-launch (overwritten on each fork) |
 
 Owner is the app uid (no su involved on read; Zygisk runs in the
 forked app process so it has DAC perms to write into the app's own
 filesDir).
 
-### `cacheDir` — `/data/user/0/dev.okhsunrog.vpnhide/cache/`
+### `cacheDir` — `/data/user/0/dev.soranerai.vpnhidenext/cache/`
 
 Scratch space for short-lived files. Currently used for:
 - `vpnhide_lspd_modules_config.db` (`+ -wal`, `+ -shm`) — temporary copies of LSPosed's config DB pulled via su and SQLite-opened read-only, then deleted. See `readLsposedConfig` (`DashboardData.kt:529-612`).
@@ -298,7 +298,7 @@ zygote forks an app (NeoZygisk):
     → read targets via module dir fd
   zygisk/src/lib.rs::post_app_specialize
     → if target: install libc hooks
-    → if VPN Hide app itself: write filesDir/vpnhide_zygisk_active
+    → if VPNHide Next app itself: write filesDir/vpnhide_zygisk_active
 ```
 
 ---

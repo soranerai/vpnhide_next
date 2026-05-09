@@ -1,6 +1,6 @@
 # Building vpnhide-kmod
 
-Most users should download pre-built modules from [Releases](https://github.com/okhsunrog/vpnhide/releases) — builds are provided for all supported GKI generations. This guide is for contributors or users who need to build from source.
+Most users should download pre-built modules from [Releases](https://github.com/soranerai/vpnhide/releases) — builds are provided for all supported GKI generations. This guide is for contributors or users who need to build from source.
 
 ## Quick build
 
@@ -67,7 +67,7 @@ adb shell "su -c 'cat /proc/vpnhide_targets'"
 
 **`insmod: File exists`** — module already loaded. `rmmod vpnhide_kmod` first.
 
-**kretprobe not firing** — check `dmesg | grep vpnhide` for registration messages and `/proc/vpnhide_targets` for correct UIDs. Target app UIDs change on reinstall — re-resolve via the VPN Hide app.
+**kretprobe not firing** — check `dmesg | grep vpnhide` for registration messages and `/proc/vpnhide_targets` for correct UIDs. Target app UIDs change on reinstall — re-resolve via the VPNHide Next app.
 
 **`./kmod/build.py` says "neither podman nor docker found"** — install one (`dnf install podman` / `apt install docker.io`), or build natively against a local kernel source via `--kdir`.
 

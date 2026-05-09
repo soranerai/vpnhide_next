@@ -93,15 +93,15 @@ use crate::hooks::{
 };
 
 const LOG_TAG: &str = "vpnhide-zygisk";
-const APP_PACKAGE: &str = "dev.okhsunrog.vpnhide";
-const APP_STATUS_FILE: &str = "/data/user/0/dev.okhsunrog.vpnhide/files/vpnhide_zygisk_active";
+const APP_PACKAGE: &str = "dev.soranerai.vpnhidenext";
+const APP_STATUS_FILE: &str = "/data/user/0/dev.soranerai.vpnhidenext/files/vpnhide_zygisk_active";
 /// Path to the user's allowlist. Lives OUTSIDE the module directory so
 /// it survives module updates (KSU/Magisk wipe `/data/adb/modules/<id>/`
 /// on every install). `customize.sh` is responsible for creating the
 /// directory and migrating the legacy in-module file on first run.
 /// Targets filename within the module directory.
 const TARGETS_FILENAME: &str = "targets.txt";
-/// Runtime debug-logging flag file. Written by the VPN Hide app when
+/// Runtime debug-logging flag file. Written by the VPNHide Next app when
 /// the user toggles the setting. Absent or not "1" ⇒ logging is off —
 /// stealth-first default matches the rest of the project.
 const DEBUG_LOGGING_FILENAME: &str = "debug_logging";
@@ -163,7 +163,7 @@ pub struct VpnHide {
     /// to hook. Read by `postAppSpecialize`. Accessed single-threaded
     /// (Zygisk calls pre/post sequentially on the zygote main thread).
     is_target: core::cell::Cell<bool>,
-    /// True only when the currently specializing app is the VPN Hide app
+    /// True only when the currently specializing app is the VPNHide Next app
     /// itself, so we can write a heartbeat the dashboard can trust.
     report_status: core::cell::Cell<bool>,
 }

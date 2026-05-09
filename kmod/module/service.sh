@@ -27,7 +27,7 @@ done
 # `pm list packages` starts responding very early in boot but returns
 # only system packages for several more seconds.
 for i in $(seq 1 60); do
-    if pm list packages -U 2>/dev/null | grep -q "^package:dev.okhsunrog.vpnhide "; then
+    if pm list packages -U 2>/dev/null | grep -q "^package:dev.soranerai.vpnhidenext "; then
         break
     fi
     sleep 1

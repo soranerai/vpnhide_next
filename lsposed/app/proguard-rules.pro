@@ -1,6 +1,6 @@
 # Keep Xposed entry points — LSPosed loads these by reflection via assets/xposed_init
--keep class dev.okhsunrog.vpnhide.HookEntry { *; }
--keepnames class dev.okhsunrog.vpnhide.** { *; }
+-keep class dev.soranerai.vpnhidenext.HookEntry { *; }
+-keepnames class dev.soranerai.vpnhidenext.** { *; }
 
 # Keep Xposed API types
 -keep class de.robv.android.xposed.** { *; }

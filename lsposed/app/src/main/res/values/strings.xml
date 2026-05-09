@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">VPN Hide</string>
+    <string name="app_name">VPNHide Next</string>
     <string name="faq_title">FAQ</string>
     <string name="module_description">Hides active VPN connection from selected apps — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
 
@@ -61,14 +61,14 @@
 
     <!-- Root status -->
     <string name="root_error_title">Root access required</string>
-    <string name="root_error_message">VPN Hide needs root access to manage target apps. Grant root permissions to this app in your root manager (Magisk, KernelSU, etc.) and reopen the app.</string>
+    <string name="root_error_message">VPNHide Next needs root access to manage target apps. Grant root permissions to this app in your root manager (Magisk, KernelSU, etc.) and reopen the app.</string>
 
     <!-- Save feedback -->
     <string name="save_success">Saved %d target(s)</string>
     <string name="save_failed_exit">Save failed (exit code %d)</string>
     <string name="save_failed_error">Save failed: %s</string>
     <string name="save_failed_root">Save failed: root access denied</string>
-    <string name="save_header_comment" translatable="false"># Managed by VPN Hide app</string>
+    <string name="save_header_comment" translatable="false"># Managed by VPNHide Next app</string>
 
     <!-- Diagnostics -->
     <string name="summary_format">%1$d/%2$d passed</string>
@@ -77,7 +77,7 @@
     <string name="btn_save_debug">Save</string>
     <string name="btn_share_debug">Share</string>
     <string name="diag_debug_logging_title">Debug logging</string>
-    <string name="diag_debug_logging_description">Off by default — VPN Hide keeps logcat and dmesg near-silent. You don\'t need to flip this to collect a bug report: Start recording and Collect debug log below automatically turn logging on for the duration of the capture. Use this toggle only if you want logs to be emitted continuously across the app, system_server hooks, Zygisk-hooked apps, and the kernel module (kmod logs to dmesg). Zygisk-hooked apps must be restarted for the change to take effect for them.</string>
+    <string name="diag_debug_logging_description">Off by default — VPNHide Next keeps logcat and dmesg near-silent. You don\'t need to flip this to collect a bug report: Start recording and Collect debug log below automatically turn logging on for the duration of the capture. Use this toggle only if you want logs to be emitted continuously across the app, system_server hooks, Zygisk-hooked apps, and the kernel module (kmod logs to dmesg). Zygisk-hooked apps must be restarted for the change to take effect for them.</string>
     <string name="logcat_card_title">Full system logcat</string>
     <string name="logcat_card_description">Records unfiltered logs from all buffers (main/system/crash/events/radio) for debugging issues that aren\'t visible in the standard checks. Start recording, reproduce the bug, then stop.</string>
     <string name="logcat_btn_start">Start recording</string>
@@ -90,21 +90,21 @@
     <string name="badge_info">INFO</string>
     <string name="banner_no_vpn">No active VPN detected. Turn on your VPN connection before running checks.</string>
     <string name="banner_ready">VPN is active. This app is in the target list. Results below.</string>
-    <string name="banner_added_self">Added VPN Hide to the target list. Restart VPN Hide (force-stop and reopen) for native-level checks to take effect — no device reboot needed.</string>
+    <string name="banner_added_self">Added VPNHide Next to the target list. Restart VPNHide Next (force-stop and reopen) for native-level checks to take effect — no device reboot needed.</string>
     <string name="banner_adding_self">Adding this app to target list&#8230;</string>
-    <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPN Hide → Mobile data &amp; Wi-Fi.</string>
+    <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPNHide Next → Mobile data &amp; Wi-Fi.</string>
     <string name="section_native">Native level (kmod / zygisk)</string>
     <string name="section_java">Java API level (LSPosed)</string>
 
     <!-- Dashboard -->
     <string name="dashboard_modules">Modules</string>
     <string name="dashboard_kmod">Kernel module</string>
-    <string name="dashboard_zygisk">VPN Hide Zygisk module</string>
-    <string name="dashboard_lsposed_module">VPN Hide LSPosed hook</string>
+    <string name="dashboard_zygisk">VPNHide Next Zygisk module</string>
+    <string name="dashboard_lsposed_module">VPNHide Next LSPosed hook</string>
     <string name="dashboard_ports">Ports hiding module</string>
     <string name="dashboard_not_installed">Not installed</string>
     <string name="dashboard_installed_inactive">Installed, inactive</string>
-    <string name="dashboard_installed_restart_app">Installed, restart VPN Hide to activate</string>
+    <string name="dashboard_installed_restart_app">Installed, restart VPNHide Next to activate</string>
     <string name="dashboard_kmod_broken_wrong_variant">Installed, wrong GKI variant</string>
     <string name="dashboard_kmod_broken_unsupported_kernel">Installed, kernel not supported</string>
     <string name="dashboard_kmod_broken_no_kprobes">Installed, kernel has no kprobes</string>
@@ -121,9 +121,9 @@
     <string name="dashboard_protection_unknown">Not checked</string>
     <string name="dashboard_protection_no_module">No module</string>
     <string name="dashboard_protection_hooks_inactive">Hooks inactive</string>
-    <string name="dashboard_needs_restart">VPN Hide was just added to its own target list. Restart VPN Hide (force-stop and reopen) to check protection — no device reboot needed.</string>
+    <string name="dashboard_needs_restart">VPNHide Next was just added to its own target list. Restart VPNHide Next (force-stop and reopen) to check protection — no device reboot needed.</string>
     <string name="dashboard_no_vpn">No active VPN. Turn on VPN to check protection status.</string>
-    <string name="vpn_off_prompt">No active VPN. Turn it on, then tap Retry to run the protection checks. Results are cached until VPN Hide is restarted — no need to re-run later in the same session.</string>
+    <string name="vpn_off_prompt">No active VPN. Turn it on, then tap Retry to run the protection checks. Results are cached until VPNHide Next is restarted — no need to re-run later in the same session.</string>
     <string name="vpn_off_retry">Retry</string>
     <string name="dashboard_install_recommendation_title">Installation recommendation</string>
     <string name="dashboard_install_recommendation_device">Your device: %1$s, kernel %2$s</string>
@@ -136,28 +136,28 @@
     <string name="dashboard_warnings">Warnings (%d)</string>
     <string name="dashboard_issue_kmod_capable_but_zygisk">Your kernel supports the kernel module — it hooks in kernel space and is invisible to anti-tamper checks. Zygisk works too, but its hooks can be detected by banking and payment apps, so you\'d have to keep Z off for those apps individually. Install %1$s and uninstall the Zygisk module for cleaner coverage.</string>
     <string name="dashboard_issue_both_native_active">Kernel module and Zygisk are both active, covering the same native paths. Kmod is invisible to anti-tamper, Zygisk isn\'t — so every time you add a banking or payment app as a target, you have to remember to leave Z off for it. Uninstall the Zygisk module to remove that per-app footgun; kmod keeps the coverage.</string>
-    <string name="dashboard_issue_debug_logging_on">Debug logging is enabled. VPN Hide is writing verbose lines to logcat that anyone with root can read. Turn it off in Diagnostics after you\'ve finished collecting a bug report.</string>
-    <string name="dashboard_issue_selinux_permissive">SELinux is Permissive. Six detection vectors VPN Hide relies on the kernel to block (RTM_GETROUTE, /proc/net/{tcp,udp,dev,fib_trie}, /sys/class/net) are reachable to target apps. Run `setenforce 1` and investigate what disabled it.</string>
-    <string name="dashboard_issue_self_multi_profile">VPN Hide is installed in %1$d profiles. The main-profile copy is the one that matters — LSPosed hooks system_server, which runs in the main profile only, and the picker there already sees apps from every profile and applies filters to all of them. Extra copies in secondary profiles are redundant and race each other\'s Saves to the shared target files. Uninstall from work profile / Second Space / other secondary profiles.</string>
+    <string name="dashboard_issue_debug_logging_on">Debug logging is enabled. VPNHide Next is writing verbose lines to logcat that anyone with root can read. Turn it off in Diagnostics after you\'ve finished collecting a bug report.</string>
+    <string name="dashboard_issue_selinux_permissive">SELinux is Permissive. Six detection vectors VPNHide Next relies on the kernel to block (RTM_GETROUTE, /proc/net/{tcp,udp,dev,fib_trie}, /sys/class/net) are reachable to target apps. Run `setenforce 1` and investigate what disabled it.</string>
+    <string name="dashboard_issue_self_multi_profile">VPNHide Next is installed in %1$d profiles. The main-profile copy is the one that matters — LSPosed hooks system_server, which runs in the main profile only, and the picker there already sees apps from every profile and applies filters to all of them. Extra copies in secondary profiles are redundant and race each other\'s Saves to the shared target files. Uninstall from work profile / Second Space / other secondary profiles.</string>
     <string name="dashboard_issue_no_native">No native module installed. Install kmod or zygisk for full protection.</string>
-    <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPN Hide module for System Framework.</string>
+    <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPNHide Next module for System Framework.</string>
     <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>
-    <string name="dashboard_issue_lsposed_config_unreadable">Failed to read LSPosed/Vector configuration. Reopen LSPosed/Vector, verify that VPN Hide is enabled there, and then reopen VPN Hide.</string>
-    <string name="dashboard_issue_lsposed_not_enabled">VPN Hide is present in LSPosed/Vector, but the module is disabled. Enable VPN Hide in LSPosed/Vector and keep System Framework in its scope.</string>
-    <string name="dashboard_issue_lsposed_no_system_scope">VPN Hide is enabled in LSPosed/Vector, but System Framework is missing from its scope. Add System Framework to the VPN Hide scope in LSPosed/Vector.</string>
-    <string name="dashboard_issue_lsposed_extra_scope">VPN Hide should stay scoped only to System Framework in LSPosed/Vector. Remove these apps from the VPN Hide scope: %1$s. Use Protection → Tun in VPN Hide for filtering instead.</string>
+    <string name="dashboard_issue_lsposed_config_unreadable">Failed to read LSPosed/Vector configuration. Reopen LSPosed/Vector, verify that VPNHide Next is enabled there, and then reopen VPNHide Next.</string>
+    <string name="dashboard_issue_lsposed_not_enabled">VPNHide Next is present in LSPosed/Vector, but the module is disabled. Enable VPNHide Next in LSPosed/Vector and keep System Framework in its scope.</string>
+    <string name="dashboard_issue_lsposed_no_system_scope">VPNHide Next is enabled in LSPosed/Vector, but System Framework is missing from its scope. Add System Framework to the VPNHide Next scope in LSPosed/Vector.</string>
+    <string name="dashboard_issue_lsposed_extra_scope">VPNHide Next should stay scoped only to System Framework in LSPosed/Vector. Remove these apps from the VPNHide Next scope: %1$s. Use Protection → Tun in VPNHide Next for filtering instead.</string>
     <string name="dashboard_issue_lsposed_field_rename">AOSP field rename detected on Android SDK %2$s: %1$s. Java-layer protection is degraded for the affected hooks (they were skipped at install time to avoid logcat-spam from per-call NoSuchFieldError). Please file an issue at github.com/okhsunrog/vpnhide/issues with this list so the hooks can be updated for your Android version.</string>
     <string name="dashboard_issue_no_targets">No target apps configured. Go to Protection → Tun to select apps.</string>
     <string name="dashboard_issue_ports_no_observers">Ports hiding module is installed but no observers are configured. Go to Protection → Ports to pick apps.</string>
     <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch: running %1$s, installed %2$s. Reboot the device to apply the update.</string>
     <string name="dashboard_issue_update_kmod">Kernel module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
     <string name="dashboard_issue_update_zygisk">Zygisk version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
-    <string name="dashboard_issue_update_app_for_kmod">Kernel module version %1$s is newer than app version %2$s. Update the VPN Hide app.</string>
-    <string name="dashboard_issue_update_app_for_zygisk">Zygisk version %1$s is newer than app version %2$s. Update the VPN Hide app.</string>
+    <string name="dashboard_issue_update_app_for_kmod">Kernel module version %1$s is newer than app version %2$s. Update the VPNHide Next app.</string>
+    <string name="dashboard_issue_update_app_for_zygisk">Zygisk version %1$s is newer than app version %2$s. Update the VPNHide Next app.</string>
     <string name="dashboard_issue_kmod_version_mismatch">Kernel module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_issue_zygisk_version_mismatch">Zygisk version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_issue_update_ports">Ports module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
-    <string name="dashboard_issue_update_app_for_ports">Ports module version %1$s is newer than app version %2$s. Update the VPN Hide app.</string>
+    <string name="dashboard_issue_update_app_for_ports">Ports module version %1$s is newer than app version %2$s. Update the VPNHide Next app.</string>
     <string name="dashboard_issue_ports_version_mismatch">Ports module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_running_version">Running module version: %s</string>
 
@@ -167,7 +167,7 @@
     <string name="dashboard_issue_kmod_ambiguous_try_alternative">Kernel module %1$s failed to load this boot. Your kernel\'s GKI branch isn\'t identifiable from uname -r, so install %2$s instead.</string>
     <string name="dashboard_issue_kmod_load_failed">Kernel module failed to load. insmod error: %1$s. Use Diagnostics → Collect debug log to attach the full boot-time insmod output to a bug report.</string>
     <string name="dashboard_issue_kmod_not_supported_kernel">Your kernel (%1$s) has no matching vpnhide-kmod variant. Uninstall the kmod module and install %2$s instead.</string>
-    <string name="dashboard_issue_kprobes_missing">Your kernel was built without CONFIG_KRETPROBES. The VPN Hide kernel module cannot work on this kernel. Uninstall kmod and use vpnhide-zygisk.zip instead.</string>
+    <string name="dashboard_issue_kprobes_missing">Your kernel was built without CONFIG_KRETPROBES. The VPNHide Next kernel module cannot work on this kernel. Uninstall kmod and use vpnhide-zygisk.zip instead.</string>
 
     <!-- Update -->
     <string name="update_available_title">Update available</string>

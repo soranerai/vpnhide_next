@@ -906,12 +906,7 @@ static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	rcu_read_lock();
 	if (rt) {
 		struct net_device *dev = NULL;
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
 		dev = rt->fib6_nh->nh_common.nhc_dev;
-#else
-		if (rt->fib6_nh)
-			dev = rt->fib6_nh->nh_common.nhc_dev;
-#endif
 		if (dev && is_vpn_ifname(dev->name)) {
 			data->saved_len = data->skb ? data->skb->len : 0;
 			data->should_filter = true;
@@ -1552,5 +1547,5 @@ module_exit(vpnhide_exit);
  * is required to resolve EXPORT_SYMBOL_GPL symbols (kretprobes, etc.)
  * at module load time. */
 MODULE_LICENSE("GPL");
-MODULE_AUTHOR("okhsunrog");
+MODULE_AUTHOR("soranerai");
 MODULE_DESCRIPTION("Hide VPN interfaces from selected apps at kernel level");

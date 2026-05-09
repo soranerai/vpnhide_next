@@ -27,7 +27,7 @@ Filtering is controlled by `Binder.getCallingUid()` -- only apps whose UID appea
 Target UIDs are loaded from `/data/system/vpnhide_uids.txt`. A `FileObserver` (inotify) watches for changes and reloads the list immediately -- no reboot needed.
 
 This file is written by:
-- The **VPN Hide app** (this APK's target picker UI)
+- The **VPNHide Next app** (this APK's target picker UI)
 - The module's `service.sh` on boot
 
 ## Target picker app
@@ -50,10 +50,10 @@ Works on KernelSU, Magisk, and any other root solution.
 
 1. Build the APK (`./gradlew assembleDebug`).
 2. Install: `adb install app/build/outputs/apk/debug/app-debug.apk`.
-3. Open LSPosed/Vector manager, go to Modules, enable **VPN Hide**.
+3. Open LSPosed/Vector manager, go to Modules, enable **VPNHide Next**.
 4. Add **"System Framework"** to the module's scope. No other apps should be in scope.
 5. Reboot.
-6. Open the VPN Hide app to manage target apps.
+6. Open the VPNHide Next app to manage target apps.
 
 ## Combined use with kmod
 
@@ -78,7 +78,7 @@ adb logcat | grep VpnHide
 
 Requires JDK 17 or later. Output: `app/build/outputs/apk/debug/app-debug.apk`.
 
-The build cross-compiles `lsposed/native/` (Rust crate) for `aarch64-linux-android` via cargo-ndk and bundles the resulting `libvpnhide_checks.so` into the APK's `jniLibs/`, plus auto-generated UniFFI Kotlin bindings under package `dev.okhsunrog.vpnhide.checks`. Both steps are driven by [Gobley](https://github.com/gobley/gobley) Gradle plugins (`dev.gobley.cargo` + `dev.gobley.uniffi`) — no manual `cargo` invocation needed. See [../docs/development.md](../docs/development.md#prerequisites) for the full prereq list.
+The build cross-compiles `lsposed/native/` (Rust crate) for `aarch64-linux-android` via cargo-ndk and bundles the resulting `libvpnhide_checks.so` into the APK's `jniLibs/`, plus auto-generated UniFFI Kotlin bindings under package `dev.soranerai.vpnhidenext.checks`. Both steps are driven by [Gobley](https://github.com/gobley/gobley) Gradle plugins (`dev.gobley.cargo` + `dev.gobley.uniffi`) — no manual `cargo` invocation needed. See [../docs/development.md](../docs/development.md#prerequisites) for the full prereq list.
 
 ## License
 

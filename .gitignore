@@ -44,3 +44,4 @@ kmod/vpnhide-ctl-host
 /tmp/
 /*.zip
 scripts/__pycache__/
+release.jks

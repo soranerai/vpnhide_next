@@ -47,11 +47,11 @@
           "type": "added",
           "items": [
             {
-              "en": "Dashboard now splits issues into Errors (red, block protection) and Warnings (amber, setup is suboptimal but working). Four new warnings: kernel supports kmod but only Zygisk is installed; kmod and Zygisk both active simultaneously (means you have to remember per-app Z-off for banking / payment apps that detect Zygisk); debug logging left on; SELinux in Permissive mode (exposes six detection vectors that VPN Hide relies on the kernel to block).",
+              "en": "Dashboard now splits issues into Errors (red, block protection) and Warnings (amber, setup is suboptimal but working). Four new warnings: kernel supports kmod but only Zygisk is installed; kmod and Zygisk both active simultaneously (means you have to remember per-app Z-off for banking / payment apps that detect Zygisk); debug logging left on; SELinux in Permissive mode (exposes six detection vectors that VPNHide Next relies on the kernel to block).",
               "ru": "Обзор теперь делит проблемы на Ошибки (красные, ломают защиту) и Предупреждения (жёлтые, защита работает, но конфигурация не оптимальная). Четыре новых предупреждения: ядро поддерживает kmod, но установлен только Zygisk; kmod и Zygisk активны одновременно (значит, для каждого банковского или платёжного приложения придётся помнить выключать Z вручную, иначе они его обнаруживают); оставлены включёнными отладочные логи; SELinux в режиме Permissive (открывает шесть векторов детекции, которые должен блокировать)."
             },
             {
-              "en": "Debug logging toggle in Diagnostics: off by default — VPN Hide, LSPosed hooks (VpnHide-NC/NI/LP and the package-visibility filter), and zygisk keep logcat near-silent. Start recording and Collect debug log automatically enable verbose logging for the duration of the capture and restore it afterwards, so the toggle is only needed if you want logs emitted continuously outside a capture. Errors always pass through so hook-install failures remain visible.",
+              "en": "Debug logging toggle in Diagnostics: off by default — VPNHide Next, LSPosed hooks (VpnHide-NC/NI/LP and the package-visibility filter), and zygisk keep logcat near-silent. Start recording and Collect debug log automatically enable verbose logging for the duration of the capture and restore it afterwards, so the toggle is only needed if you want logs emitted continuously outside a capture. Errors always pass through so hook-install failures remain visible.",
               "ru": "Переключатель отладочных логов в Диагностике: по умолчанию выключен — приложение, хуки LSPosed (VpnHide-NC/NI/LP, фильтр видимости пакетов) и zygisk почти ничего не пишут в logcat. Кнопки «Начать запись» и «Собрать отладочный лог» автоматически включают логирование на время захвата и возвращают состояние обратно, так что переключатель нужен только если вы хотите, чтобы логи писались постоянно, вне сессии захвата. Ошибки всегда видны, чтобы проблемы установки хуков не терялись."
             },
             {
@@ -67,8 +67,8 @@
               "ru": "Расширен фильтр российских приложений: Youla, Delivery Club, СДЭК, Почта России, Дом.ру, КонсультантПлюс и т. д. — локальный ритейл, аптеки, рестораны и сервисы."
             },
             {
-              "en": "Multi-profile support: VPN Hide now targets every instance of a selected app across user profiles (work profile, MIUI Second Space, Private Space, secondary users). Previously hooks only matched the app in your primary profile — a work-profile Ozon would still see the VPN. Package-to-UID resolution at boot + at Save time now uses 'pm list packages -U --user all' and writes every UID to targets, so all profiles are covered automatically without any UI changes. Fixes the work-profile request in issue #15.",
-              "ru": "Поддержка мультипрофилей: VPN Hide теперь скрывает VPN во всех профилях, где установлено выбранное приложение (рабочий профиль, MIUI Second Space, Private Space, вторичные пользователи). Раньше хуки срабатывали только для копии в основном профиле — Ozon в рабочем профиле продолжал видеть VPN. Резолв имён пакетов в UID при загрузке и при сохранении теперь использует 'pm list packages -U --user all' и пишет все UID-ы в таргеты — все профили покрываются автоматически, UI не меняется. Закрывает запрос про work profile из issue #15."
+              "en": "Multi-profile support: VPNHide Next now targets every instance of a selected app across user profiles (work profile, MIUI Second Space, Private Space, secondary users). Previously hooks only matched the app in your primary profile — a work-profile Ozon would still see the VPN. Package-to-UID resolution at boot + at Save time now uses 'pm list packages -U --user all' and writes every UID to targets, so all profiles are covered automatically without any UI changes. Fixes the work-profile request in issue #15.",
+              "ru": "Поддержка мультипрофилей: VPNHide Next теперь скрывает VPN во всех профилях, где установлено выбранное приложение (рабочий профиль, MIUI Second Space, Private Space, вторичные пользователи). Раньше хуки срабатывали только для копии в основном профиле — Ozon в рабочем профиле продолжал видеть VPN. Резолв имён пакетов в UID при загрузке и при сохранении теперь использует 'pm list packages -U --user all' и пишет все UID-ы в таргеты — все профили покрываются автоматически, UI не меняется. Закрывает запрос про work profile из issue #15."
             }
           ]
         },
@@ -441,8 +441,8 @@
           "type": "added",
           "items": [
             {
-              "en": "VPN Hide app with target picker UI — select apps to hide VPN from",
-              "ru": "Приложение VPN Hide с выбором целевых приложений"
+              "en": "VPNHide Next app with target picker UI — select apps to hide VPN from",
+              "ru": "Приложение VPNHide Next с выбором целевых приложений"
             },
             {
               "en": "Built-in diagnostics — 26 checks covering all detection vectors",

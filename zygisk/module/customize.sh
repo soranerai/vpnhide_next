@@ -5,7 +5,7 @@
 
 SKIPUNZIP=0
 MOD_VER="$(grep '^version=' "$MODPATH/module.prop" | cut -d= -f2)"
-ui_print "- VPN Hide (Zygisk native) ${MOD_VER:-unknown}"
+ui_print "- VPNHide Next (Zygisk native) ${MOD_VER:-unknown}"
 ui_print "- Installing to $MODPATH"
 
 # Make the native library readable/executable by zygote
@@ -43,10 +43,10 @@ if [ ! -f "$PERSIST_TARGETS" ]; then
     cat > "$PERSIST_TARGETS" <<'EOF'
 # vpnhide-zygisk target allowlist
 # One package name per line. Lines starting with '#' are comments.
-# Managed via the VPN Hide app.
+# Managed via the VPNHide Next app.
 EOF
 fi
 set_perm "$PERSIST_TARGETS" 0 0 0644
 
 ui_print "- Targets list: $PERSIST_TARGETS (preserved across updates)"
-ui_print "- Pick target apps via the VPN Hide app."
+ui_print "- Pick target apps via the VPNHide Next app."

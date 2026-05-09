@@ -5,7 +5,7 @@ edition = "2024"
 rust-version = "1.85"
 license = "MIT"
 description = "Zygisk module (native libc hooks) that hides an active VPN from selected Android apps."
-repository = "https://github.com/okhsunrog/vpnhide-zygisk"
+repository = "https://github.com/soranerai/vpnhide-zygisk"
 
 [lib]
 # Zygisk loads the module as an Android shared library. Name must match

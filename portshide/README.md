@@ -32,7 +32,7 @@ Hide app (it invokes `vpnhide_ports_apply.sh` via `su`).
 
 ## Configuration
 
-Managed by the VPN Hide app (Protection → Ports). Direct shell
+Managed by the VPNHide Next app (Protection → Ports). Direct shell
 alternative:
 
 ```
@@ -68,7 +68,7 @@ su -c sh /data/adb/modules/vpnhide_ports/vpnhide_ports_apply.sh
   `bw_OUTPUT` readiness).
 - Some Android versions rebuild `OUTPUT` on network state changes.
   Our rules in our own chain survive; only the `OUTPUT -j vpnhide_out`
-  jump can be affected. Re-run apply script if needed; the VPN Hide
+  jump can be affected. Re-run apply script if needed; the VPNHide Next
   app's Save action does this automatically.
 - `iptables-legacy` backend expected (default on AOSP 16 as of this
   writing). nftables backend via `iptables-nft` also works — same

@@ -2,9 +2,13 @@ obj-m += vpnhide_kmod.o
 
 ifeq ($(KERNELRELEASE),)
 
-# KERNEL_SRC and CLANG_DIR come from the environment (set via .env + direnv).
+# KERNEL_SRC / KDIR and CLANG_DIR come from the environment (set via .env + direnv).
 ifndef KERNEL_SRC
-$(error KERNEL_SRC is not set — copy .env.example to .env and fill in paths)
+  ifdef KDIR
+    KERNEL_SRC := $(KDIR)
+  else
+    $(error KERNEL_SRC or KDIR is not set — copy .env.example to .env and fill in paths)
+  endif
 endif
 ifndef CLANG_DIR
 $(error CLANG_DIR is not set — copy .env.example to .env and fill in paths)

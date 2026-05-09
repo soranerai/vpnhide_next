@@ -32,7 +32,7 @@ headers = {"Accept": "application/vnd.github+json"}
 if token := github_token():
     headers["Authorization"] = f"Bearer {token}"
 
-resp = httpx.get("https://api.github.com/repos/okhsunrog/vpnhide/releases", headers=headers)
+resp = httpx.get("https://api.github.com/repos/soranerai/vpnhide/releases", headers=headers)
 resp.raise_for_status()
 releases = resp.json()
 

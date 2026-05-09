@@ -106,7 +106,7 @@ cargo ndk -t arm64-v8a build --release \
 2. KernelSU/Magisk manager -> Modules -> Install from storage -> pick the zip.
 3. Reboot.
 4. Pick target apps:
-   - **VPN Hide app (recommended):** open the VPN Hide app (the [lsposed](../lsposed/) APK). Lists all installed apps with icons, search, and checkboxes. Works on both KernelSU and Magisk.
+   - **VPNHide Next app (recommended):** open the VPNHide Next app (the [lsposed](../lsposed/) APK). Lists all installed apps with icons, search, and checkboxes. Works on both KernelSU and Magisk.
    - **Shell:** edit `/data/adb/vpnhide_zygisk/targets.txt` directly (one package name per line, `#` for comments). A base package name `com.example.app` also matches subprocesses like `com.example.app:background`.
 5. Force-stop target apps: `adb shell am force-stop <pkg>`
 6. Verify: `adb logcat | grep vpnhide-zygisk`

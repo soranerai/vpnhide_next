@@ -8,7 +8,7 @@
 # rotate an app's UID) are picked up on the next boot or Save — a stale
 # UID never sticks. Same pattern as kmod's service.sh.
 #
-# Callable from service.sh at boot and from the VPN Hide app via su.
+# Callable from service.sh at boot and from the VPNHide Next app via su.
 # Idempotent: flushes our chain and rebuilds atomically via
 # iptables-restore --noflush. Jump from OUTPUT is added only if missing.
 #

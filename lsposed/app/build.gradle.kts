@@ -23,12 +23,12 @@ cargo {
 
 uniffi {
     generateFromLibrary {
-        packageName = "dev.okhsunrog.vpnhide.checks"
+        packageName = "dev.soranerai.vpnhidenext.checks"
     }
 }
 
 android {
-    namespace = "dev.okhsunrog.vpnhide"
+    namespace = "dev.soranerai.vpnhidenext"
     compileSdk = 35
 
     // Effective build version from ../scripts/build-version.py:
@@ -53,10 +53,10 @@ android {
             .trim()
 
     defaultConfig {
-        applicationId = "dev.okhsunrog.vpnhide"
+        applicationId = "dev.soranerai.vpnhidenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 701
+        versionCode = 1000
         versionName = buildVersion
 
         ndk {
