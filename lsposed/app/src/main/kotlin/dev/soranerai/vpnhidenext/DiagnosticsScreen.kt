@@ -28,7 +28,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import dev.soranerai.vpnhidenext.ui.theme.*
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
@@ -37,9 +36,9 @@ import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
+import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetlink
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetroute
-import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkProcNetDev
 import dev.soranerai.vpnhidenext.checks.checkProcNetFibTrie
 import dev.soranerai.vpnhidenext.checks.checkProcNetIfInet6
@@ -51,6 +50,7 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
 import dev.soranerai.vpnhidenext.generated.IfaceLists
+import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -565,11 +565,12 @@ private fun CheckCard(r: CheckResult) {
             null -> MaterialTheme.colorScheme.onSurfaceVariant
         }
 
-    val containerColor = when (r.passed) {
-        true -> TelGreen.copy(alpha = 0.15f)
-        false -> TelRed.copy(alpha = 0.15f)
-        null -> MaterialTheme.colorScheme.surfaceVariant
-    }
+    val containerColor =
+        when (r.passed) {
+            true -> TelGreen.copy(alpha = 0.15f)
+            false -> TelRed.copy(alpha = 0.15f)
+            null -> MaterialTheme.colorScheme.surfaceVariant
+        }
 
     val badgeText =
         stringResource(

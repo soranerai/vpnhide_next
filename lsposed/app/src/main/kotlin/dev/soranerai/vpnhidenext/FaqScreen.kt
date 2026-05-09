@@ -1,5 +1,8 @@
 package dev.soranerai.vpnhidenext
 
+import android.graphics.Typeface
+import android.text.Spanned
+import android.text.style.StyleSpan
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,9 +19,6 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import android.text.Spanned
-import android.text.style.StyleSpan
-import android.graphics.Typeface
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -35,22 +35,24 @@ fun FaqScreen(
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                    titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground
-                )
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
             )
         },
-        modifier = modifier.fillMaxSize()
+        modifier = modifier.fillMaxSize(),
     ) { innerPadding ->
         Column(
-            modifier = Modifier
-                .padding(innerPadding)
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+            modifier =
+                Modifier
+                    .padding(innerPadding)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             FaqSection(
                 title = stringResource(R.string.apps_help_title),
@@ -68,7 +70,7 @@ fun FaqScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
+                },
             )
 
             FaqSection(
@@ -83,7 +85,7 @@ fun FaqScreen(
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                }
+                },
             )
 
             FaqSection(
@@ -93,7 +95,7 @@ fun FaqScreen(
                         text = stringResource(R.string.hiding_hint_roles),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                }
+                },
             )
 
             FaqSection(
@@ -103,9 +105,9 @@ fun FaqScreen(
                         text = stringResource(R.string.ports_hint_role),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                }
+                },
             )
-            
+
             Spacer(modifier = Modifier.height(32.dp))
         }
     }
@@ -117,20 +119,21 @@ private fun FaqSection(
     content: @Composable ColumnScope.() -> Unit,
 ) {
     Card(
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        ),
-        modifier = Modifier.fillMaxWidth()
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+            ),
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
             modifier = Modifier.padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
-                color = MaterialTheme.colorScheme.primary
+                color = MaterialTheme.colorScheme.primary,
             )
             content()
         }

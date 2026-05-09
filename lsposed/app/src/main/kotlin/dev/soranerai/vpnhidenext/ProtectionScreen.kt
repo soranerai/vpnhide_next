@@ -2,6 +2,8 @@ package dev.soranerai.vpnhidenext
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -11,8 +13,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 
 internal enum class ProtectionMode { VpnTargets, TunBypass, AppHiding, PortHiding }
 
@@ -69,69 +69,82 @@ internal fun ProtectionScreen(
         val selfPkg = context.packageName
 
         if (!dirtyVpn) {
-            vpnApps = apps.filter { it.packageName != selfPkg }.map { app ->
-                AppEntry(
-                    packageName = app.packageName,
-                    label = app.label,
-                    icon = app.icon,
-                    isSystem = app.isSystem,
-                    userIds = app.userIds,
-                    kmod = app.packageName in t.kmodTargets,
-                    zygisk = app.packageName in t.zygiskTargets,
-                    lsposed = app.packageName in t.lsposedTargets,
-                )
-            }.sortedWith(compareByDescending<AppEntry> { it.kmod || it.zygisk || it.lsposed }.thenBy { it.label })
+            vpnApps =
+                apps
+                    .filter { it.packageName != selfPkg }
+                    .map { app ->
+                        AppEntry(
+                            packageName = app.packageName,
+                            label = app.label,
+                            icon = app.icon,
+                            isSystem = app.isSystem,
+                            userIds = app.userIds,
+                            kmod = app.packageName in t.kmodTargets,
+                            zygisk = app.packageName in t.zygiskTargets,
+                            lsposed = app.packageName in t.lsposedTargets,
+                        )
+                    }.sortedWith(compareByDescending<AppEntry> { it.kmod || it.zygisk || it.lsposed }.thenBy { it.label })
         }
 
         if (!dirtyTun) {
-            tunApps = apps.filter { it.packageName != selfPkg }.map { app ->
-                AppEntry(
-                    packageName = app.packageName,
-                    label = app.label,
-                    icon = app.icon,
-                    isSystem = app.isSystem,
-                    userIds = app.userIds,
-                    tunBypass = app.packageName in t.kmodDirectTargets,
-                )
-            }.sortedWith(compareByDescending<AppEntry> { it.tunBypass }.thenBy { it.label })
+            tunApps =
+                apps
+                    .filter { it.packageName != selfPkg }
+                    .map { app ->
+                        AppEntry(
+                            packageName = app.packageName,
+                            label = app.label,
+                            icon = app.icon,
+                            isSystem = app.isSystem,
+                            userIds = app.userIds,
+                            tunBypass = app.packageName in t.kmodDirectTargets,
+                        )
+                    }.sortedWith(compareByDescending<AppEntry> { it.tunBypass }.thenBy { it.label })
         }
 
         if (!dirtyHide) {
             val hidden = t.hiddenPkgs
             val observers = t.observerNames
-            hideApps = apps.filter { it.packageName != selfPkg }.map { app ->
-                val rawHidden = app.packageName in hidden
-                val rawObserver = app.packageName in observers
-                // Conflict resolution: apps with both roles crash on startup. 
-                // Treat as observer-only if both are set.
-                val (finalHidden, finalObserver) = if (rawHidden && rawObserver) {
-                    false to true
-                } else {
-                    rawHidden to rawObserver
-                }
-                AppEntry(
-                    packageName = app.packageName,
-                    label = app.label,
-                    icon = app.icon,
-                    isSystem = app.isSystem,
-                    userIds = app.userIds,
-                    appHiding = finalHidden,
-                    appObserver = finalObserver,
-                )
-            }.sortedWith(compareByDescending<AppEntry> { it.anyHiding }.thenBy { it.label })
+            hideApps =
+                apps
+                    .filter { it.packageName != selfPkg }
+                    .map { app ->
+                        val rawHidden = app.packageName in hidden
+                        val rawObserver = app.packageName in observers
+                        // Conflict resolution: apps with both roles crash on startup.
+                        // Treat as observer-only if both are set.
+                        val (finalHidden, finalObserver) =
+                            if (rawHidden && rawObserver) {
+                                false to true
+                            } else {
+                                rawHidden to rawObserver
+                            }
+                        AppEntry(
+                            packageName = app.packageName,
+                            label = app.label,
+                            icon = app.icon,
+                            isSystem = app.isSystem,
+                            userIds = app.userIds,
+                            appHiding = finalHidden,
+                            appObserver = finalObserver,
+                        )
+                    }.sortedWith(compareByDescending<AppEntry> { it.anyHiding }.thenBy { it.label })
         }
 
         if (!dirtyPort) {
-            portApps = apps.filter { it.packageName != selfPkg }.map { app ->
-                AppEntry(
-                    packageName = app.packageName,
-                    label = app.label,
-                    icon = app.icon,
-                    isSystem = app.isSystem,
-                    userIds = app.userIds,
-                    portHiding = app.packageName in t.portsObservers,
-                )
-            }.sortedWith(compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label })
+            portApps =
+                apps
+                    .filter { it.packageName != selfPkg }
+                    .map { app ->
+                        AppEntry(
+                            packageName = app.packageName,
+                            label = app.label,
+                            icon = app.icon,
+                            isSystem = app.isSystem,
+                            userIds = app.userIds,
+                            portHiding = app.packageName in t.portsObservers,
+                        )
+                    }.sortedWith(compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label })
         }
     }
 
@@ -140,12 +153,13 @@ internal fun ProtectionScreen(
         onDirtyChange(anyDirty)
     }
 
-    val counts = mapOf(
-        ProtectionMode.VpnTargets to vpnApps.count { it.anyProtection },
-        ProtectionMode.TunBypass to tunApps.count { it.tunBypass },
-        ProtectionMode.AppHiding to hideApps.count { it.anyHiding },
-        ProtectionMode.PortHiding to portApps.count { it.portHiding }
-    )
+    val counts =
+        mapOf(
+            ProtectionMode.VpnTargets to vpnApps.count { it.anyProtection },
+            ProtectionMode.TunBypass to tunApps.count { it.tunBypass },
+            ProtectionMode.AppHiding to hideApps.count { it.anyHiding },
+            ProtectionMode.PortHiding to portApps.count { it.portHiding },
+        )
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -154,7 +168,7 @@ internal fun ProtectionScreen(
                 counts = counts,
                 onModeChange = { mode = it },
             )
-            
+
             Box(modifier = Modifier.weight(1f)) {
                 when (mode) {
                     ProtectionMode.VpnTargets -> {
@@ -165,7 +179,10 @@ internal fun ProtectionScreen(
                             showRussianOnly = showRussianOnly,
                             showOnlySelected = showOnlySelected,
                             sortOrder = sortOrder,
-                            onUpdate = { newList -> vpnApps = newList; dirtyVpn = true },
+                            onUpdate = { newList ->
+                                vpnApps = newList
+                                dirtyVpn = true
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -178,7 +195,10 @@ internal fun ProtectionScreen(
                             showRussianOnly = showRussianOnly,
                             showOnlySelected = showOnlySelected,
                             sortOrder = sortOrder,
-                            onUpdate = { newList -> tunApps = newList; dirtyTun = true },
+                            onUpdate = { newList ->
+                                tunApps = newList
+                                dirtyTun = true
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -191,7 +211,10 @@ internal fun ProtectionScreen(
                             showRussianOnly = showRussianOnly,
                             showOnlySelected = showOnlySelected,
                             sortOrder = sortOrder,
-                            onUpdate = { newList -> hideApps = newList; dirtyHide = true },
+                            onUpdate = { newList ->
+                                hideApps = newList
+                                dirtyHide = true
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -204,7 +227,10 @@ internal fun ProtectionScreen(
                             showRussianOnly = showRussianOnly,
                             showOnlySelected = showOnlySelected,
                             sortOrder = sortOrder,
-                            onUpdate = { newList -> portApps = newList; dirtyPort = true },
+                            onUpdate = { newList ->
+                                portApps = newList
+                                dirtyPort = true
+                            },
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -213,7 +239,7 @@ internal fun ProtectionScreen(
         }
         SnackbarHost(
             hostState = snackbarHostState,
-            modifier = Modifier.align(Alignment.TopCenter)
+            modifier = Modifier.align(Alignment.TopCenter),
         )
 
         // Unified Saving Effect
@@ -305,13 +331,13 @@ private fun ProtectionModeSwitcher(
                     Text(
                         text = stringResource(labelRes),
                         style = MaterialTheme.typography.labelSmall,
-                        maxLines = 1
+                        maxLines = 1,
                     )
                     Text(
                         text = count.toString(),
                         style = MaterialTheme.typography.labelSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (m == mode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                        color = if (m == mode) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -320,7 +346,12 @@ private fun ProtectionModeSwitcher(
 }
 
 // Helpers for command building (need to be accessible or moved to a central place)
-private fun buildVpnSaveCommand(header: String, kmod: List<String>, zygisk: List<String>, lsposed: List<String>): String {
+private fun buildVpnSaveCommand(
+    header: String,
+    kmod: List<String>,
+    zygisk: List<String>,
+    lsposed: List<String>,
+): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(KMOD_TARGETS, header, kmod)
     parts += buildWriteTargetsCommand(ZYGISK_TARGETS, header, zygisk)
@@ -331,17 +362,24 @@ private fun buildVpnSaveCommand(header: String, kmod: List<String>, zygisk: List
     return parts.joinToString(" ; ")
 }
 
-private fun buildTunSaveCommand(header: String, kmod: List<String>): String {
+private fun buildTunSaveCommand(
+    header: String,
+    kmod: List<String>,
+): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(KMOD_DIRECT_TARGETS, header, kmod)
     parts += buildKmodApplyCommand(kmod, isDirect = true)
     return parts.joinToString(" ; ")
 }
 
-private fun buildHideSaveCommand(header: String, hidden: List<String>, observers: List<String>): String {
+private fun buildHideSaveCommand(
+    header: String,
+    hidden: List<String>,
+    observers: List<String>,
+): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(SS_HIDDEN_PKGS_FILE, header, hidden)
-    
+
     // Resolve observer UIDs from package names
     if (observers.isEmpty()) {
         parts += "echo '$header' > $SS_OBSERVER_UIDS_FILE"
@@ -349,12 +387,15 @@ private fun buildHideSaveCommand(header: String, hidden: List<String>, observers
         val uidsCmd = observers.joinToString(" ") { "pm list packages -U $it" }
         parts += "$uidsCmd | grep -oE 'uid:[0-9]+' | cut -d: -f2 | sort -u > $SS_OBSERVER_UIDS_FILE"
     }
-    
+
     // No need to trigger kmod refresh here as App Hiding is handled by LSPosed
     return parts.joinToString(" ; ")
 }
 
-private fun buildPortSaveCommand(header: String, pkgs: List<String>): String {
+private fun buildPortSaveCommand(
+    header: String,
+    pkgs: List<String>,
+): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(PORTS_OBSERVERS_FILE, header, pkgs)
     return parts.joinToString(" ; ")

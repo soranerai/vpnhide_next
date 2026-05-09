@@ -8,19 +8,15 @@ internal data class AppEntry(
     val icon: Drawable?,
     val isSystem: Boolean,
     val userIds: List<Int> = emptyList(),
-    
     // Protection (VPN) flags
     val kmod: Boolean = false,
     val zygisk: Boolean = false,
     val lsposed: Boolean = false,
-    
     // TUN Bypass
     val tunBypass: Boolean = false,
-    
     // App Hiding
     val appHiding: Boolean = false,
     val appObserver: Boolean = false,
-    
     // Port Hiding
     val portHiding: Boolean = false,
 ) {

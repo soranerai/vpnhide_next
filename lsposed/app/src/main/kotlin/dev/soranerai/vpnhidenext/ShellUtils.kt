@@ -1,8 +1,8 @@
 package dev.soranerai.vpnhidenext
 
+import android.content.Context
 import android.util.Base64
 import android.util.Log
-import android.content.Context
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -190,7 +190,10 @@ internal fun isVpnActiveBlocking(): Boolean {
     }
 }
 
-internal fun cleanupStaleZygiskStatus(context: android.content.Context, currentBootId: String) {
+internal fun cleanupStaleZygiskStatus(
+    context: android.content.Context,
+    currentBootId: String,
+) {
     val statusFile = File(context.filesDir, ZYGISK_STATUS_FILE_NAME)
     if (!statusFile.isFile) return
 
@@ -355,14 +358,22 @@ internal fun buildUidResolver(
         append("; if [ -n \"\$UIDS\" ]; then echo \"\$UIDS\" > $outputFile 2>/dev/null")
         append("; else echo > $outputFile 2>/dev/null; fi")
     }
-internal fun buildWriteTargetsCommand(path: String, header: String, pkgs: List<String>): String {
+
+internal fun buildWriteTargetsCommand(
+    path: String,
+    header: String,
+    pkgs: List<String>,
+): String {
     val body = "$header\n" + pkgs.joinToString("\n") + if (pkgs.isNotEmpty()) "\n" else ""
     val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
     val dir = path.substringBeforeLast('/')
     return "mkdir -p $dir ; echo '$b64' | base64 -d > $path && chmod 644 $path"
 }
 
-internal fun buildKmodApplyCommand(pkgs: List<String>, isDirect: Boolean = false): String {
+internal fun buildKmodApplyCommand(
+    pkgs: List<String>,
+    isDirect: Boolean = false,
+): String {
     val targetType = if (isDirect) "direct" else "targets"
     if (pkgs.isEmpty()) {
         return "[ -c $DEV_NODE ] && $KMOD_CTL $targetType; true"
@@ -370,8 +381,8 @@ internal fun buildKmodApplyCommand(pkgs: List<String>, isDirect: Boolean = false
 
     val pkgList = pkgs.joinToString("|") { it.replace(".", "\\.") }
     return "if [ -c $DEV_NODE ]; then " +
-            "UIDS=\$(pm list packages -U | awk -v p=\"^package:($pkgList) \" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); " +
-            "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
+        "UIDS=\$(pm list packages -U | awk -v p=\"^package:($pkgList) \" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); " +
+        "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
 }
 
 internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
@@ -394,7 +405,8 @@ internal fun applyKmodTargets(context: Context) {
 
 internal fun readPackageList(path: String): List<String> {
     val (_, raw) = suExec("cat $path 2>/dev/null || true")
-    return raw.lines()
+    return raw
+        .lines()
         .map { it.trim() }
         .filter { it.isNotEmpty() && !it.startsWith("#") }
 }

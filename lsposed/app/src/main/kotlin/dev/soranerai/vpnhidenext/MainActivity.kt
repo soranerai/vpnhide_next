@@ -1,9 +1,9 @@
 package dev.soranerai.vpnhidenext
-    
+
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -13,6 +13,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,11 +26,10 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -71,7 +71,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private sealed class RootState {
-    data class Granted(val startup: StartupResult) : RootState()
+    data class Granted(
+        val startup: StartupResult,
+    ) : RootState()
 
     data object Denied : RootState()
 }
@@ -192,9 +194,10 @@ private fun MainScreen(
         }
     }
 
-    val nestedScrollConnection = remember {
-        object : NestedScrollConnection {}
-    }
+    val nestedScrollConnection =
+        remember {
+            object : NestedScrollConnection {}
+        }
 
     Scaffold(
         modifier = Modifier.nestedScroll(nestedScrollConnection),
@@ -227,10 +230,11 @@ private fun MainScreen(
             } else {
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground
-                    ),
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        ),
                     actions = {
                         RefreshActionIcon(
                             currentTab = currentTab,
@@ -253,7 +257,8 @@ private fun MainScreen(
                                 )
                             }
                             Box {
-                                val anyFilterActive = showSystem || showRussianOnly || showOnlySelected || sortOrder != AppSortOrder.NAME_ASC
+                                val anyFilterActive =
+                                    showSystem || showRussianOnly || showOnlySelected || sortOrder != AppSortOrder.NAME_ASC
                                 if (anyFilterActive) {
                                     FilledIconButton(onClick = { showFilterMenu = true }) {
                                         Icon(
@@ -306,7 +311,10 @@ private fun MainScreen(
                                     HorizontalDivider()
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.sort_name_asc)) },
-                                        onClick = { sortOrder = AppSortOrder.NAME_ASC; showFilterMenu = false },
+                                        onClick = {
+                                            sortOrder = AppSortOrder.NAME_ASC
+                                            showFilterMenu = false
+                                        },
                                         leadingIcon = {
                                             RadioButton(
                                                 selected = sortOrder == AppSortOrder.NAME_ASC,
@@ -316,7 +324,10 @@ private fun MainScreen(
                                     )
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.sort_name_desc)) },
-                                        onClick = { sortOrder = AppSortOrder.NAME_DESC; showFilterMenu = false },
+                                        onClick = {
+                                            sortOrder = AppSortOrder.NAME_DESC
+                                            showFilterMenu = false
+                                        },
                                         leadingIcon = {
                                             RadioButton(
                                                 selected = sortOrder == AppSortOrder.NAME_DESC,
@@ -326,7 +337,10 @@ private fun MainScreen(
                                     )
                                     DropdownMenuItem(
                                         text = { Text(stringResource(R.string.sort_selected_first)) },
-                                        onClick = { sortOrder = AppSortOrder.SELECTED_FIRST; showFilterMenu = false },
+                                        onClick = {
+                                            sortOrder = AppSortOrder.SELECTED_FIRST
+                                            showFilterMenu = false
+                                        },
                                         leadingIcon = {
                                             RadioButton(
                                                 selected = sortOrder == AppSortOrder.SELECTED_FIRST,
@@ -348,12 +362,13 @@ private fun MainScreen(
             val density = androidx.compose.ui.platform.LocalDensity.current
 
             Column(
-                modifier = Modifier
-                    .padding(top = innerPadding.calculateTopPadding())
+                modifier =
+                    Modifier
+                        .padding(top = innerPadding.calculateTopPadding()),
             ) {
                 // Initial root check / startup loader
                 TopProgressBar(visible = restart == null)
-                
+
                 // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
                 TabLoadingBar()
 
@@ -391,26 +406,29 @@ private fun MainScreen(
 
             // Floating Navigation Bar and FAB
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 20.dp)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 20.dp)
+                        .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
                 val showSave = isProtectionDirty && currentTab == Tab.Protection
-                val tabs = listOf(
-                    Tab.Dashboard to Icons.Default.Home,
-                    Tab.Protection to Icons.Default.Shield,
-                    Tab.Diagnostics to Icons.Default.CheckCircle
-                )
+                val tabs =
+                    listOf(
+                        Tab.Dashboard to Icons.Default.Home,
+                        Tab.Protection to Icons.Default.Shield,
+                        Tab.Diagnostics to Icons.Default.CheckCircle,
+                    )
 
                 val saveProgress by animateFloatAsState(
                     targetValue = if (showSave) 1f else 0f,
-                    animationSpec = spring(
-                        dampingRatio = Spring.DampingRatioLowBouncy,
-                        stiffness = Spring.StiffnessLow
-                    ),
-                    label = "saveProgress"
+                    animationSpec =
+                        spring(
+                            dampingRatio = Spring.DampingRatioLowBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                    label = "saveProgress",
                 )
 
                 // The bounding box for the entire Pill + Save FAB combo
@@ -418,7 +436,7 @@ private fun MainScreen(
                     // Invisible layout driver to smoothly animate total width
                     Row(
                         modifier = Modifier.height(60.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Spacer(modifier = Modifier.width(260.dp))
                         Spacer(modifier = Modifier.width(76.dp * saveProgress))
@@ -430,23 +448,24 @@ private fun MainScreen(
                             onClick = { saveTrigger++ },
                             color = MaterialTheme.colorScheme.primary,
                             contentColor = MaterialTheme.colorScheme.onPrimary,
-                            modifier = Modifier
-                                .align(Alignment.CenterEnd)
-                                .size(60.dp)
-                                .graphicsLayer {
-                                    shadowElevation = 8.dp.toPx()
-                                    shape = RoundedCornerShape(20.dp)
-                                    clip = true
-                                    alpha = saveProgress
-                                    scaleX = 0.5f + (0.5f * saveProgress)
-                                    scaleY = 0.5f + (0.5f * saveProgress)
-                                }
+                            modifier =
+                                Modifier
+                                    .align(Alignment.CenterEnd)
+                                    .size(60.dp)
+                                    .graphicsLayer {
+                                        shadowElevation = 8.dp.toPx()
+                                        shape = RoundedCornerShape(20.dp)
+                                        clip = true
+                                        alpha = saveProgress
+                                        scaleX = 0.5f + (0.5f * saveProgress)
+                                        scaleY = 0.5f + (0.5f * saveProgress)
+                                    },
                         ) {
                             Box(contentAlignment = Alignment.Center) {
                                 Icon(
                                     Icons.Default.Check,
                                     contentDescription = null,
-                                    modifier = Modifier.size(28.dp)
+                                    modifier = Modifier.size(28.dp),
                                 )
                             }
                         }
@@ -458,39 +477,48 @@ private fun MainScreen(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
                         tonalElevation = 12.dp,
                         shadowElevation = 8.dp,
-                        modifier = Modifier
-                            .align(Alignment.CenterStart)
-                            .height(60.dp)
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterStart)
+                                .height(60.dp),
                     ) {
                         Row(
-                            modifier = Modifier
-                                .padding(horizontal = 4.dp, vertical = 4.dp)
-                                .width(260.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            modifier =
+                                Modifier
+                                    .padding(horizontal = 4.dp, vertical = 4.dp)
+                                    .width(260.dp),
+                            verticalAlignment = Alignment.CenterVertically,
                         ) {
                             tabs.forEach { (tab, icon) ->
                                 val selected = currentTab == tab
                                 Box(
-                                    modifier = Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(
-                                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                            else Color.Transparent
-                                        )
-                                        .clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null
-                                        ) { currentTab = tab },
-                                    contentAlignment = Alignment.Center
+                                    modifier =
+                                        Modifier
+                                            .weight(1f)
+                                            .fillMaxHeight()
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(
+                                                if (selected) {
+                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                } else {
+                                                    Color.Transparent
+                                                },
+                                            ).clickable(
+                                                interactionSource = remember { MutableInteractionSource() },
+                                                indication = null,
+                                            ) { currentTab = tab },
+                                    contentAlignment = Alignment.Center,
                                 ) {
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = null,
-                                        tint = if (selected) MaterialTheme.colorScheme.primary 
-                                               else MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.size(24.dp)
+                                        tint =
+                                            if (selected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
+                                        modifier = Modifier.size(24.dp),
                                     )
                                 }
                             }
@@ -503,7 +531,7 @@ private fun MainScreen(
                 BackHandler { showFaq = false }
                 FaqScreen(
                     onBack = { showFaq = false },
-                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 )
             }
         }

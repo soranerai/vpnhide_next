@@ -12,9 +12,9 @@ import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
+import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetlink
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetroute
-import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkProcNetDev
 import dev.soranerai.vpnhidenext.checks.checkProcNetFibTrie
 import dev.soranerai.vpnhidenext.checks.checkProcNetIfInet6
@@ -1140,31 +1140,35 @@ internal suspend fun loadDashboardState(
 
             else -> {
                 val diagResults = DiagnosticsCache.awaitResults(context)
-                
-                val native = if (hasNative) {
-                    if (diagResults == null) NativeResult.Fail(0, 1)
-                    else {
-                        val passed = diagResults.native.count { it.passed == true }
-                        val failed = diagResults.native.count { it.passed == false }
-                        when {
-                            passed == 0 && failed == 0 -> NativeResult.Ok
-                            failed == 0 -> NativeResult.Ok
-                            else -> NativeResult.Fail(passed, failed)
-                        }
-                    }
-                } else {
-                    NativeResult.NoModule
-                }
 
-                val java = if (lsposed is LsposedState.Active) {
-                    if (diagResults == null) JavaResult.Fail(1)
-                    else {
-                        val failedCount = diagResults.java.count { it.passed == false }
-                        if (failedCount == 0) JavaResult.Ok else JavaResult.Fail(failedCount)
+                val native =
+                    if (hasNative) {
+                        if (diagResults == null) {
+                            NativeResult.Fail(0, 1)
+                        } else {
+                            val passed = diagResults.native.count { it.passed == true }
+                            val failed = diagResults.native.count { it.passed == false }
+                            when {
+                                passed == 0 && failed == 0 -> NativeResult.Ok
+                                failed == 0 -> NativeResult.Ok
+                                else -> NativeResult.Fail(passed, failed)
+                            }
+                        }
+                    } else {
+                        NativeResult.NoModule
                     }
-                } else {
-                    JavaResult.HooksInactive
-                }
+
+                val java =
+                    if (lsposed is LsposedState.Active) {
+                        if (diagResults == null) {
+                            JavaResult.Fail(1)
+                        } else {
+                            val failedCount = diagResults.java.count { it.passed == false }
+                            if (failedCount == 0) JavaResult.Ok else JavaResult.Fail(failedCount)
+                        }
+                    } else {
+                        JavaResult.HooksInactive
+                    }
 
                 ProtectionCheck.Checked(native, java)
             }
@@ -1186,4 +1190,3 @@ internal suspend fun loadDashboardState(
         issues = issues,
     )
 }
-

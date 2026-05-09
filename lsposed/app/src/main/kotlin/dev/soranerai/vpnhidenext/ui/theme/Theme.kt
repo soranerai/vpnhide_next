@@ -33,70 +33,80 @@ val TelLightBackground = Color(0xFFF2F2F2)
 val TelLightSurface = Color.White
 val TelLightText = Color(0xFF222222)
 
-private val ExpressiveDarkColorScheme = darkColorScheme(
-    primary = TelGreen,
-    secondary = TelBlue,
-    tertiary = TelPink,
-    background = Color(0xFF1C1C1C),
-    surface = Color(0xFF242424),
-    surfaceVariant = Color(0xFF2C2C2C),
-    onPrimary = Color.Black,
-    onSecondary = Color.White,
-    onBackground = AmoledText,
-    onSurface = AmoledText,
-    onSurfaceVariant = AmoledSubtext,
-    error = TelRed,
-    outline = Color(0xFF333333)
-)
+private val ExpressiveDarkColorScheme =
+    darkColorScheme(
+        primary = TelGreen,
+        secondary = TelBlue,
+        tertiary = TelPink,
+        background = Color(0xFF1C1C1C),
+        surface = Color(0xFF242424),
+        surfaceVariant = Color(0xFF2C2C2C),
+        onPrimary = Color.Black,
+        onSecondary = Color.White,
+        onBackground = AmoledText,
+        onSurface = AmoledText,
+        onSurfaceVariant = AmoledSubtext,
+        error = TelRed,
+        outline = Color(0xFF333333),
+    )
 
-private val ExpressiveAmoledColorScheme = darkColorScheme(
-    primary = TelGreen,
-    secondary = TelBlue,
-    tertiary = TelPink,
-    background = Color.Black,
-    surface = Color.Black,
-    surfaceVariant = Color(0xFF161616),
-    onPrimary = Color.Black,
-    onSecondary = Color.White,
-    onBackground = AmoledText,
-    onSurface = AmoledText,
-    onSurfaceVariant = AmoledSubtext,
-    error = TelRed,
-    outline = Color(0xFF222222)
-)
+private val ExpressiveAmoledColorScheme =
+    darkColorScheme(
+        primary = TelGreen,
+        secondary = TelBlue,
+        tertiary = TelPink,
+        background = Color.Black,
+        surface = Color.Black,
+        surfaceVariant = Color(0xFF161616),
+        onPrimary = Color.Black,
+        onSecondary = Color.White,
+        onBackground = AmoledText,
+        onSurface = AmoledText,
+        onSurfaceVariant = AmoledSubtext,
+        error = TelRed,
+        outline = Color(0xFF222222),
+    )
 
-private val ExpressiveLightColorScheme = lightColorScheme(
-    primary = TelGreen,
-    secondary = TelBlue,
-    tertiary = TelPink,
-    background = TelLightBackground,
-    surface = TelLightSurface,
-    surfaceVariant = Color(0xFFE8E8E8),
-    onPrimary = Color.White,
-    onSecondary = Color.White,
-    onBackground = TelLightText,
-    onSurface = TelLightText,
-    onSurfaceVariant = Color(0xFF757575),
-    error = TelRed
-)
+private val ExpressiveLightColorScheme =
+    lightColorScheme(
+        primary = TelGreen,
+        secondary = TelBlue,
+        tertiary = TelPink,
+        background = TelLightBackground,
+        surface = TelLightSurface,
+        surfaceVariant = Color(0xFFE8E8E8),
+        onPrimary = Color.White,
+        onSecondary = Color.White,
+        onBackground = TelLightText,
+        onSurface = TelLightText,
+        onSurfaceVariant = Color(0xFF757575),
+        error = TelRed,
+    )
 
 @Composable
 fun VpnHideTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     pureBlack: Boolean = true,
     dynamicColor: Boolean = false, // User complained about blidness/lack of punch, so we prefer our expressive palette over generic Monet
-    content: @Composable () -> Unit
+    content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
-    val colorScheme = when {
-        // We override dynamicColor here because user specifically asked for EXPRESSIVE colors, 
-        // and Monet can often be too pastel/muted depending on wallpaper.
-        dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val colorScheme =
+        when {
+            // We override dynamicColor here because user specifically asked for EXPRESSIVE colors,
+            // and Monet can often be too pastel/muted depending on wallpaper.
+            dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
+                if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+            }
+
+            darkTheme -> {
+                if (pureBlack) ExpressiveAmoledColorScheme else ExpressiveDarkColorScheme
+            }
+
+            else -> {
+                ExpressiveLightColorScheme
+            }
         }
-        darkTheme -> if (pureBlack) ExpressiveAmoledColorScheme else ExpressiveDarkColorScheme
-        else -> ExpressiveLightColorScheme
-    }
 
     val view = LocalView.current
     if (!view.isInEditMode) {
@@ -111,6 +121,6 @@ fun VpnHideTheme(
     MaterialTheme(
         colorScheme = colorScheme,
         typography = Typography(),
-        content = content
+        content = content,
     )
 }

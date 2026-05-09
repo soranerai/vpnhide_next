@@ -65,7 +65,7 @@ internal object DiagnosticsCache {
     ) {
         val s = _state.value
         if (s is State.Ready || s is State.Running) return
-        
+
         if (inflight?.isActive == true) return
         inflight = scope.launch { doRun(context.applicationContext) }
     }
@@ -77,7 +77,7 @@ internal object DiagnosticsCache {
     suspend fun awaitResults(context: Context): CheckResults? {
         val s = _state.value
         if (s is State.Ready) return s.results
-        
+
         if (s !is State.Running) {
             // Start it if not running
             withContext(Dispatchers.Main) {
@@ -88,10 +88,10 @@ internal object DiagnosticsCache {
         }
 
         // Wait for it to become Ready or VpnOff
-        state.first { 
-            it is State.Ready || it is State.VpnOff 
+        state.first {
+            it is State.Ready || it is State.VpnOff
         }
-        
+
         return (_state.value as? State.Ready)?.results
     }
 

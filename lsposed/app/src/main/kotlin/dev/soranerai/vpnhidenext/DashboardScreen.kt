@@ -22,11 +22,11 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.soranerai.vpnhidenext.ShimmerPlaceholder
+import dev.soranerai.vpnhidenext.shimmer
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import dev.soranerai.vpnhidenext.shimmer
-import dev.soranerai.vpnhidenext.ShimmerPlaceholder
 
 @Composable
 fun DashboardScreen(
@@ -84,12 +84,11 @@ fun DashboardScreen(
                 selfNeedsRestart = selfNeedsRestart,
                 updateInfo = updateInfo,
                 scope = scope,
-                context = context
+                context = context,
             )
         }
     }
 }
-
 
 @Composable
 private fun SkeletonDashboard() {
@@ -123,7 +122,7 @@ private fun SkeletonDashboard() {
 private fun SkeletonModuleCard() {
     ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier.padding(24.dp),
@@ -131,20 +130,22 @@ private fun SkeletonModuleCard() {
         ) {
             ShimmerPlaceholder(
                 modifier = Modifier.size(12.dp),
-                shape = CircleShape
+                shape = CircleShape,
             )
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
                 ShimmerPlaceholder(
-                    modifier = Modifier
-                        .width(100.dp)
-                        .height(18.dp)
+                    modifier =
+                        Modifier
+                            .width(100.dp)
+                            .height(18.dp),
                 )
                 Spacer(Modifier.height(8.dp))
                 ShimmerPlaceholder(
-                    modifier = Modifier
-                        .width(160.dp)
-                        .height(14.dp)
+                    modifier =
+                        Modifier
+                            .width(160.dp)
+                            .height(14.dp),
                 )
             }
         }
@@ -155,7 +156,7 @@ private fun SkeletonModuleCard() {
 private fun SkeletonProtectionCard() {
     ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth()
+        modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
             modifier = Modifier.padding(24.dp).fillMaxWidth(),
@@ -163,14 +164,16 @@ private fun SkeletonProtectionCard() {
             verticalAlignment = Alignment.CenterVertically,
         ) {
             ShimmerPlaceholder(
-                modifier = Modifier
-                    .width(140.dp)
-                    .height(20.dp)
+                modifier =
+                    Modifier
+                        .width(140.dp)
+                        .height(20.dp),
             )
             ShimmerPlaceholder(
-                modifier = Modifier
-                    .width(60.dp)
-                    .height(18.dp)
+                modifier =
+                    Modifier
+                        .width(60.dp)
+                        .height(18.dp),
             )
         }
     }
@@ -197,7 +200,7 @@ private fun DashboardContent(
             text = stringResource(R.string.dashboard_modules),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 8.dp),
         )
 
         val kmodActive = (s.kmod as? ModuleState.Installed)?.active == true
@@ -225,7 +228,7 @@ private fun DashboardContent(
             text = stringResource(R.string.dashboard_protection),
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 8.dp)
+            modifier = Modifier.padding(vertical = 8.dp),
         )
 
         when (val p = s.protection) {
@@ -264,7 +267,7 @@ private fun DashboardContent(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.error,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = 8.dp),
             )
             for (issue in errors) {
                 StatusBanner(
@@ -283,7 +286,7 @@ private fun DashboardContent(
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.secondary,
-                modifier = Modifier.padding(vertical = 8.dp)
+                modifier = Modifier.padding(vertical = 8.dp),
             )
             for (issue in warnings) {
                 StatusBanner(
@@ -429,9 +432,10 @@ private fun ModuleCardShell(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Box(
-                modifier = Modifier
-                    .size(10.dp)
-                    .background(color = dotColor, shape = CircleShape)
+                modifier =
+                    Modifier
+                        .size(10.dp)
+                        .background(color = dotColor, shape = CircleShape),
             )
             Spacer(Modifier.width(16.dp))
             Column(Modifier.weight(1f)) {
@@ -472,9 +476,10 @@ private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecomme
 
     ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (recommendation.preferKmod) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer
-        ),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor = if (recommendation.preferKmod) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(24.dp)) {
