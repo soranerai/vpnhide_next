@@ -96,47 +96,6 @@ def detect_kdir(kmi: str) -> str | None:
     return str(kdir) if kdir.is_dir() else None
 
 
-def native_build_one(
-    kmod_dir: Path,
-    kmi: str,
-    kdir: str,
-    clang_dir: str | None,
-    out: Path | None,
-) -> int:
-    """Compile + package one .ko into one zip, in the current process."""
-    print(f"[{kmi}] kdir={kdir}")
-    print(f"[{kmi}] clang-dir={clang_dir or '(system PATH)'}")
-
-    env = os.environ.copy()
-    env["KERNEL_SRC"] = kdir
-    if clang_dir:
-        env["CLANG_DIR"] = clang_dir
-
-    # `make strip` does the actual kernel-module build. Let make decide
-    # whether anything needs rebuilding — its dependency tracking covers
-    # all sources, headers, and the kernel .config, not just our .c file.
-    subprocess.run(["make", "-C", str(kmod_dir), "strip"], env=env, check=True)
-
-    # Stage the module skeleton from kmod/module/, drop the freshly built
-    # .ko in, patch module.prop with the real build version + gkiVariant
-    # + updateJson. The committed module.prop stays at the last release
-    # version so PR diffs don't churn it.
-    staging = kmod_dir / "module-staging"
-    if staging.exists():
-        shutil.rmtree(staging)
-    shutil.copytree(kmod_dir / "module", staging)
-    shutil.copy(kmod_dir / KMOD_KO, staging / KMOD_KO)
-
-    # Compile the stealthy configuration tool (aarch64 static)
-    cc = "aarch64-linux-gnu-gcc"
-    strip_tool = "strip"
-    if clang_dir:
-        cc_path = Path(clang_dir) / "clang"
-        if cc_path.exists():
-            cc = str(cc_path)
-            strip_tool = str(Path(clang_dir) / "llvm-strip")
-
-
 def build_ctl_host(repo_root: Path, kmod_dir: Path) -> Path:
     """Build the vpnhide-ctl tool on the host using the Android NDK."""
     ndk_home = os.environ.get("ANDROID_NDK_HOME")
