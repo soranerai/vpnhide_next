@@ -21,6 +21,8 @@ internal fun ProtectionScreen(
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
+    showOnlySelected: Boolean,
+    sortOrder: AppSortOrder,
     onDirtyChange: (Boolean) -> Unit,
     saveTrigger: Int,
     modifier: Modifier = Modifier,
@@ -161,6 +163,8 @@ internal fun ProtectionScreen(
                             searchQuery = searchQuery,
                             showSystem = showSystem,
                             showRussianOnly = showRussianOnly,
+                            showOnlySelected = showOnlySelected,
+                            sortOrder = sortOrder,
                             onUpdate = { newList -> vpnApps = newList; dirtyVpn = true },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -172,6 +176,8 @@ internal fun ProtectionScreen(
                             searchQuery = searchQuery,
                             showSystem = showSystem,
                             showRussianOnly = showRussianOnly,
+                            showOnlySelected = showOnlySelected,
+                            sortOrder = sortOrder,
                             onUpdate = { newList -> tunApps = newList; dirtyTun = true },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -183,6 +189,8 @@ internal fun ProtectionScreen(
                             searchQuery = searchQuery,
                             showSystem = showSystem,
                             showRussianOnly = showRussianOnly,
+                            showOnlySelected = showOnlySelected,
+                            sortOrder = sortOrder,
                             onUpdate = { newList -> hideApps = newList; dirtyHide = true },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -194,6 +202,8 @@ internal fun ProtectionScreen(
                             searchQuery = searchQuery,
                             showSystem = showSystem,
                             showRussianOnly = showRussianOnly,
+                            showOnlySelected = showOnlySelected,
+                            sortOrder = sortOrder,
                             onUpdate = { newList -> portApps = newList; dirtyPort = true },
                             modifier = Modifier.fillMaxSize(),
                         )

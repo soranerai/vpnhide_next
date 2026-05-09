@@ -45,19 +45,31 @@ internal fun AppPickerScreen(
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
+    showOnlySelected: Boolean,
+    sortOrder: AppSortOrder,
     onUpdate: (List<AppEntry>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val appList by AppListCache.apps.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
-    val loading = targets == null
+    val loading = targets == null || appList == null || (apps.isEmpty() && appList?.isNotEmpty() == true)
 
     val filteredApps =
-        remember(apps, searchQuery, showSystem, showRussianOnly) {
+        remember(apps, searchQuery, showSystem, showRussianOnly, showOnlySelected, sortOrder) {
             val q = searchQuery.trim().lowercase()
             apps.filter { app ->
                 (showSystem || !app.isSystem || app.kmod || app.zygisk || app.lsposed) &&
                     (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
+                    (!showOnlySelected || app.anyProtection) &&
                     (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+            }.let { list ->
+                when (sortOrder) {
+                    AppSortOrder.NAME_ASC -> list.sortedBy { it.label.lowercase() }
+                    AppSortOrder.NAME_DESC -> list.sortedByDescending { it.label.lowercase() }
+                    AppSortOrder.SELECTED_FIRST -> list.sortedWith(
+                        compareByDescending<AppEntry> { it.anyProtection }.thenBy { it.label.lowercase() }
+                    )
+                }
             }
         }
 
@@ -65,6 +77,7 @@ internal fun AppPickerScreen(
         remember(targets) {
             InstalledModules(
                 kmod = targets?.kmodModuleInstalled == true,
+                kmodActive = targets?.kmodActive == true,
                 zygisk = targets?.zygiskModuleInstalled == true,
             )
         }
@@ -82,28 +95,6 @@ internal fun AppPickerScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
-                    item {
-                        Box(modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
-                            HelpAccordion(
-                                prefKey = "apps_vpn",
-                                title = stringResource(R.string.apps_help_title),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.apps_hint_toggles),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.apps_hint_restart_target),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.apps_hint_zygisk),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
                     items(filteredApps, key = { it.packageName }) { app ->
                         AppRow(
                             app = app,
@@ -206,12 +197,12 @@ private fun AppRow(
             )
             Spacer(Modifier.height(8.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                LayerChip("LSPOSED", app.lsposed, true) { onToggle(Layer.LSPOSED) }
+                LayerChip("LSPosed", app.lsposed, true) { onToggle(Layer.LSPOSED) }
                 if (installed.kmod) {
-                    LayerChip("KMOD", app.kmod, true) { onToggle(Layer.KMOD) }
+                    LayerChip("Kernel", app.kmod, true) { onToggle(Layer.KMOD) }
                 }
-                if (installed.zygisk) {
-                    LayerChip("ZYGISK", app.zygisk, true) { onToggle(Layer.ZYGISK) }
+                if (installed.zygisk && !installed.kmodActive) {
+                    LayerChip("Zygisk", app.zygisk, true) { onToggle(Layer.ZYGISK) }
                 }
             }
         }

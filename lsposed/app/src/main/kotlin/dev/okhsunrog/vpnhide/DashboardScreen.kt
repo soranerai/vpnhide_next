@@ -200,11 +200,14 @@ private fun DashboardContent(
             modifier = Modifier.padding(vertical = 8.dp)
         )
 
+        val kmodActive = (s.kmod as? ModuleState.Installed)?.active == true
         LsposedCard(s.lsposed)
         Spacer(Modifier.height(12.dp))
         ModuleCard(stringResource(R.string.dashboard_kmod), s.kmod)
-        Spacer(Modifier.height(12.dp))
-        ModuleCard(stringResource(R.string.dashboard_zygisk), s.zygisk, selfNeedsRestart)
+        if (!kmodActive) {
+            Spacer(Modifier.height(12.dp))
+            ModuleCard(stringResource(R.string.dashboard_zygisk), s.zygisk, selfNeedsRestart)
+        }
         Spacer(Modifier.height(12.dp))
         ModuleCard(stringResource(R.string.dashboard_ports), s.ports)
         s.nativeInstallRecommendation?.let { recommendation ->

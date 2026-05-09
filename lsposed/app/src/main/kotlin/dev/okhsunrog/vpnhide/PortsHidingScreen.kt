@@ -39,20 +39,32 @@ internal fun PortsHidingScreen(
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
+    showOnlySelected: Boolean,
+    sortOrder: AppSortOrder,
     onUpdate: (List<AppEntry>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val targets by TargetsCache.snapshot.collectAsState()
     val loading = targets == null
     
-    val filteredApps = remember(apps, searchQuery, showSystem, showRussianOnly) {
-        val q = searchQuery.trim().lowercase()
-        apps.filter { app ->
-            (showSystem || !app.isSystem || app.portHiding) &&
-            (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
-            (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+    val filteredApps =
+        remember(apps, searchQuery, showSystem, showRussianOnly, showOnlySelected, sortOrder) {
+            val q = searchQuery.trim().lowercase()
+            apps.filter { app ->
+                (showSystem || !app.isSystem || app.portHiding) &&
+                    (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
+                    (!showOnlySelected || app.portHiding) &&
+                    (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+            }.let { list ->
+                when (sortOrder) {
+                    AppSortOrder.NAME_ASC -> list.sortedBy { it.label.lowercase() }
+                    AppSortOrder.NAME_DESC -> list.sortedByDescending { it.label.lowercase() }
+                    AppSortOrder.SELECTED_FIRST -> list.sortedWith(
+                        compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label.lowercase() }
+                    )
+                }
+            }
         }
-    }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (loading) {
@@ -67,19 +79,6 @@ internal fun PortsHidingScreen(
                     modifier = Modifier.fillMaxSize(),
                     contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
-                    item {
-                        Box(modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
-                            HelpAccordion(
-                                prefKey = "apps_ports",
-                                title = stringResource(R.string.ports_help_title),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.ports_hint_role),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                            }
-                        }
-                    }
                     items(filteredApps, key = { it.packageName }) { app ->
                         PortAppRow(
                             app = app,

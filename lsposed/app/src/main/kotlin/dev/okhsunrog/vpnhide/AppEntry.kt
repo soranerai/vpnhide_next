@@ -30,7 +30,10 @@ internal data class AppEntry(
 
 internal enum class Layer { KMOD, ZYGISK, LSPOSED }
 
+internal enum class AppSortOrder { NAME_ASC, NAME_DESC, SELECTED_FIRST }
+
 internal data class InstalledModules(
     val kmod: Boolean,
+    val kmodActive: Boolean,
     val zygisk: Boolean,
 )

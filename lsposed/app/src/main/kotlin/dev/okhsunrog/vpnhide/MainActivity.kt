@@ -3,6 +3,7 @@ package dev.okhsunrog.vpnhide
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
 import androidx.compose.animation.core.*
@@ -129,9 +130,12 @@ private fun MainScreen(
     var searchActive by remember { mutableStateOf(false) }
     var showSystem by remember { mutableStateOf(false) }
     var showRussianOnly by remember { mutableStateOf(false) }
+    var showOnlySelected by remember { mutableStateOf(false) }
+    var sortOrder by remember { mutableStateOf(AppSortOrder.NAME_ASC) }
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }
+    var showFaq by remember { mutableStateOf(false) }
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
@@ -234,6 +238,13 @@ private fun MainScreen(
                             scope = scope,
                             context = context,
                         )
+                        IconButton(onClick = { showFaq = true }) {
+                            Icon(
+                                Icons.Default.HelpOutline,
+                                contentDescription = stringResource(R.string.faq_title),
+                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
                         if (currentTab == Tab.Protection) {
                             IconButton(onClick = { searchActive = true }) {
                                 Icon(
@@ -242,7 +253,7 @@ private fun MainScreen(
                                 )
                             }
                             Box {
-                                val anyFilterActive = showSystem || showRussianOnly
+                                val anyFilterActive = showSystem || showRussianOnly || showOnlySelected || sortOrder != AppSortOrder.NAME_ASC
                                 if (anyFilterActive) {
                                     FilledIconButton(onClick = { showFilterMenu = true }) {
                                         Icon(
@@ -279,6 +290,47 @@ private fun MainScreen(
                                             Checkbox(
                                                 checked = showRussianOnly,
                                                 onCheckedChange = null,
+                                            )
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.filter_only_selected)) },
+                                        onClick = { showOnlySelected = !showOnlySelected },
+                                        leadingIcon = {
+                                            Checkbox(
+                                                checked = showOnlySelected,
+                                                onCheckedChange = null,
+                                            )
+                                        },
+                                    )
+                                    HorizontalDivider()
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.sort_name_asc)) },
+                                        onClick = { sortOrder = AppSortOrder.NAME_ASC; showFilterMenu = false },
+                                        leadingIcon = {
+                                            RadioButton(
+                                                selected = sortOrder == AppSortOrder.NAME_ASC,
+                                                onClick = null,
+                                            )
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.sort_name_desc)) },
+                                        onClick = { sortOrder = AppSortOrder.NAME_DESC; showFilterMenu = false },
+                                        leadingIcon = {
+                                            RadioButton(
+                                                selected = sortOrder == AppSortOrder.NAME_DESC,
+                                                onClick = null,
+                                            )
+                                        },
+                                    )
+                                    DropdownMenuItem(
+                                        text = { Text(stringResource(R.string.sort_selected_first)) },
+                                        onClick = { sortOrder = AppSortOrder.SELECTED_FIRST; showFilterMenu = false },
+                                        leadingIcon = {
+                                            RadioButton(
+                                                selected = sortOrder == AppSortOrder.SELECTED_FIRST,
+                                                onClick = null,
                                             )
                                         },
                                     )
@@ -319,6 +371,8 @@ private fun MainScreen(
                                 searchQuery = searchQuery,
                                 showSystem = showSystem,
                                 showRussianOnly = showRussianOnly,
+                                showOnlySelected = showOnlySelected,
+                                sortOrder = sortOrder,
                                 onDirtyChange = { isProtectionDirty = it },
                                 saveTrigger = saveTrigger,
                                 modifier = Modifier.fillMaxSize(),
@@ -443,6 +497,14 @@ private fun MainScreen(
                         }
                     }
                 }
+            }
+
+            if (showFaq) {
+                BackHandler { showFaq = false }
+                FaqScreen(
+                    onBack = { showFaq = false },
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
+                )
             }
         }
     }
