@@ -330,7 +330,7 @@ unsafe fn netlink_recv(fd: i32, buf: &mut [u8]) -> isize {
 /// what we want), real failures map to `Fail`.
 fn open_netlink() -> Result<i32, CheckOutput> {
     unsafe {
-        let fd = libc::socket(libc::AF_NETLINK, libc::SOCK_RAW, libc::NETLINK_ROUTE);
+        let fd = libc::socket(libc::AF_NETLINK, libc::SOCK_RAW | libc::SOCK_CLOEXEC, libc::NETLINK_ROUTE);
         if fd < 0 {
             let e = std::io::Error::last_os_error();
             return Err(if is_selinux_denial(&e) {
@@ -340,20 +340,6 @@ fn open_netlink() -> Result<i32, CheckOutput> {
             });
         }
 
-        let mut sa: libc::sockaddr_nl = std::mem::zeroed();
-        sa.nl_family = libc::AF_NETLINK as u16;
-        let sa_len = std::mem::size_of_val(&sa) as libc::socklen_t;
-        if libc::bind(fd, std::ptr::from_ref(&sa).cast(), sa_len) < 0 {
-            let e = std::io::Error::last_os_error();
-            libc::close(fd);
-            return Err(if is_selinux_denial(&e) {
-                CheckOutput::pass(format!(
-                    "netlink bind denied by SELinux ({e}) — app cannot enumerate interfaces"
-                ))
-            } else {
-                CheckOutput::fail(format!("bind error: {e}"))
-            });
-        }
         Ok(fd)
     }
 }
@@ -417,7 +403,7 @@ unsafe fn for_each_rtattr(
 }
 
 #[uniffi::export]
-fn check_netlink_getlink() -> CheckOutput {
+pub fn check_netlink_getlink() -> CheckOutput {
     let fd = match open_netlink() {
         Ok(fd) => fd,
         Err(out) => return out,
@@ -435,16 +421,24 @@ fn check_netlink_getlink() -> CheckOutput {
         req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
         req.nlh.nlmsg_seq = 1;
 
-        if libc::send(
+        let mut dest_addr: libc::sockaddr_nl = std::mem::zeroed();
+        dest_addr.nl_family = libc::AF_NETLINK as u16;
+        if libc::sendto(
             fd,
             std::ptr::from_ref(&req).cast(),
             req.nlh.nlmsg_len as usize,
             0,
+            std::ptr::from_ref(&dest_addr).cast(),
+            std::mem::size_of_val(&dest_addr) as libc::socklen_t,
         ) < 0
         {
-            let e = last_os_error();
+            let e = std::io::Error::last_os_error();
             libc::close(fd);
-            return CheckOutput::fail(format!("send error: {e}"));
+            return if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("netlink RTM_GETLINK denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("send error: {e}"))
+            };
         }
 
         let mut buf = [0u8; 32768];
@@ -511,16 +505,24 @@ fn check_netlink_getroute() -> CheckOutput {
         req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
         req.nlh.nlmsg_seq = 1;
 
-        if libc::send(
+        let mut dest_addr: libc::sockaddr_nl = std::mem::zeroed();
+        dest_addr.nl_family = libc::AF_NETLINK as u16;
+        if libc::sendto(
             fd,
             std::ptr::from_ref(&req).cast(),
             req.nlh.nlmsg_len as usize,
             0,
+            std::ptr::from_ref(&dest_addr).cast(),
+            std::mem::size_of_val(&dest_addr) as libc::socklen_t,
         ) < 0
         {
-            let e = last_os_error();
+            let e = std::io::Error::last_os_error();
             libc::close(fd);
-            return CheckOutput::fail(format!("send error: {e}"));
+            return if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("netlink RTM_GETROUTE denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("send error: {e}"))
+            };
         }
 
         let mut buf = [0u8; 32768];
@@ -569,6 +571,99 @@ fn check_netlink_getroute() -> CheckOutput {
             CheckOutput::pass(format!("{total} routes, no VPN"))
         } else {
             CheckOutput::fail(format!("VPN routes via [{}]", join_list(&vpn)))
+        }
+    }
+}
+
+#[uniffi::export]
+fn check_netlink_anonymous_route() -> CheckOutput {
+    let fd = match open_netlink() {
+        Ok(fd) => fd,
+        Err(out) => return out,
+    };
+
+    unsafe {
+        #[repr(C)]
+        struct Req {
+            nlh: libc::nlmsghdr,
+            rtm: Rtmsg,
+        }
+        let mut req: Req = std::mem::zeroed();
+        req.nlh.nlmsg_len = std::mem::size_of::<Req>() as u32;
+        req.nlh.nlmsg_type = libc::RTM_GETROUTE;
+        req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
+        req.nlh.nlmsg_seq = 1;
+
+        let mut dest_addr: libc::sockaddr_nl = std::mem::zeroed();
+        dest_addr.nl_family = libc::AF_NETLINK as u16;
+        if libc::sendto(
+            fd,
+            std::ptr::from_ref(&req).cast(),
+            req.nlh.nlmsg_len as usize,
+            0,
+            std::ptr::from_ref(&dest_addr).cast(),
+            std::mem::size_of_val(&dest_addr) as libc::socklen_t,
+        ) < 0
+        {
+            let e = std::io::Error::last_os_error();
+            libc::close(fd);
+            return if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("netlink RTM_GETROUTE (anon) denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("send error: {e}"))
+            };
+        }
+
+        let mut buf = [0u8; 32768];
+        let mut anon_indices = Vec::new();
+        let mut total = 0u32;
+        let hdr_plus_rtmsg = std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<Rtmsg>();
+
+        loop {
+            let len = netlink_recv(fd, &mut buf);
+            if len <= 0 {
+                break;
+            }
+            let cont = parse_netlink_msgs(
+                &buf,
+                len as usize,
+                libc::RTM_NEWROUTE,
+                |b, offset, msg_len| {
+                    total += 1;
+                    let data_start = offset + hdr_plus_rtmsg;
+                    let msg_end = offset + msg_len;
+                    for_each_rtattr(b, data_start, msg_end, |rta, payload| {
+                        if rta.rta_type == RTA_OIF && payload.len() >= 4 {
+                            let ifindex = i32::from_ne_bytes(payload[..4].try_into().unwrap());
+                            if ifindex > 1 {
+                                let mut ifname_buf = [0u8; libc::IF_NAMESIZE];
+                                let ptr = libc::if_indextoname(
+                                    ifindex as u32,
+                                    ifname_buf.as_mut_ptr().cast(),
+                                );
+                                if ptr.is_null() {
+                                    if !anon_indices.contains(&ifindex) {
+                                        anon_indices.push(ifindex);
+                                    }
+                                }
+                            }
+                        }
+                    });
+                },
+            );
+            if !cont {
+                break;
+            }
+        }
+        libc::close(fd);
+
+        if anon_indices.is_empty() {
+            CheckOutput::pass(format!("{total} routes, no anonymous interfaces"))
+        } else {
+            CheckOutput::fail(format!(
+                "Anonymous routes found via ifindices [{}] (interface names hidden, but routes leaked!)",
+                anon_indices.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+            ))
         }
     }
 }

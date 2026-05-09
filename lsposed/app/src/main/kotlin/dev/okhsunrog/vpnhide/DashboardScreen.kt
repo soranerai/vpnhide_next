@@ -2,9 +2,11 @@ package dev.okhsunrog.vpnhide
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
@@ -22,6 +24,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import dev.okhsunrog.vpnhide.shimmer
+import dev.okhsunrog.vpnhide.ShimmerPlaceholder
 
 @Composable
 fun DashboardScreen(
@@ -72,26 +76,127 @@ fun DashboardScreen(
 
         val s = state
         if (s == null) {
-            Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-            return@Column
+            SkeletonDashboard()
+        } else {
+            DashboardContent(
+                s = s,
+                selfNeedsRestart = selfNeedsRestart,
+                updateInfo = updateInfo,
+                scope = scope,
+                context = context
+            )
+        }
+    }
+}
+
+
+@Composable
+private fun SkeletonDashboard() {
+    Column {
+        Text(
+            text = stringResource(R.string.dashboard_modules),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+        repeat(4) {
+            SkeletonModuleCard()
+            Spacer(Modifier.height(8.dp))
         }
 
-        // Pinned status palette — shared by the Protection status banners
-        // (NeedsRestart) and the Errors / Warnings issue banners below.
-        // Theme.colorScheme.{errorContainer,tertiaryContainer} get remixed
-        // by Material You to whatever the wallpaper suggests, which in
-        // practice landed on "lavender" and "pink" on user devices — those
-        // read as "note", not "problem". Same hardcoded pairs the module-
-        // status cards use for active/inactive.
-        val darkTheme = isSystemInDarkTheme()
-        val errorBg = if (darkTheme) Color(0xFFB71C1C).copy(alpha = 0.3f) else Color(0xFFFFEBEE)
-        val errorHeader = if (darkTheme) Color(0xFFEF9A9A) else Color(0xFFC62828)
-        val warningBg = if (darkTheme) Color(0xFFE65100).copy(alpha = 0.2f) else Color(0xFFFFF3E0)
-        val warningHeader = if (darkTheme) Color(0xFFFFB74D) else Color(0xFFE65100)
-        val onBannerColor = MaterialTheme.colorScheme.onSurface
+        Spacer(Modifier.height(20.dp))
+        Text(
+            text = stringResource(R.string.dashboard_protection),
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+        )
+        Spacer(Modifier.height(8.dp))
+        repeat(2) {
+            SkeletonProtectionCard()
+            Spacer(Modifier.height(8.dp))
+        }
+    }
+}
 
+@Composable
+private fun SkeletonModuleCard() {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ShimmerPlaceholder(
+                modifier = Modifier.size(12.dp),
+                shape = CircleShape
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                ShimmerPlaceholder(
+                    modifier = Modifier
+                        .width(100.dp)
+                        .height(18.dp)
+                )
+                Spacer(Modifier.height(4.dp))
+                ShimmerPlaceholder(
+                    modifier = Modifier
+                        .width(160.dp)
+                        .height(14.dp)
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkeletonProtectionCard() {
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        ),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ShimmerPlaceholder(
+                modifier = Modifier
+                    .width(140.dp)
+                    .height(20.dp)
+            )
+            ShimmerPlaceholder(
+                modifier = Modifier
+                    .width(60.dp)
+                    .height(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun DashboardContent(
+    s: DashboardState,
+    selfNeedsRestart: Boolean,
+    updateInfo: UpdateInfo?,
+    scope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context,
+) {
+    val darkTheme = isSystemInDarkTheme()
+    val errorBg = if (darkTheme) Color(0xFFB71C1C).copy(alpha = 0.3f) else Color(0xFFFFEBEE)
+    val errorHeader = if (darkTheme) Color(0xFFEF9A9A) else Color(0xFFC62828)
+    val warningBg = if (darkTheme) Color(0xFFE65100).copy(alpha = 0.2f) else Color(0xFFFFF3E0)
+    val warningHeader = if (darkTheme) Color(0xFFFFB74D) else Color(0xFFE65100)
+    val onBannerColor = MaterialTheme.colorScheme.onSurface
+
+    Column {
         // Module status cards
         Text(
             text = stringResource(R.string.dashboard_modules),
@@ -129,10 +234,6 @@ fun DashboardScreen(
             is ProtectionCheck.NoVpn -> {
                 VpnOffPrompt(
                     onRetry = {
-                        // Re-read dashboard state (re-runs its own VPN
-                        // + protection probes) and re-run the diag
-                        // cache so both screens move to "Ready" when
-                        // VPN is back.
                         DashboardCache.refresh(scope, context, selfNeedsRestart)
                         DiagnosticsCache.retry(scope, context)
                     },
@@ -154,10 +255,7 @@ fun DashboardScreen(
             }
         }
 
-        // Issues — split by severity. Errors first (user attention), then
-        // warnings (working-but-suboptimal). Sections hide themselves when
-        // empty so the Dashboard stays short on a healthy setup. Colors
-        // come from the pinned palette declared at the top of this block.
+        // Issues
         val errors = s.issues.filter { it.severity == IssueSeverity.ERROR }
         val warnings = s.issues.filter { it.severity == IssueSeverity.WARNING }
 
@@ -198,8 +296,6 @@ fun DashboardScreen(
                 Spacer(Modifier.height(6.dp))
             }
         }
-
-        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -342,11 +438,11 @@ private fun ModuleCardShell(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Surface(
-                shape = RoundedCornerShape(50),
-                color = dotColor,
-                modifier = Modifier.size(12.dp),
-            ) {}
+            Box(
+                modifier = Modifier
+                    .size(12.dp)
+                    .background(color = dotColor, shape = CircleShape)
+            )
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

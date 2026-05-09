@@ -38,6 +38,7 @@ import dev.okhsunrog.vpnhide.checks.checkIoctlSiocgifflags
 import dev.okhsunrog.vpnhide.checks.checkIoctlSiocgifmtu
 import dev.okhsunrog.vpnhide.checks.checkNetlinkGetlink
 import dev.okhsunrog.vpnhide.checks.checkNetlinkGetroute
+import dev.okhsunrog.vpnhide.checks.checkNetlinkAnonymousRoute
 import dev.okhsunrog.vpnhide.checks.checkProcNetDev
 import dev.okhsunrog.vpnhide.checks.checkProcNetFibTrie
 import dev.okhsunrog.vpnhide.checks.checkProcNetIfInet6
@@ -645,6 +646,7 @@ internal fun runAllChecks(
             nativeCheck(res.getString(R.string.check_getifaddrs)) { checkGetifaddrs() },
             nativeCheck(res.getString(R.string.check_netlink_getlink)) { checkNetlinkGetlink() },
             nativeCheck(res.getString(R.string.check_netlink_getroute)) { checkNetlinkGetroute() },
+            nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) { checkNetlinkAnonymousRoute() },
             nativeCheck(res.getString(R.string.check_proc_route)) { checkProcNetRoute() },
             nativeCheck(res.getString(R.string.check_proc_ipv6_route)) { checkProcNetIpv6Route() },
             nativeCheck(res.getString(R.string.check_proc_if_inet6)) { checkProcNetIfInet6() },

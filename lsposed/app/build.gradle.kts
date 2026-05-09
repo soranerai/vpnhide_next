@@ -131,6 +131,7 @@ dependencies {
 
     // Android 12 SplashScreen API, backported to API 23+.
     implementation("androidx.core:core-splashscreen:1.0.1")
+    implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
     // Compose UI
     implementation(libs.core.ktx)

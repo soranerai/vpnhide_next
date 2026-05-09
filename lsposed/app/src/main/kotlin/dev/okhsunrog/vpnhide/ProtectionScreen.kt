@@ -9,11 +9,14 @@ import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 
@@ -26,7 +29,14 @@ fun ProtectionScreen(
     showRussianOnly: Boolean,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     var mode by rememberSaveable { mutableStateOf(ProtectionMode.VpnTargets) }
+
+    LaunchedEffect(Unit) {
+        AppListCache.ensureLoaded(scope, context)
+        TargetsCache.ensureLoaded(scope, context)
+    }
 
     Column(modifier = modifier.fillMaxSize()) {
         ProtectionModeSwitcher(
