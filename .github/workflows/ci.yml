@@ -213,7 +213,7 @@ jobs:
 
       - name: Build module zip
         env:
-          UPDATE_JSON_URL: https://raw.githubusercontent.com/okhsunrog/vpnhide/main/update-json/update-zygisk.json
+          UPDATE_JSON_URL: https://raw.githubusercontent.com/soranerai/vpnhide/main/update-json/update-zygisk.json
         run: |
           cd zygisk
           python3 ./build.py
@@ -322,7 +322,7 @@ jobs:
 
       - name: Package ports module zip
         env:
-          UPDATE_JSON_URL: https://raw.githubusercontent.com/okhsunrog/vpnhide/main/update-json/update-ports.json
+          UPDATE_JSON_URL: https://raw.githubusercontent.com/soranerai/vpnhide/main/update-json/update-ports.json
         run: |
           cd portshide
           python3 ./build-zip.py

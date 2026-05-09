@@ -38,8 +38,8 @@ OUT_LSP_KT = (
     / "main"
     / "kotlin"
     / "dev"
-    / "okhsunrog"
-    / "vpnhide"
+    / "soranerai"
+    / "vpnhidenext"
     / "generated"
     / "IfaceLists.kt"
 )
@@ -51,8 +51,8 @@ OUT_LSP_KT_TEST = (
     / "test"
     / "kotlin"
     / "dev"
-    / "okhsunrog"
-    / "vpnhide"
+    / "soranerai"
+    / "vpnhidenext"
     / "generated"
     / "IfaceListsGeneratedTest.kt"
 )
@@ -485,7 +485,7 @@ def emit_kotlin(rules: list[Rule]) -> str:
     lines: list[str] = []
     lines.append(f"// {GENERATED_HEADER_LINE}")
     lines.append("")
-    lines.append("package dev.okhsunrog.vpnhide.generated")
+    lines.append("package dev.soranerai.vpnhidenext.generated")
     lines.append("")
     lines.append("internal object IfaceLists {")
     lines.append("    /** True if `name` looks like a VPN tunnel per data/interfaces.toml. */")
@@ -520,7 +520,7 @@ def emit_kotlin_test(tests: list[TestVector]) -> str:
     lines: list[str] = []
     lines.append(f"// {GENERATED_HEADER_LINE}")
     lines.append("")
-    lines.append("package dev.okhsunrog.vpnhide.generated")
+    lines.append("package dev.soranerai.vpnhidenext.generated")
     lines.append("")
     lines.append("import org.junit.Assert.assertEquals")
     lines.append("import org.junit.Test")

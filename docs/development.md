@@ -16,7 +16,7 @@ How to build vpnhide from source.
 - **`zip`** — packaging module zips.
 - **`adb`** — installing builds on a device.
 
-[Gobley](https://github.com/gobley/gobley) (Gradle plugins `dev.gobley.cargo` + `dev.gobley.uniffi`) is what builds the Rust crate at `lsposed/native/` via cargo-ndk and bundles the resulting `libvpnhide_checks.so` plus its UniFFI-generated Kotlin bindings (package `dev.okhsunrog.vpnhide.checks`) into the APK. The plugins are auto-resolved by Gradle from Maven Central — no manual install. Version is pinned in `lsposed/gradle/libs.versions.toml`.
+[Gobley](https://github.com/gobley/gobley) (Gradle plugins `dev.gobley.cargo` + `dev.gobley.uniffi`) is what builds the Rust crate at `lsposed/native/` via cargo-ndk and bundles the resulting `libvpnhide_checks.so` plus its UniFFI-generated Kotlin bindings (package `dev.soranerai.vpnhidenext.checks`) into the APK. The plugins are auto-resolved by Gradle from Maven Central — no manual install. Version is pinned in `lsposed/gradle/libs.versions.toml`.
 
 ## Repository layout
 

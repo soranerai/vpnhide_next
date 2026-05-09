@@ -49,7 +49,7 @@ On boot:
 
 ### Target management
 
-**VPN Hide app (recommended):** open the VPN Hide app (the [lsposed](../lsposed/) APK). It lists all installed apps with icons, search, and checkboxes. Saves targets for both kmod and zygisk, resolves UIDs, and writes to `/proc/vpnhide_targets` immediately. Works on both KernelSU and Magisk.
+**VPNHide Next app (recommended):** open the VPNHide Next app (the [lsposed](../lsposed/) APK). It lists all installed apps with icons, search, and checkboxes. Saves targets for both kmod and zygisk, resolves UIDs, and writes to `/proc/vpnhide_targets` immediately. Works on both KernelSU and Magisk.
 
 **Shell:**
 ```bash
@@ -78,7 +78,7 @@ Together they provide complete VPN hiding without any hooks in the target app's 
 
 1. Install **vpnhide-kmod** as a KSU module (this module).
 2. Install **[lsposed](../lsposed/)** as an LSPosed/Vector module and add **"System Framework"** to its scope (no other apps in scope).
-3. Pick target apps in the VPN Hide app -- it manages targets for both the kernel module and the system_server hooks.
+3. Pick target apps in the VPNHide Next app -- it manages targets for both the kernel module and the system_server hooks.
 
 ## Architecture notes
 

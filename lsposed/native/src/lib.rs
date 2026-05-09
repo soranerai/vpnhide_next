@@ -330,7 +330,11 @@ unsafe fn netlink_recv(fd: i32, buf: &mut [u8]) -> isize {
 /// what we want), real failures map to `Fail`.
 fn open_netlink() -> Result<i32, CheckOutput> {
     unsafe {
-        let fd = libc::socket(libc::AF_NETLINK, libc::SOCK_RAW | libc::SOCK_CLOEXEC, libc::NETLINK_ROUTE);
+        let fd = libc::socket(
+            libc::AF_NETLINK,
+            libc::SOCK_RAW | libc::SOCK_CLOEXEC,
+            libc::NETLINK_ROUTE,
+        );
         if fd < 0 {
             let e = std::io::Error::last_os_error();
             return Err(if is_selinux_denial(&e) {
@@ -608,7 +612,9 @@ fn check_netlink_anonymous_route() -> CheckOutput {
             let e = std::io::Error::last_os_error();
             libc::close(fd);
             return if is_selinux_denial(&e) {
-                CheckOutput::pass(format!("netlink RTM_GETROUTE (anon) denied by SELinux ({e})"))
+                CheckOutput::pass(format!(
+                    "netlink RTM_GETROUTE (anon) denied by SELinux ({e})"
+                ))
             } else {
                 CheckOutput::fail(format!("send error: {e}"))
             };
@@ -641,10 +647,8 @@ fn check_netlink_anonymous_route() -> CheckOutput {
                                     ifindex as u32,
                                     ifname_buf.as_mut_ptr().cast(),
                                 );
-                                if ptr.is_null() {
-                                    if !anon_indices.contains(&ifindex) {
-                                        anon_indices.push(ifindex);
-                                    }
+                                if ptr.is_null() && !anon_indices.contains(&ifindex) {
+                                    anon_indices.push(ifindex);
                                 }
                             }
                         }
@@ -662,7 +666,11 @@ fn check_netlink_anonymous_route() -> CheckOutput {
         } else {
             CheckOutput::fail(format!(
                 "Anonymous routes found via ifindices [{}] (interface names hidden, but routes leaked!)",
-                anon_indices.iter().map(|i| i.to_string()).collect::<Vec<_>>().join(", ")
+                anon_indices
+                    .iter()
+                    .map(|i| i.to_string())
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ))
         }
     }

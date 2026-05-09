@@ -96,46 +96,6 @@ def detect_kdir(kmi: str) -> str | None:
     return str(kdir) if kdir.is_dir() else None
 
 
-def native_build_one(
-    kmod_dir: Path,
-    kmi: str,
-    kdir: str,
-    clang_dir: str | None,
-    out: Path | None,
-) -> int:
-    """Compile + package one .ko into one zip, in the current process."""
-    print(f"[{kmi}] kdir={kdir}")
-    print(f"[{kmi}] clang-dir={clang_dir or '(system PATH)'}")
-
-    env = os.environ.copy()
-    env["KERNEL_SRC"] = kdir
-    if clang_dir:
-        env["CLANG_DIR"] = clang_dir
-
-    # `make strip` does the actual kernel-module build. Let make decide
-    # whether anything needs rebuilding — its dependency tracking covers
-    # all sources, headers, and the kernel .config, not just our .c file.
-    subprocess.run(["make", "-C", str(kmod_dir), "strip"], env=env, check=True)
-
-    # Stage the module skeleton from kmod/module/, drop the freshly built
-    # .ko in, patch module.prop with the real build version + gkiVariant
-    # + updateJson. The committed module.prop stays at the last release
-    # version so PR diffs don't churn it.
-    staging = kmod_dir / "module-staging"
-    if staging.exists():
-        shutil.rmtree(staging)
-    shutil.copytree(kmod_dir / "module", staging)
-    shutil.copy(kmod_dir / KMOD_KO, staging / KMOD_KO)
-    
-    # Compile the stealthy configuration tool (aarch64 static)
-    cc = "aarch64-linux-gnu-gcc"
-    strip_tool = "strip"
-    if clang_dir:
-        cc_path = Path(clang_dir) / "clang"
-        if cc_path.exists():
-            cc = str(cc_path)
-            strip_tool = str(Path(clang_dir) / "llvm-strip")
-    
 def build_ctl_host(repo_root: Path, kmod_dir: Path) -> Path:
     """Build the vpnhide-ctl tool on the host using the Android NDK."""
     ndk_home = os.environ.get("ANDROID_NDK_HOME")
@@ -144,51 +104,47 @@ def build_ctl_host(repo_root: Path, kmod_dir: Path) -> Path:
         ndk_base = Path.home() / "android-sdk" / "ndk"
         if not ndk_base.exists():
             ndk_base = Path.home() / "Android" / "Sdk" / "ndk"
-        
+
         if ndk_base.exists():
             # Use the latest version
             versions = sorted([d.name for d in ndk_base.iterdir() if d.is_dir()])
             if versions:
                 ndk_home = str(ndk_base / versions[-1])
-    
+
     if not ndk_home:
         raise RuntimeError("ANDROID_NDK_HOME not set and NDK not found in standard locations")
 
     print(f"Using NDK to build ctl: {ndk_home}")
-    
+
     # Locate clang in NDK
     clang_glob = list(Path(ndk_home).glob("**/bin/aarch64-linux-android*-clang"))
     if not clang_glob:
         raise RuntimeError(f"Could not find aarch64 clang in {ndk_home}")
-    
+
     # Pick a stable API version (e.g., 31 for Android 12)
     clang = str(clang_glob[0])
     for c in clang_glob:
         if "android31" in c.name:
             clang = str(c)
             break
-            
+
     out_bin = kmod_dir / "vpnhide-ctl-host"
-    cmd = [
-        clang,
-        "-O2", "-Wall",
-        str(kmod_dir / "vpnhide_ctl.c"),
-        "-o", str(out_bin)
-    ]
-    
+    cmd = [clang, "-O2", "-Wall", str(kmod_dir / "vpnhide_ctl.c"), "-o", str(out_bin)]
+
     # Try -static first for zero dependencies
     try:
         subprocess.run(cmd + ["-static"], check=True, capture_output=True)
     except subprocess.CalledProcessError:
         # Fallback to dynamic if -static fails (Android always has libc)
         subprocess.run(cmd, check=True)
-    
+
     # Strip the binary to reduce size
     strip_bin = Path(clang).parent / "llvm-strip"
     if strip_bin.exists():
         subprocess.run([str(strip_bin), str(out_bin)], check=True)
-    
+
     return out_bin
+
 
 def native_build_one(
     kmod_dir: Path,
@@ -211,7 +167,7 @@ def native_build_one(
     # all sources, headers, and the kernel .config, not just our .c file.
     subprocess.run(["make", "-C", str(kmod_dir), "strip"], env=env, check=True)
     shutil.copy(kmod_dir / "vpnhide_kmod.ko", staging / "vpnhide_kmod.ko")
-    
+
     # Copy the host-built ctl binary (visible in /work/kmod/)
     ctl_src = kmod_dir / "vpnhide-ctl-host"
     if ctl_src.exists():
@@ -229,10 +185,7 @@ def native_build_one(
         content = re.sub(r"^gkiVariant=.*", f"gkiVariant={kmi}", content, flags=re.MULTILINE)
     else:
         content = content.rstrip() + f"\ngkiVariant={kmi}\n"
-    update_json_url = (
-        f"https://raw.githubusercontent.com/okhsunrog/vpnhide/main/update-json/"
-        f"update-kmod-{kmi}.json"
-    )
+    update_json_url = f"https://raw.githubusercontent.com/soranerai/vpnhide/main/update-json/update-kmod-{kmi}.json"
     if re.search(r"^updateJson=", content, flags=re.MULTILINE):
         content = re.sub(
             r"^updateJson=.*", f"updateJson={update_json_url}", content, flags=re.MULTILINE
