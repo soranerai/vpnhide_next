@@ -1,34 +1,40 @@
 package dev.okhsunrog.vpnhide
-
+    
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
-import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.List
-import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Clear
-import androidx.compose.material.icons.filled.FilterList
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.IntOffset
 import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import dev.okhsunrog.vpnhide.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -69,19 +75,9 @@ private sealed class RootState {
     data object Denied : RootState()
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun VpnHideApp(onReady: () -> Unit = {}) {
-    val darkTheme = isSystemInDarkTheme()
-    val colorScheme =
-        if (android.os.Build.VERSION.SDK_INT >= 31) {
-            val context = LocalContext.current
-            if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-        } else {
-            if (darkTheme) darkColorScheme() else lightColorScheme()
-        }
-
-    MaterialTheme(colorScheme = colorScheme) {
+    VpnHideTheme {
         val context = LocalContext.current
         var rootState by remember { mutableStateOf<RootState?>(null) }
         LaunchedEffect(Unit) {
@@ -134,6 +130,8 @@ private fun MainScreen(
     var showSystem by remember { mutableStateOf(false) }
     var showRussianOnly by remember { mutableStateOf(false) }
     var showFilterMenu by remember { mutableStateOf(false) }
+    var isProtectionDirty by remember { mutableStateOf(false) }
+    var saveTrigger by remember { mutableStateOf(0) }
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
@@ -190,7 +188,12 @@ private fun MainScreen(
         }
     }
 
+    val nestedScrollConnection = remember {
+        object : NestedScrollConnection {}
+    }
+
     Scaffold(
+        modifier = Modifier.nestedScroll(nestedScrollConnection),
         topBar = {
             if (searchActive && currentTab == Tab.Protection) {
                 SearchBar(
@@ -220,11 +223,10 @@ private fun MainScreen(
             } else {
                 TopAppBar(
                     title = { Text(stringResource(R.string.app_name)) },
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                        ),
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground
+                    ),
                     actions = {
                         RefreshActionIcon(
                             currentTab = currentTab,
@@ -237,18 +239,10 @@ private fun MainScreen(
                                 Icon(
                                     Icons.Default.Search,
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                             }
                             Box {
                                 val anyFilterActive = showSystem || showRussianOnly
-                                // Active-filter indicator: the old `tint = primary`
-                                // did not contrast reliably against the topbar's
-                                // `primaryContainer` on Material You palettes where
-                                // primary and primaryContainer end up close in tone.
-                                // FilledIconButton paints itself with `primary` /
-                                // `onPrimary`, a pair M3 guarantees to contrast,
-                                // so the indicator reads on any dynamic theme.
                                 if (anyFilterActive) {
                                     FilledIconButton(onClick = { showFilterMenu = true }) {
                                         Icon(
@@ -261,7 +255,6 @@ private fun MainScreen(
                                         Icon(
                                             Icons.Default.FilterList,
                                             contentDescription = null,
-                                            tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                         )
                                     }
                                 }
@@ -296,60 +289,158 @@ private fun MainScreen(
                 )
             }
         },
-        bottomBar = {
-            NavigationBar {
-                NavigationBarItem(
-                    selected = currentTab == Tab.Dashboard,
-                    onClick = { currentTab = Tab.Dashboard },
-                    icon = { Icon(Icons.Default.Home, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_dashboard)) },
-                )
-                NavigationBarItem(
-                    selected = currentTab == Tab.Protection,
-                    onClick = { currentTab = Tab.Protection },
-                    icon = { Icon(Icons.AutoMirrored.Filled.List, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_protection)) },
-                )
-                NavigationBarItem(
-                    selected = currentTab == Tab.Diagnostics,
-                    onClick = { currentTab = Tab.Diagnostics },
-                    icon = { Icon(Icons.Default.CheckCircle, contentDescription = null) },
-                    label = { Text(stringResource(R.string.tab_diagnostics)) },
-                )
-            }
-        },
     ) { innerPadding ->
         val restart = selfNeedsRestart
-        Column(modifier = Modifier.padding(innerPadding)) {
-            // Initial root check / startup loader
-            TopProgressBar(visible = restart == null)
-            
-            // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
-            TabLoadingBar()
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val screenWidth = maxWidth
+            val density = androidx.compose.ui.platform.LocalDensity.current
 
-            if (restart != null) {
-                when (currentTab) {
-                    Tab.Dashboard -> {
-                        DashboardScreen(
-                            selfNeedsRestart = restart,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+            Column(
+                modifier = Modifier
+                    .padding(top = innerPadding.calculateTopPadding())
+            ) {
+                // Initial root check / startup loader
+                TopProgressBar(visible = restart == null)
+                
+                // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
+                TabLoadingBar()
+
+                if (restart != null) {
+                    when (currentTab) {
+                        Tab.Dashboard -> {
+                            DashboardScreen(
+                                selfNeedsRestart = restart,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+
+                        Tab.Protection -> {
+                            ProtectionScreen(
+                                searchQuery = searchQuery,
+                                showSystem = showSystem,
+                                showRussianOnly = showRussianOnly,
+                                onDirtyChange = { isProtectionDirty = it },
+                                saveTrigger = saveTrigger,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+
+                        Tab.Diagnostics -> {
+                            DiagnosticsScreen(
+                                selfNeedsRestart = restart,
+                                modifier = Modifier.fillMaxSize(),
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Floating Navigation Bar and FAB
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 20.dp)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                val showSave = isProtectionDirty && currentTab == Tab.Protection
+                val tabs = listOf(
+                    Tab.Dashboard to Icons.Default.Home,
+                    Tab.Protection to Icons.Default.Shield,
+                    Tab.Diagnostics to Icons.Default.CheckCircle
+                )
+
+                val saveProgress by animateFloatAsState(
+                    targetValue = if (showSave) 1f else 0f,
+                    animationSpec = spring(
+                        dampingRatio = Spring.DampingRatioLowBouncy,
+                        stiffness = Spring.StiffnessLow
+                    ),
+                    label = "saveProgress"
+                )
+
+                // The bounding box for the entire Pill + Save FAB combo
+                Box(contentAlignment = Alignment.Center) {
+                    // Invisible layout driver to smoothly animate total width
+                    Row(
+                        modifier = Modifier.height(60.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Spacer(modifier = Modifier.width(260.dp))
+                        Spacer(modifier = Modifier.width(76.dp * saveProgress))
                     }
 
-                    Tab.Protection -> {
-                        ProtectionScreen(
-                            searchQuery = searchQuery,
-                            showSystem = showSystem,
-                            showRussianOnly = showRussianOnly,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                    // Save Button (Anchored to the right, scales up)
+                    if (saveProgress > 0.01f) {
+                        Surface(
+                            onClick = { saveTrigger++ },
+                            color = MaterialTheme.colorScheme.primary,
+                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .size(60.dp)
+                                .graphicsLayer {
+                                    shadowElevation = 8.dp.toPx()
+                                    shape = RoundedCornerShape(20.dp)
+                                    clip = true
+                                    alpha = saveProgress
+                                    scaleX = 0.5f + (0.5f * saveProgress)
+                                    scaleY = 0.5f + (0.5f * saveProgress)
+                                }
+                        ) {
+                            Box(contentAlignment = Alignment.Center) {
+                                Icon(
+                                    Icons.Default.Check,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(28.dp)
+                                )
+                            }
+                        }
                     }
 
-                    Tab.Diagnostics -> {
-                        DiagnosticsScreen(
-                            selfNeedsRestart = restart,
-                            modifier = Modifier.fillMaxSize(),
-                        )
+                    // Navigation Pill (Anchored to the left)
+                    Surface(
+                        shape = RoundedCornerShape(20.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                        tonalElevation = 12.dp,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .height(60.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                                .width(260.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            tabs.forEach { (tab, icon) ->
+                                val selected = currentTab == tab
+                                Box(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                            else Color.Transparent
+                                        )
+                                        .clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null
+                                        ) { currentTab = tab },
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = if (selected) MaterialTheme.colorScheme.primary 
+                                               else MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

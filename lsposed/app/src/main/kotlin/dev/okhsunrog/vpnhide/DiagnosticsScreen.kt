@@ -28,6 +28,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.okhsunrog.vpnhide.ui.theme.*
 import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.okhsunrog.vpnhide.checks.CheckOutput
@@ -305,7 +306,7 @@ fun DiagnosticsScreen(
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        Spacer(Modifier.height(88.dp))
     }
 }
 
@@ -315,19 +316,19 @@ private fun DebugLoggingCard() {
     val scope = rememberCoroutineScope()
     var enabled by remember { mutableStateOf(VpnHideLog.enabled) }
 
-    Card(
+    ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            modifier = Modifier.padding(20.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.diag_debug_logging_title),
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
                 Spacer(Modifier.height(4.dp))
@@ -381,15 +382,15 @@ private fun LogcatRecordCard() {
             }
         }
 
-    Card(
+    ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Text(
                 text = stringResource(R.string.logcat_card_title),
-                style = MaterialTheme.typography.titleSmall,
+                style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(4.dp))
@@ -398,7 +399,7 @@ private fun LogcatRecordCard() {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(12.dp))
+            Spacer(Modifier.height(16.dp))
 
             when (val s = state) {
                 is LogcatRecorder.State.Recording -> {
@@ -445,7 +446,7 @@ private fun LogcatRecordCard() {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -489,7 +490,7 @@ private fun LogcatRecordCard() {
                                 Text(stringResource(R.string.btn_share_debug))
                             }
                         }
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(12.dp))
                     }
                     Button(
                         onClick = {
@@ -531,16 +532,16 @@ private fun StatusBanner(
     containerColor: Color,
     contentColor: Color,
 ) {
-    Card(
+    ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = containerColor),
+        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
             text = text,
             style = MaterialTheme.typography.bodyMedium,
             color = contentColor,
-            modifier = Modifier.padding(12.dp),
+            modifier = Modifier.padding(16.dp),
         )
     }
 }
@@ -557,21 +558,18 @@ private fun SectionHeader(title: String) {
 
 @Composable
 private fun CheckCard(r: CheckResult) {
-    val darkTheme = isSystemInDarkTheme()
-    val actualColor =
-        if (darkTheme) {
-            when (r.passed) {
-                true -> Color(0xFF1B5E20).copy(alpha = 0.3f)
-                false -> Color(0xFFB71C1C).copy(alpha = 0.3f)
-                null -> MaterialTheme.colorScheme.surfaceVariant
-            }
-        } else {
-            when (r.passed) {
-                true -> Color(0xFFE8F5E9)
-                false -> Color(0xFFFFEBEE)
-                null -> MaterialTheme.colorScheme.surfaceVariant
-            }
+    val badgeColor =
+        when (r.passed) {
+            true -> TelGreen
+            false -> TelRed
+            null -> MaterialTheme.colorScheme.onSurfaceVariant
         }
+
+    val containerColor = when (r.passed) {
+        true -> TelGreen.copy(alpha = 0.15f)
+        false -> TelRed.copy(alpha = 0.15f)
+        null -> MaterialTheme.colorScheme.surfaceVariant
+    }
 
     val badgeText =
         stringResource(
@@ -582,19 +580,12 @@ private fun CheckCard(r: CheckResult) {
             },
         )
 
-    val badgeColor =
-        when (r.passed) {
-            true -> Color(0xFF2E7D32)
-            false -> Color(0xFFC62828)
-            null -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-
-    Card(
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.cardColors(containerColor = actualColor),
+    ElevatedCard(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(modifier = Modifier.padding(12.dp)) {
+        Column(modifier = Modifier.padding(20.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -613,7 +604,7 @@ private fun CheckCard(r: CheckResult) {
                     color = badgeColor,
                 )
             }
-            Spacer(Modifier.height(4.dp))
+            Spacer(Modifier.height(8.dp))
             Text(
                 text = r.detail,
                 style = MaterialTheme.typography.bodySmall,

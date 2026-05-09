@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -62,19 +63,36 @@ internal object DiagnosticsCache {
         scope: CoroutineScope,
         context: Context,
     ) {
-        when (_state.value) {
-            is State.Ready -> {
-                return
-            }
-
-            State.Running -> {
-                return
-            }
-
-            State.NotRun, State.VpnOff -> { /* proceed */ }
-        }
+        val s = _state.value
+        if (s is State.Ready || s is State.Running) return
+        
         if (inflight?.isActive == true) return
         inflight = scope.launch { doRun(context.applicationContext) }
+    }
+
+    /**
+     * Await the results of the diagnostics run. If not already running or
+     * finished, starts a new run.
+     */
+    suspend fun awaitResults(context: Context): CheckResults? {
+        val s = _state.value
+        if (s is State.Ready) return s.results
+        
+        if (s !is State.Running) {
+            // Start it if not running
+            withContext(Dispatchers.Main) {
+                // We use a global scope or just run it here?
+                // Better to use the singleton's doRun directly to ensure only one runs.
+                doRun(context.applicationContext)
+            }
+        }
+
+        // Wait for it to become Ready or VpnOff
+        state.first { 
+            it is State.Ready || it is State.VpnOff 
+        }
+        
+        return (_state.value as? State.Ready)?.results
     }
 
     /** Used by the retry button in the "VPN off" banner. Same as [run]
@@ -86,7 +104,10 @@ internal object DiagnosticsCache {
     fun retry(
         scope: CoroutineScope,
         context: Context,
-    ) = run(scope, context)
+    ) {
+        reset()
+        run(scope, context)
+    }
 
     /** Drop any cached result. Next [run] will execute fresh.
      * Not wired to any UI at the moment — reserved for scenarios like
