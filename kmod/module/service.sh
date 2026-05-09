@@ -58,13 +58,15 @@ resolve_uids() {
 
     local uids=""
     while IFS= read -r line || [ -n "$line" ]; do
-        # ОПТИМИЗАЦИЯ: Убираем пробелы и спецсимволы средствами оболочки (без запуска 'tr')
-        local pkg="${line//[[:space:]]/}"
+        # POSIX-compliant way to remove spaces
+        local pkg
+        pkg="$(echo "$line" | tr -d '[:space:]')"
         [ -z "$pkg" ] && continue
         case "$pkg" in \#*) continue ;; esac
         
-        # ОПТИМИЗАЦИЯ: Экранируем точки для regex в awk (без запуска 'sed')
-        local pkg_esc="${pkg//./\\.}"
+        # POSIX-compliant way to escape dots
+        local pkg_esc
+        pkg_esc="$(echo "$pkg" | sed 's/\./\\./g')"
         
         # ИСПРАВЛЕНИЕ: Убран 'exit' из awk, чтобы ловить все UID (включая Work Profiles / Dual Apps)
         local uid_csv
@@ -89,7 +91,8 @@ if [ -f "$KMOD_TARGETS" ]; then
     KMOD_UIDS="$(resolve_uids "$KMOD_TARGETS")"
     if [ -n "$KMOD_UIDS" ]; then
         log -t vpnhide "kmod: applying targets: $KMOD_UIDS"
-        # Word splitting will turn space-separated string into arguments for $CTL
+        # Word splitting is intended to pass multiple UIDs as separate arguments
+        # shellcheck disable=SC2086
         $CTL targets $KMOD_UIDS
         
         # ИСПРАВЛЕНИЕ: Подсчет слов ('-w') вместо подсчета строк ('-l')
@@ -105,6 +108,7 @@ if [ -f "$KMOD_DIRECT_TARGETS" ]; then
     DIRECT_UIDS="$(resolve_uids "$KMOD_DIRECT_TARGETS")"
     if [ -n "$DIRECT_UIDS" ]; then
         log -t vpnhide "kmod-direct: applying targets: $DIRECT_UIDS"
+        # shellcheck disable=SC2086
         $CTL direct $DIRECT_UIDS
         
         # ИСПРАВЛЕНИЕ: Подсчет слов ('-w') вместо подсчета строк ('-l')
@@ -208,5 +212,6 @@ done
 # Re-seed debug logging
 SS_DEBUG_LOGGING="/data/system/vpnhide_debug_logging"
 if [ -f "$SS_DEBUG_LOGGING" ]; then
+    # shellcheck disable=SC2046
     $CTL debug $(cat "$SS_DEBUG_LOGGING")
 fi
