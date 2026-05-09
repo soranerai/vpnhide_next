@@ -647,10 +647,8 @@ fn check_netlink_anonymous_route() -> CheckOutput {
                                     ifindex as u32,
                                     ifname_buf.as_mut_ptr().cast(),
                                 );
-                                if ptr.is_null() {
-                                    if !anon_indices.contains(&ifindex) {
-                                        anon_indices.push(ifindex);
-                                    }
+                                if ptr.is_null() && !anon_indices.contains(&ifindex) {
+                                    anon_indices.push(ifindex);
                                 }
                             }
                         }
