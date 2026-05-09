@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -33,6 +34,7 @@ import io.github.oikvpqya.compose.fastscroller.material3.defaultMaterialScrollba
 import io.github.oikvpqya.compose.fastscroller.rememberScrollbarAdapter
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import dev.okhsunrog.vpnhide.ShimmerPlaceholder
 
 data class AppEntry(
     val packageName: String,
@@ -144,11 +146,10 @@ fun AppPickerScreen(
 
     Column(modifier = modifier.fillMaxSize()) {
         if (loading) {
-            Box(
-                modifier = Modifier.fillMaxSize(),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
+            LazyColumn(modifier = Modifier.fillMaxSize()) {
+                items(10) {
+                    SkeletonAppRow()
+                }
             }
         } else {
             val listState = rememberLazyListState()
@@ -452,5 +453,43 @@ private fun LayerChip(
             color = contentColor,
             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
         )
+    }
+}
+@Composable
+private fun SkeletonAppRow() {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        ShimmerPlaceholder(
+            modifier = Modifier.size(40.dp),
+            shape = CircleShape
+        )
+        Spacer(Modifier.width(12.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            ShimmerPlaceholder(
+                modifier = Modifier
+                    .width(150.dp)
+                    .height(20.dp)
+            )
+            Spacer(Modifier.height(4.dp))
+            ShimmerPlaceholder(
+                modifier = Modifier
+                    .width(220.dp)
+                    .height(14.dp)
+            )
+            Spacer(Modifier.height(4.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                repeat(3) {
+                    ShimmerPlaceholder(
+                        modifier = Modifier
+                            .size(24.dp),
+                        shape = RoundedCornerShape(4.dp)
+                    )
+                }
+            }
+        }
     }
 }

@@ -64,14 +64,9 @@ class MainActivity : ComponentActivity() {
 }
 
 private sealed class RootState {
-    data object Granted : RootState()
+    data class Granted(val startup: StartupResult) : RootState()
 
     data object Denied : RootState()
-}
-
-private fun checkRootAccess(): Boolean {
-    val (exitCode, stdout) = suExec("id")
-    return exitCode == 0 && stdout.contains("uid=0")
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -87,13 +82,15 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
         }
 
     MaterialTheme(colorScheme = colorScheme) {
+        val context = LocalContext.current
         var rootState by remember { mutableStateOf<RootState?>(null) }
-
         LaunchedEffect(Unit) {
-            rootState =
+            val appCtx = context.applicationContext
+            val res =
                 withContext(Dispatchers.IO) {
-                    if (checkRootAccess()) RootState.Granted else RootState.Denied
+                    performStartupOptimized(appCtx.packageName)
                 }
+            rootState = if (res.rootGranted) RootState.Granted(res) else RootState.Denied
         }
 
         when (rootState) {
@@ -108,8 +105,8 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                 RootDeniedScreen()
             }
 
-            RootState.Granted -> {
-                MainScreen(onReady = onReady)
+            is RootState.Granted -> {
+                MainScreen(startup = (rootState as RootState.Granted).startup, onReady = onReady)
             }
         }
     }
@@ -124,42 +121,34 @@ private data class RefreshContext(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun MainScreen(onReady: () -> Unit = {}) {
+private fun MainScreen(
+    startup: StartupResult,
+    onReady: () -> Unit = {},
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var currentTab by remember { mutableStateOf(Tab.Dashboard) }
-    var selfNeedsRestart by remember { mutableStateOf<Boolean?>(null) }
+    var selfNeedsRestart by remember { mutableStateOf<Boolean?>(startup.addedToTargets) }
     var searchQuery by remember { mutableStateOf("") }
     var searchActive by remember { mutableStateOf(false) }
     var showSystem by remember { mutableStateOf(false) }
     var showRussianOnly by remember { mutableStateOf(false) }
     var showFilterMenu by remember { mutableStateOf(false) }
-    val appListLoading by AppListCache.loading.collectAsState()
-    val targetsLoading by TargetsCache.loading.collectAsState()
-    val dashboardLoading by DashboardCache.loading.collectAsState()
-    val dashboardState by DashboardCache.state.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
-        val added = withContext(Dispatchers.IO) {
-            cleanupStaleZygiskStatus(context)
-            ensureSelfInTargets(context.packageName)
+        withContext(Dispatchers.IO) {
+            cleanupStaleZygiskStatus(context, startup.currentBootId)
         }
-        if (added) {
+        if (startup.addedToTargets) {
             withContext(Dispatchers.IO) {
                 applyKmodTargets(context)
             }
         }
-        selfNeedsRestart = added
     }
 
-    // Kick off both Protection caches as early as possible so tab
-    // switches into Protection render instantly instead of paying the
-    // per-screen pm + icon + root-shell cost each time.
-    LaunchedEffect(Unit) {
-        AppListCache.ensureLoaded(scope, context)
-        TargetsCache.ensureLoaded(scope, context)
-    }
+    // Kick off both Protection caches lazily — only when the user
+    // navigates to Protection. Moved out of here to reduce startup jank.
 
     // Pre-warm Dashboard (needed for first frame) and Diagnostics (needed
     // when user switches to Diagnostics tab) as soon as selfNeedsRestart
@@ -172,11 +161,9 @@ private fun MainScreen(onReady: () -> Unit = {}) {
         if (!r) DiagnosticsCache.run(scope, context)
     }
 
-    // Hold the splash screen until the first Dashboard frame can render
-    // with real content. Without this, the user sees splash → brief
-    // selfNeedsRestart-null spinner → brief Dashboard state-null spinner
-    // → content, with each spinner swap being visible flicker.
-    val uiReady = selfNeedsRestart != null && dashboardState != null
+    // Hold the splash screen only until the Root / Startup check completes.
+    // Dashboard data will pop in lazily once its suExec finishes.
+    val uiReady = selfNeedsRestart != null
     LaunchedEffect(uiReady) {
         if (uiReady) onReady()
     }
@@ -239,56 +226,12 @@ private fun MainScreen(onReady: () -> Unit = {}) {
                             titleContentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                         ),
                     actions = {
-                        // Refresh is contextual: Protection refreshes
-                        // the app list, Dashboard refreshes the dashboard
-                        // state + update check. Diagnostics has its own
-                        // run buttons per-check, no top-bar refresh.
-                        val refreshContext =
-                            when (currentTab) {
-                                Tab.Dashboard -> {
-                                    RefreshContext(
-                                        loading = dashboardLoading,
-                                        onRefresh = {
-                                            DashboardCache.refresh(scope, context, refreshRestart)
-                                            UpdateCheckCache.refresh(scope, BuildConfig.VERSION_NAME)
-                                        },
-                                    )
-                                }
-
-                                Tab.Protection -> {
-                                    RefreshContext(
-                                        loading = appListLoading || targetsLoading,
-                                        onRefresh = {
-                                            AppListCache.refresh(scope, context)
-                                            TargetsCache.refresh(scope, context)
-                                        },
-                                    )
-                                }
-
-                                Tab.Diagnostics -> {
-                                    null
-                                }
-                            }
-                        refreshContext?.let { rc ->
-                            IconButton(
-                                onClick = rc.onRefresh,
-                                enabled = !rc.loading,
-                            ) {
-                                if (rc.loading) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(20.dp),
-                                        strokeWidth = 2.dp,
-                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                } else {
-                                    Icon(
-                                        Icons.Default.Refresh,
-                                        contentDescription = stringResource(R.string.action_refresh_apps),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                    )
-                                }
-                            }
-                        }
+                        RefreshActionIcon(
+                            currentTab = currentTab,
+                            refreshRestart = refreshRestart,
+                            scope = scope,
+                            context = context,
+                        )
                         if (currentTab == Tab.Protection) {
                             IconButton(onClick = { searchActive = true }) {
                                 Icon(
@@ -377,40 +320,48 @@ private fun MainScreen(onReady: () -> Unit = {}) {
         },
     ) { innerPadding ->
         val restart = selfNeedsRestart
-        if (restart == null) {
-            Box(
-                modifier = Modifier.fillMaxSize().padding(innerPadding),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator()
-            }
-        } else {
-            when (currentTab) {
-                Tab.Dashboard -> {
-                    DashboardScreen(
-                        selfNeedsRestart = restart,
-                        modifier = Modifier.padding(innerPadding),
-                    )
-                }
+        Column(modifier = Modifier.padding(innerPadding)) {
+            // Initial root check / startup loader
+            TopProgressBar(visible = restart == null)
+            
+            // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
+            TabLoadingBar()
 
-                Tab.Protection -> {
-                    ProtectionScreen(
-                        searchQuery = searchQuery,
-                        showSystem = showSystem,
-                        showRussianOnly = showRussianOnly,
-                        modifier = Modifier.padding(innerPadding),
-                    )
-                }
+            if (restart != null) {
+                when (currentTab) {
+                    Tab.Dashboard -> {
+                        DashboardScreen(
+                            selfNeedsRestart = restart,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
 
-                Tab.Diagnostics -> {
-                    DiagnosticsScreen(
-                        selfNeedsRestart = restart,
-                        modifier = Modifier.padding(innerPadding),
-                    )
+                    Tab.Protection -> {
+                        ProtectionScreen(
+                            searchQuery = searchQuery,
+                            showSystem = showSystem,
+                            showRussianOnly = showRussianOnly,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+
+                    Tab.Diagnostics -> {
+                        DiagnosticsScreen(
+                            selfNeedsRestart = restart,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+@Composable
+private fun TabLoadingBar() {
+    val appListLoading by AppListCache.loading.collectAsState()
+    val targetsLoading by TargetsCache.loading.collectAsState()
+    TopProgressBar(visible = appListLoading || targetsLoading)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -460,6 +411,67 @@ private fun RootDeniedScreen() {
                         textAlign = TextAlign.Center,
                     )
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RefreshActionIcon(
+    currentTab: Tab,
+    refreshRestart: Boolean,
+    scope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context,
+) {
+    // Collect loading states locally so that only this icon recomposes when loading status changes.
+    val dashboardLoading by DashboardCache.loading.collectAsState()
+    val appListLoading by AppListCache.loading.collectAsState()
+    val targetsLoading by TargetsCache.loading.collectAsState()
+
+    val refreshContext =
+        when (currentTab) {
+            Tab.Dashboard -> {
+                RefreshContext(
+                    loading = dashboardLoading,
+                    onRefresh = {
+                        DashboardCache.refresh(scope, context, refreshRestart)
+                        UpdateCheckCache.refresh(scope, BuildConfig.VERSION_NAME)
+                    },
+                )
+            }
+
+            Tab.Protection -> {
+                RefreshContext(
+                    loading = appListLoading || targetsLoading,
+                    onRefresh = {
+                        AppListCache.refresh(scope, context)
+                        TargetsCache.refresh(scope, context)
+                    },
+                )
+            }
+
+            Tab.Diagnostics -> {
+                null
+            }
+        }
+
+    refreshContext?.let { rc ->
+        IconButton(
+            onClick = rc.onRefresh,
+            enabled = !rc.loading,
+        ) {
+            if (rc.loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            } else {
+                Icon(
+                    Icons.Default.Refresh,
+                    contentDescription = stringResource(R.string.action_refresh_apps),
+                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
             }
         }
     }

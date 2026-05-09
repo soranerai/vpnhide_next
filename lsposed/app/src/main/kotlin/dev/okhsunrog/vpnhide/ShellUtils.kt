@@ -88,6 +88,83 @@ internal suspend fun suExecAsync(
     timeoutSec: Long = SU_DEFAULT_TIMEOUT_SEC,
 ): Pair<Int, String> = withContext(Dispatchers.IO) { suExec(cmd, timeoutSec) }
 
+internal data class StartupResult(
+    val rootGranted: Boolean,
+    val addedToTargets: Boolean,
+    val currentBootId: String,
+)
+
+/**
+ * Batched startup check: root access, target sync, UID resolution and boot ID.
+ * Replaces checkRootAccess, cleanupStaleZygiskStatus and ensureSelfInTargets.
+ */
+internal fun performStartupOptimized(selfPkg: String): StartupResult {
+    val script =
+        """
+        # Check root
+        id | grep -q "uid=0" || { echo "root=0"; exit 0; }
+        echo "root=1"
+        
+        # Resolve UIDs
+        ALL_PKGS=${'$'}(pm list packages -U --user all 2>/dev/null)
+        SELF_UIDS=${'$'}(echo "${'$'}ALL_PKGS" | awk -v p="package:$selfPkg" '${'$'}1 == p { sub(/uid:/, "", ${'$'}2); print ${'$'}2; exit }' | tr ',' '\n')
+        
+        # Add self to module targets
+        ADDED=0
+        for path in $KMOD_TARGETS $ZYGISK_TARGETS $LSPOSED_TARGETS; do
+          dir=${'$'}(dirname "${'$'}path")
+          if [ -d "${'$'}dir" ]; then
+            if ! grep -q "^$selfPkg${'$'}" "${'$'}path" 2>/dev/null; then
+               echo "$selfPkg" >> "${'$'}path"
+               chmod 644 "${'$'}path"
+               ADDED=1
+            fi
+          fi
+        done
+        
+        # Sync zygisk if needed
+        if [ -d $ZYGISK_MODULE_DIR ]; then
+          cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null
+        fi
+        
+        # Hidden packages list
+        if ! grep -q "^$selfPkg${'$'}" $SS_HIDDEN_PKGS_FILE 2>/dev/null; then
+           echo "$selfPkg" >> $SS_HIDDEN_PKGS_FILE
+           chmod 640 $SS_HIDDEN_PKGS_FILE
+           chown root:system $SS_HIDDEN_PKGS_FILE
+           chcon u:object_r:system_data_file:s0 $SS_HIDDEN_PKGS_FILE 2>/dev/null || true
+        fi
+        
+        # UIDs list
+        for U in ${'$'}SELF_UIDS; do
+          if ! grep -q "^${'$'}U${'$'}" $SS_UIDS_FILE 2>/dev/null; then
+            echo "${'$'}U" >> $SS_UIDS_FILE
+            chmod 640 $SS_UIDS_FILE
+            chown root:system $SS_UIDS_FILE
+            chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null || true
+          fi
+        done
+        
+        echo "added=${'$'}ADDED"
+        echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+        """.trimIndent()
+
+    val (_, out) = suExec(script)
+    val props =
+        out
+            .lines()
+            .mapNotNull {
+                val parts = it.split("=", limit = 2)
+                if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+            }.toMap()
+
+    return StartupResult(
+        rootGranted = props["root"] == "1",
+        addedToTargets = props["added"] == "1",
+        currentBootId = props["boot_id"] ?: "",
+    )
+}
+
 /**
  * Single source of truth for "is a VPN currently up?". Both the dashboard
  * (sync, off the main thread already) and the diagnostics screen (suspend,
@@ -113,7 +190,7 @@ internal fun isVpnActiveBlocking(): Boolean {
     }
 }
 
-internal fun cleanupStaleZygiskStatus(context: android.content.Context) {
+internal fun cleanupStaleZygiskStatus(context: android.content.Context, currentBootId: String) {
     val statusFile = File(context.filesDir, ZYGISK_STATUS_FILE_NAME)
     if (!statusFile.isFile) return
 
@@ -131,8 +208,6 @@ internal fun cleanupStaleZygiskStatus(context: android.content.Context) {
         }
 
     val heartbeatBootId = props["boot_id"]
-    val (_, currentBootIdRaw) = suExec("cat /proc/sys/kernel/random/boot_id 2>/dev/null")
-    val currentBootId = currentBootIdRaw.trim()
     val stale =
         heartbeatBootId.isNullOrBlank() ||
             heartbeatBootId != currentBootId
