@@ -63,10 +63,11 @@ struct vpnhide_ioctl_data {
 	uid_t uids[MAX_TARGET_UIDS];
 };
 
-#define VH_SET_TARGETS        _IOW(VH_IOCTL_MAGIC, 0x01, struct vpnhide_ioctl_data)
-#define VH_SET_DIRECT_TARGETS _IOW(VH_IOCTL_MAGIC, 0x02, struct vpnhide_ioctl_data)
-#define VH_SET_DEBUG          _IOW(VH_IOCTL_MAGIC, 0x03, int)
-#define VH_SET_PHYS_IFINDEX    _IOW(VH_IOCTL_MAGIC, 0x04, int)
+#define VH_SET_TARGETS _IOW(VH_IOCTL_MAGIC, 0x01, struct vpnhide_ioctl_data)
+#define VH_SET_DIRECT_TARGETS \
+	_IOW(VH_IOCTL_MAGIC, 0x02, struct vpnhide_ioctl_data)
+#define VH_SET_DEBUG _IOW(VH_IOCTL_MAGIC, 0x03, int)
+#define VH_SET_PHYS_IFINDEX _IOW(VH_IOCTL_MAGIC, 0x04, int)
 
 /*
  * Pre-allocated kretprobe instance pool size, applied to every probe.
@@ -159,7 +160,6 @@ static bool is_direct_target_uid(void)
 	rcu_read_unlock();
 	return found;
 }
-
 
 /* ================================================================== */
 /*  Hook 1: dev_ioctl — all per-interface ioctls                      */
@@ -273,7 +273,6 @@ struct sock_ioctl_data {
 	bool target;
 };
 
-
 /* Handle SIOCGIFCONF filtering */
 
 /*
@@ -380,8 +379,6 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 	return 0;
 }
 
-
-
 /* ================================================================== */
 /*  Hook 2b: sock_setsockopt — Aikido Bind Sabotage                   */
 /*                                                                    */
@@ -424,8 +421,10 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 		name[optlen - 1] = '\0';
 
 		if (is_vpn_ifname(name)) {
-			vpnhide_dbg("sock_setsockopt: spoofing SO_BINDTODEVICE to %s\n", name);
-			regs->regs[5] = 0; 
+			vpnhide_dbg(
+				"sock_setsockopt: spoofing SO_BINDTODEVICE to %s\n",
+				name);
+			regs->regs[5] = 0;
 		}
 	} else if (optname == SO_BINDTOIFINDEX) {
 		int ifindex;
@@ -444,8 +443,9 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 		rcu_read_lock();
 		dev = dev_get_by_index_rcu(net, ifindex);
 		if (dev && is_vpn_ifname(dev->name)) {
-			vpnhide_dbg("sock_setsockopt: spoofing SO_BINDTOIFINDEX %d (%s)\n", 
-				    ifindex, dev->name);
+			vpnhide_dbg(
+				"sock_setsockopt: spoofing SO_BINDTOIFINDEX %d (%s)\n",
+				ifindex, dev->name);
 			regs->regs[2] = SO_BINDTODEVICE;
 			regs->regs[5] = 0;
 		}
@@ -910,8 +910,9 @@ static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		if (dev && is_vpn_ifname(dev->name)) {
 			data->saved_len = data->skb ? data->skb->len : 0;
 			data->should_filter = true;
-			vpnhide_dbg("rt6_fill_entry: hiding IPv6 route via %s (rt)\n",
-				    dev->name);
+			vpnhide_dbg(
+				"rt6_fill_entry: hiding IPv6 route via %s (rt)\n",
+				dev->name);
 		}
 	} else if (dst && dst->dev && is_vpn_ifname(dst->dev->name)) {
 		data->saved_len = data->skb ? data->skb->len : 0;
@@ -998,12 +999,14 @@ static int ipv6_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 		/* Interface name is the last field: "dest ... flags ifname\n" */
 		p = line_end - 1;
-		while (p >= src && (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t'))
+		while (p >= src &&
+		       (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t'))
 			p--;
-		
+
 		/* Now p points to the end of ifname. Backtrack to start. */
 		j = 0;
-		while (p >= src && *p != ' ' && *p != '\t' && j < IFNAMSIZ - 1) {
+		while (p >= src && *p != ' ' && *p != '\t' &&
+		       j < IFNAMSIZ - 1) {
 			j++;
 			p--;
 		}
@@ -1016,7 +1019,9 @@ static int ipv6_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		ifname[j] = '\0';
 
 		if (is_vpn_ifname(ifname)) {
-			vpnhide_dbg("ipv6_route_ret: hiding IPv6 route for %s\n", ifname);
+			vpnhide_dbg(
+				"ipv6_route_ret: hiding IPv6 route for %s\n",
+				ifname);
 			src = line_end;
 			continue;
 		}
@@ -1209,8 +1214,10 @@ static int ip_route_output_flow_entry(struct kretprobe_instance *ri,
 		if (phys_idx > 0)
 			flp4->flowi4_oif = phys_idx;
 
-		vpnhide_dbg("ip_route_output_flow: forced bypass (oif=%d) for uid=%u\n",
-			    flp4->flowi4_oif, from_kuid(&init_user_ns, current_uid()));
+		vpnhide_dbg(
+			"ip_route_output_flow: forced bypass (oif=%d) for uid=%u\n",
+			flp4->flowi4_oif,
+			from_kuid(&init_user_ns, current_uid()));
 	}
 	return 0;
 }
@@ -1242,9 +1249,11 @@ static int ip_route_output_key_entry(struct kretprobe_instance *ri,
 		flp4->saddr = 0;
 		if (phys_idx > 0)
 			flp4->flowi4_oif = phys_idx;
-		
-		vpnhide_dbg("__ip_route_output_key: forced bypass (oif=%d) for uid=%u\n",
-			    flp4->flowi4_oif, from_kuid(&init_user_ns, current_uid()));
+
+		vpnhide_dbg(
+			"__ip_route_output_key: forced bypass (oif=%d) for uid=%u\n",
+			flp4->flowi4_oif,
+			from_kuid(&init_user_ns, current_uid()));
 	}
 	return 0;
 }
@@ -1282,9 +1291,11 @@ static int ip6_route_output_entry(struct kretprobe_instance *ri,
 		fl6->saddr = in6addr_any;
 		if (phys_idx > 0)
 			fl6->flowi6_oif = phys_idx;
-		
-		vpnhide_dbg("ip6_route_output: forced bypass (oif=%d) for uid=%u\n",
-			    fl6->flowi6_oif, from_kuid(&init_user_ns, current_uid()));
+
+		vpnhide_dbg(
+			"ip6_route_output: forced bypass (oif=%d) for uid=%u\n",
+			fl6->flowi6_oif,
+			from_kuid(&init_user_ns, current_uid()));
 	}
 	return 0;
 }
@@ -1302,8 +1313,10 @@ static struct kretprobe ip6_route_output_krp = {
 static int update_targets(uid_t *uids, int count, bool direct)
 {
 	struct vpnhide_targets *new_t, *old_t;
-	spinlock_t *lock = direct ? &direct_targets_update_lock : &targets_update_lock;
-	struct vpnhide_targets __rcu **global_ptr = direct ? &global_direct_targets : &global_targets;
+	spinlock_t *lock = direct ? &direct_targets_update_lock :
+				    &targets_update_lock;
+	struct vpnhide_targets __rcu **global_ptr =
+		direct ? &global_direct_targets : &global_targets;
 
 	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
 	if (!new_t)
@@ -1323,7 +1336,8 @@ static int update_targets(uid_t *uids, int count, bool direct)
 		kfree(old_t);
 	}
 
-	vpnhide_dbg("%s targets updated: %d UIDs\n", direct ? "Direct" : "Normal", count);
+	vpnhide_dbg("%s targets updated: %d UIDs\n",
+		    direct ? "Direct" : "Normal", count);
 	return 0;
 }
 
@@ -1386,7 +1400,8 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 }
 
 /* Misc device IOCTL wrapper */
-static long vpnhide_dev_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
+static long vpnhide_dev_ioctl(struct file *file, unsigned int cmd,
+			      unsigned long arg)
 {
 	return handle_vpnhide_ioctl(cmd, arg);
 }
@@ -1425,7 +1440,6 @@ static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		    from_kuid(&init_user_ns, current_uid()), data->argp);
 	return 0;
 }
-
 
 /* ================================================================== */
 /*  Module init / exit                                                */
@@ -1525,8 +1539,9 @@ static void __exit vpnhide_exit(void)
 
 	/* Cleanup RCU direct targets */
 	spin_lock(&direct_targets_update_lock);
-	t = rcu_dereference_protected(global_direct_targets,
-				      lockdep_is_held(&direct_targets_update_lock));
+	t = rcu_dereference_protected(
+		global_direct_targets,
+		lockdep_is_held(&direct_targets_update_lock));
 	rcu_assign_pointer(global_direct_targets, NULL);
 	spin_unlock(&direct_targets_update_lock);
 
