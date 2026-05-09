@@ -139,14 +139,25 @@ jobs:
       # Single Gradle invocation: lint + tests share one configuration
       # phase + warm daemon. Configures Gobley's cargo plugin once instead
       # of twice. ANDROID_NDK_ROOT is baked into the CI image
-      # (Dockerfile ENV), no manual export needed.
+      # Gradle invocation: lint + tests share one configuration
+      # phase + warm daemon.
       - name: Android lint + Kotlin unit tests
-        # `:app:lintDebug` (not `:app:lint`) runs Lint on the debug
-        # variant only — release-variant Lint covers R8/ProGuard issues
-        # and is reserved for ad-hoc local runs / future tag CI.
         run: cd lsposed && ./gradlew :app:lintDebug :app:testDebugUnitTest
 
+      # Build vpnhide-ctl (CLI tool for kmod control via ioctl)
+      - name: Build vpnhide-ctl
+        run: |
+          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang -O2 -Wall -static kmod/vpnhide_ctl.c -o vpnhide-ctl
+          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip vpnhide-ctl
+
+      - name: Upload vpnhide-ctl
+        uses: actions/upload-artifact@v7
+        with:
+          name: vpnhide-ctl
+          path: vpnhide-ctl
+
   kmod:
+    needs: [setup, lint]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -169,6 +180,15 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+
+      - name: Download vpnhide-ctl
+        uses: actions/download-artifact@v7
+        with:
+          name: vpnhide-ctl
+          path: kmod/
+
+      - name: Rename ctl for build.py
+        run: mv kmod/vpnhide-ctl kmod/vpnhide-ctl-host
 
       - name: Mark workspace safe
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
