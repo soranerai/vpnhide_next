@@ -47,6 +47,8 @@
     <string name="bypass_hint_kmod">Требуется установленный и активный модуль ядра (kmod). Эта функция работает только на уровне ядра для обеспечения надежного перенаправления маршрутизации.</string>
 
     <!-- App hiding -->
+    <string name="hiding_role_hidden">Скрытые</string>
+    <string name="hiding_role_observer">Наблюдатели</string>
     <string name="hiding_help_title">Как работает скрытие приложений</string>
     <string name="hiding_hint_roles">Отметьте приложения как H (Hidden — скрытые) — приложения с меткой O (Observer — наблюдатели) не смогут их видеть. Наблюдатель не получит скрытое приложение ни в списке установленных, ни через intent-запросы, ни через resolve.</string>
     <string name="hiding_hint_system">Системные вызовы (установщик, лаунчер, системные сервисы) всегда исключены — иначе сломается базовая функциональность Android.</string>
