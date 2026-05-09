@@ -36,6 +36,7 @@ kmod/module/vpnhide_kmod.ko
 kmod/.env
 kmod/*.lds
 kmod/test_iface_lists
+kmod/vpnhide-ctl-host
 
 # General
 *.swp

@@ -364,6 +364,7 @@ private fun collectDashboardSnapshot(cacheDir: File): RawDashboardSnapshot {
         echo "lsmod=${'$'}(lsmod | grep -q vpnhide_kmod && echo 1 || echo 0)"
         echo "kmod_targets=${'$'}(cat $KMOD_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "zygisk_targets=${'$'}(cat $ZYGISK_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
+        echo "lsposed_targets=${'$'}(cat $LSPOSED_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "ports_targets=${'$'}(cat $PORTS_OBSERVERS_FILE 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "ports_active=${'$'}(iptables -L vpnhide_out -n 2>/dev/null >/dev/null && echo 1 || echo 0)"
         echo "uname=${'$'}(uname -r)"
@@ -407,7 +408,7 @@ private fun collectDashboardSnapshot(cacheDir: File): RawDashboardSnapshot {
     return RawDashboardSnapshot(props)
 }
 
-internal fun loadDashboardState(
+internal suspend fun loadDashboardState(
     cm: ConnectivityManager,
     context: android.content.Context,
     selfNeedsRestart: Boolean,
@@ -828,7 +829,7 @@ internal fun loadDashboardState(
     val hookVersion = hookProps["version"]
     val hookBootId = hookProps["boot_id"]
     val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
-    val lsposedTargetCount = countTargets(LSPOSED_TARGETS)
+    val lsposedTargetCount = countTargets(snapshot.get("lsposed_targets"))
     val lsposedFramework = detectLsposedFramework()
     val lsposedConfig =
         when (lsposedFramework) {
@@ -1138,21 +1139,32 @@ internal fun loadDashboardState(
             }
 
             else -> {
-                val native =
-                    if (hasNative) {
-                        runNativeProtectionCheck()
-                    } else {
-                        NativeResult.NoModule
+                val diagResults = DiagnosticsCache.awaitResults(context)
+                
+                val native = if (hasNative) {
+                    if (diagResults == null) NativeResult.Fail(0, 1)
+                    else {
+                        val passed = diagResults.native.count { it.passed == true }
+                        val failed = diagResults.native.count { it.passed == false }
+                        when {
+                            passed == 0 && failed == 0 -> NativeResult.Ok
+                            failed == 0 -> NativeResult.Ok
+                            else -> NativeResult.Fail(passed, failed)
+                        }
                     }
-                VpnHideLog.i(TAG, "nativeResult=$native")
+                } else {
+                    NativeResult.NoModule
+                }
 
-                val java =
-                    if (lsposed is LsposedState.Active) {
-                        runJavaProtectionCheck(cm)
-                    } else {
-                        JavaResult.HooksInactive
+                val java = if (lsposed is LsposedState.Active) {
+                    if (diagResults == null) JavaResult.Fail(1)
+                    else {
+                        val failedCount = diagResults.java.count { it.passed == false }
+                        if (failedCount == 0) JavaResult.Ok else JavaResult.Fail(failedCount)
                     }
-                VpnHideLog.i(TAG, "javaResult=$java")
+                } else {
+                    JavaResult.HooksInactive
+                }
 
                 ProtectionCheck.Checked(native, java)
             }
@@ -1175,112 +1187,3 @@ internal fun loadDashboardState(
     )
 }
 
-private fun runNativeProtectionCheck(): NativeResult {
-    val checks: List<Pair<String, () -> CheckOutput>> =
-        listOf(
-            "ioctl_flags" to { checkIoctlSiocgifflags() },
-            "ioctl_mtu" to { checkIoctlSiocgifmtu() },
-            "ioctl_conf" to { checkIoctlSiocgifconf() },
-            "getifaddrs" to { checkGetifaddrs() },
-            "netlink_getlink" to { checkNetlinkGetlink() },
-            "netlink_getroute" to { checkNetlinkGetroute() },
-            "netlink_anonymous_route" to { checkNetlinkAnonymousRoute() },
-            "proc_route" to { checkProcNetRoute() },
-            "proc_ipv6_route" to { checkProcNetIpv6Route() },
-            "proc_if_inet6" to { checkProcNetIfInet6() },
-            "proc_tcp" to { checkProcNetTcp() },
-            "proc_tcp6" to { checkProcNetTcp6() },
-            "proc_udp" to { checkProcNetUdp() },
-            "proc_udp6" to { checkProcNetUdp6() },
-            "proc_dev" to { checkProcNetDev() },
-            "proc_fib_trie" to { checkProcNetFibTrie() },
-            "sys_class_net" to { checkSysClassNet() },
-        )
-
-    var passed = 0
-    var failed = 0
-    var skipped = 0
-    for ((name, check) in checks) {
-        try {
-            val out = check()
-            when (out.status) {
-                CheckStatus.NETWORK_BLOCKED -> {
-                    skipped++
-                    VpnHideLog.d(TAG, "native[$name]: NETWORK_BLOCKED")
-                }
-
-                CheckStatus.PASS -> {
-                    passed++
-                    VpnHideLog.d(TAG, "native[$name]: PASS")
-                }
-
-                CheckStatus.FAIL -> {
-                    failed++
-                    VpnHideLog.w(TAG, "native[$name]: FAIL — ${out.detail}")
-                }
-            }
-        } catch (e: Exception) {
-            failed++
-            Log.e(TAG, "native[$name]: exception — ${e.message}")
-        }
-    }
-
-    VpnHideLog.i(TAG, "native protection: passed=$passed failed=$failed skipped=$skipped")
-    return when {
-        // Nothing ran (all NETWORK_BLOCKED) — treat as OK so the UI doesn't
-        // paint a scary red when the real issue is the app having no network
-        // permission; a dedicated banner covers that case separately.
-        passed == 0 && failed == 0 -> NativeResult.Ok
-
-        failed == 0 -> NativeResult.Ok
-
-        passed > 0 -> NativeResult.Fail(passed, failed)
-
-        else -> NativeResult.Fail(0, failed)
-    }
-}
-
-@Suppress("DEPRECATION")
-private fun runJavaProtectionCheck(cm: ConnectivityManager): JavaResult {
-    val net = cm.activeNetwork
-    if (net == null) {
-        VpnHideLog.d(TAG, "java: no active network")
-        return JavaResult.Ok
-    }
-    val caps = cm.getNetworkCapabilities(net)
-    if (caps == null) {
-        VpnHideLog.d(TAG, "java: no capabilities")
-        return JavaResult.Ok
-    }
-
-    var failed = 0
-
-    val hasVpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-    if (hasVpn) failed++
-    VpnHideLog.d(TAG, "java: hasTransport(VPN)=$hasVpn")
-
-    val notVpn = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-    if (!notVpn) failed++
-    VpnHideLog.d(TAG, "java: hasCapability(NOT_VPN)=$notVpn")
-
-    val info = caps.transportInfo
-    val isVpnTi = info?.javaClass?.name?.contains("VpnTransportInfo") == true
-    if (isVpnTi) failed++
-    VpnHideLog.d(TAG, "java: transportInfo=${info?.javaClass?.name} isVpn=$isVpnTi")
-
-    val vpnNets =
-        cm.allNetworks.count {
-            cm.getNetworkCapabilities(it)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
-        }
-    if (vpnNets > 0) failed++
-    VpnHideLog.d(TAG, "java: allNetworks vpnCount=$vpnNets")
-
-    val lp = cm.getLinkProperties(net)
-    val ifname = lp?.interfaceName
-    val vpnIfname = ifname != null && IfaceLists.isVpnIface(ifname)
-    if (vpnIfname) failed++
-    VpnHideLog.d(TAG, "java: linkProperties ifname=$ifname isVpn=$vpnIfname")
-
-    VpnHideLog.i(TAG, "java protection: failed=$failed")
-    return if (failed == 0) JavaResult.Ok else JavaResult.Fail(failed)
-}

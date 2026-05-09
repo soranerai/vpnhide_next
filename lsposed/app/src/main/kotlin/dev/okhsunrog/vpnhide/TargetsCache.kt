@@ -29,6 +29,7 @@ import kotlinx.coroutines.withContext
  */
 internal data class TargetsSnapshot(
     val kmodModuleInstalled: Boolean,
+    val kmodActive: Boolean,
     val zygiskModuleInstalled: Boolean,
     val portsModuleInstalled: Boolean,
     val kmodTargets: Set<String>,
@@ -91,6 +92,8 @@ internal object TargetsCache {
         """
         echo "$SENTINEL KMOD_MODULE_DIR"
         [ -d $KMOD_MODULE_DIR ] && echo 1 || echo 0
+        echo "$SENTINEL LSMOD"
+        lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
         echo "$SENTINEL ZYGISK_MODULE_DIR"
         [ -d $ZYGISK_MODULE_DIR ] && echo 1 || echo 0
         echo "$SENTINEL PORTS_MODULE_PROP"
@@ -176,6 +179,7 @@ internal object TargetsCache {
 
         return TargetsSnapshot(
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",
+            kmodActive = sections["LSMOD"]?.trim() == "1",
             zygiskModuleInstalled = sections["ZYGISK_MODULE_DIR"]?.trim() == "1",
             portsModuleInstalled = portsInstalled,
             kmodTargets = nonEmptyLines(sections["KMOD_TARGETS"]),

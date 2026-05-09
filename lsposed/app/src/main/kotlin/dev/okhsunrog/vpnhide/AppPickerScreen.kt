@@ -1,6 +1,6 @@
 package dev.okhsunrog.vpnhide
 
-import android.graphics.drawable.Drawable
+import androidx.compose.animation.*
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.clickable
@@ -12,6 +12,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -26,6 +28,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import dev.okhsunrog.vpnhide.ui.theme.*
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import io.github.oikvpqya.compose.fastscroller.VerticalScrollbar
@@ -36,351 +39,126 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import dev.okhsunrog.vpnhide.ShimmerPlaceholder
 
-data class AppEntry(
-    val packageName: String,
-    val label: String,
-    val icon: Drawable?,
-    val isSystem: Boolean,
-    val userIds: List<Int> = emptyList(),
-    val kmod: Boolean = false,
-    val zygisk: Boolean = false,
-    val lsposed: Boolean = false,
-) {
-    val anySelected get() = kmod || zygisk || lsposed
-}
-
-/** Which installed modules are present (detected once at load). */
-data class InstalledModules(
-    val kmod: Boolean = false,
-    val zygisk: Boolean = false,
-)
-
-internal enum class Layer { KMOD, ZYGISK, LSPOSED }
-
 @Composable
-fun AppPickerScreen(
+internal fun AppPickerScreen(
+    apps: List<AppEntry>,
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
+    showOnlySelected: Boolean,
+    sortOrder: AppSortOrder,
+    onUpdate: (List<AppEntry>) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-
-    val cachedApps by AppListCache.apps.collectAsState()
-    val userNames by AppListCache.userNames.collectAsState()
+    val appList by AppListCache.apps.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
+    val loading = targets == null || appList == null || (apps.isEmpty() && appList?.isNotEmpty() == true)
 
-    var allApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
-    var saving by remember { mutableStateOf(false) }
-    var dirty by remember { mutableStateOf(false) }
-    var snackMessage by remember { mutableStateOf<String?>(null) }
-    val snackbarHostState = remember { SnackbarHostState() }
-
-    LaunchedEffect(snackMessage) {
-        snackMessage?.let {
-            snackbarHostState.showSnackbar(
-                message = it,
-                duration = SnackbarDuration.Long,
-            )
-            snackMessage = null
+    val filteredApps =
+        remember(apps, searchQuery, showSystem, showRussianOnly, showOnlySelected, sortOrder) {
+            val q = searchQuery.trim().lowercase()
+            apps.filter { app ->
+                (showSystem || !app.isSystem || app.kmod || app.zygisk || app.lsposed) &&
+                    (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
+                    (!showOnlySelected || app.anyProtection) &&
+                    (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+            }.let { list ->
+                when (sortOrder) {
+                    AppSortOrder.NAME_ASC -> list.sortedBy { it.label.lowercase() }
+                    AppSortOrder.NAME_DESC -> list.sortedByDescending { it.label.lowercase() }
+                    AppSortOrder.SELECTED_FIRST -> list.sortedWith(
+                        compareByDescending<AppEntry> { it.anyProtection }.thenBy { it.label.lowercase() }
+                    )
+                }
+            }
         }
-    }
-
-    LaunchedEffect(Unit) {
-        TargetsCache.ensureLoaded(scope, context)
-    }
 
     val installed =
         remember(targets) {
             InstalledModules(
                 kmod = targets?.kmodModuleInstalled == true,
+                kmodActive = targets?.kmodActive == true,
                 zygisk = targets?.zygiskModuleInstalled == true,
             )
         }
 
-    // Merge cached app metadata with per-screen target flags. Cheap —
-    // runs whenever either side of the cache changes.
-    //
-    // While `dirty` is true the user has unsaved checkbox edits — don't
-    // overwrite them with a fresh snapshot. Caches can refresh under us
-    // (ON_RESUME, another screen calling `TargetsCache.refresh()`) and
-    // silently dropping the edits is the worst outcome.
-    LaunchedEffect(cachedApps, targets) {
-        if (dirty) return@LaunchedEffect
-        val apps = cachedApps ?: return@LaunchedEffect
-        val t = targets ?: return@LaunchedEffect
-        val selfPkg = context.packageName
-        allApps =
-            apps
-                .filter { it.packageName != selfPkg }
-                .map { app ->
-                    AppEntry(
-                        packageName = app.packageName,
-                        label = app.label,
-                        icon = app.icon,
-                        isSystem = app.isSystem,
-                        userIds = app.userIds,
-                        kmod = app.packageName in t.kmodTargets,
-                        zygisk = app.packageName in t.zygiskTargets,
-                        lsposed = app.packageName in t.lsposedTargets,
-                    )
-                }
-            .sortedWith(compareByDescending<AppEntry> { it.anySelected }.thenBy { it.label })
-        dirty = false
-    }
-
-    val loading = cachedApps == null || targets == null
-
-    val filteredApps =
-        remember(allApps, searchQuery, showSystem, showRussianOnly) {
-            val q = searchQuery.trim().lowercase()
-            allApps.filter { app ->
-                (showSystem || !app.isSystem || app.anySelected) &&
-                    (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
-                    (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
-            }
-        }
-
-    val selectedCount = remember(allApps) { allApps.count { it.anySelected } }
-
-    Column(modifier = modifier.fillMaxSize()) {
+    Box(modifier = modifier.fillMaxSize()) {
         if (loading) {
             LazyColumn(modifier = Modifier.fillMaxSize()) {
-                items(10) {
-                    SkeletonAppRow()
-                }
+                items(10) { SkeletonAppRow() }
             }
         } else {
             val listState = rememberLazyListState()
-            Box(modifier = Modifier.weight(1f)) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,
                     modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(bottom = 88.dp)
                 ) {
-                    item {
-                        Box(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
-                            HelpAccordion(
-                                prefKey = "apps_tun",
-                                title = stringResource(R.string.apps_help_title),
-                            ) {
-                                Text(
-                                    text = stringResource(R.string.apps_hint_toggles),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.apps_hint_restart_target),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                )
-                                Text(
-                                    text = stringResource(R.string.apps_hint_zygisk),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
-                    }
                     items(filteredApps, key = { it.packageName }) { app ->
                         AppRow(
                             app = app,
-                            userNames = userNames,
+                            userNames = emptyMap(),
                             installed = installed,
                             onToggle = { layer ->
-                                allApps =
-                                    allApps.map {
-                                        if (it.packageName != app.packageName) {
-                                            it
-                                        } else {
-                                            when (layer) {
-                                                Layer.KMOD -> it.copy(kmod = !it.kmod)
-                                                Layer.ZYGISK -> it.copy(zygisk = !it.zygisk)
-                                                Layer.LSPOSED -> it.copy(lsposed = !it.lsposed)
-                                            }
-                                        }
+                                val newList = apps.map {
+                                    if (it.packageName != app.packageName) it
+                                    else when (layer) {
+                                        Layer.KMOD -> it.copy(kmod = !it.kmod)
+                                        Layer.ZYGISK -> it.copy(zygisk = !it.zygisk)
+                                        Layer.LSPOSED -> it.copy(lsposed = !it.lsposed)
                                     }
-                                dirty = true
+                                }
+                                onUpdate(newList)
                             },
                             onToggleAll = {
-                                allApps =
-                                    allApps.map {
-                                        if (it.packageName != app.packageName) {
-                                            it
-                                        } else {
-                                            val newState = !it.anySelected
-                                            it.copy(
-                                                kmod = if (installed.kmod) newState else false,
-                                                zygisk = if (installed.zygisk) newState else false,
-                                                lsposed = newState,
-                                            )
-                                        }
-                                    }
-                                dirty = true
+                                val newState = !(app.kmod || app.zygisk || app.lsposed)
+                                val newList = apps.map {
+                                    if (it.packageName != app.packageName) it
+                                    else it.copy(
+                                        kmod = if (installed.kmod) newState else false,
+                                        zygisk = if (installed.zygisk) newState else false,
+                                        lsposed = newState,
+                                    )
+                                }
+                                onUpdate(newList)
                             },
                         )
                     }
                 }
+                
                 val interactionSource = remember { MutableInteractionSource() }
                 val isDragging by interactionSource.collectIsDraggedAsState()
-                val indicatorAlpha by animateFloatAsState(
-                    if (isDragging) 1f else 0f,
-                    label = "indicatorAlpha",
-                )
+                val indicatorAlpha by animateFloatAsState(if (isDragging) 1f else 0f, label = "alpha")
                 VerticalScrollbar(
                     adapter = rememberScrollbarAdapter(scrollState = listState),
                     interactionSource = interactionSource,
                     style = defaultMaterialScrollbarStyle(),
-                    enablePressToScroll = false,
-                    modifier =
-                        Modifier
-                            .align(Alignment.TopEnd)
-                            .fillMaxHeight(),
+                    modifier = Modifier.align(Alignment.TopEnd).fillMaxHeight(),
                     indicator = { position, isVisible ->
-                        val firstChar =
-                            filteredApps
-                                .getOrNull(listState.firstVisibleItemIndex)
-                                ?.label
-                                ?.firstOrNull()
-                                ?.uppercase() ?: ""
+                        val firstChar = filteredApps.getOrNull(listState.firstVisibleItemIndex)?.label?.firstOrNull()?.uppercase() ?: ""
                         Box(
-                            modifier =
-                                Modifier
-                                    .align(Alignment.TopEnd)
-                                    .padding(end = IndicatorConstants.Default.PADDING)
-                                    .graphicsLayer {
-                                        val y = -(IndicatorConstants.Default.MIN_HEIGHT / 2).toPx()
-                                        translationY = (y + position).coerceAtLeast(0f)
-                                        alpha = indicatorAlpha
-                                    },
+                            modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp).graphicsLayer {
+                                translationY = position; alpha = indicatorAlpha
+                            }
                         ) {
-                            val indicatorColor =
-                                if (isVisible) MaterialTheme.colorScheme.primary else Color.Transparent
-                            val textColor =
-                                if (isVisible) MaterialTheme.colorScheme.onPrimary else Color.Transparent
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .defaultMinSize(
-                                            minHeight = IndicatorConstants.Default.MIN_HEIGHT,
-                                            minWidth = IndicatorConstants.Default.MIN_WIDTH,
-                                        ).graphicsLayer {
-                                            clip = true
-                                            shape = IndicatorConstants.Default.SHAPE
-                                        }.drawBehind { drawRect(indicatorColor) },
-                            )
-                            Text(
-                                text = firstChar,
-                                color = textColor,
-                                textAlign = TextAlign.Center,
-                                style = MaterialTheme.typography.titleMedium,
-                                modifier =
-                                    Modifier
-                                        .align(Alignment.CenterEnd)
-                                        .wrapContentHeight()
-                                        .padding(end = IndicatorConstants.Default.PADDING)
-                                        .width(IndicatorConstants.Default.MIN_HEIGHT),
-                            )
-                        }
-                    },
-                )
-            }
-            Surface(tonalElevation = 3.dp) {
-                Box {
-                    Row(
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            text = stringResource(R.string.selected_count, selectedCount),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.weight(1f),
-                        )
-                        Button(
-                            onClick = {
-                                saving = true
-                                dirty = false
-                            },
-                            enabled = dirty && !saving,
-                        ) {
-                            Text(stringResource(R.string.btn_save))
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = if (isVisible) MaterialTheme.colorScheme.primary else Color.Transparent,
+                                modifier = Modifier.size(48.dp)
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Text(firstChar, color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.titleMedium)
+                                }
+                            }
                         }
                     }
-
-                    SnackbarHost(
-                        hostState = snackbarHostState,
-                        modifier =
-                            Modifier
-                                .fillMaxWidth()
-                                .align(Alignment.TopCenter),
-                    )
-                }
+                )
             }
-        }
-    }
-
-    // Save effect
-    if (saving) {
-        LaunchedEffect(Unit) {
-            // Always include self in all lists (self is hidden from UI but must stay in targets)
-            val selfPkg = context.packageName
-            val kmodPkgs = (allApps.filter { it.kmod }.map { it.packageName } + selfPkg).distinct().sorted()
-            val zygiskPkgs = (allApps.filter { it.zygisk }.map { it.packageName } + selfPkg).distinct().sorted()
-            val lsposedPkgs = (allApps.filter { it.lsposed }.map { it.packageName } + selfPkg).distinct().sorted()
-            val header = context.getString(R.string.save_header_comment)
-
-            try {
-                val (exitCode, _) =
-                    suExecAsync(
-                        buildSaveCommand(header, kmodPkgs, zygiskPkgs, lsposedPkgs),
-                    )
-                val totalSelected = allApps.count { it.anySelected }
-                if (exitCode == 0) {
-                    // Target counts shown on the Dashboard just changed;
-                    // invalidate so next open reflects them without a
-                    // manual refresh tap.
-                    DashboardCache.invalidate()
-                    TargetsCache.refresh(scope, context)
-                } else if (exitCode == -1) {
-                    snackMessage = context.getString(R.string.save_failed_root)
-                    dirty = true
-                } else {
-                    snackMessage = context.getString(R.string.save_failed_exit, exitCode)
-                    dirty = true
-                }
-            } catch (e: Exception) {
-                snackMessage = context.getString(R.string.save_failed_error, e.message ?: "")
-                dirty = true
-            }
-            saving = false
         }
     }
 }
 
-private fun buildSaveCommand(
-    header: String,
-    kmodPkgs: List<String>,
-    zygiskPkgs: List<String>,
-    lsposedPkgs: List<String>,
-): String {
-    val parts = mutableListOf<String>()
-
-    // Persistent saves
-    parts += buildWriteTargetsCommand(KMOD_TARGETS, header, kmodPkgs)
-    parts += buildWriteTargetsCommand(ZYGISK_TARGETS, header, zygiskPkgs)
-    parts += buildWriteTargetsCommand(LSPOSED_TARGETS, header, lsposedPkgs)
-
-    // Sync zygisk module dir
-    parts += "if [ -d $ZYGISK_MODULE_DIR ]; then cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null; fi"
-
-    // Live apply
-    parts += buildKmodApplyCommand(kmodPkgs)
-    parts += buildLsposedApplyCommand(lsposedPkgs)
-
-    return parts.joinToString(" ; ")
-}
 @Composable
 private fun AppRow(
     app: AppEntry,
@@ -390,42 +168,41 @@ private fun AppRow(
     onToggleAll: () -> Unit,
 ) {
     Row(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clickable(onClick = onToggleAll)
-                .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onToggleAll)
+            .padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         app.icon?.let { drawable ->
             Image(
                 bitmap = drawable.toBitmap(48, 48).asImageBitmap(),
                 contentDescription = null,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(44.dp),
             )
-            Spacer(Modifier.width(12.dp))
+            Spacer(Modifier.width(16.dp))
         }
         Column(modifier = Modifier.weight(1f)) {
             Text(
                 text = labelWithUsers(app.label, app.userIds, userNames),
                 style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.Medium,
+                fontWeight = FontWeight.SemiBold,
             )
             Text(
                 text = app.packageName,
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
-                fontSize = 12.sp,
+                fontSize = 11.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                LayerChip("L", app.lsposed, true) { onToggle(Layer.LSPOSED) }
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                LayerChip("LSPosed", app.lsposed, true) { onToggle(Layer.LSPOSED) }
                 if (installed.kmod) {
-                    LayerChip("K", app.kmod, true) { onToggle(Layer.KMOD) }
+                    LayerChip("Kernel", app.kmod, true) { onToggle(Layer.KMOD) }
                 }
-                if (installed.zygisk) {
-                    LayerChip("Z", app.zygisk, true) { onToggle(Layer.ZYGISK) }
+                if (installed.zygisk && !installed.kmodActive) {
+                    LayerChip("Zygisk", app.zygisk, true) { onToggle(Layer.ZYGISK) }
                 }
             }
         }
@@ -439,11 +216,10 @@ private fun LayerChip(
     available: Boolean,
     onClick: () -> Unit,
 ) {
-    val containerColor = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val contentColor = if (enabled) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
     Surface(
-        shape = RoundedCornerShape(4.dp),
-        color = containerColor,
+        shape = RoundedCornerShape(12.dp),
+        color = if (enabled) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.5f),
         modifier = Modifier.clickable(enabled = available, onClick = onClick),
     ) {
         Text(
@@ -451,43 +227,27 @@ private fun LayerChip(
             style = MaterialTheme.typography.labelSmall,
             fontWeight = FontWeight.Bold,
             color = contentColor,
-            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+            modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp),
         )
     }
 }
+
 @Composable
 private fun SkeletonAppRow() {
     Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 10.dp),
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        ShimmerPlaceholder(
-            modifier = Modifier.size(40.dp),
-            shape = CircleShape
-        )
-        Spacer(Modifier.width(12.dp))
+        ShimmerPlaceholder(modifier = Modifier.size(44.dp), shape = CircleShape)
+        Spacer(Modifier.width(16.dp))
         Column(modifier = Modifier.weight(1f)) {
-            ShimmerPlaceholder(
-                modifier = Modifier
-                    .width(150.dp)
-                    .height(20.dp)
-            )
-            Spacer(Modifier.height(4.dp))
-            ShimmerPlaceholder(
-                modifier = Modifier
-                    .width(220.dp)
-                    .height(14.dp)
-            )
-            Spacer(Modifier.height(4.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+            ShimmerPlaceholder(modifier = Modifier.width(150.dp).height(20.dp))
+            Spacer(Modifier.height(8.dp))
+            ShimmerPlaceholder(modifier = Modifier.width(220.dp).height(14.dp))
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 repeat(3) {
-                    ShimmerPlaceholder(
-                        modifier = Modifier
-                            .size(24.dp),
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                    ShimmerPlaceholder(modifier = Modifier.width(60.dp).height(24.dp), shape = RoundedCornerShape(12.dp))
                 }
             }
         }

@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">VPN Hide</string>
+    <string name="faq_title">FAQ</string>
     <string name="module_description">Скрывает активное VPN-соединение от выбранных приложений — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
 
     <!-- Navigation -->
@@ -31,14 +32,18 @@
     <string name="filter_system">Системные</string>
     <string name="filter_show_system">Показать системные приложения</string>
     <string name="filter_russian_only">Только российские</string>
+    <string name="filter_only_selected">Только выбранные</string>
+    <string name="sort_name_asc">По названию (А-Я)</string>
+    <string name="sort_name_desc">По названию (Я-А)</string>
+    <string name="sort_selected_first">Сначала выбранные</string>
     <string name="apps_help_title">Как это работает</string>
-    <string name="apps_hint_toggles">Нажимайте L, K, Z для переключения отдельных уровней защиты (LSPosed, модуль ядра, Zygisk). Нажмите на строку, чтобы переключить все уровни сразу.</string>
-    <string name="apps_hint_restart_target">После Save: L (LSPosed) и K (модуль ядра) применяются к целевому приложению мгновенно — рестарт не нужен. Z (Zygisk) внедряется при форке процесса, поэтому для любого только что переключённого целевого приложения с Z (включением или выключением) нужен force-stop + повторный запуск, чтобы изменение для него вступило в силу.</string>
-    <string name="apps_hint_zygisk">Банковские и платёжные приложения обнаруживают Zygisk-хуки и при включённом Z крашатся или отказываются работать. Держите Z выключенным для таких приложений и полагайтесь на модуль ядра + LSPosed.</string>
+    <string name="apps_hint_toggles">Используйте галочки для включения отдельных уровней: <b>LSPosed</b>, <b>Kernel</b> и <b>Zygisk</b>. Нажатие на строку приложения переключает все доступные уровни одновременно.</string>
+    <string name="apps_hint_restart_target">После сохранения: уровни <b>LSPosed</b> и <b>Kernel</b> применяются мгновенно. Хуки <b>Zygisk</b> внедряются при запуске процесса, поэтому для вступления изменений Zygisk в силу необходимо принудительно остановить и снова открыть приложение.</string>
+    <string name="apps_hint_zygisk">Банковские и платежные приложения могут обнаруживать Zygisk. Если приложение вылетает или видит root, попробуйте отключить уровень <b>Zygisk</b>, оставив только <b>Kernel</b> + <b>LSPosed</b>.</string>
 
     <!-- TUN bypass -->
     <string name="bypass_help_title">Как работает байпас TUN</string>
-    <string name="bypass_hint_logic">Нажмите K, чтобы заставить приложение обходить VPN-туннель. Трафик отмеченных приложений пойдет напрямую через Wi-Fi или мобильную сеть, даже если VPN включен.</string>
+    <string name="bypass_hint_logic">Отметьте галочку <b>Kernel</b>, чтобы пустить трафик приложения в обход VPN-туннеля. Трафик пойдет напрямую через Wi-Fi или мобильную сеть.</string>
     <string name="bypass_hint_kmod">Требуется установленный и активный модуль ядра (kmod). Эта функция работает только на уровне ядра для обеспечения надежного перенаправления маршрутизации.</string>
 
     <!-- App hiding -->

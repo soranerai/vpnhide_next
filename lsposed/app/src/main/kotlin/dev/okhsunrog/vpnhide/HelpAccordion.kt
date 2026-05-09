@@ -17,11 +17,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.outlined.Info
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,10 +62,10 @@ fun HelpAccordion(
         label = "accordionChevron",
     )
 
-    Card(
-        shape = RoundedCornerShape(12.dp),
+    ElevatedCard(
+        shape = RoundedCornerShape(8.dp),
         colors =
-            CardDefaults.cardColors(
+            CardDefaults.elevatedCardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant,
             ),
         modifier = modifier.fillMaxWidth(),
@@ -82,7 +78,7 @@ fun HelpAccordion(
                         .clickable {
                             collapsed = !collapsed
                             prefs.edit().putBoolean(fullKey, collapsed).apply()
-                        }.padding(horizontal = 16.dp, vertical = 12.dp),
+                        }.padding(horizontal = 24.dp, vertical = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Icon(
@@ -94,7 +90,7 @@ fun HelpAccordion(
                 Spacer(Modifier.width(10.dp))
                 Text(
                     text = title,
-                    style = MaterialTheme.typography.titleSmall,
+                    style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     modifier = Modifier.weight(1f),
                 )
@@ -110,8 +106,8 @@ fun HelpAccordion(
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .padding(start = 16.dp, end = 16.dp, bottom = 14.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                            .padding(start = 24.dp, end = 24.dp, bottom = 20.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
                     content = content,
                 )
             }

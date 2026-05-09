@@ -74,6 +74,13 @@ android {
                 keyPassword = keystoreProperties["password"] as String
                 storeFile = file(keystoreProperties["storeFile"] as String)
                 storePassword = keystoreProperties["password"] as String
+            } else {
+                // Если ключа нет, подставляем дебажный
+                val debugConfig = getByName("debug")
+                keyAlias = debugConfig.keyAlias
+                keyPassword = debugConfig.keyPassword
+                storeFile = debugConfig.storeFile
+                storePassword = debugConfig.storePassword
             }
         }
     }

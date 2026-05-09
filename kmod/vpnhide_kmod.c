@@ -885,6 +885,7 @@ struct rt6_fill_data {
 static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct rt6_fill_data *data = (void *)ri->data;
+	struct fib6_info *rt;
 	struct dst_entry *dst;
 
 	data->should_filter = false;
@@ -892,15 +893,35 @@ static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (!is_target_uid())
 		return 0;
 
-	/* x1=skb, x3=dst */
+	/*
+	 * rt6_fill_node(net, skb, rt, dst, ...)
+	 * arm64: x0=net, x1=skb, x2=rt, x3=dst
+	 *
+	 * In most route dumps, dst is NULL and information is in rt.
+	 */
 	data->skb = (struct sk_buff *)regs->regs[1];
+	rt = (struct fib6_info *)regs->regs[2];
 	dst = (struct dst_entry *)regs->regs[3];
 
 	rcu_read_lock();
-	if (dst && dst->dev && is_vpn_ifname(dst->dev->name)) {
+	if (rt) {
+		struct net_device *dev = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0)
+		dev = rt->fib6_nh->nh_common.nhc_dev;
+#else
+		if (rt->fib6_nh)
+			dev = rt->fib6_nh->nh_common.nhc_dev;
+#endif
+		if (dev && is_vpn_ifname(dev->name)) {
+			data->saved_len = data->skb ? data->skb->len : 0;
+			data->should_filter = true;
+			vpnhide_dbg("rt6_fill_entry: hiding IPv6 route via %s (rt)\n",
+				    dev->name);
+		}
+	} else if (dst && dst->dev && is_vpn_ifname(dst->dev->name)) {
 		data->saved_len = data->skb ? data->skb->len : 0;
 		data->should_filter = true;
-		vpnhide_dbg("rt6_fill_entry: hiding IPv6 route via %s\n",
+		vpnhide_dbg("rt6_fill_entry: hiding IPv6 route via %s (dst)\n",
 			    dst->dev->name);
 	}
 	rcu_read_unlock();
@@ -928,6 +949,99 @@ static struct kretprobe rt6_fill_krp = {
 	.data_size = sizeof(struct rt6_fill_data),
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
 	.kp.symbol_name = "rt6_fill_node",
+};
+
+/* ================================================================== */
+/*  Hook 8b: ipv6_route_seq_show — /proc/net/ipv6_route                */
+/*                                                                    */
+/*  ipv6_route_seq_show(seq, v) is the IPv6 equivalent of hook 6.     */
+/*  The interface name is the LAST field in the line.                 */
+/* ================================================================== */
+
+static int ipv6_route_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data = (void *)ri->data;
+
+	data->seq = (struct seq_file *)regs->regs[0];
+	data->target = is_target_uid();
+
+	if (data->target && data->seq) {
+		data->start_count = data->seq->count;
+		vpnhide_dbg("ipv6_route_entry: uid=%u target=1\n",
+			    from_kuid(&init_user_ns, current_uid()));
+	} else {
+		data->start_count = 0;
+	}
+
+	return 0;
+}
+
+static int ipv6_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data = (void *)ri->data;
+	struct seq_file *seq = data->seq;
+	char *buf, *src, *dst, *end;
+	char ifname[IFNAMSIZ];
+	int j;
+
+	if (!data->target || !seq || !seq->buf)
+		return 0;
+
+	if (seq->count <= data->start_count)
+		return 0;
+
+	buf = seq->buf;
+	src = buf + data->start_count;
+	dst = src;
+	end = buf + seq->count;
+
+	while (src < end) {
+		char *nl = memchr(src, '\n', end - src);
+		char *line_end = nl ? nl + 1 : end;
+		size_t line_len = line_end - src;
+		char *p;
+
+		/* Interface name is the last field: "dest ... flags ifname\n" */
+		p = line_end - 1;
+		while (p >= src && (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t'))
+			p--;
+		
+		/* Now p points to the end of ifname. Backtrack to start. */
+		j = 0;
+		while (p >= src && *p != ' ' && *p != '\t' && j < IFNAMSIZ - 1) {
+			j++;
+			p--;
+		}
+		p++;
+
+		for (j = 0; j < IFNAMSIZ - 1 && (p + j) < line_end &&
+			    p[j] != ' ' && p[j] != '\t' && p[j] != '\n';
+		     j++)
+			ifname[j] = p[j];
+		ifname[j] = '\0';
+
+		if (is_vpn_ifname(ifname)) {
+			vpnhide_dbg("ipv6_route_ret: hiding IPv6 route for %s\n", ifname);
+			src = line_end;
+			continue;
+		}
+
+		if (dst != src)
+			memmove(dst, src, line_len);
+		dst += line_len;
+		src = line_end;
+	}
+
+	seq->count = dst - buf;
+	return 0;
+}
+
+static struct kretprobe ipv6_route_krp = {
+	.handler = ipv6_route_ret,
+	.entry_handler = ipv6_route_entry,
+	.data_size = sizeof(struct fib_route_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "ipv6_route_seq_show",
 };
 
 /* ================================================================== */
@@ -1345,6 +1459,7 @@ static struct kretprobe_reg probes[] = {
 	{ &inet6_fill_krp, "inet6_fill_ifaddr", false },
 	{ &inet_fill_krp, "inet_fill_ifaddr", false },
 	{ &fib_route_krp, "fib_route_seq_show", false },
+	{ &ipv6_route_krp, "ipv6_route_seq_show", false },
 	{ &fib_dump_krp, "fib_dump_info", false },
 	{ &rt6_fill_krp, "rt6_fill_node", false },
 	{ &rt_fill_krp, "rt_fill_info", false },
