@@ -380,14 +380,17 @@ internal fun buildKmodApplyCommand(
     }
 
     val pkgList = pkgs.joinToString("|") { it.replace(".", "\\.") }
+    val awkCmd = "awk -v p=\"^package:($pkgList) \" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }'"
     return "if [ -c $DEV_NODE ]; then " +
-        "UIDS=\$(pm list packages -U | awk -v p=\"^package:($pkgList) \" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); " +
+        "UIDS=\$(pm list packages -U | $awkCmd | xargs); " +
         "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
 }
 
 internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
     if (pkgs.isEmpty()) {
-        return "echo > $SS_UIDS_FILE; chmod 640 $SS_UIDS_FILE; chown root:system $SS_UIDS_FILE; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; true"
+        return "echo > $SS_UIDS_FILE; chmod 640 $SS_UIDS_FILE; " +
+            "chown root:system $SS_UIDS_FILE; " +
+            "chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; true"
     }
 
     return buildString {

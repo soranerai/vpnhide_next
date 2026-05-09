@@ -478,7 +478,12 @@ private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecomme
         shape = RoundedCornerShape(8.dp),
         colors =
             CardDefaults.elevatedCardColors(
-                containerColor = if (recommendation.preferKmod) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.secondaryContainer,
+                containerColor =
+                    if (recommendation.preferKmod) {
+                        MaterialTheme.colorScheme.primaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.secondaryContainer
+                    },
             ),
         modifier = Modifier.fillMaxWidth(),
     ) {
