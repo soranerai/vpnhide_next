@@ -1,6 +1,115 @@
 {
   "history": [
     {
+      "version": "1.0.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Align native cdylib LOAD segments on 16 KiB so libvpnhide_zygisk.so and libvpnhide_checks.so load cleanly on Android 16 Pixel 8 Pro (and future 16 KiB-page hardware) without the \"ELF LOAD not aligned\" warning at app start",
+              "ru": "Native-библиотеки (libvpnhide_zygisk.so, libvpnhide_checks.so) теперь выровнены на 16 КиБ. На Pixel 8 Pro с Android 16 (и будущем железе с 16 КиБ-страницами) больше нет предупреждения \"сегмент LOAD не выровнен\" при старте приложения"
+            },
+            {
+              "en": "lsposed: install-time smoke-check on private AOSP fields used by writeToParcel hooks. If AOSP renames or retypes mIfaceName / mTransportTypes / mNetworkType / similar, the affected hook is skipped at install (no per-call NoSuchFieldError spam) and the dashboard shows a red error listing the broken fields and Android SDK so users can file a bug.",
+              "ru": "lsposed: smoke-check приватных AOSP-полей при установке writeToParcel-хуков. Если в новой AOSP поле переименовано или сменило тип, соответствующий хук пропускается при установке (без спама NoSuchFieldError на каждом вызове), а дашборд показывает красную ошибку со списком сломанных полей и версией Android — чтобы пользователь мог завести issue."
+            },
+            {
+              "en": "Enhanced app list with advanced sorting (Name A-Z/Z-A, Selected first) and selection filtering",
+              "ru": "Добавлены расширенные возможности сортировки (по имени А-Я/Я-А, сначала выбранные) и фильтрация по статусу выбора"
+            },
+            {
+              "en": "New netlink check for anonymous VPN routes (leaked routes via hidden interfaces)",
+              "ru": "Новая проверка netlink на анонимные VPN-маршруты (утечка маршрутов через скрытые интерфейсы)"
+            },
+            {
+              "en": "New release signing keystore and integrated GitHub Actions signing workflow",
+              "ru": "Новая подпись для релизов и интеграция процесса подписи в GitHub Actions"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Debug logging toggle now also enables verbose kmod logging in dmesg (previously kmod was only flipped during Collect debug log)",
+              "ru": "Переключатель отладочного логирования теперь также включает подробные логи модуля ядра в dmesg (раньше kmod включался только во время «Собрать отладочный лог»)"
+            },
+            {
+              "en": "Consolidated help content into a new FAQ screen and added FAQ icon to the main screen",
+              "ru": "Перенесли справочную информацию в отдельный экран FAQ и добавили значок FAQ на главный экран"
+            },
+            {
+              "en": "Replaced easily detectable `/proc` configuration nodes with a private `miscdevice` interface (`/dev/vpnhide_ctrl`). This prevents simple fingerprinting of the module's target lists by untrusted apps. Updated the entire userspace stack (CLI tool and Android app) to support the new stealthy configuration protocol. Improved boot-time UID resolution with robust support for Work Profiles. Reworked apps sorting logic.",
+              "ru": "Легко обнаруживаемые файлы конфигурации в `/proc` заменены на приватный интерфейс `miscdevice` (`/dev/vpnhide_ctrl`). Это редотвращает простое обнаружение списков целей модуля (fingerprinting) обычными приложениями. Весь пользовательский стек (утилита и Android-приложение) обновлен для работы с новым скрытным протоколом конфигурации. Улучшена логика определения UID при загрузке, включая надежную поддержку Work Profile. Переработана логика сортировки приложений."
+            },
+            {
+              "en": "Optimized app startup time by batching initial root checks and target synchronization",
+              "ru": "Оптимизировано время запуска приложения за счет группировки начальных проверок root и синхронизации целей"
+            },
+            {
+              "en": "Optimized dashboard loading speed by batching root shell checks",
+              "ru": "Оптимизирована скорость загрузки дашборда за счет группировки проверок в один вызов su"
+            },
+            {
+              "en": "Bump version to 1.0.0 across all components",
+              "ru": "Обновление версии всех компонентов до 1.0.0"
+            },
+            {
+              "en": "Full project rebranding to VPNHide Next with new package identifier dev.soranerai.vpnhidenext",
+              "ru": "Полный ребрендинг проекта в VPNHide Next с новым идентификатором пакета dev.soranerai.vpnhidenext"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Native diagnostics now recognize utun*, l2tp*, gre* and renamed *vpn* interfaces as VPN tunnels (matching the rest of the hooks).",
+              "ru": "Нативная диагностика теперь распознаёт utun*, l2tp*, gre* и переименованные *vpn* интерфейсы как VPN-туннели (соответствует поведению остальных хуков)."
+            },
+            {
+              "en": "Notification time increased to make it readable",
+              "ru": "Увеличено время отображения уведомления о сохранении"
+            },
+            {
+              "en": "Save snackbar on the App Hiding screen no longer counts vpnhide itself in the hidden total.",
+              "ru": "Snackbar после сохранения на экране скрытия приложений больше не учитывает сам vpnhide в счётчике скрытых."
+            },
+            {
+              "en": "Catch tunnels renamed to the kernel default `if<N>` pattern (issue #86) — e.g. `tun0` renamed to `if33` is no longer visible to target apps.",
+              "ru": "Прячем туннели, переименованные в дефолтный для ядра паттерн `if<N>` (issue #86) — например `tun0` с именем `if33` теперь скрыт от целевых приложений."
+            },
+            {
+              "en": "Dashboard 'VPN active' detection now matches the kmod/zygisk filter for renamed interfaces (if<N> from issue #86, MyVPN, wg-client, ...).",
+              "ru": "Определение 'VPN активен' на дашборде теперь совпадает с правилами фильтра kmod/zygisk для переименованных интерфейсов (if<N> из issue #86, MyVPN, wg-client и т. п.)."
+            },
+            {
+              "en": "kmod: stop hanging RTM_GETLINK dumps when SELinux is Permissive — replaced -EMSGSIZE return in rtnl_fill_ifinfo with the same skb_trim+return-0 trick already used for inet6_fill_ifaddr",
+              "ru": "kmod: больше не зависает RTM_GETLINK при Permissive SELinux — в rtnl_fill_ifinfo вместо -EMSGSIZE теперь skb_trim+return 0, как уже было в inet6_fill_ifaddr"
+            },
+            {
+              "en": "Restore debug-logging flag for the zygisk module on app start. KSU/Magisk replace the module dir wholesale on reinstall, wiping the runtime flag file even though the user's preference is still ON; the app now re-applies the persisted preference to disk on every start so logs stay enabled.",
+              "ru": "Восстанавливаем флаг отладочного логирования для zygisk-модуля при старте приложения. KSU/Magisk при переустановке модуля заменяют его папку целиком, удаляя runtime-файл флага, хотя в настройках логирование всё ещё включено; приложение теперь переписывает сохранённое значение на диск при каждом старте, так что логи остаются включёнными."
+            },
+            {
+              "en": "Kernel module compilation on Android 12 GKI (5.10) and improved build scripts",
+              "ru": "Исправлена компиляция модуля ядра для Android 12 GKI (5.10) и улучшены скрипты сборки"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Drop redundant 'netlink RTM_GETLINK (recv)' diagnostic check (the recvmsg variant covers it).",
+              "ru": "Удалена избыточная диагностическая проверка 'netlink RTM_GETLINK (recv)' (вариант с recvmsg её покрывает)."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "0.7.1",
       "sections": [
         {

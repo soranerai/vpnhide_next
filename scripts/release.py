@@ -1,4 +1,4 @@
-#!/usr/bin/env -S uv run --script
+#!/usr/bin/env python3
 #
 # /// script
 # requires-python = ">=3.12"
@@ -103,7 +103,6 @@ def update_gradle_kts(path: Path, version: str, version_code: int) -> None:
         path,
         [
             (re.compile(r"versionCode = \d+"), f"versionCode = {version_code}"),
-            (re.compile(r'versionName = "[^"]*"'), f'versionName = "{version}"'),
         ],
     )
 

@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.0.0
+
+### Added
+- Align native cdylib LOAD segments on 16 KiB so libvpnhide_zygisk.so and libvpnhide_checks.so load cleanly on Android 16 Pixel 8 Pro (and future 16 KiB-page hardware) without the "ELF LOAD not aligned" warning at app start
+- lsposed: install-time smoke-check on private AOSP fields used by writeToParcel hooks. If AOSP renames or retypes mIfaceName / mTransportTypes / mNetworkType / similar, the affected hook is skipped at install (no per-call NoSuchFieldError spam) and the dashboard shows a red error listing the broken fields and Android SDK so users can file a bug.
+- Enhanced app list with advanced sorting (Name A-Z/Z-A, Selected first) and selection filtering
+- New netlink check for anonymous VPN routes (leaked routes via hidden interfaces)
+- New release signing keystore and integrated GitHub Actions signing workflow
+
+### Changed
+- Debug logging toggle now also enables verbose kmod logging in dmesg (previously kmod was only flipped during Collect debug log)
+- Consolidated help content into a new FAQ screen and added FAQ icon to the main screen
+- Replaced easily detectable `/proc` configuration nodes with a private `miscdevice` interface (`/dev/vpnhide_ctrl`). This prevents simple fingerprinting of the module's target lists by untrusted apps. Updated the entire userspace stack (CLI tool and Android app) to support the new stealthy configuration protocol. Improved boot-time UID resolution with robust support for Work Profiles. Reworked apps sorting logic.
+- Optimized app startup time by batching initial root checks and target synchronization
+- Optimized dashboard loading speed by batching root shell checks
+- Bump version to 1.0.0 across all components
+- Full project rebranding to VPNHide Next with new package identifier dev.soranerai.vpnhidenext
+
+### Fixed
+- Native diagnostics now recognize utun*, l2tp*, gre* and renamed *vpn* interfaces as VPN tunnels (matching the rest of the hooks).
+- Notification time increased to make it readable
+- Save snackbar on the App Hiding screen no longer counts vpnhide itself in the hidden total.
+- Catch tunnels renamed to the kernel default `if<N>` pattern (issue #86) — e.g. `tun0` renamed to `if33` is no longer visible to target apps.
+- Dashboard 'VPN active' detection now matches the kmod/zygisk filter for renamed interfaces (if<N> from issue #86, MyVPN, wg-client, ...).
+- kmod: stop hanging RTM_GETLINK dumps when SELinux is Permissive — replaced -EMSGSIZE return in rtnl_fill_ifinfo with the same skb_trim+return-0 trick already used for inet6_fill_ifaddr
+- Restore debug-logging flag for the zygisk module on app start. KSU/Magisk replace the module dir wholesale on reinstall, wiping the runtime flag file even though the user's preference is still ON; the app now re-applies the persisted preference to disk on every start so logs stay enabled.
+- Kernel module compilation on Android 12 GKI (5.10) and improved build scripts
+
+### Removed
+- Drop redundant 'netlink RTM_GETLINK (recv)' diagnostic check (the recvmsg variant covers it).
+
 ## v0.7.1
 
 ### Added
