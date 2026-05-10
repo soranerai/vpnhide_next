@@ -138,6 +138,8 @@ private fun MainScreen(
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }
     var showFaq by remember { mutableStateOf(false) }
+    var editingAppRules by remember { mutableStateOf<AppEntry?>(null) }
+    var rulesUpdatedApp by remember { mutableStateOf<AppEntry?>(null) }
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
@@ -199,8 +201,9 @@ private fun MainScreen(
             object : NestedScrollConnection {}
         }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(nestedScrollConnection),
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.nestedScroll(nestedScrollConnection),
         topBar = {
             if (searchActive && currentTab == Tab.Protection) {
                 SearchBar(
@@ -389,6 +392,8 @@ private fun MainScreen(
                                 showOnlySelected = showOnlySelected,
                                 sortOrder = sortOrder,
                                 onDirtyChange = { isProtectionDirty = it },
+                                onAppPortConfig = { editingAppRules = it },
+                                updatedApp = rulesUpdatedApp,
                                 saveTrigger = saveTrigger,
                                 modifier = Modifier.fillMaxSize(),
                             )
@@ -409,6 +414,7 @@ private fun MainScreen(
                 modifier =
                     Modifier
                         .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
                         .padding(bottom = 20.dp)
                         .fillMaxWidth(),
                 contentAlignment = Alignment.Center,
@@ -526,12 +532,35 @@ private fun MainScreen(
                     }
                 }
             }
+            }
+        }
 
-            if (showFaq) {
-                BackHandler { showFaq = false }
-                FaqScreen(
-                    onBack = { showFaq = false },
-                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+        if (showFaq) {
+            BackHandler { showFaq = false }
+            FaqScreen(
+                onBack = { showFaq = false },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = editingAppRules != null,
+            enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            editingAppRules?.let { app ->
+                BackHandler { editingAppRules = null }
+                PortRulesScreen(
+                    app = app,
+                    onBack = { editingAppRules = null },
+                    onSave = { updatedRules ->
+                        if (updatedRules != app.portRules) {
+                            rulesUpdatedApp = app.copy(portRules = updatedRules)
+                        }
+                        editingAppRules = null
+                    },
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)
                 )
             }
         }

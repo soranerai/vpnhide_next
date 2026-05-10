@@ -36,6 +36,7 @@ internal data class TargetsSnapshot(
     val zygiskTargets: Set<String>,
     val lsposedTargets: Set<String>,
     val portsObservers: Set<String>,
+    val portRules: Map<String, List<PortRule>>,
     val uidToPkg: Map<Int, String>,
 )
 
@@ -96,6 +97,8 @@ internal object TargetsCache {
         cat $LSPOSED_TARGETS 2>/dev/null || true
         echo "$SENTINEL PORTS_OBSERVERS"
         cat $PORTS_OBSERVERS_FILE 2>/dev/null || true
+        echo "$SENTINEL PORTS_RULES"
+        cat $PORTS_RULES_FILE 2>/dev/null || true
         echo "$SENTINEL PM_LIST"
         pm list packages -U --user all 2>/dev/null || true
         echo "$END"
@@ -151,12 +154,28 @@ internal object TargetsCache {
         // from any profile resolve back to the same package name.
         val pmLine = Regex("^package:(\\S+) uid:(\\S+)")
         val uidToPkg = mutableMapOf<Int, String>()
-        sections["PM_LIST"]?.lines()?.forEach { line ->
-            val m = pmLine.find(line) ?: return@forEach
-            val pkg = m.groupValues[1]
-            for (id in m.groupValues[2].split(',')) {
-                id.toIntOrNull()?.let { uidToPkg[it] = pkg }
+        val portRules = mutableMapOf<String, List<PortRule>>()
+        sections["PORTS_RULES"]?.lines()?.forEach { line ->
+            if (line.isBlank() || line.startsWith("#")) return@forEach
+            val parts = line.split(" ")
+            if (parts.size < 2) return@forEach
+            val pkg = parts[0]
+            val rulesList = mutableListOf<PortRule>()
+            for (i in 1 until parts.size) {
+                val ruleParts = parts[i].split("-", ":")
+                if (ruleParts.size == 3) {
+                    val start = ruleParts[0].toIntOrNull() ?: 0
+                    val end = ruleParts[1].toIntOrNull() ?: 0
+                    val protoIdx = ruleParts[2].toIntOrNull() ?: 2
+                    val proto = when (protoIdx) {
+                        0 -> PortProtocol.TCP
+                        1 -> PortProtocol.UDP
+                        else -> PortProtocol.BOTH
+                    }
+                    rulesList.add(PortRule(startPort = start, endPort = end, protocol = proto))
+                }
             }
+            portRules[pkg] = rulesList
         }
 
         return TargetsSnapshot(
@@ -168,6 +187,7 @@ internal object TargetsCache {
             zygiskTargets = nonEmptyLines(sections["ZYGISK_TARGETS"]),
             lsposedTargets = nonEmptyLines(sections["LSPOSED_TARGETS"]),
             portsObservers = nonEmptyLines(sections["PORTS_OBSERVERS"]),
+            portRules = portRules,
             uidToPkg = uidToPkg,
         )
     }

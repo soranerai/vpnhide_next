@@ -1,5 +1,7 @@
 package dev.soranerai.vpnhidenext
 
+import android.util.Base64
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -24,6 +26,8 @@ internal fun ProtectionScreen(
     showOnlySelected: Boolean,
     sortOrder: AppSortOrder,
     onDirtyChange: (Boolean) -> Unit,
+    onAppPortConfig: (AppEntry) -> Unit,
+    updatedApp: AppEntry?,
     saveTrigger: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -113,6 +117,7 @@ internal fun ProtectionScreen(
                             isSystem = app.isSystem,
                             userIds = app.userIds,
                             portHiding = app.packageName in t.portsObservers,
+                            portRules = t.portRules[app.packageName] ?: emptyList()
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label })
         }
@@ -185,6 +190,7 @@ internal fun ProtectionScreen(
                                 portApps = newList
                                 dirtyPort = true
                             },
+                            onConfigClick = onAppPortConfig,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -222,8 +228,7 @@ internal fun ProtectionScreen(
                         parts += buildTunSaveCommand(header, k)
                     }
                     if (dirtyPort) {
-                        val p = portApps.filter { it.portHiding }.map { it.packageName }.sorted()
-                        parts += buildPortSaveCommand(header, p)
+                        parts += buildPortSaveCommand(header, portApps)
                     }
 
                     if (parts.isNotEmpty()) {
@@ -244,6 +249,15 @@ internal fun ProtectionScreen(
                 }
                 saving = false
             }
+        }
+    }
+
+    LaunchedEffect(updatedApp) {
+        updatedApp?.let { app ->
+            portApps = portApps.map { 
+                if (it.packageName == app.packageName) app else it 
+            }
+            dirtyPort = true
         }
     }
 }
@@ -304,7 +318,7 @@ private fun buildVpnSaveCommand(
     parts += buildWriteTargetsCommand(ZYGISK_TARGETS, header, zygisk)
     parts += buildWriteTargetsCommand(LSPOSED_TARGETS, header, lsposed)
     parts += "if [ -d $ZYGISK_MODULE_DIR ]; then cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null; fi"
-    parts += buildKmodApplyCommand(kmod)
+    parts += buildKmodApplyCommand(kmod, targetType = "targets")
     parts += buildLsposedApplyCommand(lsposed)
     return parts.joinToString(" ; ")
 }
@@ -315,16 +329,40 @@ private fun buildTunSaveCommand(
 ): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(KMOD_DIRECT_TARGETS, header, kmod)
-    parts += buildKmodApplyCommand(kmod, isDirect = true)
+    parts += buildKmodApplyCommand(kmod, targetType = "direct")
     return parts.joinToString(" ; ")
 }
 
 private fun buildPortSaveCommand(
     header: String,
-    pkgs: List<String>,
+    apps: List<AppEntry>,
 ): String {
+    val pkgs = apps.filter { it.portHiding }.map { it.packageName }.sorted()
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(PORTS_OBSERVERS_FILE, header, pkgs)
-    parts += "sh $PORTS_APPLY_SCRIPT"
+    
+    val ruleMap = apps.filter { it.portHiding }.associate { it.packageName to it.portRules }
+    
+    // Build rule persistence file body
+    val rulesBody = StringBuilder(header).append("\n")
+    ruleMap.forEach { (pkg, rules) ->
+        rulesBody.append(pkg)
+        rules.forEach { rule ->
+            val proto = when (rule.protocol) {
+                PortProtocol.TCP -> 0
+                PortProtocol.UDP -> 1
+                PortProtocol.BOTH -> 2
+            }
+            rulesBody.append(" ${rule.startPort}-${rule.endPort}:$proto")
+        }
+        rulesBody.append("\n")
+    }
+    
+    val b64Rules = Base64.encodeToString(rulesBody.toString().toByteArray(), Base64.NO_WRAP)
+    val rulesDir = PORTS_RULES_FILE.substringBeforeLast('/')
+    parts += "mkdir -p $rulesDir ; echo '$b64Rules' | base64 -d > $PORTS_RULES_FILE && chmod 644 $PORTS_RULES_FILE"
+    
+    parts += buildKmodPortRulesApplyCommand(ruleMap)
+    
     return parts.joinToString(" ; ")
 }

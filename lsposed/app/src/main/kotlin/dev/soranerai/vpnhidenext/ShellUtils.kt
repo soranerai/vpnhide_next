@@ -20,6 +20,7 @@ internal const val LSPOSED_TARGETS = "/data/adb/vpnhide_lsposed/targets.txt"
 internal const val KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
 internal const val SS_UIDS_FILE = "/data/system/vpnhide_uids.txt"
 internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt"
+internal const val PORTS_RULES_FILE = "/data/adb/vpnhide_ports/rules.txt"
 internal const val DEV_NODE = "/dev/vpnhide_ctrl"
 internal const val PORTS_APPLY_SCRIPT = "/data/adb/modules/vpnhide_kmod/vpnhide_ports_apply.sh"
 internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
@@ -339,9 +340,8 @@ internal fun buildWriteTargetsCommand(
 
 internal fun buildKmodApplyCommand(
     pkgs: List<String>,
-    isDirect: Boolean = false,
+    targetType: String = "targets",
 ): String {
-    val targetType = if (isDirect) "direct" else "targets"
     if (pkgs.isEmpty()) {
         return "[ -c $DEV_NODE ] && $KMOD_CTL $targetType; true"
     }
@@ -351,6 +351,40 @@ internal fun buildKmodApplyCommand(
     return "if [ -c $DEV_NODE ]; then " +
         "UIDS=\$(pm list packages -U | $awkCmd | xargs); " +
         "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
+}
+
+internal fun buildKmodPortRulesApplyCommand(
+    rules: Map<String, List<PortRule>>
+): String {
+    if (rules.isEmpty()) {
+        return "[ -c $DEV_NODE ] && $KMOD_CTL port_rules; true"
+    }
+
+    // Since we need UIDs for vpnhide-ctl port_rules, we build a script that
+    // resolves UIDs for each package and then calls vpnhide-ctl with rules.
+    return buildString {
+        append("if [ -c $DEV_NODE ]; then ")
+        append("ALL_PKGS=\"\$(pm list packages -U)\"; ")
+        append("ARGS=\"\"; ")
+        rules.forEach { (pkg, portRules) ->
+            val pkgEsc = pkg.replace(".", "\\.")
+            append("U=\$(echo \"\$ALL_PKGS\" | awk -v p=\"^package:$pkgEsc[ :]\" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); ")
+            append("if [ -n \"\$U\" ]; then ")
+            append("for UID_VAL in \$U; do ")
+            append("ARGS=\"\$ARGS \$UID_VAL ${portRules.size}")
+            portRules.forEach { rule ->
+                val proto = when (rule.protocol) {
+                    PortProtocol.TCP -> 0
+                    PortProtocol.UDP -> 1
+                    PortProtocol.BOTH -> 2
+                }
+                append(" ${rule.startPort} ${rule.endPort} $proto")
+            }
+            append("\"; ")
+            append("done; fi; ")
+        }
+        append("[ -n \"\$ARGS\" ] && $KMOD_CTL port_rules \$ARGS; fi")
+    }
 }
 
 internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
@@ -370,7 +404,7 @@ internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
 
 internal fun applyKmodTargets(context: Context) {
     val kmodFile = readPackageList(KMOD_TARGETS)
-    suExec(buildKmodApplyCommand(kmodFile, isDirect = false))
+    suExec(buildKmodApplyCommand(kmodFile, targetType = "targets"))
 }
 
 internal fun readPackageList(path: String): List<String> {

@@ -52,28 +52,13 @@
 #include <net/ipv6.h>
 
 #include "generated/iface_lists.h"
+#include "include/vpnhide.h"
 
 #ifndef CONFIG_ARM64
 #error "vpnhide_kmod currently supports only arm64 (handlers read regs->regs[N] directly)"
 #endif
 
 #define MODNAME "vpnhide"
-#define MAX_TARGET_UIDS 512
-
-/* --- IOCTL definitions for stealthy configuration --- */
-#define VH_IOCTL_MAGIC 0x56
-struct vpnhide_ioctl_data {
-	int count;
-	uid_t uids[MAX_TARGET_UIDS];
-};
-
-#define VH_SET_TARGETS _IOW(VH_IOCTL_MAGIC, 0x01, struct vpnhide_ioctl_data)
-#define VH_SET_DIRECT_TARGETS \
-	_IOW(VH_IOCTL_MAGIC, 0x02, struct vpnhide_ioctl_data)
-#define VH_SET_PORT_TARGETS \
-	_IOW(VH_IOCTL_MAGIC, 0x05, struct vpnhide_ioctl_data)
-#define VH_SET_DEBUG _IOW(VH_IOCTL_MAGIC, 0x03, int)
-#define VH_SET_PHYS_IFINDEX _IOW(VH_IOCTL_MAGIC, 0x04, int)
 
 /*
  * Pre-allocated kretprobe instance pool size, applied to every probe.
@@ -114,8 +99,14 @@ static bool debug_enabled;
 #define is_vpn_ifname(name) vpnhide_iface_is_vpn(name)
 
 struct vpnhide_targets {
-	uid_t uids[MAX_TARGET_UIDS];
 	int count;
+	uid_t uids[MAX_TARGET_UIDS];
+	struct rcu_head rcu;
+};
+
+struct vpnhide_port_targets {
+	int count;
+	struct vpnhide_uid_port_rules targets[MAX_TARGET_UIDS];
 	struct rcu_head rcu;
 };
 
@@ -125,7 +116,7 @@ static DEFINE_SPINLOCK(targets_update_lock);
 static struct vpnhide_targets __rcu *global_direct_targets;
 static DEFINE_SPINLOCK(direct_targets_update_lock);
 
-static struct vpnhide_targets __rcu *global_port_targets;
+static struct vpnhide_port_targets __rcu *global_port_targets;
 static DEFINE_SPINLOCK(port_targets_update_lock);
 
 static bool is_target_uid(void)
@@ -158,27 +149,6 @@ static bool is_direct_target_uid(void)
 
 	rcu_read_lock();
 	t = rcu_dereference(global_direct_targets);
-	if (t) {
-		for (i = 0; i < t->count; i++) {
-			if (t->uids[i] == uid) {
-				found = true;
-				break;
-			}
-		}
-	}
-	rcu_read_unlock();
-	return found;
-}
-
-static bool is_port_target_uid(void)
-{
-	uid_t uid = from_kuid(&init_user_ns, current_uid());
-	struct vpnhide_targets *t;
-	bool found = false;
-	int i;
-
-	rcu_read_lock();
-	t = rcu_dereference(global_port_targets);
 	if (t) {
 		for (i = 0; i < t->count; i++) {
 			if (t->uids[i] == uid) {
@@ -1340,6 +1310,35 @@ static struct kretprobe ip6_route_output_krp = {
 /*  UID List Update Logic                                              */
 /* ================================================================== */
 
+static int update_port_rules(struct vpnhide_uid_port_rules *rules, int count)
+{
+	struct vpnhide_port_targets *new_t, *old_t;
+
+	new_t = kvzalloc(sizeof(*new_t), GFP_KERNEL);
+	if (!new_t)
+		return -ENOMEM;
+
+	new_t->count = count;
+	if (count > 0)
+		memcpy(new_t->targets, rules,
+		       count * sizeof(struct vpnhide_uid_port_rules));
+
+	spin_lock(&port_targets_update_lock);
+	old_t = rcu_dereference_protected(global_port_targets,
+					  lockdep_is_held(
+						  &port_targets_update_lock));
+	rcu_assign_pointer(global_port_targets, new_t);
+	spin_unlock(&port_targets_update_lock);
+
+	if (old_t) {
+		synchronize_rcu();
+		kvfree(old_t);
+	}
+
+	vpnhide_dbg("Port rules updated: %d UIDs\n", count);
+	return 0;
+}
+
 static int update_targets(uid_t *uids, int count, bool direct)
 {
 	struct vpnhide_targets *new_t, *old_t;
@@ -1347,11 +1346,6 @@ static int update_targets(uid_t *uids, int count, bool direct)
 				    &targets_update_lock;
 	struct vpnhide_targets __rcu **global_ptr =
 		direct ? &global_direct_targets : &global_targets;
-
-	if (direct == 2) {
-		lock = &port_targets_update_lock;
-		global_ptr = &global_port_targets;
-	}
 
 	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
 	if (!new_t)
@@ -1372,8 +1366,7 @@ static int update_targets(uid_t *uids, int count, bool direct)
 	}
 
 	vpnhide_dbg("%s targets updated: %d UIDs\n",
-		    (direct == 1) ? "Direct" : (direct == 2) ? "Port" : "Normal",
-		    count);
+		    (direct == 1) ? "Direct" : "Normal", count);
 	return 0;
 }
 
@@ -1408,11 +1401,51 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 			ret = update_targets(kdata->uids, kdata->count, 0);
 		else if (cmd == VH_SET_DIRECT_TARGETS)
 			ret = update_targets(kdata->uids, kdata->count, 1);
-		else
-			ret = update_targets(kdata->uids, kdata->count, 2);
+		else {
+			/* Backward compatibility: if app sends just UIDs, block ALL loopback for them */
+			struct vpnhide_uid_port_rules *rules;
+			rules = kvmalloc_array(kdata->count, sizeof(*rules),
+					      GFP_KERNEL);
+			if (rules) {
+				int i;
+				for (i = 0; i < kdata->count; i++) {
+					rules[i].uid = kdata->uids[i];
+					rules[i].rule_count = 1;
+					rules[i].rules[0].start_port = 0;
+					rules[i].rules[0].end_port = 65535;
+					rules[i].rules[0].protocol =
+						VH_PROTO_BOTH;
+				}
+				ret = update_port_rules(rules, kdata->count);
+				kvfree(rules);
+			} else {
+				ret = -ENOMEM;
+			}
+		}
 
 		kfree(kdata);
 		break;
+
+	case VH_SET_PORT_RULES: {
+		struct vpnhide_port_ioctl_data *pdata;
+		pdata = kvzalloc(sizeof(*pdata), GFP_KERNEL);
+		if (!pdata)
+			return -ENOMEM;
+
+		if (copy_from_user(pdata, (void __user *)arg, sizeof(*pdata))) {
+			kvfree(pdata);
+			return -EFAULT;
+		}
+
+		if (pdata->count < 0 || pdata->count > MAX_TARGET_UIDS) {
+			kvfree(pdata);
+			return -EINVAL;
+		}
+
+		ret = update_port_rules(pdata->targets, pdata->count);
+		kvfree(pdata);
+		break;
+	}
 
 	case VH_SET_DEBUG:
 		if (get_user(val, (int __user *)arg))
@@ -1479,31 +1512,87 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 				 struct pt_regs *regs)
 {
 	struct socket_connect_data *data = (void *)ri->data;
+	struct socket *sock = (struct socket *)regs->regs[0];
 	struct sockaddr *addr = (struct sockaddr *)regs->regs[1];
+	uid_t uid = from_kuid(&init_user_ns, current_uid());
+	struct vpnhide_port_targets *t;
+	struct vpnhide_uid_port_rules *urules = NULL;
+	int i;
 
 	data->should_block = false;
+	
+	rcu_read_lock();
+	t = rcu_dereference(global_port_targets);
+	if (t) {
+		for (i = 0; i < t->count; i++) {
+			if (t->targets[i].uid == uid) {
+				urules = &t->targets[i];
+				break;
+			}
+		}
+	}
 
-	if (!is_port_target_uid())
+	if (!urules || !addr || !sock || !sock->sk) {
+		rcu_read_unlock();
 		return 0;
-
-	if (!addr)
-		return 0;
+	}
 
 	if (addr->sa_family == AF_INET) {
 		struct sockaddr_in *sin = (struct sockaddr_in *)addr;
 		if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
-			data->should_block = true;
-			vpnhide_dbg("socket_connect: blocking IPv4 loopback for uid=%u\n",
-				    from_kuid(&init_user_ns, current_uid()));
+			unsigned short port = ntohs(sin->sin_port);
+			unsigned char proto = (sock->sk->sk_type == SOCK_STREAM) ?
+						      VH_PROTO_TCP :
+						      VH_PROTO_UDP;
+
+			for (i = 0; i < urules->rule_count; i++) {
+				struct vpnhide_port_rule *r = &urules->rules[i];
+				if (port >= r->start_port &&
+				    port <= r->end_port) {
+					if (r->protocol == VH_PROTO_BOTH ||
+					    r->protocol == proto) {
+						data->should_block = true;
+						vpnhide_dbg(
+							"socket_connect: blocking IPv4 port %u (%s) for uid=%u\n",
+							port,
+							(proto == VH_PROTO_TCP) ?
+								"TCP" :
+								"UDP",
+							uid);
+						break;
+					}
+				}
+			}
 		}
 	} else if (addr->sa_family == AF_INET6) {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
 		if (ipv6_addr_loopback(&sin6->sin6_addr)) {
-			data->should_block = true;
-			vpnhide_dbg("socket_connect: blocking IPv6 loopback for uid=%u\n",
-				    from_kuid(&init_user_ns, current_uid()));
+			unsigned short port = ntohs(sin6->sin6_port);
+			unsigned char proto = (sock->sk->sk_type == SOCK_STREAM) ?
+						      VH_PROTO_TCP :
+						      VH_PROTO_UDP;
+
+			for (i = 0; i < urules->rule_count; i++) {
+				struct vpnhide_port_rule *r = &urules->rules[i];
+				if (port >= r->start_port &&
+				    port <= r->end_port) {
+					if (r->protocol == VH_PROTO_BOTH ||
+					    r->protocol == proto) {
+						data->should_block = true;
+						vpnhide_dbg(
+							"socket_connect: blocking IPv6 port %u (%s) for uid=%u\n",
+							port,
+							(proto == VH_PROTO_TCP) ?
+								"TCP" :
+								"UDP",
+							uid);
+						break;
+					}
+				}
+			}
 		}
 	}
+	rcu_read_unlock();
 
 	return 0;
 }
@@ -1620,6 +1709,7 @@ static int __init vpnhide_init(void)
 static void __exit vpnhide_exit(void)
 {
 	struct vpnhide_targets *t;
+	struct vpnhide_port_targets *t_port;
 	int i;
 
 	/* No proc entries to remove anymore */
@@ -1660,15 +1750,15 @@ static void __exit vpnhide_exit(void)
 
 	/* Cleanup RCU port targets */
 	spin_lock(&port_targets_update_lock);
-	t = rcu_dereference_protected(
+	t_port = rcu_dereference_protected(
 		global_port_targets,
 		lockdep_is_held(&port_targets_update_lock));
 	rcu_assign_pointer(global_port_targets, NULL);
 	spin_unlock(&port_targets_update_lock);
 
-	if (t) {
+	if (t_port) {
 		synchronize_rcu();
-		kfree(t);
+		kfree(t_port);
 	}
 
 	misc_deregister(&vpnhide_misc);
