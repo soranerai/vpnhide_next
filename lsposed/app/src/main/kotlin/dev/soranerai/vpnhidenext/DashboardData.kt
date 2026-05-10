@@ -1003,7 +1003,6 @@ internal suspend fun loadDashboardState(
         warn(res.getString(R.string.dashboard_issue_selinux_permissive))
     }
 
-
     // ── Errors: kmod variant / load problems ──
     // Priority ordered: kprobes-missing first (no variant will ever work),
     // then "kernel has no kmod variant" (user picked the wrong tool),

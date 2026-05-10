@@ -104,7 +104,6 @@ internal fun ProtectionScreen(
                     }.sortedWith(compareByDescending<AppEntry> { it.tunBypass }.thenBy { it.label })
         }
 
-
         if (!dirtyPort) {
             portApps =
                 apps
@@ -117,7 +116,7 @@ internal fun ProtectionScreen(
                             isSystem = app.isSystem,
                             userIds = app.userIds,
                             portHiding = app.packageName in t.portsObservers,
-                            portRules = t.portRules[app.packageName] ?: emptyList()
+                            portRules = t.portRules[app.packageName] ?: emptyList(),
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label })
         }
@@ -176,7 +175,6 @@ internal fun ProtectionScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
-
 
                     ProtectionMode.PortHiding -> {
                         PortsHidingScreen(
@@ -254,9 +252,10 @@ internal fun ProtectionScreen(
 
     LaunchedEffect(updatedApp) {
         updatedApp?.let { app ->
-            portApps = portApps.map { 
-                if (it.packageName == app.packageName) app else it 
-            }
+            portApps =
+                portApps.map {
+                    if (it.packageName == app.packageName) app else it
+                }
             dirtyPort = true
         }
     }
@@ -340,29 +339,30 @@ private fun buildPortSaveCommand(
     val pkgs = apps.filter { it.portHiding }.map { it.packageName }.sorted()
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(PORTS_OBSERVERS_FILE, header, pkgs)
-    
+
     val ruleMap = apps.filter { it.portHiding }.associate { it.packageName to it.portRules }
-    
+
     // Build rule persistence file body
     val rulesBody = StringBuilder(header).append("\n")
     ruleMap.forEach { (pkg, rules) ->
         rulesBody.append(pkg)
         rules.forEach { rule ->
-            val proto = when (rule.protocol) {
-                PortProtocol.TCP -> 0
-                PortProtocol.UDP -> 1
-                PortProtocol.BOTH -> 2
-            }
+            val proto =
+                when (rule.protocol) {
+                    PortProtocol.TCP -> 0
+                    PortProtocol.UDP -> 1
+                    PortProtocol.BOTH -> 2
+                }
             rulesBody.append(" ${rule.startPort}-${rule.endPort}:$proto")
         }
         rulesBody.append("\n")
     }
-    
+
     val b64Rules = Base64.encodeToString(rulesBody.toString().toByteArray(), Base64.NO_WRAP)
     val rulesDir = PORTS_RULES_FILE.substringBeforeLast('/')
     parts += "mkdir -p $rulesDir ; echo '$b64Rules' | base64 -d > $PORTS_RULES_FILE && chmod 644 $PORTS_RULES_FILE"
-    
+
     parts += buildKmodPortRulesApplyCommand(ruleMap)
-    
+
     return parts.joinToString(" ; ")
 }

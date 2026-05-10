@@ -19,42 +19,42 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 
-
 @Composable
 internal fun AppRow(
     app: AppEntry,
     userNames: Map<Int, String>,
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
-    onToggleAll: () -> Unit
+    onToggleAll: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onToggleAll() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { onToggleAll() },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             app.icon?.let {
                 Image(
                     bitmap = it.toBitmap(48, 48).asImageBitmap(),
                     contentDescription = null,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(40.dp),
                 )
             } ?: Box(modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.surface, CircleShape))
-            
+
             Spacer(Modifier.width(12.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(app.label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(app.packageName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            
+
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (installed.kmod) {
                     ProtectionChip("Kernel", app.kmod, true) { onToggle(Layer.KMOD) }
@@ -69,20 +69,25 @@ internal fun AppRow(
 }
 
 @Composable
-private fun ProtectionChip(label: String, active: Boolean, installed: Boolean, onClick: () -> Unit) {
+private fun ProtectionChip(
+    label: String,
+    active: Boolean,
+    installed: Boolean,
+    onClick: () -> Unit,
+) {
     val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant
     val textColor = if (active) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurfaceVariant
-    
+
     Surface(
         onClick = onClick,
         enabled = installed,
         shape = RoundedCornerShape(10.dp),
         color = color.copy(alpha = if (installed) 1f else 0.3f),
-        contentColor = textColor
+        contentColor = textColor,
     ) {
         Box(
             modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-            contentAlignment = Alignment.Center
+            contentAlignment = Alignment.Center,
         ) {
             Text(label, fontWeight = FontWeight.Bold, fontSize = 11.sp)
         }
@@ -92,35 +97,36 @@ private fun ProtectionChip(label: String, active: Boolean, installed: Boolean, o
 @Composable
 internal fun BypassAppRow(
     app: AppEntry,
-    onToggle: () -> Unit
+    onToggle: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onToggle() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { onToggle() },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             app.icon?.let {
                 Image(
                     bitmap = it.toBitmap(48, 48).asImageBitmap(),
                     contentDescription = null,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(40.dp),
                 )
             }
-            
+
             Spacer(Modifier.width(12.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(app.label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(app.packageName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            
+
             Switch(checked = app.tunBypass, onCheckedChange = { onToggle() })
         }
     }
@@ -130,46 +136,54 @@ internal fun BypassAppRow(
 internal fun PortAppRow(
     app: AppEntry,
     onToggle: () -> Unit,
-    onConfigClick: () -> Unit
+    onConfigClick: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(16.dp))
-            .clickable { onToggle() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 4.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .clickable { onToggle() },
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
     ) {
         Row(
             modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             app.icon?.let {
                 Image(
                     bitmap = it.toBitmap(48, 48).asImageBitmap(),
                     contentDescription = null,
-                    modifier = Modifier.size(40.dp)
+                    modifier = Modifier.size(40.dp),
                 )
             }
-            
+
             Spacer(Modifier.width(12.dp))
-            
+
             Column(modifier = Modifier.weight(1f)) {
                 Text(app.label, fontWeight = FontWeight.Bold, fontSize = 16.sp)
                 Text(app.packageName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-            
+
             IconButton(
                 onClick = onConfigClick,
-                enabled = app.portHiding
+                enabled = app.portHiding,
             ) {
                 Icon(
                     Icons.Default.Settings,
                     contentDescription = null,
-                    tint = if (app.portHiding) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                    tint =
+                        if (app.portHiding) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                alpha = 0.3f,
+                            )
+                        },
                 )
             }
-            
+
             Switch(checked = app.portHiding, onCheckedChange = { onToggle() })
         }
     }
@@ -179,7 +193,7 @@ internal fun PortAppRow(
 internal fun SkeletonAppRow() {
     Row(
         modifier = Modifier.fillMaxWidth().padding(16.dp),
-        verticalAlignment = Alignment.CenterVertically
+        verticalAlignment = Alignment.CenterVertically,
     ) {
         ShimmerPlaceholder(modifier = Modifier.size(40.dp).clip(CircleShape))
         Spacer(Modifier.width(12.dp))

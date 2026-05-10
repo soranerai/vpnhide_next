@@ -1324,9 +1324,9 @@ static int update_port_rules(struct vpnhide_uid_port_rules *rules, int count)
 		       count * sizeof(struct vpnhide_uid_port_rules));
 
 	spin_lock(&port_targets_update_lock);
-	old_t = rcu_dereference_protected(global_port_targets,
-					  lockdep_is_held(
-						  &port_targets_update_lock));
+	old_t = rcu_dereference_protected(
+		global_port_targets,
+		lockdep_is_held(&port_targets_update_lock));
 	rcu_assign_pointer(global_port_targets, new_t);
 	spin_unlock(&port_targets_update_lock);
 
@@ -1405,7 +1405,7 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 			/* Backward compatibility: if app sends just UIDs, block ALL loopback for them */
 			struct vpnhide_uid_port_rules *rules;
 			rules = kvmalloc_array(kdata->count, sizeof(*rules),
-					      GFP_KERNEL);
+					       GFP_KERNEL);
 			if (rules) {
 				int i;
 				for (i = 0; i < kdata->count; i++) {
@@ -1509,7 +1509,7 @@ struct socket_connect_data {
 };
 
 static int socket_connect_entry(struct kretprobe_instance *ri,
-				 struct pt_regs *regs)
+				struct pt_regs *regs)
 {
 	struct socket_connect_data *data = (void *)ri->data;
 	struct socket *sock = (struct socket *)regs->regs[0];
@@ -1520,7 +1520,7 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 	int i;
 
 	data->should_block = false;
-	
+
 	rcu_read_lock();
 	t = rcu_dereference(global_port_targets);
 	if (t) {
@@ -1541,9 +1541,10 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 		struct sockaddr_in *sin = (struct sockaddr_in *)addr;
 		if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
 			unsigned short port = ntohs(sin->sin_port);
-			unsigned char proto = (sock->sk->sk_type == SOCK_STREAM) ?
-						      VH_PROTO_TCP :
-						      VH_PROTO_UDP;
+			unsigned char proto =
+				(sock->sk->sk_type == SOCK_STREAM) ?
+					VH_PROTO_TCP :
+					VH_PROTO_UDP;
 
 			for (i = 0; i < urules->rule_count; i++) {
 				struct vpnhide_port_rule *r = &urules->rules[i];
@@ -1555,7 +1556,8 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 						vpnhide_dbg(
 							"socket_connect: blocking IPv4 port %u (%s) for uid=%u\n",
 							port,
-							(proto == VH_PROTO_TCP) ?
+							(proto ==
+							 VH_PROTO_TCP) ?
 								"TCP" :
 								"UDP",
 							uid);
@@ -1568,9 +1570,10 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
 		if (ipv6_addr_loopback(&sin6->sin6_addr)) {
 			unsigned short port = ntohs(sin6->sin6_port);
-			unsigned char proto = (sock->sk->sk_type == SOCK_STREAM) ?
-						      VH_PROTO_TCP :
-						      VH_PROTO_UDP;
+			unsigned char proto =
+				(sock->sk->sk_type == SOCK_STREAM) ?
+					VH_PROTO_TCP :
+					VH_PROTO_UDP;
 
 			for (i = 0; i < urules->rule_count; i++) {
 				struct vpnhide_port_rule *r = &urules->rules[i];
@@ -1582,7 +1585,8 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 						vpnhide_dbg(
 							"socket_connect: blocking IPv6 port %u (%s) for uid=%u\n",
 							port,
-							(proto == VH_PROTO_TCP) ?
+							(proto ==
+							 VH_PROTO_TCP) ?
 								"TCP" :
 								"UDP",
 							uid);
@@ -1597,7 +1601,8 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static int socket_connect_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+static int socket_connect_ret(struct kretprobe_instance *ri,
+			      struct pt_regs *regs)
 {
 	struct socket_connect_data *data = (void *)ri->data;
 

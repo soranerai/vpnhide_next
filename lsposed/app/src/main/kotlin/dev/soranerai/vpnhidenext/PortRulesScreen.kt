@@ -43,24 +43,26 @@ internal fun PortRulesScreen(
     var showAddDialog by remember { mutableStateOf(false) }
 
     Box(
-        modifier = modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier =
+            modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.background),
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
             // Header with App Info
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .statusBarsPadding()
-                    .padding(horizontal = 24.dp, vertical = 20.dp),
-                verticalAlignment = Alignment.CenterVertically
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .statusBarsPadding()
+                        .padding(horizontal = 24.dp, vertical = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
                 app.icon?.let {
                     Image(
                         bitmap = it.toBitmap(48, 48).asImageBitmap(),
                         contentDescription = null,
-                        modifier = Modifier.size(44.dp)
+                        modifier = Modifier.size(44.dp),
                     )
                     Spacer(Modifier.width(16.dp))
                 }
@@ -69,12 +71,12 @@ internal fun PortRulesScreen(
                         app.label,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onBackground
+                        color = MaterialTheme.colorScheme.onBackground,
                     )
                     Text(
                         app.packageName,
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -86,13 +88,13 @@ internal fun PortRulesScreen(
                             Icons.Default.Dns,
                             contentDescription = null,
                             modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
                         )
                         Spacer(Modifier.height(16.dp))
                         Text(
                             "No rules defined",
                             style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                 }
@@ -100,14 +102,14 @@ internal fun PortRulesScreen(
                 LazyColumn(
                     modifier = Modifier.weight(1f).fillMaxWidth(),
                     contentPadding = PaddingValues(horizontal = 24.dp, vertical = 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     items(rules, key = { it.id }) { rule ->
                         PortRuleCard(
                             rule = rule,
                             onEdit = { editingRule = rule },
                             onDelete = { rules = rules.filter { it.id != rule.id } },
-                            onToggle = { rules = rules.map { if (it.id == rule.id) it.copy(enabled = !it.enabled) else it } }
+                            onToggle = { rules = rules.map { if (it.id == rule.id) it.copy(enabled = !it.enabled) else it } },
                         )
                     }
                     item { Spacer(Modifier.height(100.dp)) }
@@ -117,18 +119,19 @@ internal fun PortRulesScreen(
 
         // Bottom Bar (Pill style - matched with MainActivity)
         Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .navigationBarsPadding()
-                .padding(bottom = 20.dp)
-                .fillMaxWidth(),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 20.dp)
+                    .fillMaxWidth(),
+            contentAlignment = Alignment.Center,
         ) {
             Box(contentAlignment = Alignment.Center) {
                 // Width driver to match MainActivity's centering
                 Row(
                     modifier = Modifier.height(60.dp),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Spacer(modifier = Modifier.width(260.dp))
                     Spacer(modifier = Modifier.width(76.dp))
@@ -140,38 +143,42 @@ internal fun PortRulesScreen(
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
                     tonalElevation = 12.dp,
                     shadowElevation = 8.dp,
-                    modifier = Modifier
-                        .align(Alignment.CenterStart)
-                        .height(60.dp),
+                    modifier =
+                        Modifier
+                            .align(Alignment.CenterStart)
+                            .height(60.dp),
                 ) {
                     Row(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp, vertical = 4.dp)
-                            .width(260.dp), // Match nav pill width
-                        verticalAlignment = Alignment.CenterVertically
+                        modifier =
+                            Modifier
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                                .width(260.dp),
+                        // Match nav pill width
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
                         Box(
-                            modifier = Modifier
-                                .weight(1f)
-                                .fillMaxHeight()
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
-                                .clickable { onSave(rules) },
-                            contentAlignment = Alignment.Center
+                            modifier =
+                                Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f))
+                                    .clickable { onSave(rules) },
+                            contentAlignment = Alignment.Center,
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
                                     Icons.AutoMirrored.Filled.ArrowBack,
                                     contentDescription = null,
                                     modifier = Modifier.size(20.dp),
-                                    tint = MaterialTheme.colorScheme.primary
+                                    tint = MaterialTheme.colorScheme.primary,
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
                                     "Save & Back",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.primary
+                                    color = MaterialTheme.colorScheme.primary,
                                 )
                             }
                         }
@@ -183,14 +190,15 @@ internal fun PortRulesScreen(
                     onClick = { showAddDialog = true },
                     color = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(60.dp)
-                        .graphicsLayer {
-                            shadowElevation = 8.dp.toPx()
-                            shape = RoundedCornerShape(20.dp)
-                            clip = true
-                        },
+                    modifier =
+                        Modifier
+                            .align(Alignment.CenterEnd)
+                            .size(60.dp)
+                            .graphicsLayer {
+                                shadowElevation = 8.dp.toPx()
+                                shape = RoundedCornerShape(20.dp)
+                                clip = true
+                            },
                 ) {
                     Box(contentAlignment = Alignment.Center) {
                         Icon(
@@ -207,27 +215,30 @@ internal fun PortRulesScreen(
             PortRuleDialog(
                 initialRule = editingRule,
                 existingRules = rules,
-                onDismiss = { 
+                onDismiss = {
                     showAddDialog = false
                     editingRule = null
                 },
                 onConfirm = { newRule ->
-                    val filtered = rules.filter { e ->
-                        !(newRule.startPort <= e.startPort && newRule.endPort >= e.endPort &&
-                        (newRule.protocol == PortProtocol.BOTH || newRule.protocol == e.protocol))
-                    }
+                    val filtered =
+                        rules.filter { e ->
+                            !(
+                                newRule.startPort <= e.startPort && newRule.endPort >= e.endPort &&
+                                    (newRule.protocol == PortProtocol.BOTH || newRule.protocol == e.protocol)
+                            )
+                        }
                     if (editingRule != null) {
                         rules = filtered.map { if (it.id == editingRule!!.id) newRule.copy(id = it.id) else it }
                         // If the editing rule itself was filtered out (it covers itself), we must re-add it
                         if (rules.none { it.id == editingRule!!.id }) {
-                             rules = filtered + newRule.copy(id = editingRule!!.id)
+                            rules = filtered + newRule.copy(id = editingRule!!.id)
                         }
                     } else {
                         rules = filtered + newRule
                     }
                     showAddDialog = false
                     editingRule = null
-                }
+                },
             )
         }
     }
@@ -243,30 +254,38 @@ private fun PortRuleCard(
     ElevatedCard(
         onClick = onEdit,
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = if (rule.enabled) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-        )
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor =
+                    if (rule.enabled) {
+                        MaterialTheme.colorScheme.surfaceVariant
+                    } else {
+                        MaterialTheme.colorScheme.surfaceVariant.copy(
+                            alpha = 0.5f,
+                        )
+                    },
+            ),
     ) {
         Row(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 if (rule.label.isNotEmpty()) {
                     Text(
                         text = rule.label,
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
                     )
                 }
                 Text(
                     text = if (rule.startPort == rule.endPort) "Port: ${rule.startPort}" else "Range: ${rule.startPort} - ${rule.endPort}",
-                    style = MaterialTheme.typography.bodyMedium
+                    style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
                     text = "Protocol: ${rule.protocol}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
             }
             Switch(checked = rule.enabled, onCheckedChange = { onToggle() })
@@ -296,19 +315,20 @@ private fun PortRuleDialog(
             shape = RoundedCornerShape(28.dp),
             tonalElevation = 6.dp,
             color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
+            modifier =
+                Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
         ) {
             Column(
                 modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
                     text = if (initialRule == null) "New Port Rule" else "Edit Port Rule",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary
+                    color = MaterialTheme.colorScheme.primary,
                 )
 
                 OutlinedTextField(
@@ -318,7 +338,7 @@ private fun PortRuleDialog(
                     placeholder = { Text("e.g. My Server") },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 )
 
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -329,7 +349,7 @@ private fun PortRuleDialog(
                         placeholder = { Text("1") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
                         value = endPort,
@@ -338,14 +358,14 @@ private fun PortRuleDialog(
                         placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     )
                 }
-                
+
                 Text(
                     "Default: All ports (1-65535)",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -355,7 +375,7 @@ private fun PortRuleDialog(
                             SegmentedButton(
                                 selected = protocol == p,
                                 onClick = { protocol = p },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = PortProtocol.values().size)
+                                shape = SegmentedButtonDefaults.itemShape(index = index, count = PortProtocol.values().size),
                             ) {
                                 Text(p.name, fontSize = 10.sp)
                             }
@@ -364,50 +384,55 @@ private fun PortRuleDialog(
                 }
 
                 val currentStart = startPort.toIntOrNull() ?: 1
-                val currentEnd = if (endPort.isEmpty()) {
-                    if (startPort.isEmpty()) 65535 else currentStart
-                } else {
-                    endPort.toIntOrNull() ?: currentStart
-                }
+                val currentEnd =
+                    if (endPort.isEmpty()) {
+                        if (startPort.isEmpty()) 65535 else currentStart
+                    } else {
+                        endPort.toIntOrNull() ?: currentStart
+                    }
 
-                val isDuplicate = existingRules.any { 
-                    it.id != initialRule?.id && 
-                    it.startPort == currentStart && 
-                    it.endPort == currentEnd && 
-                    it.protocol == protocol 
-                }
+                val isDuplicate =
+                    existingRules.any {
+                        it.id != initialRule?.id &&
+                            it.startPort == currentStart &&
+                            it.endPort == currentEnd &&
+                            it.protocol == protocol
+                    }
 
-                val isRedundant = !isDuplicate && existingRules.any { e ->
-                    e.id != initialRule?.id &&
-                    e.enabled &&
-                    e.startPort <= currentStart && e.endPort >= currentEnd &&
-                    (e.protocol == PortProtocol.BOTH || e.protocol == protocol)
-                }
+                val isRedundant =
+                    !isDuplicate &&
+                        existingRules.any { e ->
+                            e.id != initialRule?.id &&
+                                e.enabled &&
+                                e.startPort <= currentStart && e.endPort >= currentEnd &&
+                                (e.protocol == PortProtocol.BOTH || e.protocol == protocol)
+                        }
 
                 if (isDuplicate) {
                     Text(
                         "This rule already exists",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
                     )
                 } else if (isRedundant) {
                     Text(
                         "This rule is redundant (covered by another rule)",
                         style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error
+                        color = MaterialTheme.colorScheme.error,
                     )
                 } else {
-                    val rulesToRemove = existingRules.filter { e ->
-                        e.id != initialRule?.id &&
-                        currentStart <= e.startPort && currentEnd >= e.endPort &&
-                        (protocol == PortProtocol.BOTH || protocol == e.protocol)
-                    }
+                    val rulesToRemove =
+                        existingRules.filter { e ->
+                            e.id != initialRule?.id &&
+                                currentStart <= e.startPort && currentEnd >= e.endPort &&
+                                (protocol == PortProtocol.BOTH || protocol == e.protocol)
+                        }
 
                     if (rulesToRemove.isNotEmpty()) {
                         Text(
                             "${rulesToRemove.size} redundant rule(s) will be removed",
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     }
                 }
@@ -417,7 +442,7 @@ private fun PortRuleDialog(
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     TextButton(onClick = onDismiss) {
                         Text("Cancel")
@@ -426,21 +451,24 @@ private fun PortRuleDialog(
                     Button(
                         onClick = {
                             if (currentStart in 1..65535 && currentEnd in 1..65535) {
-                                onConfirm(PortRule(
-                                    startPort = currentStart, 
-                                    endPort = currentEnd, 
-                                    protocol = protocol, 
-                                    label = label,
-                                    enabled = initialRule?.enabled ?: true
-                                ))
+                                onConfirm(
+                                    PortRule(
+                                        startPort = currentStart,
+                                        endPort = currentEnd,
+                                        protocol = protocol,
+                                        label = label,
+                                        enabled = initialRule?.enabled ?: true,
+                                    ),
+                                )
                             }
                         },
                         enabled = !isDuplicate && !isRedundant,
                         shape = RoundedCornerShape(12.dp),
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary
-                        )
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                            ),
                     ) {
                         Text(if (initialRule == null) "Add Rule" else "Save Changes")
                     }

@@ -24,7 +24,10 @@ internal data class AppEntry(
 internal enum class PortProtocol { TCP, UDP, BOTH }
 
 internal data class PortRule(
-    val id: String = java.util.UUID.randomUUID().toString(),
+    val id: String =
+        java.util.UUID
+            .randomUUID()
+            .toString(),
     val startPort: Int,
     val endPort: Int = startPort,
     val protocol: PortProtocol = PortProtocol.BOTH,

@@ -88,7 +88,6 @@ fun FaqScreen(
                 },
             )
 
-
             FaqSection(
                 title = stringResource(R.string.ports_help_title),
                 content = {

@@ -147,7 +147,6 @@ internal object TargetsCache {
                 ?.filter { it.isNotEmpty() && !it.startsWith("#") }
                 ?.toSet() ?: emptySet()
 
-
         // With `--user all`, multi-profile packages report comma-separated
         // UIDs: `package:com.android.chrome uid:10187,1010187`. Each UID
         // becomes its own entry in the reverse map so observer lookups
@@ -167,11 +166,12 @@ internal object TargetsCache {
                     val start = ruleParts[0].toIntOrNull() ?: 0
                     val end = ruleParts[1].toIntOrNull() ?: 0
                     val protoIdx = ruleParts[2].toIntOrNull() ?: 2
-                    val proto = when (protoIdx) {
-                        0 -> PortProtocol.TCP
-                        1 -> PortProtocol.UDP
-                        else -> PortProtocol.BOTH
-                    }
+                    val proto =
+                        when (protoIdx) {
+                            0 -> PortProtocol.TCP
+                            1 -> PortProtocol.UDP
+                            else -> PortProtocol.BOTH
+                        }
                     rulesList.add(PortRule(startPort = start, endPort = end, protocol = proto))
                 }
             }

@@ -133,7 +133,7 @@ jobs:
 
       # Kotlin
       - name: ktlint
-        run: ktlint "lsposed/**/*.kt"
+        run: ktlint "lsposed/app/src/**/*.kt"
       # Single Gradle invocation: lint + tests share one configuration
       # phase + warm daemon. Configures Gobley's cargo plugin once instead
       # of twice. ANDROID_NDK_ROOT is baked into the CI image

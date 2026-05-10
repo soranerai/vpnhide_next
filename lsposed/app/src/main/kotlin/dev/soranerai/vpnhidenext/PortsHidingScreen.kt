@@ -63,33 +63,43 @@ internal fun PortsHidingScreen(
     // Stable ID list for the display to prevent shuffling on toggle
     var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
     val currentPackageNames = remember(apps) { apps.map { it.packageName }.toSet() }
-    
+
     // Update the sort order only on filters/search/refresh OR initial load
     LaunchedEffect(currentPackageNames.isEmpty(), searchQuery, showSystem, showRussianOnly, showOnlySelected, sortOrder, refreshTrigger) {
         if (apps.isEmpty()) return@LaunchedEffect
-        
+
         val q = searchQuery.trim().lowercase()
-        sortedIds = apps
-            .filter { app ->
-                (showSystem || !app.isSystem || app.portHiding) &&
-                    (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
-                    (!showOnlySelected || app.portHiding) &&
-                    (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
-            }.let { list ->
-                when (sortOrder) {
-                    AppSortOrder.NAME_ASC -> list.sortedBy { it.label.lowercase() }
-                    AppSortOrder.NAME_DESC -> list.sortedByDescending { it.label.lowercase() }
-                    AppSortOrder.SELECTED_FIRST -> list.sortedWith(
-                        compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label.lowercase() }
-                    )
-                }
-            }.map { it.packageName }
+        sortedIds =
+            apps
+                .filter { app ->
+                    (showSystem || !app.isSystem || app.portHiding) &&
+                        (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
+                        (!showOnlySelected || app.portHiding) &&
+                        (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+                }.let { list ->
+                    when (sortOrder) {
+                        AppSortOrder.NAME_ASC -> {
+                            list.sortedBy { it.label.lowercase() }
+                        }
+
+                        AppSortOrder.NAME_DESC -> {
+                            list.sortedByDescending { it.label.lowercase() }
+                        }
+
+                        AppSortOrder.SELECTED_FIRST -> {
+                            list.sortedWith(
+                                compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label.lowercase() },
+                            )
+                        }
+                    }
+                }.map { it.packageName }
     }
 
     // Map current data to the stable order
-    val displayApps = remember(apps, sortedIds) {
-        sortedIds.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
-    }
+    val displayApps =
+        remember(apps, sortedIds) {
+            sortedIds.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+        }
 
     Box(modifier = modifier.fillMaxSize()) {
         if (loading) {
@@ -109,7 +119,7 @@ internal fun PortsHidingScreen(
                         refreshing = false
                     }
                 },
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
                     LazyColumn(
@@ -137,32 +147,38 @@ internal fun PortsHidingScreen(
                     val alpha by animateFloatAsState(if (isDragged) 1f else 0f, label = "scrollbar_alpha")
 
                     VerticalScrollbar(
-                        modifier = Modifier
-                            .align(Alignment.CenterEnd)
-                            .padding(end = 4.dp)
-                            .fillMaxHeight()
-                            .graphicsLayer { this.alpha = alpha },
+                        modifier =
+                            Modifier
+                                .align(Alignment.CenterEnd)
+                                .padding(end = 4.dp)
+                                .fillMaxHeight()
+                                .graphicsLayer { this.alpha = alpha },
                         adapter = rememberScrollbarAdapter(listState),
                         style = defaultMaterialScrollbarStyle(),
                         indicator = { index, _ ->
                             if (isDragged) {
                                 val itemIndex = index.toInt()
-                                val label = displayApps.getOrNull(itemIndex)?.label?.take(1)?.uppercase() ?: ""
+                                val label =
+                                    displayApps
+                                        .getOrNull(itemIndex)
+                                        ?.label
+                                        ?.take(1)
+                                        ?.uppercase() ?: ""
                                 Surface(
                                     shape = CircleShape,
                                     color = MaterialTheme.colorScheme.primary,
                                     contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    tonalElevation = 8.dp
+                                    tonalElevation = 8.dp,
                                 ) {
                                     Box(
                                         modifier = Modifier.size(48.dp),
-                                        contentAlignment = Alignment.Center
+                                        contentAlignment = Alignment.Center,
                                     ) {
                                         Text(label, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                                     }
                                 }
                             }
-                        }
+                        },
                     )
                 }
             }

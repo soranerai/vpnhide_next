@@ -269,7 +269,6 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
     suExec("mkdir -p /data/adb/vpnhide_lsposed")
     addIfMissing(LSPOSED_TARGETS, null)
 
-
     // Resolve UIDs so hooks pick us up immediately (kmod + lsposed support live reload).
     // `--user all` catches the case where vpnhide is installed in a work profile too —
     // each UID gets added to targets so both instances are covered. `tr ',' '\n'`
@@ -353,9 +352,7 @@ internal fun buildKmodApplyCommand(
         "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
 }
 
-internal fun buildKmodPortRulesApplyCommand(
-    rules: Map<String, List<PortRule>>
-): String {
+internal fun buildKmodPortRulesApplyCommand(rules: Map<String, List<PortRule>>): String {
     if (rules.isEmpty()) {
         return "[ -c $DEV_NODE ] && $KMOD_CTL port_rules; true"
     }
@@ -368,16 +365,19 @@ internal fun buildKmodPortRulesApplyCommand(
         append("ARGS=\"\"; ")
         rules.forEach { (pkg, portRules) ->
             val pkgEsc = pkg.replace(".", "\\.")
-            append("U=\$(echo \"\$ALL_PKGS\" | awk -v p=\"^package:$pkgEsc[ :]\" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); ")
+            append(
+                "U=\$(echo \"\$ALL_PKGS\" | awk -v p=\"^package:$pkgEsc[ :]\" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); ",
+            )
             append("if [ -n \"\$U\" ]; then ")
             append("for UID_VAL in \$U; do ")
             append("ARGS=\"\$ARGS \$UID_VAL ${portRules.size}")
             portRules.forEach { rule ->
-                val proto = when (rule.protocol) {
-                    PortProtocol.TCP -> 0
-                    PortProtocol.UDP -> 1
-                    PortProtocol.BOTH -> 2
-                }
+                val proto =
+                    when (rule.protocol) {
+                        PortProtocol.TCP -> 0
+                        PortProtocol.UDP -> 1
+                        PortProtocol.BOTH -> 2
+                    }
                 append(" ${rule.startPort} ${rule.endPort} $proto")
             }
             append("\"; ")
