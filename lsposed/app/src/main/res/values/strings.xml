@@ -17,8 +17,6 @@
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>
-    <string name="ports_module_not_installed_title">Ports module not installed</string>
-    <string name="ports_module_not_installed_body">Install vpnhide-ports.zip via KernelSU-Next or Magisk to block selected apps from reaching localhost ports. This hides locally-bound VPN/proxy daemons from apps that probe them via connect(127.0.0.1, PORT).</string>
     <string name="ports_help_title">How port hiding works</string>
     <string name="ports_hint_role">Tap P to mark an app as a proxy-hide observer. Observer apps receive ECONNREFUSED when they try to connect to any port on 127.0.0.1 or ::1 — indistinguishable from a real closed port.</string>
     <string name="ports_hint_safe">Safe for banks, госуслуги, marketplaces, non-browser apps. Chromium-based browsers use localhost for dev/PWA features — avoid adding them as observers.</string>
@@ -101,7 +99,6 @@
     <string name="dashboard_kmod">Kernel module</string>
     <string name="dashboard_zygisk">VPNHide Next Zygisk module</string>
     <string name="dashboard_lsposed_module">VPNHide Next LSPosed hook</string>
-    <string name="dashboard_ports">Ports hiding module</string>
     <string name="dashboard_not_installed">Not installed</string>
     <string name="dashboard_installed_inactive">Installed, inactive</string>
     <string name="dashboard_installed_restart_app">Installed, restart VPNHide Next to activate</string>
@@ -148,7 +145,6 @@
     <string name="dashboard_issue_lsposed_extra_scope">VPNHide Next should stay scoped only to System Framework in LSPosed/Vector. Remove these apps from the VPNHide Next scope: %1$s. Use Protection → Tun in VPNHide Next for filtering instead.</string>
     <string name="dashboard_issue_lsposed_field_rename">AOSP field rename detected on Android SDK %2$s: %1$s. Java-layer protection is degraded for the affected hooks (they were skipped at install time to avoid logcat-spam from per-call NoSuchFieldError). Please file an issue at github.com/okhsunrog/vpnhide/issues with this list so the hooks can be updated for your Android version.</string>
     <string name="dashboard_issue_no_targets">No target apps configured. Go to Protection → Tun to select apps.</string>
-    <string name="dashboard_issue_ports_no_observers">Ports hiding module is installed but no observers are configured. Go to Protection → Ports to pick apps.</string>
     <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch: running %1$s, installed %2$s. Reboot the device to apply the update.</string>
     <string name="dashboard_issue_update_kmod">Kernel module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
     <string name="dashboard_issue_update_zygisk">Zygisk version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
@@ -156,9 +152,6 @@
     <string name="dashboard_issue_update_app_for_zygisk">Zygisk version %1$s is newer than app version %2$s. Update the VPNHide Next app.</string>
     <string name="dashboard_issue_kmod_version_mismatch">Kernel module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_issue_zygisk_version_mismatch">Zygisk version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
-    <string name="dashboard_issue_update_ports">Ports module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
-    <string name="dashboard_issue_update_app_for_ports">Ports module version %1$s is newer than app version %2$s. Update the VPNHide Next app.</string>
-    <string name="dashboard_issue_ports_version_mismatch">Ports module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_running_version">Running module version: %s</string>
 
     <!-- kmod variant / load diagnostics -->

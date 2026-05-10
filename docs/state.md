@@ -27,8 +27,10 @@ persistent dirs of section 2.
 ### `/data/adb/modules/vpnhide_kmod/`
 - `module.prop` — module metadata + stamped `gkiVariant=` and `version=`. Read by app dashboard (`DashboardData.kt:382` `parseModuleProp`).
 - `post-fs-data.sh` — runs at boot, attempts `insmod vpnhide_kmod.ko`, writes diagnostics into the persistent dir.
-- `service.sh` — runs after boot, reads `targets.txt`, resolves UIDs, writes `/proc/vpnhide_targets`.
+- `service.sh` — runs after boot, reads `targets.txt` and `observers.txt`, resolves UIDs, writes `/proc/vpnhide_targets` and calls `vpnhide_ports_apply.sh`.
+- `vpnhide_ports_apply.sh` — resolves observers → UIDs, applies them to kernel via `vpnhide-ctl port_targets`. Also cleans up legacy iptables chains.
 - `vpnhide_kmod.ko` — the kernel module binary itself.
+- `vpnhide-ctl` — control utility for the kernel module.
 
 ### `/data/adb/modules/vpnhide_zygisk/`
 - `module.prop` — module metadata.
@@ -38,12 +40,6 @@ persistent dirs of section 2.
 - `targets.txt` — **boot-time copy** of the canonical persistent file (`/data/adb/vpnhide_zygisk/targets.txt`). Loader reads via fd, not path. (`zygisk/module/service.sh`, `zygisk/src/lib.rs`)
 - `debug_logging` — `"0"` or `"1"`. **Boot-time copy** of `/data/adb/vpnhide_zygisk/debug_logging` (canonical). The app also writes both paths directly via su on every toggle, so the module-dir mirror stays current between reinstall and reboot. Read by zygisk module on init via the module dir fd.
 
-### `/data/adb/modules/vpnhide_ports/`
-- `module.prop`.
-- `customize.sh` — seeds persistent dir on install.
-- `service.sh` — calls `vpnhide_ports_apply.sh` after netd is up.
-- `vpnhide_ports_apply.sh` — main runtime script. Resolves observers → UIDs, builds & applies iptables rules. Also re-invoked by the app via su when the user taps Save.
-- `uninstall.sh` — flushes `vpnhide_out` / `vpnhide_out6` chains.
 
 ---
 
@@ -58,6 +54,7 @@ only by factory reset.
 | File | Format | Writer | Reader | Lifetime |
 |---|---|---|---|---|
 | `targets.txt` | one pkg per line, `#` comments | app via su (Save in Protection); seeded by `kmod/module/customize.sh` | `kmod/module/service.sh` (boot, resolves to UIDs) | persistent |
+| `direct_targets.txt` | one pkg per line | app via su | `kmod/module/service.sh` | persistent |
 | `load_status` | `key=value` per line: `timestamp`, `boot_id`, `uname_r`, `gki_variant`, `kmod_version`, `root_manager`, `kprobes`, `kretprobes`, `insmod_exit`, `loaded`, `insmod_stderr` | `kmod/module/post-fs-data.sh` | app dashboard (`KMOD_LOAD_STATUS_FILE` constant in `ShellUtils.kt`); `readKmodLoadStatus` in `DashboardData.kt:482` | overwritten each boot |
 | `load_dmesg` | filtered `dmesg` excerpt (text) | `post-fs-data.sh` | dashboard (verbose error display) | overwritten each boot |
 
@@ -74,7 +71,7 @@ was written this boot" vs. "stale from last boot".
 ### `/data/adb/vpnhide_ports/`
 | File | Format | Writer | Reader | Lifetime |
 |---|---|---|---|---|
-| `observers.txt` | one pkg per line | app via su; seeded by `portshide/module/customize.sh` | `vpnhide_ports_apply.sh` (boot + on Save) | persistent |
+| `observers.txt` | one pkg per line | app via su; seeded by `kmod/module/customize.sh` | `vpnhide_ports_apply.sh` (boot + on Save) | persistent |
 
 ### `/data/adb/vpnhide_lsposed/`
 | File | Format | Writer | Reader | Lifetime |
@@ -230,21 +227,12 @@ Scratch space for short-lived files. Currently used for:
 ## 6. iptables — `vpnhide_out` and `vpnhide_out6`
 
 Two named chains in the `filter` / `OUTPUT` path, IPv4 and IPv6.
-Defined in `portshide/module/vpnhide_ports_apply.sh:21-22`.
+**Legacy mechanism** used by the old standalone `portshide` module.
 
-- **Created/populated** by `vpnhide_ports_apply.sh` via `iptables-restore`
-  / `ip6tables-restore` (`--noflush` so other chains aren't touched).
-- **Triggered**: at boot (`portshide/module/service.sh`), and on every
-  Save in the Ports tab of the app (re-runs the apply script via su).
-- **Removed** on module uninstall (`portshide/module/uninstall.sh`).
-- **Live in kernel memory only** — no persistence across reboot;
-  must be re-applied each boot.
-- Per-UID rules: target observer apps' UIDs get REJECT for connections
-  to `127.0.0.0/8` and `::1`.
+- **Cleanup**: Handled by `vpnhide_ports_apply.sh` in the new `kmod` module to ensure no dangling rules survive migration.
+- **Current mechanism**: Port hiding is now handled by the kernel module hooks (`security_socket_connect`), which is invisible to `iptables`.
 
-The dashboard's "ports active" check is `iptables -L vpnhide_out -n`
-in `DashboardData.kt:690` — chain existence implies the apply script
-has run successfully this boot.
+The dashboard's "ports active" check (if it still uses `iptables -L`) should be updated to check the kernel module status instead.
 
 ---
 
@@ -274,18 +262,16 @@ post-fs-data.sh phase (root, before zygote):
 
 service.sh phase (root, after boot_completed-ish):
   kmod/module/service.sh
-    → resolve /data/adb/vpnhide_kmod/targets.txt → UIDs
-    → write /proc/vpnhide_targets
+    → resolve /data/adb/vpnhide_kmod/targets.txt → UIDs → `vpnhide-ctl targets`
+    → resolve /data/adb/vpnhide_kmod/direct_targets.txt → UIDs → `vpnhide-ctl direct`
+    → call kmod/module/vpnhide_ports_apply.sh
+      → resolve /data/adb/vpnhide_ports/observers.txt → UIDs → `vpnhide-ctl port_targets`
+      → clean up legacy iptables rules
     → write /data/system/vpnhide_uids.txt
   zygisk/module/service.sh
     → cp /data/adb/vpnhide_zygisk/targets.txt → /data/adb/modules/vpnhide_zygisk/targets.txt
     → resolve /data/adb/vpnhide_lsposed/targets.txt → UIDs
     → append/merge into /data/system/vpnhide_uids.txt
-  portshide/module/service.sh
-    → wait for netd
-    → /data/adb/modules/vpnhide_ports/vpnhide_ports_apply.sh
-      → resolve /data/adb/vpnhide_ports/observers.txt → UIDs
-      → iptables-restore --noflush  (creates vpnhide_out / vpnhide_out6)
 
 system_server start (LSPosed framework injects):
   HookEntry.handleLoadPackage
@@ -307,7 +293,7 @@ zygote forks an app (NeoZygisk):
 
 | Lifetime class | Examples |
 |---|---|
-| **In-kernel only (per-boot, volatile)** | `/proc/vpnhide_targets`, `/proc/vpnhide_debug`, iptables `vpnhide_out{,6}` chains |
+| **In-kernel only (per-boot, volatile)** | `/proc/vpnhide_targets` (legacy), `/proc/vpnhide_debug`, kernel-internal UID lists (Normal/Direct/Port) |
 | **Per-boot** (overwritten each boot by service scripts) | `/data/adb/vpnhide_kmod/load_status`, `/data/adb/vpnhide_kmod/load_dmesg`, `/data/system/vpnhide_uids.txt`, `/data/system/vpnhide_hook_active` |
 | **Per-app-launch** (overwritten on each fork) | `<app-filesDir>/vpnhide_zygisk_active` |
 | **Persistent — survives reboot, module reinstall, app reinstall** | `/data/adb/vpnhide_*/targets.txt`, `/data/adb/vpnhide_ports/observers.txt`, `/data/system/vpnhide_hidden_pkgs.txt`, `/data/system/vpnhide_observer_uids.txt`, `/data/system/vpnhide_debug_logging` |

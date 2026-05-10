@@ -6,11 +6,13 @@
 KMOD_TARGETS="/data/adb/vpnhide_kmod/targets.txt"
 KMOD_DIRECT_TARGETS="/data/adb/vpnhide_kmod/direct_targets.txt"
 LSPOSED_TARGETS="/data/adb/vpnhide_lsposed/targets.txt"
+PORT_TARGETS="/data/adb/vpnhide_ports/observers.txt"
 SS_UIDS_FILE="/data/system/vpnhide_uids.txt"
 
 # Get the directory where the script is located
 MODDIR="${0%/*}"
 CTL="$MODDIR/vpnhide-ctl"
+APPLY_PORTS="$MODDIR/vpnhide_ports_apply.sh"
 DEV_NODE="/dev/vpnhide_ctrl"
 
 log -t vpnhide "service.sh starting: MODDIR=$MODDIR"
@@ -117,6 +119,12 @@ if [ -f "$KMOD_DIRECT_TARGETS" ]; then
     else
         log -t vpnhide "kmod-direct: no UIDs resolved"
     fi
+fi
+
+# Resolve port targets (localhost blocker)
+if [ -f "$PORT_TARGETS" ] && [ -f "$APPLY_PORTS" ]; then
+    log -t vpnhide "ports: applying observers from $PORT_TARGETS"
+    sh "$APPLY_PORTS"
 fi
 
 # Background monitoring: find active physical interface and tell the kernel

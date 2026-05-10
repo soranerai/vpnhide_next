@@ -398,5 +398,6 @@ private fun buildPortSaveCommand(
 ): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(PORTS_OBSERVERS_FILE, header, pkgs)
+    parts += "sh $PORTS_APPLY_SCRIPT"
     return parts.joinToString(" ; ")
 }

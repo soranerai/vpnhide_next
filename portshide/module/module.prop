@@ -1,6 +1,0 @@
-id=vpnhide_ports
-name=VPNHide Next (Ports)
-version=v1.0.0
-versionCode=10000
-author=soranerai
-description=Blocks selected apps from reaching localhost ports — hides locally-bound VPN/proxy from probe attempts via netfilter. Manage observers via VPNHide Next app.

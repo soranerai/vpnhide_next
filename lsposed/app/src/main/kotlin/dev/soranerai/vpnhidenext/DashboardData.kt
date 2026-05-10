@@ -104,7 +104,7 @@ sealed interface JavaResult {
     data object HooksInactive : JavaResult
 }
 
-internal enum class NativeModuleKind { Kmod, Zygisk, Ports }
+internal enum class NativeModuleKind { Kmod, Zygisk }
 
 internal data class ModuleMismatch(
     val kind: NativeModuleKind,
@@ -169,7 +169,6 @@ internal data class DashboardState(
     val kmod: ModuleState,
     val zygisk: ModuleState,
     val lsposed: LsposedState,
-    val ports: ModuleState,
     val nativeInstallRecommendation: NativeInstallRecommendation?,
     val kmodLoadStatus: KmodLoadStatus?,
     val protection: ProtectionCheck,
@@ -360,13 +359,11 @@ private fun collectDashboardSnapshot(cacheDir: File): RawDashboardSnapshot {
         """
         echo "kmod_prop=${'$'}(cat $KMOD_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
         echo "zygisk_prop=${'$'}(cat $ZYGISK_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
-        echo "ports_prop=${'$'}(cat $PORTS_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
         echo "lsmod=${'$'}(lsmod | grep -q vpnhide_kmod && echo 1 || echo 0)"
         echo "kmod_targets=${'$'}(cat $KMOD_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "zygisk_targets=${'$'}(cat $ZYGISK_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "lsposed_targets=${'$'}(cat $LSPOSED_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "ports_targets=${'$'}(cat $PORTS_OBSERVERS_FILE 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
-        echo "ports_active=${'$'}(iptables -L vpnhide_out -n 2>/dev/null >/dev/null && echo 1 || echo 0)"
         echo "uname=${'$'}(uname -r)"
         echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id)"
         echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
@@ -499,7 +496,6 @@ internal suspend fun loadDashboardState(
                     when (kind) {
                         NativeModuleKind.Kmod -> R.string.dashboard_issue_kmod_version_mismatch
                         NativeModuleKind.Zygisk -> R.string.dashboard_issue_zygisk_version_mismatch
-                        NativeModuleKind.Ports -> R.string.dashboard_issue_ports_version_mismatch
                     },
                     moduleVersion,
                     appVersion,
@@ -511,7 +507,6 @@ internal suspend fun loadDashboardState(
                     when (kind) {
                         NativeModuleKind.Kmod -> R.string.dashboard_issue_update_kmod
                         NativeModuleKind.Zygisk -> R.string.dashboard_issue_update_zygisk
-                        NativeModuleKind.Ports -> R.string.dashboard_issue_update_ports
                     },
                     moduleVersion,
                     appVersion,
@@ -523,7 +518,6 @@ internal suspend fun loadDashboardState(
                     when (kind) {
                         NativeModuleKind.Kmod -> R.string.dashboard_issue_update_app_for_kmod
                         NativeModuleKind.Zygisk -> R.string.dashboard_issue_update_app_for_zygisk
-                        NativeModuleKind.Ports -> R.string.dashboard_issue_update_app_for_ports
                     },
                     moduleVersion,
                     appVersion,
@@ -708,18 +702,8 @@ internal suspend fun loadDashboardState(
         }
     VpnHideLog.i(TAG, "zygisk: $zygisk (heartbeatBootId=$zygiskBootId currentBootId=${currentBootId.trim()})")
 
-    // ports (iptables-based loopback blocker)
-    val portsProp = parseModuleProp(snapshot.decodeBase64("ports_prop"))
-    val portsObserverCount =
-        if (portsProp.installed) countTargets(snapshot.get("ports_targets")) else 0
-    val portsActive = portsProp.installed && snapshot.get("ports_active") == "1"
-    val ports: ModuleState =
-        if (portsProp.installed) {
-            ModuleState.Installed(portsProp.version, portsActive, portsObserverCount)
-        } else {
-            ModuleState.NotInstalled
-        }
-    VpnHideLog.i(TAG, "ports: $ports")
+    val portsObserverCount = countTargets(snapshot.get("ports_targets"))
+    // Recommendation based purely on the kernel
 
     // Recommendation based purely on the kernel
     val kernelRaw = snapshot.get("uname")
@@ -957,7 +941,6 @@ internal suspend fun loadDashboardState(
             listOf(
                 kmod to NativeModuleKind.Kmod,
                 zygisk to NativeModuleKind.Zygisk,
-                ports to NativeModuleKind.Ports,
             ),
             appVersion,
         )
@@ -967,9 +950,6 @@ internal suspend fun loadDashboardState(
     val totalTargets = lsposedTargetCount + kmodTargetCount + zygiskTargetCount
     if (totalTargets == 0) {
         err(res.getString(R.string.dashboard_issue_no_targets))
-    }
-    if (ports is ModuleState.Installed && ports.targetCount == 0) {
-        warn(res.getString(R.string.dashboard_issue_ports_no_observers))
     }
     if (lsposed is LsposedState.Active) {
         val runningVersion = lsposed.version
@@ -1183,7 +1163,6 @@ internal suspend fun loadDashboardState(
         kmod = kmod,
         zygisk = zygisk,
         lsposed = lsposed,
-        ports = ports,
         nativeInstallRecommendation = nativeInstallRecommendation,
         kmodLoadStatus = kmodLoadStatus,
         protection = protection,

@@ -8,12 +8,9 @@ tooling that follows the AGENTS-convention picks it up automatically.
 
 ## Project layout
 
-Monorepo for hiding VPN interfaces from selected Android apps. Three runtime components plus tooling:
-
-- `kmod/` — kernel module, kretprobes-based, per-GKI-generation builds
+- `kmod/` — kernel module (hiding interfaces + ports), kretprobes-based
 - `zygisk/` — Rust Zygisk module, inline `libc` hooks via shadowhook
 - `lsposed/` — LSPosed module + Compose target-picker app
-- `portshide/` — localhost port blocker (shell + iptables)
 
 ## Read before touching code
 

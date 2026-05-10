@@ -31,7 +31,6 @@ internal data class TargetsSnapshot(
     val kmodModuleInstalled: Boolean,
     val kmodActive: Boolean,
     val zygiskModuleInstalled: Boolean,
-    val portsModuleInstalled: Boolean,
     val kmodTargets: Set<String>,
     val kmodDirectTargets: Set<String>,
     val zygiskTargets: Set<String>,
@@ -96,8 +95,6 @@ internal object TargetsCache {
         lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
         echo "$SENTINEL ZYGISK_MODULE_DIR"
         [ -d $ZYGISK_MODULE_DIR ] && echo 1 || echo 0
-        echo "$SENTINEL PORTS_MODULE_PROP"
-        cat $PORTS_MODULE_DIR/module.prop 2>/dev/null || true
         echo "$SENTINEL KMOD_TARGETS"
         cat $KMOD_TARGETS 2>/dev/null || true
         echo "$SENTINEL KMOD_DIRECT_TARGETS"
@@ -160,7 +157,6 @@ internal object TargetsCache {
                 ?.filter { it.isNotEmpty() && !it.startsWith("#") }
                 ?.toSet() ?: emptySet()
 
-        val portsInstalled = sections["PORTS_MODULE_PROP"]?.isNotBlank() == true
         val observerUids = nonEmptyLines(sections["OBSERVER_UIDS"]).mapNotNull { it.toIntOrNull() }.toSet()
 
         // With `--user all`, multi-profile packages report comma-separated
@@ -181,7 +177,6 @@ internal object TargetsCache {
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",
             kmodActive = sections["LSMOD"]?.trim() == "1",
             zygiskModuleInstalled = sections["ZYGISK_MODULE_DIR"]?.trim() == "1",
-            portsModuleInstalled = portsInstalled,
             kmodTargets = nonEmptyLines(sections["KMOD_TARGETS"]),
             kmodDirectTargets = nonEmptyLines(sections["KMOD_DIRECT_TARGETS"]),
             zygiskTargets = nonEmptyLines(sections["ZYGISK_TARGETS"]),

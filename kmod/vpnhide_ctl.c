@@ -19,9 +19,10 @@ struct vpnhide_ioctl_data {
 #define VH_SET_DIRECT_TARGETS _IOW(VH_IOCTL_MAGIC, 0x02, struct vpnhide_ioctl_data)
 #define VH_SET_DEBUG          _IOW(VH_IOCTL_MAGIC, 0x03, int)
 #define VH_SET_PHYS_IFINDEX   _IOW(VH_IOCTL_MAGIC, 0x04, int)
+#define VH_SET_PORT_TARGETS   _IOW(VH_IOCTL_MAGIC, 0x05, struct vpnhide_ioctl_data)
 
 void print_usage(const char *prog) {
-    fprintf(stderr, "Usage: %s <targets|direct|debug|phys> [args...]\n", prog);
+    fprintf(stderr, "Usage: %s <targets|direct|port_targets|debug|phys> [args...]\n", prog);
 }
 
 int main(int argc, char **argv) {
@@ -41,8 +42,7 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (strcmp(argv[1], "targets") == 0 || strcmp(argv[1], "direct") == 0) {
-        int is_direct = (strcmp(argv[1], "direct") == 0);
+    if (strcmp(argv[1], "targets") == 0 || strcmp(argv[1], "direct") == 0 || strcmp(argv[1], "port_targets") == 0) {
         data.count = argc - 2;
         if (data.count > 512) data.count = 512;
         
@@ -50,7 +50,11 @@ int main(int argc, char **argv) {
             data.uids[i] = (unsigned int)atoi(argv[i + 2]);
         }
         
-        unsigned long cmd = is_direct ? VH_SET_DIRECT_TARGETS : VH_SET_TARGETS;
+        unsigned long cmd;
+        if (strcmp(argv[1], "targets") == 0) cmd = VH_SET_TARGETS;
+        else if (strcmp(argv[1], "direct") == 0) cmd = VH_SET_DIRECT_TARGETS;
+        else cmd = VH_SET_PORT_TARGETS;
+
         if (ioctl(fd, cmd, &data) < 0) {
             perror("ioctl");
             return 1;

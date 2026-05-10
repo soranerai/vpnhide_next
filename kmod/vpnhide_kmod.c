@@ -46,6 +46,10 @@
 #include <net/ip6_fib.h>
 #include <net/ip6_route.h>
 #include <net/route.h>
+#include <linux/socket.h>
+#include <linux/in.h>
+#include <linux/in6.h>
+#include <net/ipv6.h>
 
 #include "generated/iface_lists.h"
 
@@ -66,6 +70,8 @@ struct vpnhide_ioctl_data {
 #define VH_SET_TARGETS _IOW(VH_IOCTL_MAGIC, 0x01, struct vpnhide_ioctl_data)
 #define VH_SET_DIRECT_TARGETS \
 	_IOW(VH_IOCTL_MAGIC, 0x02, struct vpnhide_ioctl_data)
+#define VH_SET_PORT_TARGETS \
+	_IOW(VH_IOCTL_MAGIC, 0x05, struct vpnhide_ioctl_data)
 #define VH_SET_DEBUG _IOW(VH_IOCTL_MAGIC, 0x03, int)
 #define VH_SET_PHYS_IFINDEX _IOW(VH_IOCTL_MAGIC, 0x04, int)
 
@@ -119,6 +125,9 @@ static DEFINE_SPINLOCK(targets_update_lock);
 static struct vpnhide_targets __rcu *global_direct_targets;
 static DEFINE_SPINLOCK(direct_targets_update_lock);
 
+static struct vpnhide_targets __rcu *global_port_targets;
+static DEFINE_SPINLOCK(port_targets_update_lock);
+
 static bool is_target_uid(void)
 {
 	uid_t uid = from_kuid(&init_user_ns, current_uid());
@@ -149,6 +158,27 @@ static bool is_direct_target_uid(void)
 
 	rcu_read_lock();
 	t = rcu_dereference(global_direct_targets);
+	if (t) {
+		for (i = 0; i < t->count; i++) {
+			if (t->uids[i] == uid) {
+				found = true;
+				break;
+			}
+		}
+	}
+	rcu_read_unlock();
+	return found;
+}
+
+static bool is_port_target_uid(void)
+{
+	uid_t uid = from_kuid(&init_user_ns, current_uid());
+	struct vpnhide_targets *t;
+	bool found = false;
+	int i;
+
+	rcu_read_lock();
+	t = rcu_dereference(global_port_targets);
 	if (t) {
 		for (i = 0; i < t->count; i++) {
 			if (t->uids[i] == uid) {
@@ -1318,6 +1348,11 @@ static int update_targets(uid_t *uids, int count, bool direct)
 	struct vpnhide_targets __rcu **global_ptr =
 		direct ? &global_direct_targets : &global_targets;
 
+	if (direct == 2) {
+		lock = &port_targets_update_lock;
+		global_ptr = &global_port_targets;
+	}
+
 	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
 	if (!new_t)
 		return -ENOMEM;
@@ -1337,7 +1372,8 @@ static int update_targets(uid_t *uids, int count, bool direct)
 	}
 
 	vpnhide_dbg("%s targets updated: %d UIDs\n",
-		    direct ? "Direct" : "Normal", count);
+		    (direct == 1) ? "Direct" : (direct == 2) ? "Port" : "Normal",
+		    count);
 	return 0;
 }
 
@@ -1353,6 +1389,7 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case VH_SET_TARGETS:
 	case VH_SET_DIRECT_TARGETS:
+	case VH_SET_PORT_TARGETS:
 		kdata = kmalloc(sizeof(*kdata), GFP_KERNEL);
 		if (!kdata)
 			return -ENOMEM;
@@ -1368,9 +1405,11 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		}
 
 		if (cmd == VH_SET_TARGETS)
-			ret = update_targets(kdata->uids, kdata->count, false);
+			ret = update_targets(kdata->uids, kdata->count, 0);
+		else if (cmd == VH_SET_DIRECT_TARGETS)
+			ret = update_targets(kdata->uids, kdata->count, 1);
 		else
-			ret = update_targets(kdata->uids, kdata->count, true);
+			ret = update_targets(kdata->uids, kdata->count, 2);
 
 		kfree(kdata);
 		break;
@@ -1419,6 +1458,73 @@ static struct miscdevice vpnhide_misc = {
 	.name = "vpnhide_ctrl",
 	.fops = &vpnhide_fops,
 	.mode = 0660,
+};
+
+/* ================================================================== */
+/*  Hook 12: security_socket_connect — Port Hiding                    */
+/*                                                                    */
+/*  security_socket_connect(struct socket *sock,                      */
+/*                          struct sockaddr *address, int addrlen)    */
+/*  arm64: x1=address                                                 */
+/*                                                                    */
+/*  If a target app tries to connect to 127.0.0.1 or ::1, we return   */
+/*  -ECONNREFUSED. This covers all protocols (TCP, UDP, etc.)         */
+/* ================================================================== */
+
+struct socket_connect_data {
+	bool should_block;
+};
+
+static int socket_connect_entry(struct kretprobe_instance *ri,
+				 struct pt_regs *regs)
+{
+	struct socket_connect_data *data = (void *)ri->data;
+	struct sockaddr *addr = (struct sockaddr *)regs->regs[1];
+
+	data->should_block = false;
+
+	if (!is_port_target_uid())
+		return 0;
+
+	if (!addr)
+		return 0;
+
+	if (addr->sa_family == AF_INET) {
+		struct sockaddr_in *sin = (struct sockaddr_in *)addr;
+		if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+			data->should_block = true;
+			vpnhide_dbg("socket_connect: blocking IPv4 loopback for uid=%u\n",
+				    from_kuid(&init_user_ns, current_uid()));
+		}
+	} else if (addr->sa_family == AF_INET6) {
+		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
+		if (ipv6_addr_loopback(&sin6->sin6_addr)) {
+			data->should_block = true;
+			vpnhide_dbg("socket_connect: blocking IPv6 loopback for uid=%u\n",
+				    from_kuid(&init_user_ns, current_uid()));
+		}
+	}
+
+	return 0;
+}
+
+static int socket_connect_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct socket_connect_data *data = (void *)ri->data;
+
+	if (data->should_block) {
+		regs_set_return_value(regs, -ECONNREFUSED);
+	}
+
+	return 0;
+}
+
+static struct kretprobe socket_connect_krp = {
+	.handler = socket_connect_ret,
+	.entry_handler = socket_connect_entry,
+	.data_size = sizeof(struct socket_connect_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "security_socket_connect",
 };
 
 static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
@@ -1476,6 +1582,7 @@ static struct kretprobe_reg probes[] = {
 	{ &ip_route_output_key_krp, "__ip_route_output_key", false },
 	{ &ip6_route_output_krp, "ip6_route_output", false },
 	{ &sock_setsockopt_krp, "sock_setsockopt", false },
+	{ &socket_connect_krp, "security_socket_connect", false },
 };
 
 static int __init vpnhide_init(void)
@@ -1485,6 +1592,7 @@ static int __init vpnhide_init(void)
 	/* Initialize RCU targets pointers */
 	rcu_assign_pointer(global_targets, NULL);
 	rcu_assign_pointer(global_direct_targets, NULL);
+	rcu_assign_pointer(global_port_targets, NULL);
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		ret = register_kretprobe(probes[i].krp);
@@ -1544,6 +1652,19 @@ static void __exit vpnhide_exit(void)
 		lockdep_is_held(&direct_targets_update_lock));
 	rcu_assign_pointer(global_direct_targets, NULL);
 	spin_unlock(&direct_targets_update_lock);
+
+	if (t) {
+		synchronize_rcu();
+		kfree(t);
+	}
+
+	/* Cleanup RCU port targets */
+	spin_lock(&port_targets_update_lock);
+	t = rcu_dereference_protected(
+		global_port_targets,
+		lockdep_is_held(&port_targets_update_lock));
+	rcu_assign_pointer(global_port_targets, NULL);
+	spin_unlock(&port_targets_update_lock);
 
 	if (t) {
 		synchronize_rcu();

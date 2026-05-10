@@ -99,7 +99,7 @@ private fun SkeletonDashboard() {
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(8.dp))
-        repeat(4) {
+        repeat(3) {
             SkeletonModuleCard()
             Spacer(Modifier.height(8.dp))
         }
@@ -211,8 +211,6 @@ private fun DashboardContent(
             Spacer(Modifier.height(12.dp))
             ModuleCard(stringResource(R.string.dashboard_zygisk), s.zygisk, selfNeedsRestart)
         }
-        Spacer(Modifier.height(12.dp))
-        ModuleCard(stringResource(R.string.dashboard_ports), s.ports)
         s.nativeInstallRecommendation?.let { recommendation ->
             Spacer(Modifier.height(12.dp))
             NativeInstallRecommendationCard(recommendation)

@@ -16,8 +16,6 @@
     <string name="port_hiding_coming_soon">Скоро</string>
 
     <!-- Port hiding -->
-    <string name="ports_module_not_installed_title">Модуль портов не установлен</string>
-    <string name="ports_module_not_installed_body">Установите vpnhide-ports.zip через KernelSU-Next или Magisk, чтобы блокировать подключения выбранных приложений к localhost-портам. Это скрывает локально поднятые VPN/прокси-демоны от приложений, которые пробуют connect(127.0.0.1, PORT).</string>
     <string name="ports_help_title">Как работает скрытие портов</string>
     <string name="ports_hint_role">Нажмите P, чтобы отметить приложение как observer для proxy-hide. Observer получит ECONNREFUSED при попытке подключения к любому порту на 127.0.0.1 или ::1 — неотличимо от реально закрытого порта.</string>
     <string name="ports_hint_safe">Безопасно для банков, госуслуг, маркетплейсов, не-браузерных приложений. Chromium-браузеры используют localhost для dev/PWA — их не стоит делать observer\'ами.</string>
@@ -70,7 +68,6 @@
     <string name="dashboard_kmod">Модуль ядра</string>
     <string name="dashboard_zygisk">VPNHide Next Zygisk модуль</string>
     <string name="dashboard_lsposed_module">VPNHide Next LSPosed-хук</string>
-    <string name="dashboard_ports">Модуль скрытия портов</string>
     <string name="dashboard_not_installed">Не установлен</string>
     <string name="dashboard_installed_inactive">Установлен, неактивен</string>
     <string name="dashboard_installed_restart_app">Установлен, перезапустите VPNHide Next</string>
@@ -117,7 +114,6 @@
     <string name="dashboard_issue_lsposed_extra_scope">VPNHide Next в LSPosed/Vector должен быть включён только для System Framework. Уберите из scope модуля VPNHide Next эти приложения: %1$s. Для фильтрации используйте Защита → Туннели в VPNHide Next.</string>
     <string name="dashboard_issue_lsposed_field_rename">Обнаружено переименование AOSP-поля на Android SDK %2$s: %1$s. Java-защита отключена для затронутых хуков (они пропущены при установке, чтобы не спамить logcat NoSuchFieldError на каждом вызове). Пожалуйста, заведите issue на github.com/okhsunrog/vpnhide/issues с этим списком — это нужно, чтобы обновить хуки под вашу версию Android.</string>
     <string name="dashboard_issue_no_targets">Целевые приложения не настроены. Перейдите в Защита → Туннели.</string>
-    <string name="dashboard_issue_ports_no_observers">Модуль скрытия портов установлен, но наблюдатели не настроены. Перейдите в Защита → Порты.</string>
     <string name="dashboard_issue_version_mismatch">Несоответствие версий LSPosed модуля: запущена %1$s, установлена %2$s. Перезагрузите устройство для обновления.</string>
     <string name="dashboard_issue_update_kmod">Версия модуля ядра %1$s старее версии приложения %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
     <string name="dashboard_issue_update_zygisk">Версия модуля Zygisk %1$s старее версии приложения %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
@@ -125,9 +121,6 @@
     <string name="dashboard_issue_update_app_for_zygisk">Версия модуля Zygisk %1$s новее версии приложения %2$s. Обновите приложение VPNHide Next.</string>
     <string name="dashboard_issue_kmod_version_mismatch">Несоответствие версий модуля ядра: модуль %1$s, приложение %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
     <string name="dashboard_issue_zygisk_version_mismatch">Несоответствие версий модуля Zygisk: модуль %1$s, приложение %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
-    <string name="dashboard_issue_update_ports">Версия модуля скрытия портов %1$s старее версии приложения %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
-    <string name="dashboard_issue_update_app_for_ports">Версия модуля скрытия портов %1$s новее версии приложения %2$s. Обновите приложение VPNHide Next.</string>
-    <string name="dashboard_issue_ports_version_mismatch">Несоответствие версий модуля скрытия портов: модуль %1$s, приложение %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
     <string name="dashboard_running_version">Версия запущенного модуля: %s</string>
 
     <!-- kmod variant / load diagnostics -->
