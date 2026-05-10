@@ -14,14 +14,10 @@ internal data class AppEntry(
     val lsposed: Boolean = false,
     // TUN Bypass
     val tunBypass: Boolean = false,
-    // App Hiding
-    val appHiding: Boolean = false,
-    val appObserver: Boolean = false,
     // Port Hiding
     val portHiding: Boolean = false,
 ) {
     val anyProtection get() = kmod || zygisk || lsposed
-    val anyHiding get() = appHiding || appObserver
 }
 
 internal enum class Layer { KMOD, ZYGISK, LSPOSED }

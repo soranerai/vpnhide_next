@@ -133,7 +133,7 @@ private fun MainScreen(
     var showSystem by remember { mutableStateOf(false) }
     var showRussianOnly by remember { mutableStateOf(false) }
     var showOnlySelected by remember { mutableStateOf(false) }
-    var sortOrder by remember { mutableStateOf(AppSortOrder.NAME_ASC) }
+    var sortOrder by remember { mutableStateOf(AppSortOrder.SELECTED_FIRST) }
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }

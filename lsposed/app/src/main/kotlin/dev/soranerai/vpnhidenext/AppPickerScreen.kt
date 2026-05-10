@@ -98,6 +98,9 @@ internal fun AppPickerScreen(
             }
         } else {
             val listState = rememberLazyListState()
+            LaunchedEffect(sortOrder) {
+                listState.scrollToItem(0)
+            }
             Box(modifier = Modifier.fillMaxSize()) {
                 LazyColumn(
                     state = listState,

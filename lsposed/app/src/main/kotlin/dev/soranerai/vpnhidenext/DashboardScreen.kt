@@ -99,7 +99,7 @@ private fun SkeletonDashboard() {
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(8.dp))
-        repeat(3) {
+        repeat(2) {
             SkeletonModuleCard()
             Spacer(Modifier.height(8.dp))
         }

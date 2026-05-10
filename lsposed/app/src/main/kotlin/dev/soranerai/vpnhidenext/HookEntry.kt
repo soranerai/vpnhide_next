@@ -53,7 +53,6 @@ class HookEntry : IXposedHookLoadPackage {
             HookLog.install()
             HookLog.i("VpnHide: system_server detected, installing Binder hooks")
             val brokenFields = installSystemServerHooks()
-            tryHook("PackageVisibility") { PackageVisibilityHooks.install(lpparam.classLoader) }
             writeHookStatusFile(brokenFields)
         }
     }

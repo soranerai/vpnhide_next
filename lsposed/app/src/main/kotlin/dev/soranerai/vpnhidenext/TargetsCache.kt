@@ -35,18 +35,9 @@ internal data class TargetsSnapshot(
     val kmodDirectTargets: Set<String>,
     val zygiskTargets: Set<String>,
     val lsposedTargets: Set<String>,
-    val hiddenPkgs: Set<String>,
-    val observerUids: Set<Int>,
     val portsObservers: Set<String>,
     val uidToPkg: Map<Int, String>,
-) {
-    /** Observer UIDs resolved back to current package names via
-     * `pm list packages -U`. UIDs that no longer map to an installed
-     * package (e.g. after an uninstall) silently drop out.
-     */
-    val observerNames: Set<String>
-        get() = observerUids.mapNotNull { uidToPkg[it] }.toSet()
-}
+)
 
 internal object TargetsCache {
     private val _snapshot = MutableStateFlow<TargetsSnapshot?>(null)
@@ -103,10 +94,6 @@ internal object TargetsCache {
         cat $ZYGISK_TARGETS 2>/dev/null || true
         echo "$SENTINEL LSPOSED_TARGETS"
         cat $LSPOSED_TARGETS 2>/dev/null || true
-        echo "$SENTINEL HIDDEN_PKGS"
-        cat $SS_HIDDEN_PKGS_FILE 2>/dev/null || true
-        echo "$SENTINEL OBSERVER_UIDS"
-        cat $SS_OBSERVER_UIDS_FILE 2>/dev/null || true
         echo "$SENTINEL PORTS_OBSERVERS"
         cat $PORTS_OBSERVERS_FILE 2>/dev/null || true
         echo "$SENTINEL PM_LIST"
@@ -157,7 +144,6 @@ internal object TargetsCache {
                 ?.filter { it.isNotEmpty() && !it.startsWith("#") }
                 ?.toSet() ?: emptySet()
 
-        val observerUids = nonEmptyLines(sections["OBSERVER_UIDS"]).mapNotNull { it.toIntOrNull() }.toSet()
 
         // With `--user all`, multi-profile packages report comma-separated
         // UIDs: `package:com.android.chrome uid:10187,1010187`. Each UID
@@ -181,8 +167,6 @@ internal object TargetsCache {
             kmodDirectTargets = nonEmptyLines(sections["KMOD_DIRECT_TARGETS"]),
             zygiskTargets = nonEmptyLines(sections["ZYGISK_TARGETS"]),
             lsposedTargets = nonEmptyLines(sections["LSPOSED_TARGETS"]),
-            hiddenPkgs = nonEmptyLines(sections["HIDDEN_PKGS"]),
-            observerUids = observerUids,
             portsObservers = nonEmptyLines(sections["PORTS_OBSERVERS"]),
             uidToPkg = uidToPkg,
         )

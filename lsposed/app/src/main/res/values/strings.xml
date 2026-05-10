@@ -11,7 +11,6 @@
     <!-- Protection modes (segmented button) -->
     <string name="mode_vpn_targets">Tun</string>
     <string name="mode_tun_bypass">Bypass</string>
-    <string name="mode_app_hiding">Apps</string>
     <string name="mode_port_hiding">Ports</string>
     <string name="port_hiding_coming_soon">Coming soon</string>
 
@@ -45,17 +44,6 @@
     <string name="bypass_help_title">How TUN bypass works</string>
     <string name="bypass_hint_logic">Enable the <b>Kernel</b> bypass checkbox to force an app to ignore the VPN tunnel. Its traffic will go directly through your primary network interface (Wi-Fi or Mobile Data).</string>
     <string name="bypass_hint_kmod">Requires the Kernel module (kmod) to be installed and active. This feature only works at the kernel level to ensure reliable routing redirection.</string>
-
-    <!-- App hiding -->
-    <string name="hiding_chip_hidden" translatable="false">H</string>
-    <string name="hiding_chip_observer" translatable="false">O</string>
-    <string name="hiding_role_hidden">Hidden</string>
-    <string name="hiding_role_observer">Observer</string>
-    <string name="hiding_help_title">How app hiding works</string>
-    <string name="hiding_hint_roles">Mark apps as H (Hidden) to remove them from the package manager for O (Observer) apps. Observers cannot list, resolve, or query any Hidden app.</string>
-    <string name="hiding_hint_system">System callers (installer, launcher, system services) are always exempt so core OS functionality keeps working.</string>
-    <string name="hiding_hint_reboot">Changes take effect immediately, but observer apps may cache the package list — force-stop and restart them to see results.</string>
-    <string name="hiding_save_success">Saved · %1$d hidden, %2$d observers</string>
 
     <!-- Root status -->
     <string name="root_error_title">Root access required</string>
@@ -135,7 +123,6 @@
     <string name="dashboard_issue_both_native_active">Kernel module and Zygisk are both active, covering the same native paths. Kmod is invisible to anti-tamper, Zygisk isn\'t — so every time you add a banking or payment app as a target, you have to remember to leave Z off for it. Uninstall the Zygisk module to remove that per-app footgun; kmod keeps the coverage.</string>
     <string name="dashboard_issue_debug_logging_on">Debug logging is enabled. VPNHide Next is writing verbose lines to logcat that anyone with root can read. Turn it off in Diagnostics after you\'ve finished collecting a bug report.</string>
     <string name="dashboard_issue_selinux_permissive">SELinux is Permissive. Six detection vectors VPNHide Next relies on the kernel to block (RTM_GETROUTE, /proc/net/{tcp,udp,dev,fib_trie}, /sys/class/net) are reachable to target apps. Run `setenforce 1` and investigate what disabled it.</string>
-    <string name="dashboard_issue_self_multi_profile">VPNHide Next is installed in %1$d profiles. The main-profile copy is the one that matters — LSPosed hooks system_server, which runs in the main profile only, and the picker there already sees apps from every profile and applies filters to all of them. Extra copies in secondary profiles are redundant and race each other\'s Saves to the shared target files. Uninstall from work profile / Second Space / other secondary profiles.</string>
     <string name="dashboard_issue_no_native">No native module installed. Install kmod or zygisk for full protection.</string>
     <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPNHide Next module for System Framework.</string>
     <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>

@@ -14,7 +14,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
-internal enum class ProtectionMode { VpnTargets, TunBypass, AppHiding, PortHiding }
+internal enum class ProtectionMode { VpnTargets, TunBypass, PortHiding }
 
 @Composable
 internal fun ProtectionScreen(
@@ -38,12 +38,10 @@ internal fun ProtectionScreen(
     // Unified states for each tab
     var vpnApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var tunApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
-    var hideApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var portApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
 
     var dirtyVpn by remember { mutableStateOf(false) }
     var dirtyTun by remember { mutableStateOf(false) }
-    var dirtyHide by remember { mutableStateOf(false) }
     var dirtyPort by remember { mutableStateOf(false) }
 
     var saving by remember { mutableStateOf(false) }
@@ -102,34 +100,6 @@ internal fun ProtectionScreen(
                     }.sortedWith(compareByDescending<AppEntry> { it.tunBypass }.thenBy { it.label })
         }
 
-        if (!dirtyHide) {
-            val hidden = t.hiddenPkgs
-            val observers = t.observerNames
-            hideApps =
-                apps
-                    .filter { it.packageName != selfPkg }
-                    .map { app ->
-                        val rawHidden = app.packageName in hidden
-                        val rawObserver = app.packageName in observers
-                        // Conflict resolution: apps with both roles crash on startup.
-                        // Treat as observer-only if both are set.
-                        val (finalHidden, finalObserver) =
-                            if (rawHidden && rawObserver) {
-                                false to true
-                            } else {
-                                rawHidden to rawObserver
-                            }
-                        AppEntry(
-                            packageName = app.packageName,
-                            label = app.label,
-                            icon = app.icon,
-                            isSystem = app.isSystem,
-                            userIds = app.userIds,
-                            appHiding = finalHidden,
-                            appObserver = finalObserver,
-                        )
-                    }.sortedWith(compareByDescending<AppEntry> { it.anyHiding }.thenBy { it.label })
-        }
 
         if (!dirtyPort) {
             portApps =
@@ -148,7 +118,7 @@ internal fun ProtectionScreen(
         }
     }
 
-    val anyDirty = dirtyVpn || dirtyTun || dirtyHide || dirtyPort
+    val anyDirty = dirtyVpn || dirtyTun || dirtyPort
     LaunchedEffect(anyDirty) {
         onDirtyChange(anyDirty)
     }
@@ -157,7 +127,6 @@ internal fun ProtectionScreen(
         mapOf(
             ProtectionMode.VpnTargets to vpnApps.count { it.anyProtection },
             ProtectionMode.TunBypass to tunApps.count { it.tunBypass },
-            ProtectionMode.AppHiding to hideApps.count { it.anyHiding },
             ProtectionMode.PortHiding to portApps.count { it.portHiding },
         )
 
@@ -203,21 +172,6 @@ internal fun ProtectionScreen(
                         )
                     }
 
-                    ProtectionMode.AppHiding -> {
-                        AppHidingScreen(
-                            apps = hideApps,
-                            searchQuery = searchQuery,
-                            showSystem = showSystem,
-                            showRussianOnly = showRussianOnly,
-                            showOnlySelected = showOnlySelected,
-                            sortOrder = sortOrder,
-                            onUpdate = { newList ->
-                                hideApps = newList
-                                dirtyHide = true
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
 
                     ProtectionMode.PortHiding -> {
                         PortsHidingScreen(
@@ -267,11 +221,6 @@ internal fun ProtectionScreen(
                         val k = (tunApps.filter { it.tunBypass }.map { it.packageName } + selfPkg).distinct().sorted()
                         parts += buildTunSaveCommand(header, k)
                     }
-                    if (dirtyHide) {
-                        val h = hideApps.filter { it.appHiding }.map { it.packageName }.sorted()
-                        val o = hideApps.filter { it.appObserver }.map { it.packageName }.sorted()
-                        parts += buildHideSaveCommand(header, h, o)
-                    }
                     if (dirtyPort) {
                         val p = portApps.filter { it.portHiding }.map { it.packageName }.sorted()
                         parts += buildPortSaveCommand(header, p)
@@ -285,7 +234,6 @@ internal fun ProtectionScreen(
                             TargetsCache.refresh(scope, context)
                             dirtyVpn = false
                             dirtyTun = false
-                            dirtyHide = false
                             dirtyPort = false
                         } else {
                             snackMessage = context.getString(R.string.save_failed_exit, exitCode)
@@ -310,7 +258,6 @@ private fun ProtectionModeSwitcher(
         listOf(
             ProtectionMode.VpnTargets to R.string.mode_vpn_targets,
             ProtectionMode.TunBypass to R.string.mode_tun_bypass,
-            ProtectionMode.AppHiding to R.string.mode_app_hiding,
             ProtectionMode.PortHiding to R.string.mode_port_hiding,
         )
     SingleChoiceSegmentedButtonRow(
@@ -369,26 +316,6 @@ private fun buildTunSaveCommand(
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(KMOD_DIRECT_TARGETS, header, kmod)
     parts += buildKmodApplyCommand(kmod, isDirect = true)
-    return parts.joinToString(" ; ")
-}
-
-private fun buildHideSaveCommand(
-    header: String,
-    hidden: List<String>,
-    observers: List<String>,
-): String {
-    val parts = mutableListOf<String>()
-    parts += buildWriteTargetsCommand(SS_HIDDEN_PKGS_FILE, header, hidden)
-
-    // Resolve observer UIDs from package names
-    if (observers.isEmpty()) {
-        parts += "echo '$header' > $SS_OBSERVER_UIDS_FILE"
-    } else {
-        val uidsCmd = observers.joinToString(" ") { "pm list packages -U $it" }
-        parts += "$uidsCmd | grep -oE 'uid:[0-9]+' | cut -d: -f2 | sort -u > $SS_OBSERVER_UIDS_FILE"
-    }
-
-    // No need to trigger kmod refresh here as App Hiding is handled by LSPosed
     return parts.joinToString(" ; ")
 }
 
