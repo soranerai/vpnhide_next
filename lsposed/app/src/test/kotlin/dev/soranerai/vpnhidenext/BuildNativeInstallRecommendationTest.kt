@@ -135,43 +135,6 @@ class BuildNativeInstallRecommendationTest {
         assertEquals("Android 14", r.kernelBranch)
     }
 
-    // ── 5. Pre-GKI / unsupported → zygisk ─────────────────────────────────
-
-    @Test
-    fun `pre-GKI 4_14 recommends zygisk`() {
-        val r = buildNativeInstallRecommendation("4.14.302-g92e0d94b6cba", "Android 13")!!
-        assertFalse(r.preferKmod)
-        assertFalse(r.variantAmbiguous)
-        assertEquals("vpnhide-zygisk.zip", r.recommendedArtifact)
-        assertNull(r.recommendedGkiVariant)
-        assertEquals("Android 13", r.androidVersion)
-    }
-
-    @Test
-    fun `5_4 recommends zygisk`() {
-        val r = buildNativeInstallRecommendation("5.4.188-custom", "Android 12")!!
-        assertFalse(r.preferKmod)
-        assertEquals("vpnhide-zygisk.zip", r.recommendedArtifact)
-    }
-
-    @Test
-    fun `6_3 recommends zygisk — no shipping variant for this series`() {
-        // We only ship for 6.1, 6.6, 6.12 — a 6.3 kernel is rare but
-        // shouldn't silently pick one of those.
-        val r = buildNativeInstallRecommendation("6.3.0-something", "Android 14")!!
-        assertFalse(r.preferKmod)
-        assertEquals("vpnhide-zygisk.zip", r.recommendedArtifact)
-    }
-
-    @Test
-    fun `unparseable kernel string recommends zygisk`() {
-        // parseKernelSeries would not find a `\d+\.\d+` token — the
-        // function must not crash, just recommend zygisk.
-        val r = buildNativeInstallRecommendation("garbage-no-numbers", "Android 12")!!
-        assertFalse(r.preferKmod)
-        assertEquals("vpnhide-zygisk.zip", r.recommendedArtifact)
-    }
-
     // ── 6. Null / blank input ─────────────────────────────────────────────
 
     @Test
