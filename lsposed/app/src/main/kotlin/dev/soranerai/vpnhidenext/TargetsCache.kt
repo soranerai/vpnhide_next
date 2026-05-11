@@ -32,10 +32,8 @@ import kotlinx.coroutines.withContext
 internal data class TargetsSnapshot(
     val kmodModuleInstalled: Boolean,
     val kmodActive: Boolean,
-    val zygiskModuleInstalled: Boolean,
     val kmodTargets: Set<String>,
     val kmodDirectTargets: Set<String>,
-    val zygiskTargets: Set<String>,
     val lsposedTargets: Set<String>,
     val portsObservers: Set<String>,
     val portRules: Map<String, List<PortRule>>,
@@ -88,14 +86,10 @@ internal object TargetsCache {
         [ -d $KMOD_MODULE_DIR ] && echo 1 || echo 0
         echo "$SENTINEL LSMOD"
         lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
-        echo "$SENTINEL ZYGISK_MODULE_DIR"
-        [ -d $ZYGISK_MODULE_DIR ] && echo 1 || echo 0
         echo "$SENTINEL KMOD_TARGETS"
         cat $KMOD_TARGETS 2>/dev/null || true
         echo "$SENTINEL KMOD_DIRECT_TARGETS"
         cat $KMOD_DIRECT_TARGETS 2>/dev/null || true
-        echo "$SENTINEL ZYGISK_TARGETS"
-        cat $ZYGISK_TARGETS 2>/dev/null || true
         echo "$SENTINEL LSPOSED_TARGETS"
         cat $LSPOSED_TARGETS 2>/dev/null || true
         echo "$SENTINEL PORTS_OBSERVERS"
@@ -126,7 +120,7 @@ internal object TargetsCache {
                 val allPkgs =
                     (
                         snapshot.kmodTargets + snapshot.kmodDirectTargets +
-                            snapshot.zygiskTargets + snapshot.lsposedTargets +
+                            snapshot.lsposedTargets +
                             snapshot.portsObservers
                     ).distinct()
 
@@ -135,7 +129,6 @@ internal object TargetsCache {
                         dev.soranerai.vpnhidenext.db.AppProtection(
                             packageName = pkg,
                             kmod = pkg in snapshot.kmodTargets,
-                            zygisk = pkg in snapshot.zygiskTargets,
                             lsposed = pkg in snapshot.lsposedTargets,
                             tunBypass = pkg in snapshot.kmodDirectTargets,
                             portHiding = pkg in snapshot.portsObservers,
@@ -168,8 +161,6 @@ internal object TargetsCache {
                 [ -d $KMOD_MODULE_DIR ] && echo 1 || echo 0
                 echo "$SENTINEL LSMOD"
                 lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
-                echo "$SENTINEL ZYGISK_MODULE_DIR"
-                [ -d $ZYGISK_MODULE_DIR ] && echo 1 || echo 0
                 echo "$SENTINEL PM_LIST"
                 pm list packages -U --user all 2>/dev/null || true
                 echo "$END"
@@ -199,10 +190,8 @@ internal object TargetsCache {
                 TargetsSnapshot(
                     kmodModuleInstalled = statusSnapshot.kmodModuleInstalled,
                     kmodActive = statusSnapshot.kmodActive,
-                    zygiskModuleInstalled = statusSnapshot.zygiskModuleInstalled,
                     kmodTargets = apps.filter { it.kmod }.map { it.packageName }.toSet(),
                     kmodDirectTargets = apps.filter { it.tunBypass }.map { it.packageName }.toSet(),
-                    zygiskTargets = apps.filter { it.zygisk }.map { it.packageName }.toSet(),
                     lsposedTargets = apps.filter { it.lsposed }.map { it.packageName }.toSet(),
                     portsObservers = apps.filter { it.portHiding }.map { it.packageName }.toSet(),
                     portRules = portRulesMap,
@@ -356,10 +345,8 @@ internal object TargetsCache {
         return TargetsSnapshot(
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",
             kmodActive = sections["LSMOD"]?.trim() == "1",
-            zygiskModuleInstalled = sections["ZYGISK_MODULE_DIR"]?.trim() == "1",
             kmodTargets = nonEmptyLines(sections["KMOD_TARGETS"]),
             kmodDirectTargets = nonEmptyLines(sections["KMOD_DIRECT_TARGETS"]),
-            zygiskTargets = nonEmptyLines(sections["ZYGISK_TARGETS"]),
             lsposedTargets = nonEmptyLines(sections["LSPOSED_TARGETS"]),
             portsObservers = nonEmptyLines(sections["PORTS_OBSERVERS"]),
             portRules = portRules,

@@ -32,13 +32,6 @@ persistent dirs of section 2.
 - `vpnhide_kmod.ko` — the kernel module binary itself.
 - `vpnhide-ctl` — control utility for the kernel module.
 
-### `/data/adb/modules/vpnhide_zygisk/`
-- `module.prop` — module metadata.
-- `customize.sh` — install-time hook; seeds persistent dir, migrates legacy targets.
-- `service.sh` — boot script; copies persistent `targets.txt` and `debug_logging` into module dir so the Zygisk loader's `get_module_dir()` fd sees them.
-- `zygisk/arm64-v8a.so` — Rust cdylib injected into every forked app by NeoZygisk.
-- `targets.txt` — **boot-time copy** of the canonical persistent file (`/data/adb/vpnhide_zygisk/targets.txt`). Loader reads via fd, not path. (`zygisk/module/service.sh`, `zygisk/src/lib.rs`)
-- `debug_logging` — `"0"` or `"1"`. **Boot-time copy** of `/data/adb/vpnhide_zygisk/debug_logging` (canonical). The app also writes both paths directly via su on every toggle, so the module-dir mirror stays current between reinstall and reboot. Read by zygisk module on init via the module dir fd.
 
 
 ---
@@ -62,11 +55,6 @@ only by factory reset.
 `/proc/sys/kernel/random/boot_id` so the app can tell "this status
 was written this boot" vs. "stale from last boot".
 
-### `/data/adb/vpnhide_zygisk/`
-| File | Format | Writer | Reader | Lifetime |
-|---|---|---|---|---|
-| `targets.txt` | one pkg per line | app via su; `zygisk/module/customize.sh` migrates from legacy in-module location | copied into module dir by `zygisk/module/service.sh` at boot | persistent |
-| `debug_logging` | single byte `"0"` or `"1"` | app via su (`DebugLoggingPrefs.kt::writeDebugFlagFiles`, part of the persistent toggle fan-out) | copied into module dir by `zygisk/module/service.sh` at boot, where the .so reads it via `get_module_dir()` fd | persistent |
 
 ### `/data/adb/vpnhide_ports/`
 | File | Format | Writer | Reader | Lifetime |
@@ -76,7 +64,7 @@ was written this boot" vs. "stale from last boot".
 ### `/data/adb/vpnhide_lsposed/`
 | File | Format | Writer | Reader | Lifetime |
 |---|---|---|---|---|
-| `targets.txt` | one pkg per line | app via su (`ensureSelfInTargets` in `ShellUtils.kt:198` + Protection screens) | `kmod/module/service.sh` and `zygisk/module/service.sh` migrate-from on first boot if their own `targets.txt` is empty | persistent |
+| `targets.txt` | one pkg per line | app via su (`ensureSelfInTargets` in `ShellUtils.kt:198` + Protection screens) | `kmod/module/service.sh` migrates-from on first boot if its own `targets.txt` is empty | persistent |
 
 LSPosed has no module dir (it's not a Magisk module — it's
 hooks installed into system_server by the Vector framework), so
@@ -121,26 +109,19 @@ applyDebugLoggingRuntime(enabled)
     ├─ VpnHideLog.enabled = enabled                          (1) app process — instant, in-memory
     └─ writeDebugFlagFiles (one batched su):
          ├─ /data/system/vpnhide_debug_logging               (2) system_server — ~10ms via inotify FileObserver
-         ├─ /data/adb/vpnhide_zygisk/debug_logging           (3a) zygisk persistent — survives module reinstall
-         ├─ /data/adb/modules/vpnhide_zygisk/debug_logging   (3b) zygisk module-dir mirror — read by .so on next fork
          └─ /proc/vpnhide_debug                              (4) kmod — instant if loaded, else no-op
 ```
 
 `/data/system/vpnhide_debug_logging` is the canonical persistent
-source-of-truth on disk for everything except zygisk; zygisk has its
-own canonical at `/data/adb/vpnhide_zygisk/debug_logging` because
-the .so reads via the module-dir fd, not via system_data_file path.
+source-of-truth on disk for everything.
 
 Boot-time re-seeding makes the persistent toggle survive reboots
 without the app needing to open:
 
 - `kmod/module/service.sh` copies `/data/system/vpnhide_debug_logging`
   → `/proc/vpnhide_debug` (in-kernel state lost on every boot).
-- `zygisk/module/service.sh` copies `/data/adb/vpnhide_zygisk/debug_logging`
-  → `/data/adb/modules/vpnhide_zygisk/debug_logging` (module-dir
-  mirror lost on every module reinstall).
 
-`MainActivity.onCreate` re-propagates from SharedPrefs to all four
+`MainActivity.onCreate` re-propagates from SharedPrefs to both
 sinks at every app launch as a safety-net for "user reinstalled a
 module mid-session and didn't reboot before opening the app".
 
@@ -207,15 +188,6 @@ in Kotlin. Keys currently in use:
 > classic `XSharedPreferences` mechanism), not a vpnhide-specific
 > quirk.
 
-### `filesDir` — `/data/user/0/dev.soranerai.vpnhidenext/files/`
-
-| File | Format | Writer | Reader | Lifetime |
-|---|---|---|---|---|
-| `vpnhide_zygisk_active` | `key=value`: `version`, `boot_id`, `pid`, `timestamp` | Zygisk module (`zygisk/src/lib.rs`) when the VPNHide Next app itself is forked under zygisk hooks | App reads from its own `filesDir` to verify zygisk is hooking the app process; compared against current `boot_id` to detect stale heartbeats; `cleanupStaleZygiskStatus` (`ShellUtils.kt:113`) deletes if stale | per-app-launch (overwritten on each fork) |
-
-Owner is the app uid (no su involved on read; Zygisk runs in the
-forked app process so it has DAC perms to write into the app's own
-filesDir).
 
 ### `cacheDir` — `/data/user/0/dev.soranerai.vpnhidenext/cache/`
 
@@ -268,10 +240,7 @@ service.sh phase (root, after boot_completed-ish):
       → resolve /data/adb/vpnhide_ports/observers.txt → UIDs → `vpnhide-ctl port_targets`
       → clean up legacy iptables rules
     → write /data/system/vpnhide_uids.txt
-  zygisk/module/service.sh
-    → cp /data/adb/vpnhide_zygisk/targets.txt → /data/adb/modules/vpnhide_zygisk/targets.txt
-    → resolve /data/adb/vpnhide_lsposed/targets.txt → UIDs
-    → append/merge into /data/system/vpnhide_uids.txt
+    → write /data/system/vpnhide_uids.txt
 
 system_server start (LSPosed framework injects):
   HookEntry.handleLoadPackage
@@ -279,12 +248,6 @@ system_server start (LSPosed framework injects):
     → write /data/system/vpnhide_hook_active (with current boot_id)
     → start FileObservers on /data/system/
 
-zygote forks an app (NeoZygisk):
-  zygisk/src/lib.rs::on_load (in forked process before specialize)
-    → read targets via module dir fd
-  zygisk/src/lib.rs::post_app_specialize
-    → if target: install libc hooks
-    → if VPNHide Next app itself: write filesDir/vpnhide_zygisk_active
 ```
 
 ---
@@ -295,7 +258,6 @@ zygote forks an app (NeoZygisk):
 |---|---|
 | **In-kernel only (per-boot, volatile)** | `/proc/vpnhide_targets` (legacy), `/proc/vpnhide_debug`, kernel-internal UID lists (Normal/Direct/Port) |
 | **Per-boot** (overwritten each boot by service scripts) | `/data/adb/vpnhide_kmod/load_status`, `/data/adb/vpnhide_kmod/load_dmesg`, `/data/system/vpnhide_uids.txt`, `/data/system/vpnhide_hook_active` |
-| **Per-app-launch** (overwritten on each fork) | `<app-filesDir>/vpnhide_zygisk_active` |
 | **Persistent — survives reboot, module reinstall, app reinstall** | `/data/adb/vpnhide_*/targets.txt`, `/data/adb/vpnhide_ports/observers.txt`, `/data/system/vpnhide_hidden_pkgs.txt`, `/data/system/vpnhide_observer_uids.txt`, `/data/system/vpnhide_debug_logging` |
 | **Persistent — survives reboot but wiped on module reinstall** | everything inside `/data/adb/modules/vpnhide_*/` (Magisk/KSU replaces the tree from the zip) |
 | **Persistent — survives reboot but wiped on app reinstall** | SharedPrefs `vpnhide_prefs` — but stored at the Vector-redirected path under `/data/misc/<uuid>/prefs/` |

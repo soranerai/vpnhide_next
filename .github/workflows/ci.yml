@@ -58,9 +58,8 @@ jobs:
           path: |
             /usr/local/cargo/registry
             /usr/local/cargo/git
-            zygisk/target
             lsposed/native/target
-          key: cargo-${{ runner.os }}-lint-${{ hashFiles('zygisk/Cargo.lock', 'lsposed/native/Cargo.lock') }}
+          key: cargo-${{ runner.os }}-lint-${{ hashFiles('lsposed/native/Cargo.lock') }}
           restore-keys: cargo-${{ runner.os }}-lint-
 
       # Gradle cache (deps + configuration cache + wrapper). cache-read-only
@@ -84,17 +83,12 @@ jobs:
       # Rust
       - name: rustfmt
         run: |
-          cd zygisk && cargo fmt --check
-          cd ../lsposed/native && cargo fmt --check
+          cd lsposed/native && cargo fmt --check
       # `--tests` so generated test modules are also linted
       # (catches `bool_assert_comparison`-style regressions in
       # codegen output).
-      - name: clippy (zygisk)
-        run: cd zygisk && cargo ndk -t arm64-v8a clippy --tests -- -D warnings
       - name: clippy (lsposed native)
         run: cd lsposed/native && cargo ndk -t arm64-v8a clippy --tests -- -D warnings
-      - name: cargo test (zygisk)
-        run: cd zygisk && cargo test
       - name: cargo test (lsposed native)
         run: cd lsposed/native && cargo test
 
@@ -119,7 +113,6 @@ jobs:
           fi
           shellcheck -x -e SC2034,SC3043 \
             kmod/module/customize.sh kmod/module/post-fs-data.sh kmod/module/service.sh \
-            zygisk/module/customize.sh zygisk/module/service.sh \
             scripts/clean-device.sh scripts/update-json.sh
 
       # C (kernel module)
@@ -201,47 +194,6 @@ jobs:
           path: vpnhide-kmod-${{ matrix.kmi }}.zip
           if-no-files-found: error
 
-  zygisk:
-    needs: setup
-    runs-on: ubuntu-latest
-    container:
-      image: ${{ needs.setup.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-
-      - name: Mark workspace safe
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      - name: Cache cargo
-        uses: actions/cache@v5
-        with:
-          path: |
-            /usr/local/cargo/registry
-            /usr/local/cargo/git
-            zygisk/target
-          key: cargo-${{ runner.os }}-${{ hashFiles('zygisk/Cargo.lock') }}
-          restore-keys: cargo-${{ runner.os }}-
-
-      - name: Build module zip
-        env:
-          UPDATE_JSON_URL: https://raw.githubusercontent.com/soranerai/vpnhide_next/main/update-json/update-zygisk.json
-        run: |
-          cd zygisk
-          python3 ./build.py
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: vpnhide-zygisk
-          path: zygisk/target/vpnhide-zygisk.zip
-          if-no-files-found: error
 
   lsposed:
     needs: setup
@@ -333,7 +285,7 @@ jobs:
 
 
   release:
-    needs: [kmod, zygisk, lsposed]
+    needs: [kmod, lsposed]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # Only the release job needs write — used by softprops/action-gh-release

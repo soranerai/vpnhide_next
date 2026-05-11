@@ -61,15 +61,6 @@ fun FaqScreen(
                         text = annotatedStringResource(R.string.apps_hint_toggles),
                         style = MaterialTheme.typography.bodyMedium,
                     )
-                    Text(
-                        text = annotatedStringResource(R.string.apps_hint_restart_target),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = annotatedStringResource(R.string.apps_hint_zygisk),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
                 },
             )
 

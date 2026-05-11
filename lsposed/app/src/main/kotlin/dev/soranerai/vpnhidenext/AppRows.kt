@@ -59,9 +59,7 @@ internal fun AppRow(
                 if (installed.kmod) {
                     ProtectionChip("Kernel", app.kmod, true) { onToggle(Layer.KMOD) }
                 }
-                if (installed.zygisk) {
-                    ProtectionChip("Zygisk", app.zygisk, true) { onToggle(Layer.ZYGISK) }
-                }
+
                 ProtectionChip("LSPosed", app.lsposed, true) { onToggle(Layer.LSPOSED) }
             }
         }

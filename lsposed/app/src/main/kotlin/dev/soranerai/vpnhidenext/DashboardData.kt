@@ -104,7 +104,7 @@ sealed interface JavaResult {
     data object HooksInactive : JavaResult
 }
 
-internal enum class NativeModuleKind { Kmod, Zygisk }
+internal enum class NativeModuleKind { Kmod }
 
 internal data class ModuleMismatch(
     val kind: NativeModuleKind,
@@ -114,7 +114,7 @@ internal data class ModuleMismatch(
 
 // Pure: given a list of (state, kind) pairs and the app version, returns
 // the subset whose base version disagrees with the app. Extracted so the
-// three kmod / zygisk / ports callsites in loadDashboardState share one
+// two kmod / ports callsites in loadDashboardState share one
 // code path instead of three near-identical if-blocks.
 internal fun detectModuleMismatches(
     modules: List<Pair<ModuleState, NativeModuleKind>>,
@@ -167,7 +167,6 @@ internal data class Issue(
 
 internal data class DashboardState(
     val kmod: ModuleState,
-    val zygisk: ModuleState,
     val lsposed: LsposedState,
     val nativeInstallRecommendation: NativeInstallRecommendation?,
     val kmodLoadStatus: KmodLoadStatus?,
@@ -241,9 +240,7 @@ internal fun parseKernelAndroidBranch(raw: String): String? =
  *       - 5.10 / 5.15 have two shipping variants each → return the
  *         primary plus an alternative via `variantAmbiguous=true`;
  *         the UI shows "try primary, if it doesn't load try alt".
- *  3. Pre-GKI series (<5.10) or unparseable kernel version → fall
- *     back to zygisk (preferKmod=false) since we have no kmod
- *     binaries that can load against such kernels' Module.symvers.
+ *  3. Pre-GKI series (<5.10) or unparseable kernel version → no recommendation.
  *
  * Returns `null` only if [kernelRaw] is blank (no uname output).
  * `deviceAndroidLabel` is only reflected back in the returned
@@ -329,14 +326,7 @@ internal fun buildNativeInstallRecommendation(
         )
     }
 
-    return NativeInstallRecommendation(
-        androidVersion = deviceAndroidLabel,
-        kernelVersion = kernelVersion,
-        kernelBranch = kernelBranch,
-        recommendedArtifact = "vpnhide-zygisk.zip",
-        recommendedGkiVariant = null,
-        preferKmod = false,
-    )
+    return null
 }
 
 private data class RawDashboardSnapshot(
@@ -358,21 +348,19 @@ private fun collectDashboardSnapshot(cacheDir: File): RawDashboardSnapshot {
     val script =
         """
         echo "kmod_prop=${'$'}(cat $KMOD_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
-        echo "zygisk_prop=${'$'}(cat $ZYGISK_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
-        echo "lsmod=${'$'}(lsmod | grep -q vpnhide_kmod && echo 1 || echo 0)"
         echo "kmod_targets=${'$'}(cat $KMOD_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
-        echo "zygisk_targets=${'$'}(cat $ZYGISK_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "lsposed_targets=${'$'}(cat $LSPOSED_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "ports_targets=${'$'}(cat $PORTS_OBSERVERS_FILE 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "uname=${'$'}(uname -r)"
         echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id)"
         echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
         echo "load_dmesg=${'$'}(cat $KMOD_LOAD_DMESG_FILE 2>/dev/null | tail -n 50 | base64 | tr -d '\n')"
+        [ -c $DEV_NODE ] && echo "lsmod=1" || echo "lsmod=0"
         
         # LSPosed framework
         LSP_INSTALLED=0
         LSP_DISABLED=0
-        for id in zygisk_vector zygisk_lsposed lsposed; do
+        for id in lsposed; do
           for dir in /data/adb/modules/${'$'}id /data/adb/modules_update/${'$'}id; do
             if [ -f ${'$'}dir/module.prop ]; then
               LSP_INSTALLED=1
@@ -425,6 +413,7 @@ internal suspend fun loadDashboardState(
     val startTime = System.currentTimeMillis()
     VpnHideLog.i(TAG, "=== Loading dashboard state ===")
     val snapshot = collectDashboardSnapshot(context.cacheDir)
+    val currentBootId = snapshot.get("boot_id")
 
     // ── Module detection ──
     // Strip the `v` prefix from module.prop versions at parse time so
@@ -493,10 +482,7 @@ internal suspend fun loadDashboardState(
         return when (compareSemver(normalizedModuleVersion, normalizedAppVersion)) {
             null, 0 -> {
                 res.getString(
-                    when (kind) {
-                        NativeModuleKind.Kmod -> R.string.dashboard_issue_kmod_version_mismatch
-                        NativeModuleKind.Zygisk -> R.string.dashboard_issue_zygisk_version_mismatch
-                    },
+                    R.string.dashboard_issue_kmod_version_mismatch,
                     moduleVersion,
                     appVersion,
                 )
@@ -504,10 +490,7 @@ internal suspend fun loadDashboardState(
 
             in Int.MIN_VALUE..-1 -> {
                 res.getString(
-                    when (kind) {
-                        NativeModuleKind.Kmod -> R.string.dashboard_issue_update_kmod
-                        NativeModuleKind.Zygisk -> R.string.dashboard_issue_update_zygisk
-                    },
+                    R.string.dashboard_issue_update_kmod,
                     moduleVersion,
                     appVersion,
                 )
@@ -515,10 +498,7 @@ internal suspend fun loadDashboardState(
 
             else -> {
                 res.getString(
-                    when (kind) {
-                        NativeModuleKind.Kmod -> R.string.dashboard_issue_update_app_for_kmod
-                        NativeModuleKind.Zygisk -> R.string.dashboard_issue_update_app_for_zygisk
-                    },
+                    R.string.dashboard_issue_update_app_for_kmod,
                     moduleVersion,
                     appVersion,
                 )
@@ -678,29 +658,6 @@ internal suspend fun loadDashboardState(
         }
     VpnHideLog.i(TAG, "kmodRaw: $kmodRaw")
 
-    val zygiskProp = parseModuleProp(snapshot.decodeBase64("zygisk_prop"))
-    val zygiskInstalled = zygiskProp.installed
-    val zygiskVersion = zygiskProp.version
-    val zygiskStatusFile = File(context.filesDir, ZYGISK_STATUS_FILE_NAME)
-    val zygiskStatusRaw =
-        try {
-            zygiskStatusFile.takeIf { it.isFile }?.readText().orEmpty()
-        } catch (e: Exception) {
-            VpnHideLog.w(TAG, "failed to read zygisk status heartbeat: ${e.message}")
-            ""
-        }
-    val zygiskProps = parseProps(zygiskStatusRaw)
-    val currentBootId = snapshot.get("boot_id")
-    val zygiskBootId = zygiskProps["boot_id"]
-    val zygiskActive = zygiskInstalled && zygiskBootId != null && zygiskBootId == currentBootId.trim()
-    val zygiskTargetCount = if (zygiskInstalled) countTargets(snapshot.get("zygisk_targets")) else 0
-    val zygisk: ModuleState =
-        if (zygiskInstalled) {
-            ModuleState.Installed(zygiskVersion, zygiskActive, zygiskTargetCount)
-        } else {
-            ModuleState.NotInstalled
-        }
-    VpnHideLog.i(TAG, "zygisk: $zygisk (heartbeatBootId=$zygiskBootId currentBootId=${currentBootId.trim()})")
 
     val portsObserverCount = countTargets(snapshot.get("ports_targets"))
     // Recommendation based purely on the kernel
@@ -719,8 +676,7 @@ internal suspend fun loadDashboardState(
     //  - kmod installed without gkiVariant (old build) AND not loaded —
     //    variant unknown + broken is almost always a variant mismatch, or
     //  - kmod installed on a kernel with no matching vpnhide-kmod variant at
-    //    all (non-GKI / unsupported combo) — we recommend zygisk instead so
-    //    the user doesn't wait for the kmod to "just work".
+    //    all (non-GKI / unsupported combo).
     val recommendedKmi = kernelRecommendation?.recommendedGkiVariant
     // Two cross-cutting gates on kmod warnings:
     //   !kmodRaw.active — an active kmod (/proc/vpnhide_targets present)
@@ -798,7 +754,7 @@ internal suspend fun loadDashboardState(
     // duplicates the instruction.
     val nativeInstallRecommendation =
         kernelRecommendation?.takeIf {
-            kmod is ModuleState.NotInstalled && zygisk is ModuleState.NotInstalled
+            kmod is ModuleState.NotInstalled
         }
     VpnHideLog.i(
         TAG,
@@ -875,7 +831,7 @@ internal suspend fun loadDashboardState(
     )
 
     // ── Issues ──
-    val hasNative = kmod is ModuleState.Installed || zygisk is ModuleState.Installed
+    val hasNative = kmod is ModuleState.Installed
     if (!hasNative) {
         err(res.getString(R.string.dashboard_issue_no_native))
     }
@@ -940,14 +896,13 @@ internal suspend fun loadDashboardState(
         detectModuleMismatches(
             listOf(
                 kmod to NativeModuleKind.Kmod,
-                zygisk to NativeModuleKind.Zygisk,
             ),
             appVersion,
         )
     moduleMismatches.forEach { mismatch ->
         warn(buildModuleVersionIssue(mismatch.kind, mismatch.moduleVersion, mismatch.appVersion))
     }
-    val totalTargets = lsposedTargetCount + kmodTargetCount + zygiskTargetCount
+    val totalTargets = lsposedTargetCount + kmodTargetCount
     if (totalTargets == 0) {
         err(res.getString(R.string.dashboard_issue_no_targets))
     }
@@ -961,30 +916,7 @@ internal suspend fun loadDashboardState(
 
     // ── Warnings: suboptimal-but-working setups ──
 
-    // W1: kernel supports kmod, but user only installed zygisk. Zygisk is
-    // detected by banking / payment apps, so a user has to remember Z-off
-    // per such app; kmod is invisible to anti-tamper.
-    if (kernelRecommendation?.preferKmod == true &&
-        zygisk is ModuleState.Installed &&
-        kmod is ModuleState.NotInstalled
-    ) {
-        warn(
-            res.getString(
-                R.string.dashboard_issue_kmod_capable_but_zygisk,
-                kernelRecommendation.recommendedArtifact,
-            ),
-        )
-    }
 
-    // W2: kmod and zygisk both active simultaneously — same coverage,
-    // but Zygisk adds the per-app footgun for banking / payment targets.
-    if (kmod is ModuleState.Installed &&
-        kmod.active &&
-        zygisk is ModuleState.Installed &&
-        zygisk.active
-    ) {
-        warn(res.getString(R.string.dashboard_issue_both_native_active))
-    }
 
     // W3: user has debug logging turned on — VPNHide Next is writing verbose lines
     // to logcat that a forensic reader with root can see. The flag file is
@@ -1136,7 +1068,6 @@ internal suspend fun loadDashboardState(
 
     return DashboardState(
         kmod = kmod,
-        zygisk = zygisk,
         lsposed = lsposed,
         nativeInstallRecommendation = nativeInstallRecommendation,
         kmodLoadStatus = kmodLoadStatus,

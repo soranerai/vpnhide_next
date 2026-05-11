@@ -14,8 +14,7 @@ private const val TAG = "VpnHide"
 
 internal const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
 internal const val KMOD_DIRECT_TARGETS = "/data/adb/vpnhide_kmod/direct_targets.txt"
-internal const val ZYGISK_TARGETS = "/data/adb/vpnhide_zygisk/targets.txt"
-internal const val ZYGISK_MODULE_TARGETS = "/data/adb/modules/vpnhide_zygisk/targets.txt"
+
 internal const val LSPOSED_TARGETS = "/data/adb/vpnhide_lsposed/targets.txt"
 internal const val KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
 internal const val SS_UIDS_FILE = "/data/system/vpnhide_uids.txt"
@@ -26,8 +25,7 @@ internal const val PORTS_APPLY_SCRIPT = "/data/adb/modules/vpnhide_kmod/vpnhide_
 internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
 internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
 internal const val KMOD_LOAD_DMESG_FILE = "/data/adb/vpnhide_kmod/load_dmesg"
-internal const val ZYGISK_MODULE_DIR = "/data/adb/modules/vpnhide_zygisk"
-internal const val ZYGISK_STATUS_FILE_NAME = "vpnhide_zygisk_active"
+
 
 /** Default cap on a single su invocation. Most root commands here finish
  *  in milliseconds; this only fires if the su binary is genuinely stuck
@@ -94,7 +92,7 @@ internal data class StartupResult(
 
 /**
  * Batched startup check: root access, target sync, UID resolution and boot ID.
- * Replaces checkRootAccess, cleanupStaleZygiskStatus and ensureSelfInTargets.
+ * Replaces checkRootAccess and ensureSelfInTargets.
  */
 internal fun performStartupOptimized(selfPkg: String): StartupResult {
     val script =
@@ -109,7 +107,7 @@ internal fun performStartupOptimized(selfPkg: String): StartupResult {
         
         # Add self to module targets
         ADDED=0
-        for path in $KMOD_TARGETS $ZYGISK_TARGETS $LSPOSED_TARGETS; do
+        for path in $KMOD_TARGETS $LSPOSED_TARGETS; do
           dir=${'$'}(dirname "${'$'}path")
           if [ -d "${'$'}dir" ]; then
             if ! grep -q "^$selfPkg${'$'}" "${'$'}path" 2>/dev/null; then
@@ -119,11 +117,7 @@ internal fun performStartupOptimized(selfPkg: String): StartupResult {
             fi
           fi
         done
-        
-        # Sync zygisk if needed
-        if [ -d $ZYGISK_MODULE_DIR ]; then
-          cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null
-        fi
+
         
         
         # UIDs list
@@ -181,48 +175,12 @@ internal fun isVpnActiveBlocking(): Boolean {
     }
 }
 
-internal fun cleanupStaleZygiskStatus(
-    context: android.content.Context,
-    currentBootId: String,
-) {
-    val statusFile = File(context.filesDir, ZYGISK_STATUS_FILE_NAME)
-    if (!statusFile.isFile) return
 
-    val props =
-        try {
-            statusFile
-                .readLines()
-                .mapNotNull {
-                    val parts = it.split("=", limit = 2)
-                    if (parts.size == 2) parts[0] to parts[1] else null
-                }.toMap()
-        } catch (e: Exception) {
-            VpnHideLog.w(TAG, "cleanupStaleZygiskStatus: failed to read heartbeat: ${e.message}")
-            emptyMap()
-        }
-
-    val heartbeatBootId = props["boot_id"]
-    val stale =
-        heartbeatBootId.isNullOrBlank() ||
-            heartbeatBootId != currentBootId
-
-    if (stale) {
-        if (statusFile.delete()) {
-            VpnHideLog.i(
-                TAG,
-                "cleanupStaleZygiskStatus: deleted stale heartbeat " +
-                    "(bootId=$heartbeatBootId currentBootId=$currentBootId)",
-            )
-        } else {
-            VpnHideLog.w(TAG, "cleanupStaleZygiskStatus: failed to delete stale heartbeat")
-        }
-    }
-}
 
 /**
  * Ensure the VPNHide Next app itself is in all 3 target lists + resolve UIDs.
  * Returns true if self had to be added to any list (= hooks may not be
- * applied to the current process, restart needed for zygisk).
+ * applied to the current process, restart needed).
  * Called once at app startup; result is shared with all screens.
  */
 internal fun ensureSelfInTargets(selfPkg: String): Boolean {
@@ -255,17 +213,6 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
     }
 
     addIfMissing(KMOD_TARGETS, "/data/adb/vpnhide_kmod")
-    addIfMissing(ZYGISK_TARGETS, "/data/adb/vpnhide_zygisk")
-    // Zygisk reads targets from module dir (via get_module_dir() fd), not
-    // from persistent dir. Must sync after adding self, otherwise zygisk
-    // won't hook us on next launch. Surface real `cp` failures (read-only
-    // mount, SELinux denial) — silent failure here used to manifest as
-    // "I edited targets in the app but zygisk didn't pick it up".
-    val (cpExit, cpOut) =
-        suExec("if [ -d $ZYGISK_MODULE_DIR ]; then cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>&1; fi")
-    if (cpExit != 0 && cpOut.isNotBlank()) {
-        VpnHideLog.w(TAG, "ensureSelfInTargets: zygisk module dir copy failed (exit=$cpExit): ${cpOut.trim()}")
-    }
     suExec("mkdir -p /data/adb/vpnhide_lsposed")
     addIfMissing(LSPOSED_TARGETS, null)
 

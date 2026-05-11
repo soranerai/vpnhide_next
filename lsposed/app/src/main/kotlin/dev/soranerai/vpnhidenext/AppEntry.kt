@@ -10,7 +10,6 @@ internal data class AppEntry(
     val userIds: List<Int> = emptyList(),
     // Protection (VPN) flags
     val kmod: Boolean = false,
-    val zygisk: Boolean = false,
     val lsposed: Boolean = false,
     // TUN Bypass
     val tunBypass: Boolean = false,
@@ -18,7 +17,7 @@ internal data class AppEntry(
     val portHiding: Boolean = false,
     val portRules: List<PortRule> = emptyList(),
 ) {
-    val anyProtection get() = kmod || zygisk || lsposed
+    val anyProtection get() = kmod || lsposed
 }
 
 internal enum class PortProtocol { TCP, UDP, BOTH }
@@ -35,12 +34,11 @@ internal data class PortRule(
     val enabled: Boolean = true,
 )
 
-internal enum class Layer { KMOD, ZYGISK, LSPOSED }
+internal enum class Layer { KMOD, LSPOSED }
 
 internal enum class AppSortOrder { NAME_ASC, NAME_DESC, SELECTED_FIRST }
 
 internal data class InstalledModules(
     val kmod: Boolean,
     val kmodActive: Boolean,
-    val zygisk: Boolean,
 )

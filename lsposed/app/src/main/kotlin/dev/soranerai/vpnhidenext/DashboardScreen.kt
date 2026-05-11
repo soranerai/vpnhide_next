@@ -207,10 +207,6 @@ private fun DashboardContent(
         LsposedCard(s.lsposed)
         Spacer(Modifier.height(12.dp))
         ModuleCard(stringResource(R.string.dashboard_kmod), s.kmod)
-        if (!kmodActive) {
-            Spacer(Modifier.height(12.dp))
-            ModuleCard(stringResource(R.string.dashboard_zygisk), s.zygisk, selfNeedsRestart)
-        }
         s.nativeInstallRecommendation?.let { recommendation ->
             Spacer(Modifier.height(12.dp))
             NativeInstallRecommendationCard(recommendation)
@@ -529,7 +525,7 @@ private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecomme
                     when {
                         !recommendation.preferKmod -> {
                             stringResource(
-                                R.string.dashboard_install_recommendation_zygisk,
+                                R.string.dashboard_install_recommendation_kmod_unsupported,
                                 recommendation.recommendedArtifact,
                             )
                         }
@@ -552,14 +548,7 @@ private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecomme
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Medium,
             )
-            if (!recommendation.preferKmod) {
-                Spacer(Modifier.height(8.dp))
-                Text(
-                    text = stringResource(R.string.dashboard_install_recommendation_zygisk_warning),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-                )
-            }
+
         }
     }
 }

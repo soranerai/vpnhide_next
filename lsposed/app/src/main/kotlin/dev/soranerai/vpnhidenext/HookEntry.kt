@@ -31,7 +31,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  *   - LinkProperties: getInterfaceName(), getRoutes(), getDnsServers()
  *
  * Native detection paths (getifaddrs, ioctl, /proc/net) are covered
- * by vpnhide-kmod (kernel module) or vpnhide-zygisk (in-process hooks).
+ * by vpnhide-kmod (kernel module).
  *
  * Only "System Framework" needs to be in LSPosed scope.
  */

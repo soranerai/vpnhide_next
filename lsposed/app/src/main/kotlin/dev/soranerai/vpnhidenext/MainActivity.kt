@@ -54,11 +54,7 @@ class MainActivity : ComponentActivity() {
         VpnHideLog.init(applicationContext)
         // Re-propagate the persisted flag to the on-disk sinks as a
         // safety-net. Most reinstall scenarios are now covered by:
-        //   - the canonical /data/adb/vpnhide_zygisk/debug_logging file
-        //     surviving module reinstall (lives outside /data/adb/modules/),
         //   - kmod's service.sh re-seeding /proc/vpnhide_debug at boot,
-        //   - zygisk's service.sh copying the canonical debug_logging
-        //     into the module dir at boot.
         // The remaining gap is "user reinstalled a native module mid-
         // session and didn't reboot before opening the app" — service.sh
         // hasn't re-seeded the module-dir copy yet, so the next fork of
@@ -148,9 +144,7 @@ private fun MainScreen(
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            cleanupStaleZygiskStatus(context, startup.currentBootId)
-        }
+
         if (startup.addedToTargets) {
             withContext(Dispatchers.IO) {
                 applyKmodTargets(context)

@@ -61,6 +61,6 @@ This string goes into:
 - APK `versionName` (visible in Android Settings → Apps, diagnostic debug zip, `BuildConfig.VERSION_NAME`)
 - Inside the zip filenames (only for release tags; dev artifacts in CI keep a stable name)
 
-The committed `module.prop` files are **not** modified — `kmod/build.py` and `zygisk/build.py` stage a copy, patch the version there, and zip. `lsposed/app/build.gradle.kts` evaluates `build-version.py` at configure time and sets `versionName` dynamically.
+The committed `module.prop` files are **not** modified — `kmod/build.py` stages a copy, patch the version there, and zip. `lsposed/app/build.gradle.kts` evaluates `build-version.py` at configure time and sets `versionName` dynamically.
 
 `versionCode` stays at the value baked in by the last `release.py` run (monotonically increasing integer required by Android/Magisk).

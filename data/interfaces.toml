@@ -1,9 +1,9 @@
 # Single source of truth for VPN-like network interface name patterns.
 # A name matching any rule below is treated as a tunnel and hidden from
-# target apps (kmod) / from the calling process (zygisk + lsposed).
+# target apps (kmod) / from the calling process (lsposed).
 #
 # Read at codegen time by scripts/codegen-interfaces.py, which renders
-# four matchers (kmod C, zygisk Rust, lsposed-native Rust, lsposed
+# three matchers (kmod C, lsposed-native Rust, lsposed
 # Kotlin). Sync between platforms is enforced by a CI lint step that
 # re-runs the codegen and fails if the generated files drift.
 #
@@ -256,4 +256,3 @@ is_vpn = false
 [[test]]
 name = "VPN"          # full name is the substring
 is_vpn = true
-

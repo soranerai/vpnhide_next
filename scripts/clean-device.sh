@@ -7,7 +7,7 @@ echo "Uninstalling app..."
 adb shell pm uninstall dev.soranerai.vpnhidenext 2>/dev/null || true
 
 echo "Removing persistent data..."
-adb shell su -c "rm -rf /data/adb/vpnhide_kmod /data/adb/vpnhide_zygisk /data/adb/vpnhide_lsposed" 2>/dev/null || true
+adb shell su -c "rm -rf /data/adb/vpnhide_kmod /data/adb/vpnhide_lsposed" 2>/dev/null || true
 
 echo "Removing runtime files..."
 adb shell su -c "rm -f /data/system/vpnhide_uids.txt" 2>/dev/null || true

@@ -1,7 +1,3 @@
-# Zygisk (Rust)
-zygisk/target/
-zygisk/.vscode/
-zygisk/.idea/
 
 # LSPosed (Kotlin/Gradle)
 lsposed/.gradle/

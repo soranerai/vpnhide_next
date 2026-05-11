@@ -17,25 +17,6 @@
 
 **vpnhide** — это инструмент для скрытия использования VPN от приложений на Android. Он делает VPN-соединение невидимым даже для тех сервисов, которые специально пытаются его обнаружить (например, банковские клиенты, стриминговые платформы или приложения с территориальными ограничениями).
 
-### Архитектура
-*   **`kmod`** — модуль ядра (рекомендуется), работающий вне процесса приложения. Требования: GKI + ARM64-v8a.
-*   **`lsposed`** — фильтрация Binder-транзакций в `system_server`. Необязательно.
-*   **`zygisk`** — нативные хуки для устройств без поддержки модулей ядра. Идентичны исходному репозиторию.
-*   **`portshide`** — блокировка доступа к localhost для защиты от обнаружения прокси-демонов. Необязательно.
-
-### Установка
-1.  Установите `vpnhide.apk` и включите модуль в LSPosed (scope: System Framework).
-2.  Перезагрузите устройство.
-3.  Установите рекомендованный нативный модуль (`kmod` или `zygisk`) через приложение.
-4.  Выберите приложения для защиты во вкладке «Защита» и сохраните настройки.
-
-### Скриншоты
-| Дашборд | Список приложений | Сортировка | Диагностика |
-|:-:|:-:|:-:|:-:|
-| <img src="assets/screenshots/Dashboard.jpg" width="200"> | <img src="assets/screenshots/AppSelector.jpg" width="200"> | <img src="assets/screenshots/SortMenu.jpg" width="200"> | <img src="assets/screenshots/Diagnostics.jpg" width="200"> |
-| **Массовые правила портов** | **Локальные правила портов** | **Валидация правил портов** | **FAQ** |
-| <img src="assets/screenshots/Bulk%20edit%20rules.jpg" width="200"> | <img src="assets/screenshots/Local%20ports%20edit.jpg" width="200"> | <img src="assets/screenshots/Duplicate%20and%20redutant%20protection.jpg" width="200"> | <img src="assets/screenshots/FAQ.jpg" width="200"> |
-
 ---
 ### Информация о проекте
 Это форк проекта [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide/). Проект был отделен от апстрима из-за внесения значительных изменений.
@@ -50,4 +31,21 @@
 *   **Переход приложения на БД**: Правила зеркально хранятся в БД приложения.
 *   **Максимальная скрытность**: Полный отказ от файлов в `/proc/`, которые доступны всем приложениям, что исключает обнаружение модуля через файловую систему.
 
-**В будущем планируется полностью вырезать поддержку Zygisk. Этот форк ориентирован только на kernel-level и LSPosed**
+**Этот форк полностью сфокусирован на kernel-level и LSPosed. Поддержка Zygisk была удалена.**
+
+### Архитектура
+*   **`kmod`** — модуль ядра (рекомендуется), работающий вне процесса приложения. Требования: GKI + ARM64-v8a.
+*   **`lsposed`** — фильтрация Binder-транзакций в `system_server`.
+
+### Установка
+1.  Установите `vpnhide.apk` и включите модуль в LSPosed (scope: System Framework).
+2.  Перезагрузите устройство.
+3.  Установите модуль ядра (`kmod`) через приложение.
+4.  Выберите приложения для защиты во вкладке «Защита» и сохраните настройки.
+
+### Скриншоты
+| Дашборд | Список приложений | Сортировка | Диагностика |
+|:-:|:-:|:-:|:-:|
+| <img src="assets/screenshots/Dashboard.jpg" width="200"> | <img src="assets/screenshots/AppSelector.jpg" width="200"> | <img src="assets/screenshots/SortMenu.jpg" width="200"> | <img src="assets/screenshots/Diagnostics.jpg" width="200"> |
+| **Массовые правила портов** | **Локальные правила портов** | **Валидация правил портов** | **FAQ** |
+| <img src="assets/screenshots/Bulk%20edit%20rules.jpg" width="200"> | <img src="assets/screenshots/Local%20ports%20edit.jpg" width="200"> | <img src="assets/screenshots/Duplicate%20and%20redutant%20protection.jpg" width="200"> | <img src="assets/screenshots/FAQ.jpg" width="200"> |

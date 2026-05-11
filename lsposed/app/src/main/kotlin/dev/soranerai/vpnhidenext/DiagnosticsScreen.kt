@@ -904,7 +904,7 @@ private suspend fun exportDebugZip(
 ): File? =
     withContext(Dispatchers.IO) {
         // Force-enable debug logging across all four sinks (app, system_server,
-        // zygisk, kmod) while the capture runs so the dump contains VpnHide-
+        // kmod) while the capture runs so the dump contains VpnHide-
         // tagged lines + verbose dmesg even when the user's persistent toggle
         // is OFF (the default). We restore to whatever the SharedPreferences
         // say at the end — if the user happens to flip the UI toggle mid-
@@ -1024,10 +1024,6 @@ private suspend fun exportDebugZip(
                     val (_, loadDmesg) = suExec("cat $KMOD_LOAD_DMESG_FILE 2>/dev/null")
                     appendLine(loadDmesg.ifEmpty { "(not captured)" })
                     appendLine()
-                    appendLine("=== Zygisk module ===")
-                    val (_, zygiskProp) = suExec("cat /data/adb/modules/vpnhide_zygisk/module.prop 2>/dev/null")
-                    appendLine(zygiskProp.ifEmpty { "Not installed" })
-                    appendLine()
                     appendLine("=== Registered kretprobes ===")
                     val (_, kprobes) = suExec("cat /sys/kernel/debug/kprobes/list 2>/dev/null | grep vpnhide")
                     appendLine(kprobes.ifEmpty { "(not available or no vpnhide probes)" })
@@ -1068,7 +1064,6 @@ private suspend fun exportDebugZip(
             // Target UIDs
             val (_, procTargets) = suExec("cat /proc/vpnhide_targets 2>/dev/null")
             val (_, kmodTargets) = suExec("cat $KMOD_TARGETS 2>/dev/null")
-            val (_, zygiskTargets) = suExec("cat $ZYGISK_TARGETS 2>/dev/null")
             val (_, lsposedTargets) = suExec("cat $LSPOSED_TARGETS 2>/dev/null")
             val targetsText =
                 buildString {
@@ -1077,9 +1072,6 @@ private suspend fun exportDebugZip(
                     appendLine()
                     appendLine("=== kmod targets ===")
                     appendLine(kmodTargets.ifEmpty { "(empty)" })
-                    appendLine()
-                    appendLine("=== zygisk targets ===")
-                    appendLine(zygiskTargets.ifEmpty { "(empty)" })
                     appendLine()
                     appendLine("=== lsposed targets ===")
                     appendLine(lsposedTargets.ifEmpty { "(empty)" })
@@ -1138,12 +1130,6 @@ private suspend fun exportDebugZip(
                                 "VPNHideTest:*",
                                 "VpnHide:*",
                                 "VpnHide-Dashboard:*",
-                                // zygisk's android_logger uses this tag (see
-                                // zygisk/src/lib.rs:LOG_TAG); without it the
-                                // exported zip is missing all native-side
-                                // hook logs, which is the half users most
-                                // need to debug.
-                                "vpnhide-zygisk:*",
                             ),
                         )
                     val output = proc.inputStream.bufferedReader().readText()

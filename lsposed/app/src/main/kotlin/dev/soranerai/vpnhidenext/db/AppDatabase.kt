@@ -70,7 +70,7 @@ internal class Converters {
 
 @Database(
     entities = [AppProtection::class, DbPortRule::class, DbMassPortRule::class],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 @TypeConverters(Converters::class)
@@ -93,7 +93,8 @@ internal abstract class AppDatabase : RoomDatabase() {
                             context.applicationContext,
                             AppDatabase::class.java,
                             "vpnhide_database",
-                        ).build()
+                        ).fallbackToDestructiveMigration()
+                        .build()
                 instance = newInstance
                 newInstance
             }

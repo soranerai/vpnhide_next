@@ -15,7 +15,7 @@ pub enum CheckStatus {
     /// (SELinux denial, ENODEV, etc.) — both outcomes confirm the VPN is
     /// hidden from this surface.
     Pass,
-    /// Probe surfaced VPN-shaped data the kmod / zygisk should have hidden.
+    /// Probe surfaced VPN-shaped data the kmod / lsposed should have hidden.
     Fail,
     /// App has no network permission, so the probe couldn't run at all.
     /// Reported separately from Pass/Fail so the UI can tell the user to
@@ -308,7 +308,7 @@ fn check_proc_file(path: &str) -> CheckOutput {
 }
 
 /// Wrapper around recvmsg for netlink sockets. Uses recvmsg (not recv/recvfrom)
-/// so that zygisk's recvmsg hook can filter the response.
+/// so that the recvmsg hook can filter the response.
 unsafe fn netlink_recv(fd: i32, buf: &mut [u8]) -> isize {
     unsafe {
         let mut iov = libc::iovec {

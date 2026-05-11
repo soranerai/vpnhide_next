@@ -1,6 +1,0 @@
-id=vpnhide_zygisk
-name=VPNHide Next (Zygisk native)
-version=v1.2.0
-versionCode=10200
-author=soranerai
-description=Hides active VPN interfaces from selected apps by inline-hooking libc ioctl via shadowhook. Covers the native detection path (Flutter, JNI, raw C/C++) that Java-level LSPosed modules can't reach. Manage targets via VPNHide Next app.

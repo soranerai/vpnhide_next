@@ -17,16 +17,24 @@
 
 **vpnhide** is a tool to hide VPN usage from Android applications. It makes the VPN connection invisible even to services that actively try to detect it (such as banking apps, streaming platforms, or region-restricted services).
 
+**Main differences from the original:**
+*   **Dropped support for legacy architectures**: Only arm64 is supported.
+*   **Deep redesign and optimization**: Completely overhauled interface (skeleton, async loading) and significantly optimized code.
+*   **Flexible sorting**: Added the ability for proper application sorting.
+*   **Anonymous TUN route hiding**: Exclusion of TUN interfaces from route requests.
+*   **Kernel-Level Bind Bypass**: Ability to deploy packages directly bypassing any application binds at the kernel level.
+*   **Fully reworked port blocking**: Rule-based port access blocking mechanism. The logic has been moved from iptables to the kernel.
+*   **Database-driven architecture**: Rules are mirrored and stored in the application's database.
+*   **Maximum Stealth**: Complete removal of `/proc/` files accessible to all applications, eliminating module detection through the file system.
+
 ### Architecture
 *   **`kmod`** — kernel module (recommended), operating outside the application process context. Requirements: GKI + ARM64-v8a.
 *   **`lsposed`** — Binder transaction filtering in `system_server`. Optional.
-*   **`zygisk`** — native hooks for devices without kernel module support. Identical to the original repository.
-*   **`portshide`** — blocking access to localhost to prevent proxy daemon detection. Optional.
 
 ### Installation
 1.  Install `vpnhide.apk` and enable the module in LSPosed (scope: System Framework).
 2.  Reboot your device.
-3.  Install the recommended native module (`kmod` or `zygisk`) via the app.
+3.  Install the kernel module (`kmod`) via the app.
 4.  Select target apps in the "Protection" tab and save your settings.
 
 ### Screenshots
@@ -39,13 +47,3 @@
 ---
 ### Project Information
 This is a fork of the [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide/) project. This branch was detached from the upstream due to significant changes.
-
-**Main differences from the original:**
-*   **Dropped support for legacy architectures**: Only arm64 is supported.
-*   **Deep redesign and optimization**: Completely overhauled interface (skeleton, async loading) and significantly optimized code.
-*   **Flexible sorting**: Added the ability for proper application sorting.
-*   **Anonymous TUN route hiding**: Exclusion of TUN interfaces from route requests.
-*   **Kernel-Level Bind Bypass**: Ability to deploy packages directly bypassing any application binds at the kernel level.
-*   **Fully reworked port blocking**: Rule-based port access blocking mechanism. The logic has been moved from iptables to the kernel.
-*   **Database-driven architecture**: Rules are mirrored and stored in the application's database.
-*   **Maximum Stealth**: Complete removal of `/proc/` files accessible to all applications, eliminating module detection through the file system.

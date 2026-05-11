@@ -75,7 +75,7 @@ internal fun AppPickerScreen(
         sortedIds =
             apps
                 .filter { app ->
-                    (showSystem || !app.isSystem || app.kmod || app.zygisk || app.lsposed) &&
+                    (showSystem || !app.isSystem || app.kmod || app.lsposed) &&
                         (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
                         (!showOnlySelected || app.anyProtection) &&
                         (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
@@ -109,7 +109,6 @@ internal fun AppPickerScreen(
             InstalledModules(
                 kmod = targets?.kmodModuleInstalled == true,
                 kmodActive = targets?.kmodActive == true,
-                zygisk = targets?.zygiskModuleInstalled == true,
             )
         }
 
@@ -152,7 +151,6 @@ internal fun AppPickerScreen(
                                             } else {
                                                 when (layer) {
                                                     Layer.KMOD -> it.copy(kmod = !it.kmod)
-                                                    Layer.ZYGISK -> it.copy(zygisk = !it.zygisk)
                                                     Layer.LSPOSED -> it.copy(lsposed = !it.lsposed)
                                                 }
                                             }
@@ -160,7 +158,7 @@ internal fun AppPickerScreen(
                                     onUpdate(newList)
                                 },
                                 onToggleAll = {
-                                    val newState = !(app.kmod || app.zygisk || app.lsposed)
+                                    val newState = !(app.kmod || app.lsposed)
                                     val newList =
                                         apps.map {
                                             if (it.packageName != app.packageName) {
@@ -168,7 +166,6 @@ internal fun AppPickerScreen(
                                             } else {
                                                 it.copy(
                                                     kmod = if (installed.kmod) newState else false,
-                                                    zygisk = if (installed.zygisk) newState else false,
                                                     lsposed = newState,
                                                 )
                                             }

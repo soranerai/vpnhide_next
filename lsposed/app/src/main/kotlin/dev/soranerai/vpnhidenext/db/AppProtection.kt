@@ -7,7 +7,6 @@ import androidx.room.PrimaryKey
 internal data class AppProtection(
     @PrimaryKey val packageName: String,
     val kmod: Boolean = false,
-    val zygisk: Boolean = false,
     val lsposed: Boolean = false,
     val tunBypass: Boolean = false,
     val portHiding: Boolean = false,

@@ -9,7 +9,6 @@ tooling that follows the AGENTS-convention picks it up automatically.
 ## Project layout
 
 - `kmod/` — kernel module (hiding interfaces + ports), kretprobes-based
-- `zygisk/` — Rust Zygisk module, inline `libc` hooks via shadowhook
 - `lsposed/` — LSPosed module + Compose target-picker app
 
 ## Read before touching code
@@ -39,10 +38,9 @@ These short files cover everything specific to this repo. Skipping them leads to
 Single-command builds for both CI and local — the same scripts run in both places.
 
 - **kmod**: `./kmod/build.py --kmi <kmi>` (or `--all`). Auto-spawns the DDK podman/docker container if you're not already inside it; CI passes `--inside-container` to skip the spawn. The DDK image tag is `DDK_IMAGE_TAG` in `kmod/build.py` — `.github/workflows/ci.yml` mirrors it, bump both together.
-- **zygisk**: `cd zygisk && ./build.py` — host-side cargo-ndk build, same script in CI image.
 - **lsposed APK**: `cd lsposed && ./gradlew :app:assembleRelease`.
 
-Both Rust cdylibs (`zygisk/build.rs`, `lsposed/native/build.rs`) pass `-Wl,-z,max-page-size=16384` so the resulting `.so` files load cleanly on 16 KiB-page Android devices (Pixel 8 Pro on Android 16, future hardware). Don't strip that flag.
+The Rust cdylib (`lsposed/native/build.rs`) passes `-Wl,-z,max-page-size=16384` so the resulting `.so` file loads cleanly on 16 KiB-page Android devices (Pixel 8 Pro on Android 16, future hardware). Don't strip that flag.
 
 ## Design notes
 

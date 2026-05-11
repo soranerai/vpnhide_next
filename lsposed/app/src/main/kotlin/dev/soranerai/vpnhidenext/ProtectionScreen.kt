@@ -86,10 +86,9 @@ internal fun ProtectionScreen(
                             isSystem = app.isSystem,
                             userIds = app.userIds,
                             kmod = app.packageName in t.kmodTargets,
-                            zygisk = app.packageName in t.zygiskTargets,
                             lsposed = app.packageName in t.lsposedTargets,
                         )
-                    }.sortedWith(compareByDescending<AppEntry> { it.kmod || it.zygisk || it.lsposed }.thenBy { it.label })
+                    }.sortedWith(compareByDescending<AppEntry> { it.kmod || it.lsposed }.thenBy { it.label })
             originalVpn = vpnApps
         }
 
@@ -258,7 +257,6 @@ internal fun ProtectionScreen(
                                 dev.soranerai.vpnhidenext.db.AppProtection(
                                     packageName = pkg,
                                     kmod = vpnApp?.kmod ?: false,
-                                    zygisk = vpnApp?.zygisk ?: false,
                                     lsposed = vpnApp?.lsposed ?: false,
                                     tunBypass = tunApp?.tunBypass ?: false,
                                     portHiding = portApp?.portHiding ?: false,
@@ -301,9 +299,8 @@ internal fun ProtectionScreen(
 
                     if (isVpnDirty) {
                         val k = (vpnApps.filter { it.kmod }.map { it.packageName } + selfPkg).distinct().sorted()
-                        val z = (vpnApps.filter { it.zygisk }.map { it.packageName } + selfPkg).distinct().sorted()
                         val l = (vpnApps.filter { it.lsposed }.map { it.packageName } + selfPkg).distinct().sorted()
-                        parts += buildVpnSaveCommand(header, k, z, l)
+                        parts += buildVpnSaveCommand(header, k, l)
                     }
                     if (isTunDirty) {
                         val k = (tunApps.filter { it.tunBypass }.map { it.packageName } + selfPkg).distinct().sorted()
@@ -352,7 +349,7 @@ private fun dirtyVpn(
     if (current.size != original.size) return true
     return current.any { c ->
         val o = original.find { it.packageName == c.packageName } ?: return@any true
-        c.kmod != o.kmod || c.zygisk != o.zygisk || c.lsposed != o.lsposed
+        c.kmod != o.kmod || c.lsposed != o.lsposed
     }
 }
 
@@ -426,14 +423,11 @@ private fun ProtectionModeSwitcher(
 private fun buildVpnSaveCommand(
     header: String,
     kmod: List<String>,
-    zygisk: List<String>,
     lsposed: List<String>,
 ): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(KMOD_TARGETS, header, kmod)
-    parts += buildWriteTargetsCommand(ZYGISK_TARGETS, header, zygisk)
     parts += buildWriteTargetsCommand(LSPOSED_TARGETS, header, lsposed)
-    parts += "if [ -d $ZYGISK_MODULE_DIR ]; then cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null; fi"
     parts += buildKmodApplyCommand(kmod, targetType = "targets")
     parts += buildLsposedApplyCommand(lsposed)
     return parts.joinToString(" ; ")

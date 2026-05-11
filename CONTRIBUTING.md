@@ -1,58 +1,45 @@
-# Contributing to vpnhide_next
+# Contributing to VPNHide
 
-Thanks for your interest. This file covers the contribution **process**; for build and setup instructions see [docs/development.md](docs/development.md).
+We welcome contributions of all types: bug fixes, new features, documentation, and translations.
 
-## Before you start
+## Commit messages
 
-- For non-trivial changes, open an issue first to discuss the approach.
-- Make sure your change builds locally and passes the CI lints listed in [docs/development.md](docs/development.md#ci-lints-run-before-pushing).
+We follow a loose conventional-commits style for changelog generation and easier history browsing.
 
-## Commits
-
-Use conventional-style prefixes, matching the existing history:
-
-- `fix:` — bug fix
 - `feat:` — new feature
-- `refactor:` — code change without behaviour change
-- `docs:` — documentation only
+- `fix:` — bug fix
+- `docs:` — documentation
+- `style:` — formatting, missing semi colons, etc
+- `refactor:` — code change that neither fixes a bug nor adds a feature
+- `perf:` — code change that improves performance
+- `test:` — adding missing tests
 - `chore:` — tooling, release, CI, build
 - `ci:` — CI-only changes
 
-Scope the prefix where useful: `fix(zygisk): …`, `feat(lsposed): …`, `fix(kmod): …`.
+Scope the prefix where useful: `feat(lsposed): …`, `fix(kmod): …`.
 
 Keep messages focused on *why*, not *what* — the diff already shows what changed.
 
-## Changelog entry (required for user-visible changes)
+## Branching model
 
-Before opening a PR, add a changelog entry:
+- `main` — production-ready code. Every commit here must pass all CI checks.
+- `dev` — ongoing development. Can be unstable.
+- feature branches — use `feat/name` or `fix/name` branches for PRs.
 
-```sh
-./scripts/changelog.py <type> "<EN text>" "<RU text>"
-# types: added | changed | fixed | removed | deprecated | security
-```
+## Development workflow
 
-This writes a new Markdown fragment to `changelog.d/`. That's the only file changed — `CHANGELOG.md` is regenerated only at release time, which is what keeps concurrent PRs from conflicting. Commit just the fragment alongside your code change. Run `./scripts/preview-changelog.py` to see the pending entries together.
+1. Fork the repository.
+2. Create a feature branch.
+3. Make your changes.
+4. Add a changelog fragment (see [AGENTS.md](AGENTS.md)).
+5. Open a Pull Request.
 
-**Skip the entry** for internal refactors with no behaviour change, docs-only, CI-only, and test-only changes.
+## Coding style
 
-See [docs/changelog.md](docs/changelog.md) for the full changelog workflow.
+- **Kotlin**: Follow official Kotlin style guide. Use `ktlint` to check.
+- **Rust**: Use `rustfmt` and `clippy`.
+- **C**: Follow Linux kernel coding style for `kmod`.
 
-## Pull requests
+## UI/UX guidelines
 
-- Target the `main` branch.
-- Keep PRs focused — one logical change per PR.
-- Include a "why" in the PR description, and a brief "Testing" section if you verified anything manually that CI doesn't cover (hardware testing, specific device models, edge cases).
-- CI must pass before merge.
-
-## Code style
-
-All style is enforced by CI — run the checks locally before pushing:
-
-- Rust: `cargo fmt` + `cargo clippy -- -D warnings`
-- C: `clang-format` against `kmod/vpnhide_kmod.c`
-- Kotlin: `ktlint`
-- Android: `./gradlew :app:lint`
-
-## License
-
-By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE) that covers the project.
+We aim for a "premium" feel. Use modern components, smooth animations, and a cohesive color palette. Avoid simple MVPs; prioritize visual excellence.

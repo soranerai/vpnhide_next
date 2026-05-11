@@ -18,7 +18,7 @@ import kotlinx.coroutines.withContext
  * Diagnostics answer one question: *do the hooks work for this app
  * process right now?* The hooks themselves are fixed at process
  * creation time — kmod loads at boot, LSPosed injects into
- * system_server at its boot, Zygisk hooks fire at zygote fork —
+ * system_server at its boot —
  * so a run's result is valid for the entire lifetime of this app
  * process. Re-running every tab switch is pure waste.
  *
