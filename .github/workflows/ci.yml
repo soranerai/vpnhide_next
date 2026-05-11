@@ -120,8 +120,6 @@ jobs:
           shellcheck -x -e SC2034,SC3043 \
             kmod/module/customize.sh kmod/module/post-fs-data.sh kmod/module/service.sh \
             zygisk/module/customize.sh zygisk/module/service.sh \
-            portshide/module/customize.sh portshide/module/service.sh \
-            portshide/module/uninstall.sh portshide/module/vpnhide_ports_apply.sh \
             scripts/clean-device.sh scripts/update-json.sh
 
       # C (kernel module)
@@ -135,7 +133,7 @@ jobs:
 
       # Kotlin
       - name: ktlint
-        run: ktlint "lsposed/**/*.kt"
+        run: ktlint "lsposed/app/src/**/*.kt"
       # Single Gradle invocation: lint + tests share one configuration
       # phase + warm daemon. Configures Gobley's cargo plugin once instead
       # of twice. ANDROID_NDK_ROOT is baked into the CI image
@@ -333,30 +331,9 @@ jobs:
           path: vpnhide.apk
           if-no-files-found: error
 
-  portshide:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-
-      - name: Package ports module zip
-        env:
-          UPDATE_JSON_URL: https://raw.githubusercontent.com/soranerai/vpnhide/main/update-json/update-ports.json
-        run: |
-          cd portshide
-          python3 ./build-zip.py
-          mv vpnhide-ports.zip "$GITHUB_WORKSPACE/vpnhide-ports.zip"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: vpnhide-ports
-          path: vpnhide-ports.zip
-          if-no-files-found: error
 
   release:
-    needs: [kmod, zygisk, lsposed, portshide]
+    needs: [kmod, zygisk, lsposed]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # Only the release job needs write — used by softprops/action-gh-release

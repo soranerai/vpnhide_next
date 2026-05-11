@@ -19,12 +19,10 @@ internal const val ZYGISK_MODULE_TARGETS = "/data/adb/modules/vpnhide_zygisk/tar
 internal const val LSPOSED_TARGETS = "/data/adb/vpnhide_lsposed/targets.txt"
 internal const val KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
 internal const val SS_UIDS_FILE = "/data/system/vpnhide_uids.txt"
-internal const val SS_HIDDEN_PKGS_FILE = "/data/system/vpnhide_hidden_pkgs.txt"
-internal const val SS_OBSERVER_UIDS_FILE = "/data/system/vpnhide_observer_uids.txt"
 internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt"
+internal const val PORTS_RULES_FILE = "/data/adb/vpnhide_ports/rules.txt"
 internal const val DEV_NODE = "/dev/vpnhide_ctrl"
-internal const val PORTS_APPLY_SCRIPT = "/data/adb/modules/vpnhide_ports/vpnhide_ports_apply.sh"
-internal const val PORTS_MODULE_DIR = "/data/adb/modules/vpnhide_ports"
+internal const val PORTS_APPLY_SCRIPT = "/data/adb/modules/vpnhide_kmod/vpnhide_ports_apply.sh"
 internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
 internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
 internal const val KMOD_LOAD_DMESG_FILE = "/data/adb/vpnhide_kmod/load_dmesg"
@@ -127,13 +125,6 @@ internal fun performStartupOptimized(selfPkg: String): StartupResult {
           cp $ZYGISK_TARGETS $ZYGISK_MODULE_TARGETS 2>/dev/null
         fi
         
-        # Hidden packages list
-        if ! grep -q "^$selfPkg${'$'}" $SS_HIDDEN_PKGS_FILE 2>/dev/null; then
-           echo "$selfPkg" >> $SS_HIDDEN_PKGS_FILE
-           chmod 640 $SS_HIDDEN_PKGS_FILE
-           chown root:system $SS_HIDDEN_PKGS_FILE
-           chcon u:object_r:system_data_file:s0 $SS_HIDDEN_PKGS_FILE 2>/dev/null || true
-        fi
         
         # UIDs list
         for U in ${'$'}SELF_UIDS; do
@@ -278,30 +269,6 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
     suExec("mkdir -p /data/adb/vpnhide_lsposed")
     addIfMissing(LSPOSED_TARGETS, null)
 
-    // Always hide self via package visibility hooks — prevents observer apps from seeing us.
-    // File lives in /data/system/ (system_data_file), readable by system_server.
-    val (_, hiddenRaw) = suExec("cat $SS_HIDDEN_PKGS_FILE 2>/dev/null || true")
-    val hiddenExisting = hiddenRaw.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-    if (selfPkg !in hiddenExisting) {
-        val body =
-            "# Managed by VPNHide Next app\n" +
-                (hiddenExisting + selfPkg).sorted().joinToString("\n") + "\n"
-        val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
-        suExec(
-            // Mode 0640 + group=system: system_server reads via the group
-            // bit; untrusted apps fall to "other" and get EACCES.
-            // /data/system/ itself is mode 0775 traversable by untrusted —
-            // a plain 0644 here used to be enumerable + readable.
-            "echo '$b64' | base64 -d > $SS_HIDDEN_PKGS_FILE" +
-                " && chmod 640 $SS_HIDDEN_PKGS_FILE" +
-                " && chown root:system $SS_HIDDEN_PKGS_FILE" +
-                " && chcon u:object_r:system_data_file:s0 $SS_HIDDEN_PKGS_FILE 2>/dev/null; true",
-        )
-        VpnHideLog.i(TAG, "ensureSelfInTargets: added $selfPkg to $SS_HIDDEN_PKGS_FILE")
-        // Don't flip `added`: PM hooks live in system_server and pick up the file change
-        // immediately via inotify — no app restart is needed, unlike native (zygisk) hooks.
-    }
-
     // Resolve UIDs so hooks pick us up immediately (kmod + lsposed support live reload).
     // `--user all` catches the case where vpnhide is installed in a work profile too —
     // each UID gets added to targets so both instances are covered. `tr ',' '\n'`
@@ -372,9 +339,8 @@ internal fun buildWriteTargetsCommand(
 
 internal fun buildKmodApplyCommand(
     pkgs: List<String>,
-    isDirect: Boolean = false,
+    targetType: String = "targets",
 ): String {
-    val targetType = if (isDirect) "direct" else "targets"
     if (pkgs.isEmpty()) {
         return "[ -c $DEV_NODE ] && $KMOD_CTL $targetType; true"
     }
@@ -384,6 +350,45 @@ internal fun buildKmodApplyCommand(
     return "if [ -c $DEV_NODE ]; then " +
         "UIDS=\$(pm list packages -U | $awkCmd | xargs); " +
         "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
+}
+
+internal fun buildKmodPortRulesApplyCommand(rules: Map<String, List<PortRule>>): String {
+    if (rules.isEmpty()) {
+        return "[ -c $DEV_NODE ] && $KMOD_CTL port_rules; true"
+    }
+
+    // Since we need UIDs for vpnhide-ctl port_rules, we build a script that
+    // resolves UIDs for each package and then calls vpnhide-ctl with rules.
+    return buildString {
+        append("if [ -c $DEV_NODE ]; then ")
+        append("ALL_PKGS=\"\$(pm list packages -U)\"; ")
+        append("ARGS=\"\"; ")
+        rules.forEach { (pkg, portRules) ->
+            val pkgEsc = pkg.replace(".", "\\.")
+            append(
+                "U=\$(echo \"\$ALL_PKGS\" | awk -v p=\"^package:$pkgEsc[ :]\" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); ",
+            )
+            append("if [ -n \"\$U\" ]; then ")
+            append("for UID_VAL in \$U; do ")
+            if (portRules.isEmpty()) {
+                append("ARGS=\"\$ARGS \$UID_VAL 1 0 65535 2\"; ")
+            } else {
+                append("ARGS=\"\$ARGS \$UID_VAL ${portRules.size}")
+                portRules.forEach { rule ->
+                    val proto =
+                        when (rule.protocol) {
+                            PortProtocol.TCP -> 0
+                            PortProtocol.UDP -> 1
+                            PortProtocol.BOTH -> 2
+                        }
+                    append(" ${rule.startPort} ${rule.endPort} $proto")
+                }
+                append("\"; ")
+            }
+            append("done; fi; ")
+        }
+        append("[ -n \"\$ARGS\" ] && $KMOD_CTL port_rules \$ARGS; fi")
+    }
 }
 
 internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
@@ -403,7 +408,7 @@ internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
 
 internal fun applyKmodTargets(context: Context) {
     val kmodFile = readPackageList(KMOD_TARGETS)
-    suExec(buildKmodApplyCommand(kmodFile, isDirect = false))
+    suExec(buildKmodApplyCommand(kmodFile, targetType = "targets"))
 }
 
 internal fun readPackageList(path: String): List<String> {

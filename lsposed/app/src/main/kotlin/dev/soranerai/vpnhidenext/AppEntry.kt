@@ -14,15 +14,26 @@ internal data class AppEntry(
     val lsposed: Boolean = false,
     // TUN Bypass
     val tunBypass: Boolean = false,
-    // App Hiding
-    val appHiding: Boolean = false,
-    val appObserver: Boolean = false,
     // Port Hiding
     val portHiding: Boolean = false,
+    val portRules: List<PortRule> = emptyList(),
 ) {
     val anyProtection get() = kmod || zygisk || lsposed
-    val anyHiding get() = appHiding || appObserver
 }
+
+internal enum class PortProtocol { TCP, UDP, BOTH }
+
+internal data class PortRule(
+    val id: String =
+        java.util.UUID
+            .randomUUID()
+            .toString(),
+    val startPort: Int,
+    val endPort: Int = startPort,
+    val protocol: PortProtocol = PortProtocol.BOTH,
+    val label: String = "",
+    val enabled: Boolean = true,
+)
 
 internal enum class Layer { KMOD, ZYGISK, LSPOSED }
 

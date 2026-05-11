@@ -89,16 +89,6 @@ fun FaqScreen(
             )
 
             FaqSection(
-                title = stringResource(R.string.hiding_help_title),
-                content = {
-                    Text(
-                        text = stringResource(R.string.hiding_hint_roles),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                },
-            )
-
-            FaqSection(
                 title = stringResource(R.string.ports_help_title),
                 content = {
                     Text(

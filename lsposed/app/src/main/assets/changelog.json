@@ -1,6 +1,32 @@
 {
   "history": [
     {
+      "version": "1.1.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Granular Port Hiding: Ability to hide specific local ports from targeted applications via kernel-level socket filtering (connect() hook)",
+              "ru": "Гранулярное скрытие портов: Возможность скрывать конкретные локальные порты от выбранных приложений через фильтрацию сокетов на уровне ядра (хук connect())"
+            },
+            {
+              "en": "Custom Rule Sets: Support for port ranges (e.g., 8080-8090) and protocol selection (TCP, UDP, or both) per application",
+              "ru": "Настраиваемые наборы правил: Поддержка диапазонов портов (например, 8080-8090) и выбора протокола (TCP, UDP или оба) для каждого приложения"
+            },
+            {
+              "en": "Enhanced UI: New interactive port rules editor with protocol toggles and simplified range management",
+              "ru": "Улучшенный интерфейс: Новый интерактивный редактор правил портов с переключателями протоколов и упрощенным управлением диапазонами"
+            },
+            {
+              "en": "Memory Stability: Switched to virtual memory allocation (kvmalloc) in the kernel for large rule sets, preventing ENOMEM on fragmented systems",
+              "ru": "Стабильность памяти: Переход на виртуальное выделение памяти (kvmalloc) в ядре для больших наборов правил, предотвращающий ошибки ENOMEM на фрагментированных системах"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.0.0",
       "sections": [
         {

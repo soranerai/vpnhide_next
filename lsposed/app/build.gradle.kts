@@ -8,6 +8,7 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.gobley.cargo)
     alias(libs.plugins.gobley.uniffi)
+    alias(libs.plugins.ksp)
 }
 
 cargo {
@@ -56,7 +57,7 @@ android {
         applicationId = "dev.soranerai.vpnhidenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 10000
+        versionCode = 10100
         versionName = buildVersion
 
         ndk {
@@ -151,6 +152,11 @@ dependencies {
     implementation("io.github.oikvpqya.compose.fastscroller:fastscroller-indicator:0.3.2")
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
+
+    // Room
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
 
     testImplementation("junit:junit:4.13.2")
 }

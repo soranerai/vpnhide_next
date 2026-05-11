@@ -43,13 +43,11 @@ class DetectModuleMismatchesTest {
             listOf(
                 installed("0.6.1") to NativeModuleKind.Kmod,
                 installed("0.6.2") to NativeModuleKind.Zygisk,
-                installed("0.5.0") to NativeModuleKind.Ports,
             )
         val result = detectModuleMismatches(modules, "0.6.2")
         assertEquals(
             listOf(
                 ModuleMismatch(NativeModuleKind.Kmod, "0.6.1", "0.6.2"),
-                ModuleMismatch(NativeModuleKind.Ports, "0.5.0", "0.6.2"),
             ),
             result,
         )
@@ -57,11 +55,11 @@ class DetectModuleMismatchesTest {
 
     @Test
     fun `module kind and versions preserved in result`() {
-        val modules = listOf(installed("0.5.0") to NativeModuleKind.Ports)
+        val modules = listOf(installed("0.5.0") to NativeModuleKind.Kmod)
         val result = detectModuleMismatches(modules, "0.6.2")
         assertEquals(1, result.size)
         val only = result.single()
-        assertEquals(NativeModuleKind.Ports, only.kind)
+        assertEquals(NativeModuleKind.Kmod, only.kind)
         assertEquals("0.5.0", only.moduleVersion)
         assertEquals("0.6.2", only.appVersion)
     }

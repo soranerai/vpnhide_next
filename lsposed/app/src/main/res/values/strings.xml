@@ -11,20 +11,33 @@
     <!-- Protection modes (segmented button) -->
     <string name="mode_vpn_targets">Tun</string>
     <string name="mode_tun_bypass">Bypass</string>
-    <string name="mode_app_hiding">Apps</string>
     <string name="mode_port_hiding">Ports</string>
     <string name="port_hiding_coming_soon">Coming soon</string>
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>
-    <string name="ports_module_not_installed_title">Ports module not installed</string>
-    <string name="ports_module_not_installed_body">Install vpnhide-ports.zip via KernelSU-Next or Magisk to block selected apps from reaching localhost ports. This hides locally-bound VPN/proxy daemons from apps that probe them via connect(127.0.0.1, PORT).</string>
     <string name="ports_help_title">How port hiding works</string>
     <string name="ports_hint_role">Tap P to mark an app as a proxy-hide observer. Observer apps receive ECONNREFUSED when they try to connect to any port on 127.0.0.1 or ::1 — indistinguishable from a real closed port.</string>
     <string name="ports_hint_safe">Safe for banks, госуслуги, marketplaces, non-browser apps. Chromium-based browsers use localhost for dev/PWA features — avoid adding them as observers.</string>
     <string name="ports_hint_reboot">Rules are re-applied on every Save. After reboot, the module restores them automatically via service.sh.</string>
     <string name="ports_save_success">Saved · %1$d observer(s)</string>
     <string name="ports_count" translatable="false">P: %d</string>
+    <string name="bulk_rules_title">Bulk Rules</string>
+    <string name="bulk_rules_subtitle">Applies to all protected apps</string>
+    <string name="no_rules">No rules defined</string>
+    <string name="back">Back</string>
+    <string name="bulk_btn">Bulk</string>
+    <string name="cancel">Cancel</string>
+    <string name="apply_bulk_btn">Apply</string>
+    <string name="new_bulk_rule">New Bulk Rule</string>
+    <string name="edit_bulk_rule">Edit Bulk Rule</string>
+    <string name="label_optional">Label (optional)</string>
+    <string name="port_start">Start Port</string>
+    <string name="port_end">End Port</string>
+    <string name="protocol">Protocol</string>
+    <string name="add_rule">Add Rule</string>
+    <string name="err_rule_redundant">Redundant: covered by \"%s\"</string>
+    <string name="err_rule_exists">This rule already exists</string>
 
     <!-- App picker -->
     <string name="selected_count">%d selected</string>
@@ -47,17 +60,6 @@
     <string name="bypass_help_title">How TUN bypass works</string>
     <string name="bypass_hint_logic">Enable the <b>Kernel</b> bypass checkbox to force an app to ignore the VPN tunnel. Its traffic will go directly through your primary network interface (Wi-Fi or Mobile Data).</string>
     <string name="bypass_hint_kmod">Requires the Kernel module (kmod) to be installed and active. This feature only works at the kernel level to ensure reliable routing redirection.</string>
-
-    <!-- App hiding -->
-    <string name="hiding_chip_hidden" translatable="false">H</string>
-    <string name="hiding_chip_observer" translatable="false">O</string>
-    <string name="hiding_role_hidden">Hidden</string>
-    <string name="hiding_role_observer">Observer</string>
-    <string name="hiding_help_title">How app hiding works</string>
-    <string name="hiding_hint_roles">Mark apps as H (Hidden) to remove them from the package manager for O (Observer) apps. Observers cannot list, resolve, or query any Hidden app.</string>
-    <string name="hiding_hint_system">System callers (installer, launcher, system services) are always exempt so core OS functionality keeps working.</string>
-    <string name="hiding_hint_reboot">Changes take effect immediately, but observer apps may cache the package list — force-stop and restart them to see results.</string>
-    <string name="hiding_save_success">Saved · %1$d hidden, %2$d observers</string>
 
     <!-- Root status -->
     <string name="root_error_title">Root access required</string>
@@ -101,7 +103,6 @@
     <string name="dashboard_kmod">Kernel module</string>
     <string name="dashboard_zygisk">VPNHide Next Zygisk module</string>
     <string name="dashboard_lsposed_module">VPNHide Next LSPosed hook</string>
-    <string name="dashboard_ports">Ports hiding module</string>
     <string name="dashboard_not_installed">Not installed</string>
     <string name="dashboard_installed_inactive">Installed, inactive</string>
     <string name="dashboard_installed_restart_app">Installed, restart VPNHide Next to activate</string>
@@ -138,7 +139,6 @@
     <string name="dashboard_issue_both_native_active">Kernel module and Zygisk are both active, covering the same native paths. Kmod is invisible to anti-tamper, Zygisk isn\'t — so every time you add a banking or payment app as a target, you have to remember to leave Z off for it. Uninstall the Zygisk module to remove that per-app footgun; kmod keeps the coverage.</string>
     <string name="dashboard_issue_debug_logging_on">Debug logging is enabled. VPNHide Next is writing verbose lines to logcat that anyone with root can read. Turn it off in Diagnostics after you\'ve finished collecting a bug report.</string>
     <string name="dashboard_issue_selinux_permissive">SELinux is Permissive. Six detection vectors VPNHide Next relies on the kernel to block (RTM_GETROUTE, /proc/net/{tcp,udp,dev,fib_trie}, /sys/class/net) are reachable to target apps. Run `setenforce 1` and investigate what disabled it.</string>
-    <string name="dashboard_issue_self_multi_profile">VPNHide Next is installed in %1$d profiles. The main-profile copy is the one that matters — LSPosed hooks system_server, which runs in the main profile only, and the picker there already sees apps from every profile and applies filters to all of them. Extra copies in secondary profiles are redundant and race each other\'s Saves to the shared target files. Uninstall from work profile / Second Space / other secondary profiles.</string>
     <string name="dashboard_issue_no_native">No native module installed. Install kmod or zygisk for full protection.</string>
     <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPNHide Next module for System Framework.</string>
     <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>
@@ -148,7 +148,6 @@
     <string name="dashboard_issue_lsposed_extra_scope">VPNHide Next should stay scoped only to System Framework in LSPosed/Vector. Remove these apps from the VPNHide Next scope: %1$s. Use Protection → Tun in VPNHide Next for filtering instead.</string>
     <string name="dashboard_issue_lsposed_field_rename">AOSP field rename detected on Android SDK %2$s: %1$s. Java-layer protection is degraded for the affected hooks (they were skipped at install time to avoid logcat-spam from per-call NoSuchFieldError). Please file an issue at github.com/okhsunrog/vpnhide/issues with this list so the hooks can be updated for your Android version.</string>
     <string name="dashboard_issue_no_targets">No target apps configured. Go to Protection → Tun to select apps.</string>
-    <string name="dashboard_issue_ports_no_observers">Ports hiding module is installed but no observers are configured. Go to Protection → Ports to pick apps.</string>
     <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch: running %1$s, installed %2$s. Reboot the device to apply the update.</string>
     <string name="dashboard_issue_update_kmod">Kernel module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
     <string name="dashboard_issue_update_zygisk">Zygisk version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
@@ -156,9 +155,6 @@
     <string name="dashboard_issue_update_app_for_zygisk">Zygisk version %1$s is newer than app version %2$s. Update the VPNHide Next app.</string>
     <string name="dashboard_issue_kmod_version_mismatch">Kernel module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_issue_zygisk_version_mismatch">Zygisk version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
-    <string name="dashboard_issue_update_ports">Ports module version %1$s is older than app version %2$s. Open KernelSU/Magisk → Modules to update.</string>
-    <string name="dashboard_issue_update_app_for_ports">Ports module version %1$s is newer than app version %2$s. Update the VPNHide Next app.</string>
-    <string name="dashboard_issue_ports_version_mismatch">Ports module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
     <string name="dashboard_running_version">Running module version: %s</string>
 
     <!-- kmod variant / load diagnostics -->

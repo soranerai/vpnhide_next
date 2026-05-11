@@ -35,6 +35,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -133,11 +134,17 @@ private fun MainScreen(
     var showSystem by remember { mutableStateOf(false) }
     var showRussianOnly by remember { mutableStateOf(false) }
     var showOnlySelected by remember { mutableStateOf(false) }
-    var sortOrder by remember { mutableStateOf(AppSortOrder.NAME_ASC) }
+    var sortOrder by remember { mutableStateOf(AppSortOrder.SELECTED_FIRST) }
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
+    var currentProtectionMode by remember { mutableStateOf(ProtectionMode.VpnTargets) }
+    var dirtyProtectionModes by remember { mutableStateOf(setOf<ProtectionMode>()) }
     var saveTrigger by remember { mutableStateOf(0) }
     var showFaq by remember { mutableStateOf(false) }
+    var editingAppRules by remember { mutableStateOf<AppEntry?>(null) }
+    var showBulkRules by remember { mutableStateOf(false) }
+    var localMassRules by remember { mutableStateOf<List<PortRule>?>(null) }
+    var rulesUpdatedApp by remember { mutableStateOf<AppEntry?>(null) }
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
@@ -199,341 +206,451 @@ private fun MainScreen(
             object : NestedScrollConnection {}
         }
 
-    Scaffold(
-        modifier = Modifier.nestedScroll(nestedScrollConnection),
-        topBar = {
-            if (searchActive && currentTab == Tab.Protection) {
-                SearchBar(
-                    query = searchQuery,
-                    onQueryChange = { searchQuery = it },
-                    onSearch = {},
-                    active = false,
-                    onActiveChange = {},
-                    placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                    leadingIcon = {
-                        IconButton(onClick = {
-                            searchActive = false
-                            searchQuery = ""
-                        }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                        }
-                    },
-                    trailingIcon = {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(onClick = { searchQuery = "" }) {
-                                Icon(Icons.Default.Clear, contentDescription = null)
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            modifier = Modifier.nestedScroll(nestedScrollConnection),
+            topBar = {
+                if (searchActive && currentTab == Tab.Protection) {
+                    SearchBar(
+                        query = searchQuery,
+                        onQueryChange = { searchQuery = it },
+                        onSearch = {},
+                        active = false,
+                        onActiveChange = {},
+                        placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                        leadingIcon = {
+                            IconButton(onClick = {
+                                searchActive = false
+                                searchQuery = ""
+                            }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
                             }
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {}
-            } else {
-                TopAppBar(
-                    title = { Text(stringResource(R.string.app_name)) },
-                    colors =
-                        TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                            titleContentColor = MaterialTheme.colorScheme.onBackground,
-                        ),
-                    actions = {
-                        RefreshActionIcon(
-                            currentTab = currentTab,
-                            refreshRestart = refreshRestart,
-                            scope = scope,
-                            context = context,
-                        )
-                        IconButton(onClick = { showFaq = true }) {
-                            Icon(
-                                Icons.Default.HelpOutline,
-                                contentDescription = stringResource(R.string.faq_title),
-                                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        },
+                        trailingIcon = {
+                            if (searchQuery.isNotEmpty()) {
+                                IconButton(onClick = { searchQuery = "" }) {
+                                    Icon(Icons.Default.Clear, contentDescription = null)
+                                }
+                            }
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {}
+                } else {
+                    TopAppBar(
+                        title = { Text(stringResource(R.string.app_name)) },
+                        colors =
+                            TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.background,
+                                titleContentColor = MaterialTheme.colorScheme.onBackground,
+                            ),
+                        actions = {
+                            RefreshActionIcon(
+                                currentTab = currentTab,
+                                refreshRestart = refreshRestart,
+                                scope = scope,
+                                context = context,
                             )
-                        }
-                        if (currentTab == Tab.Protection) {
-                            IconButton(onClick = { searchActive = true }) {
+                            IconButton(onClick = { showFaq = true }) {
                                 Icon(
-                                    Icons.Default.Search,
-                                    contentDescription = null,
+                                    Icons.Default.HelpOutline,
+                                    contentDescription = stringResource(R.string.faq_title),
+                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
                                 )
                             }
-                            Box {
-                                val anyFilterActive =
-                                    showSystem || showRussianOnly || showOnlySelected || sortOrder != AppSortOrder.NAME_ASC
-                                if (anyFilterActive) {
-                                    FilledIconButton(onClick = { showFilterMenu = true }) {
-                                        Icon(
-                                            Icons.Default.FilterList,
-                                            contentDescription = null,
-                                        )
-                                    }
-                                } else {
-                                    IconButton(onClick = { showFilterMenu = true }) {
-                                        Icon(
-                                            Icons.Default.FilterList,
-                                            contentDescription = null,
-                                        )
-                                    }
+                            if (currentTab == Tab.Protection) {
+                                IconButton(onClick = { searchActive = true }) {
+                                    Icon(
+                                        Icons.Default.Search,
+                                        contentDescription = null,
+                                    )
                                 }
-                                DropdownMenu(
-                                    expanded = showFilterMenu,
-                                    onDismissRequest = { showFilterMenu = false },
-                                ) {
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.filter_show_system)) },
-                                        onClick = { showSystem = !showSystem },
-                                        leadingIcon = {
-                                            Checkbox(
-                                                checked = showSystem,
-                                                onCheckedChange = null,
+                                Box {
+                                    val anyFilterActive =
+                                        showSystem || showRussianOnly || showOnlySelected || sortOrder != AppSortOrder.NAME_ASC
+                                    if (anyFilterActive) {
+                                        FilledIconButton(onClick = { showFilterMenu = true }) {
+                                            Icon(
+                                                Icons.Default.FilterList,
+                                                contentDescription = null,
                                             )
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.filter_russian_only)) },
-                                        onClick = { showRussianOnly = !showRussianOnly },
-                                        leadingIcon = {
-                                            Checkbox(
-                                                checked = showRussianOnly,
-                                                onCheckedChange = null,
+                                        }
+                                    } else {
+                                        IconButton(onClick = { showFilterMenu = true }) {
+                                            Icon(
+                                                Icons.Default.FilterList,
+                                                contentDescription = null,
                                             )
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.filter_only_selected)) },
-                                        onClick = { showOnlySelected = !showOnlySelected },
-                                        leadingIcon = {
-                                            Checkbox(
-                                                checked = showOnlySelected,
-                                                onCheckedChange = null,
-                                            )
-                                        },
-                                    )
-                                    HorizontalDivider()
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.sort_name_asc)) },
-                                        onClick = {
-                                            sortOrder = AppSortOrder.NAME_ASC
-                                            showFilterMenu = false
-                                        },
-                                        leadingIcon = {
-                                            RadioButton(
-                                                selected = sortOrder == AppSortOrder.NAME_ASC,
-                                                onClick = null,
-                                            )
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.sort_name_desc)) },
-                                        onClick = {
-                                            sortOrder = AppSortOrder.NAME_DESC
-                                            showFilterMenu = false
-                                        },
-                                        leadingIcon = {
-                                            RadioButton(
-                                                selected = sortOrder == AppSortOrder.NAME_DESC,
-                                                onClick = null,
-                                            )
-                                        },
-                                    )
-                                    DropdownMenuItem(
-                                        text = { Text(stringResource(R.string.sort_selected_first)) },
-                                        onClick = {
-                                            sortOrder = AppSortOrder.SELECTED_FIRST
-                                            showFilterMenu = false
-                                        },
-                                        leadingIcon = {
-                                            RadioButton(
-                                                selected = sortOrder == AppSortOrder.SELECTED_FIRST,
-                                                onClick = null,
-                                            )
-                                        },
-                                    )
+                                        }
+                                    }
+                                    DropdownMenu(
+                                        expanded = showFilterMenu,
+                                        onDismissRequest = { showFilterMenu = false },
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.filter_show_system)) },
+                                            onClick = { showSystem = !showSystem },
+                                            leadingIcon = {
+                                                Checkbox(
+                                                    checked = showSystem,
+                                                    onCheckedChange = null,
+                                                )
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.filter_russian_only)) },
+                                            onClick = { showRussianOnly = !showRussianOnly },
+                                            leadingIcon = {
+                                                Checkbox(
+                                                    checked = showRussianOnly,
+                                                    onCheckedChange = null,
+                                                )
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.filter_only_selected)) },
+                                            onClick = { showOnlySelected = !showOnlySelected },
+                                            leadingIcon = {
+                                                Checkbox(
+                                                    checked = showOnlySelected,
+                                                    onCheckedChange = null,
+                                                )
+                                            },
+                                        )
+                                        HorizontalDivider()
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.sort_name_asc)) },
+                                            onClick = {
+                                                sortOrder = AppSortOrder.NAME_ASC
+                                                showFilterMenu = false
+                                            },
+                                            leadingIcon = {
+                                                RadioButton(
+                                                    selected = sortOrder == AppSortOrder.NAME_ASC,
+                                                    onClick = null,
+                                                )
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.sort_name_desc)) },
+                                            onClick = {
+                                                sortOrder = AppSortOrder.NAME_DESC
+                                                showFilterMenu = false
+                                            },
+                                            leadingIcon = {
+                                                RadioButton(
+                                                    selected = sortOrder == AppSortOrder.NAME_DESC,
+                                                    onClick = null,
+                                                )
+                                            },
+                                        )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.sort_selected_first)) },
+                                            onClick = {
+                                                sortOrder = AppSortOrder.SELECTED_FIRST
+                                                showFilterMenu = false
+                                            },
+                                            leadingIcon = {
+                                                RadioButton(
+                                                    selected = sortOrder == AppSortOrder.SELECTED_FIRST,
+                                                    onClick = null,
+                                                )
+                                            },
+                                        )
+                                    }
                                 }
                             }
-                        }
-                    },
-                )
-            }
-        },
-    ) { innerPadding ->
-        val restart = selfNeedsRestart
-        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-            val screenWidth = maxWidth
-            val density = androidx.compose.ui.platform.LocalDensity.current
+                        },
+                    )
+                }
+            },
+        ) { innerPadding ->
+            val restart = selfNeedsRestart
+            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                val screenWidth = maxWidth
+                val density = androidx.compose.ui.platform.LocalDensity.current
 
-            Column(
-                modifier =
-                    Modifier
-                        .padding(top = innerPadding.calculateTopPadding()),
-            ) {
-                // Initial root check / startup loader
-                TopProgressBar(visible = restart == null)
+                Column(
+                    modifier =
+                        Modifier
+                            .padding(top = innerPadding.calculateTopPadding()),
+                ) {
+                    // Initial root check / startup loader
+                    TopProgressBar(visible = restart == null)
 
-                // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
-                TabLoadingBar()
+                    // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
+                    TabLoadingBar()
 
-                if (restart != null) {
-                    when (currentTab) {
-                        Tab.Dashboard -> {
-                            DashboardScreen(
-                                selfNeedsRestart = restart,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
+                    if (restart != null) {
+                        when (currentTab) {
+                            Tab.Dashboard -> {
+                                DashboardScreen(
+                                    selfNeedsRestart = restart,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
 
-                        Tab.Protection -> {
-                            ProtectionScreen(
-                                searchQuery = searchQuery,
-                                showSystem = showSystem,
-                                showRussianOnly = showRussianOnly,
-                                showOnlySelected = showOnlySelected,
-                                sortOrder = sortOrder,
-                                onDirtyChange = { isProtectionDirty = it },
-                                saveTrigger = saveTrigger,
-                                modifier = Modifier.fillMaxSize(),
-                            )
-                        }
+                            Tab.Protection -> {
+                                ProtectionScreen(
+                                    searchQuery = searchQuery,
+                                    showSystem = showSystem,
+                                    showRussianOnly = showRussianOnly,
+                                    showOnlySelected = showOnlySelected,
+                                    sortOrder = sortOrder,
+                                    onStateChange = { mode, dirtyModes ->
+                                        currentProtectionMode = mode
+                                        dirtyProtectionModes = dirtyModes
+                                        isProtectionDirty = dirtyModes.isNotEmpty()
+                                    },
+                                    onAppPortConfig = { editingAppRules = it },
+                                    updatedApp = rulesUpdatedApp,
+                                    saveTrigger = saveTrigger,
+                                    pendingMassRules = localMassRules,
+                                    onSaved = {
+                                        localMassRules = null
+                                        rulesUpdatedApp = null
+                                    },
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
 
-                        Tab.Diagnostics -> {
-                            DiagnosticsScreen(
-                                selfNeedsRestart = restart,
-                                modifier = Modifier.fillMaxSize(),
-                            )
+                            Tab.Diagnostics -> {
+                                DiagnosticsScreen(
+                                    selfNeedsRestart = restart,
+                                    modifier = Modifier.fillMaxSize(),
+                                )
+                            }
                         }
                     }
                 }
-            }
 
-            // Floating Navigation Bar and FAB
-            Box(
-                modifier =
-                    Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(bottom = 20.dp)
-                        .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
-            ) {
-                val showSave = isProtectionDirty && currentTab == Tab.Protection
-                val tabs =
-                    listOf(
-                        Tab.Dashboard to Icons.Default.Home,
-                        Tab.Protection to Icons.Default.Shield,
-                        Tab.Diagnostics to Icons.Default.CheckCircle,
+                // Floating Navigation Bar and FAB
+                Box(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 20.dp)
+                            .fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    val showSave = currentTab == Tab.Protection && currentProtectionMode in dirtyProtectionModes
+                    val showBulk = currentTab == Tab.Protection && currentProtectionMode == ProtectionMode.PortHiding
+
+                    val controlsProgress by animateFloatAsState(
+                        targetValue = if (showSave || showBulk) 1f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+                        label = "controlsProgress",
                     )
 
-                val saveProgress by animateFloatAsState(
-                    targetValue = if (showSave) 1f else 0f,
-                    animationSpec =
-                        spring(
-                            dampingRatio = Spring.DampingRatioLowBouncy,
-                            stiffness = Spring.StiffnessLow,
-                        ),
-                    label = "saveProgress",
-                )
+                    val saveProgress by animateFloatAsState(
+                        targetValue = if (showSave) 1f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+                        label = "saveProgress",
+                    )
 
-                // The bounding box for the entire Pill + Save FAB combo
-                Box(contentAlignment = Alignment.Center) {
-                    // Invisible layout driver to smoothly animate total width
-                    Row(
-                        modifier = Modifier.height(60.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Spacer(modifier = Modifier.width(260.dp))
-                        Spacer(modifier = Modifier.width(76.dp * saveProgress))
-                    }
+                    val bulkProgress by animateFloatAsState(
+                        targetValue = if (showBulk) 1f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+                        label = "bulkProgress",
+                    )
 
-                    // Save Button (Anchored to the right, scales up)
-                    if (saveProgress > 0.01f) {
-                        Surface(
-                            onClick = { saveTrigger++ },
-                            color = MaterialTheme.colorScheme.primary,
-                            contentColor = MaterialTheme.colorScheme.onPrimary,
-                            modifier =
-                                Modifier
-                                    .align(Alignment.CenterEnd)
-                                    .size(60.dp)
-                                    .graphicsLayer {
-                                        shadowElevation = 8.dp.toPx()
-                                        shape = RoundedCornerShape(20.dp)
-                                        clip = true
-                                        alpha = saveProgress
-                                        scaleX = 0.5f + (0.5f * saveProgress)
-                                        scaleY = 0.5f + (0.5f * saveProgress)
-                                    },
-                        ) {
-                            Box(contentAlignment = Alignment.Center) {
-                                Icon(
-                                    Icons.Default.Check,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(28.dp),
-                                )
-                            }
-                        }
-                    }
+                    val bulkColor by animateColorAsState(
+                        targetValue = if (showSave) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
+                        label = "bulkColor",
+                    )
+                    val bulkContentColor by animateColorAsState(
+                        targetValue = if (showSave) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary,
+                        label = "bulkContentColor",
+                    )
 
-                    // Navigation Pill (Anchored to the left)
-                    Surface(
-                        shape = RoundedCornerShape(20.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
-                        tonalElevation = 12.dp,
-                        shadowElevation = 8.dp,
-                        modifier =
-                            Modifier
-                                .align(Alignment.CenterStart)
-                                .height(60.dp),
-                    ) {
+                    val tabs =
+                        listOf(
+                            Tab.Dashboard to Icons.Default.Home,
+                            Tab.Protection to Icons.Default.Shield,
+                            Tab.Diagnostics to Icons.Default.CheckCircle,
+                        )
+
+                    // The bounding box for the entire Pill + Save FAB combo
+                    Box(contentAlignment = Alignment.Center) {
+                        // Invisible layout driver to smoothly animate total width
                         Row(
-                            modifier =
-                                Modifier
-                                    .padding(horizontal = 4.dp, vertical = 4.dp)
-                                    .width(260.dp),
+                            modifier = Modifier.height(60.dp),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            tabs.forEach { (tab, icon) ->
-                                val selected = currentTab == tab
-                                Box(
-                                    modifier =
-                                        Modifier
-                                            .weight(1f)
-                                            .fillMaxHeight()
-                                            .clip(RoundedCornerShape(16.dp))
-                                            .background(
-                                                if (selected) {
-                                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                                } else {
-                                                    Color.Transparent
-                                                },
-                                            ).clickable(
-                                                interactionSource = remember { MutableInteractionSource() },
-                                                indication = null,
-                                            ) { currentTab = tab },
-                                    contentAlignment = Alignment.Center,
-                                ) {
+                            Spacer(modifier = Modifier.width(260.dp))
+                            Spacer(modifier = Modifier.width(76.dp * controlsProgress))
+                        }
+
+                        // Save Button (Anchored to the right, scales up)
+                        if (saveProgress > 0.01f) {
+                            Surface(
+                                onClick = { saveTrigger++ },
+                                color = MaterialTheme.colorScheme.primary,
+                                contentColor = MaterialTheme.colorScheme.onPrimary,
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .size(60.dp)
+                                        .graphicsLayer {
+                                            shadowElevation = 8.dp.toPx()
+                                            shape = RoundedCornerShape(20.dp)
+                                            clip = true
+                                            alpha = saveProgress
+                                            scaleX = 0.5f + (0.5f * saveProgress)
+                                            scaleY = 0.5f + (0.5f * saveProgress)
+                                        },
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        imageVector = icon,
+                                        Icons.Default.Check,
                                         contentDescription = null,
-                                        tint =
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        modifier = Modifier.size(24.dp),
+                                        modifier = Modifier.size(28.dp),
                                     )
+                                }
+                            }
+                        }
+
+                        // Bulk Button (Moves up if Save is visible)
+                        if (bulkProgress > 0.01f) {
+                            val bulkOffset by animateDpAsState(
+                                targetValue = if (showSave) (-72).dp else 0.dp,
+                                label = "bulkOffset",
+                            )
+                            Surface(
+                                onClick = { showBulkRules = true },
+                                color = bulkColor,
+                                contentColor = bulkContentColor,
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .offset(y = bulkOffset)
+                                        .size(60.dp)
+                                        .graphicsLayer {
+                                            shadowElevation = 8.dp.toPx()
+                                            shape = RoundedCornerShape(20.dp)
+                                            clip = true
+                                            alpha = bulkProgress
+                                            scaleX = 0.5f + (0.5f * bulkProgress)
+                                            scaleY = 0.5f + (0.5f * bulkProgress)
+                                        },
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.SettingsSuggest,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(28.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        // Navigation Pill (Anchored to the left)
+                        Surface(
+                            shape = RoundedCornerShape(20.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                            tonalElevation = 12.dp,
+                            shadowElevation = 8.dp,
+                            modifier =
+                                Modifier
+                                    .align(Alignment.CenterStart)
+                                    .height(60.dp),
+                        ) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .padding(horizontal = 4.dp, vertical = 4.dp)
+                                        .width(260.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                tabs.forEach { (tab, icon) ->
+                                    val selected = currentTab == tab
+                                    Box(
+                                        modifier =
+                                            Modifier
+                                                .weight(1f)
+                                                .fillMaxHeight()
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(
+                                                    if (selected) {
+                                                        MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                                    } else {
+                                                        Color.Transparent
+                                                    },
+                                                ).clickable(
+                                                    interactionSource = remember { MutableInteractionSource() },
+                                                    indication = null,
+                                                ) { currentTab = tab },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        Icon(
+                                            imageVector = icon,
+                                            contentDescription = null,
+                                            tint =
+                                                if (selected) {
+                                                    MaterialTheme.colorScheme.primary
+                                                } else {
+                                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                                },
+                                            modifier = Modifier.size(24.dp),
+                                        )
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
+        }
 
-            if (showFaq) {
-                BackHandler { showFaq = false }
-                FaqScreen(
-                    onBack = { showFaq = false },
+        if (showFaq) {
+            BackHandler { showFaq = false }
+            FaqScreen(
+                onBack = { showFaq = false },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = editingAppRules != null,
+            enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            editingAppRules?.let { app ->
+                BackHandler { editingAppRules = null }
+                val targets by TargetsCache.snapshot.collectAsState()
+                PortRulesScreen(
+                    app = app,
+                    massRules = localMassRules ?: targets?.massPortRules ?: emptyList(),
+                    onBack = { editingAppRules = null },
+                    onSave = { updatedRules ->
+                        if (updatedRules != app.portRules) {
+                            rulesUpdatedApp = app.copy(portRules = updatedRules)
+                        }
+                        editingAppRules = null
+                    },
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 )
             }
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showBulkRules,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            BackHandler { showBulkRules = false }
+            val targets by TargetsCache.snapshot.collectAsState()
+            BulkRulesScreen(
+                initialRules = localMassRules ?: targets?.massPortRules ?: emptyList(),
+                onBack = { showBulkRules = false },
+                onSave = { updatedRules ->
+                    localMassRules = updatedRules
+                    showBulkRules = false
+                },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
         }
     }
 }
