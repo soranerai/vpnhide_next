@@ -118,6 +118,8 @@
     <string name="dashboard_issue_no_targets">Целевые приложения не настроены. Перейдите в Защита → Туннели.</string>
     <string name="dashboard_issue_version_mismatch">Несоответствие версий LSPosed модуля: запущена %1$s, установлена %2$s. Перезагрузите устройство для обновления.</string>
     <string name="dashboard_issue_kmod_version_mismatch">Несоответствие версий модуля ядра: модуль %1$s, приложение %2$s. Откройте KernelSU/Magisk → Модули для обновления.</string>
+    <string name="dashboard_issue_update_kmod">Модуль ядра устарел: запущена версия %1$s, актуальная — %2$s. Обновите модуль kmod.</string>
+    <string name="dashboard_issue_update_app_for_kmod">Приложение VPNHide Next устарело для этого модуля: версия модуля — %1$s, приложения — %2$s. Обновите приложение.</string>
     <string name="dashboard_running_version">Версия запущенного модуля: %s</string>
 
     <!-- kmod variant / load diagnostics -->
