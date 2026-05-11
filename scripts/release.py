@@ -18,7 +18,7 @@ What it does, atomically:
   * Regenerate `CHANGELOG.md` and `update-json/changelog.md`.
   * Write `X.Y.Z` into the `VERSION` file.
   * Patch the pinned version in:
-      - `{kmod,zygisk,portshide}/module/module.prop` (version, versionCode)
+      - `{kmod,zygisk}/module/module.prop` (version, versionCode)
       - `zygisk/Cargo.toml`                            (first `version = "..."`)
       - `lsposed/native/Cargo.toml`                    (first `version = "..."`)
       - `lsposed/app/build.gradle.kts`                 (versionName, versionCode)
@@ -140,7 +140,6 @@ def main() -> int:
     files = [
         REPO_ROOT / "kmod/module/module.prop",
         REPO_ROOT / "zygisk/module/module.prop",
-        REPO_ROOT / "portshide/module/module.prop",
         REPO_ROOT / "zygisk/Cargo.toml",
         REPO_ROOT / "lsposed/app/build.gradle.kts",
         REPO_ROOT / "lsposed/native/Cargo.toml",
@@ -168,14 +167,12 @@ def main() -> int:
     # Version-bearing source files.
     update_module_prop(REPO_ROOT / "kmod/module/module.prop", version, version_code)
     update_module_prop(REPO_ROOT / "zygisk/module/module.prop", version, version_code)
-    update_module_prop(REPO_ROOT / "portshide/module/module.prop", version, version_code)
     update_cargo_toml(REPO_ROOT / "zygisk/Cargo.toml", version)
     update_cargo_toml(REPO_ROOT / "lsposed/native/Cargo.toml", version)
     update_gradle_kts(REPO_ROOT / "lsposed/app/build.gradle.kts", version, version_code)
 
     console.print("  [green]✓[/green] kmod/module/module.prop")
     console.print("  [green]✓[/green] zygisk/module/module.prop")
-    console.print("  [green]✓[/green] portshide/module/module.prop")
     console.print("  [green]✓[/green] zygisk/Cargo.toml")
     console.print("  [green]✓[/green] lsposed/native/Cargo.toml")
     console.print("  [green]✓[/green] lsposed/app/build.gradle.kts")

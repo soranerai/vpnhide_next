@@ -5,16 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## v1.1.0
+## v1.2.0
 
 ### Added
-- **Granular Port Hiding**: Block specific ports and protocols (TCP/UDP) for targeted apps at the kernel level.
-- **Port Rules Persistence**: Configuration is now saved to `/data/adb/vpnhide_ports/rules.txt` and restored at boot.
-- **Improved UI**: Interactive port rules editor with protocol toggles and range support.
-
-### Fixed
-- Improved kernel memory stability by switching to `kvmalloc` for large rule sets.
-- Fixed potential RCU race condition in socket connection filtering.
+- Granular Port Hiding: Ability to hide specific local ports from targeted applications via kernel-level socket filtering (connect() hook)
+- Custom Rule Sets: Support for port ranges (e.g., 8080-8090) and protocol selection (TCP, UDP, or both) per application
+- Enhanced UI: New interactive port rules editor with protocol toggles and simplified range management
+- Memory Stability: Switched to virtual memory allocation (kvmalloc) in the kernel for large rule sets, preventing ENOMEM on fragmented systems
 
 ## v1.0.0
 

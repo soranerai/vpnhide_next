@@ -1,3 +1,13 @@
+## v1.2.0
+
+## v1.1.0
+
+### Added
+- Granular Port Hiding: Ability to hide specific local ports from targeted applications via kernel-level socket filtering (connect() hook)
+- Custom Rule Sets: Support for port ranges (e.g., 8080-8090) and protocol selection (TCP, UDP, or both) per application
+- Enhanced UI: New interactive port rules editor with protocol toggles and simplified range management
+- Memory Stability: Switched to virtual memory allocation (kvmalloc) in the kernel for large rule sets, preventing ENOMEM on fragmented systems
+
 ## v1.0.0
 
 ### Added
