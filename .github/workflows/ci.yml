@@ -231,7 +231,7 @@ jobs:
 
       - name: Build module zip
         env:
-          UPDATE_JSON_URL: https://raw.githubusercontent.com/soranerai/vpnhide/main/update-json/update-zygisk.json
+          UPDATE_JSON_URL: https://raw.githubusercontent.com/soranerai/vpnhide_next/main/update-json/update-zygisk.json
         run: |
           cd zygisk
           python3 ./build.py

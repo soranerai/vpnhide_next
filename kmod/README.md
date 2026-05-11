@@ -1,6 +1,6 @@
-# vpnhide -- Kernel module
+# vpnhide_next -- Kernel module
 
-kretprobe-based kernel module that hides VPN interfaces from selected apps. Part of [vpnhide](../README.md).
+kretprobe-based kernel module that hides VPN interfaces from selected apps. Part of [vpnhide_next](../README.md).
 
 Zero footprint in the target app's process -- no modified function prologues, no framework classes, no anonymous memory regions. Invisible to aggressive anti-tamper SDKs.
 

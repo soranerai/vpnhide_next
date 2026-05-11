@@ -7,9 +7,9 @@
 <p align="center">Hide an active Android VPN connection from selected apps.</p>
 
 <p align="center">
-  <a href="https://github.com/soranerai/vpnhide/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/soranerai/vpnhide/ci.yml?label=CI" alt="CI"></a>
-  <a href="https://github.com/soranerai/vpnhide/releases/latest"><img src="https://img.shields.io/github/v/release/soranerai/vpnhide" alt="Release"></a>
-  <a href="https://github.com/soranerai/vpnhide/releases"><img src="https://img.shields.io/github/downloads/soranerai/vpnhide/total" alt="Downloads"></a>
+  <a href="https://github.com/soranerai/vpnhide_next/actions/workflows/ci.yml"><img src="https://img.shields.io/github/actions/workflow/status/soranerai/vpnhide_next/ci.yml?label=CI" alt="CI"></a>
+  <a href="https://github.com/soranerai/vpnhide_next/releases/latest"><img src="https://img.shields.io/github/v/release/soranerai/vpnhide_next" alt="Release"></a>
+  <a href="https://github.com/soranerai/vpnhide_next/releases"><img src="https://img.shields.io/github/downloads/soranerai/vpnhide_next/total" alt="Downloads"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 

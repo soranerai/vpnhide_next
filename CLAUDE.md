@@ -1,4 +1,4 @@
-# vpnhide — repo conventions for AI agents and contributors
+# vpnhide_next — repo conventions for AI agents and contributors
 
 Quick orientation file for anyone (or anything) working on this repo.
 Read in full before opening a PR; it's short on purpose.

@@ -1,4 +1,4 @@
-# Contributing to vpnhide
+# Contributing to vpnhide_next
 
 Thanks for your interest. This file covers the contribution **process**; for build and setup instructions see [docs/development.md](docs/development.md).
 

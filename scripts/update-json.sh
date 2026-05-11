@@ -14,8 +14,8 @@ fi
 IFS='.' read -r MAJOR MINOR PATCH <<< "$VERSION"
 VERSION_CODE=$(( MAJOR * 10000 + MINOR * 100 + PATCH ))
 
-REPO="https://github.com/soranerai/vpnhide"
-RAW="https://raw.githubusercontent.com/soranerai/vpnhide/main"
+REPO="https://github.com/soranerai/vpnhide_next"
+RAW="https://raw.githubusercontent.com/soranerai/vpnhide_next/main"
 
 echo "Generating update-json for v${VERSION} (versionCode: $VERSION_CODE)"
 

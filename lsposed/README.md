@@ -1,8 +1,8 @@
-# vpnhide -- LSPosed module + target picker app
+# vpnhide_next -- LSPosed module + target picker app
 
-Hooks `writeToParcel()` in `system_server` to strip VPN data before Binder serialization reaches target apps. Part of [vpnhide](../README.md).
+Hooks `writeToParcel()` in `system_server` to strip VPN data before Binder serialization reaches target apps. Part of [vpnhide_next](../README.md).
 
-The APK also serves as the **target management UI** for the entire vpnhide project — it writes targets for both [kmod](../kmod/) and [zygisk](../zygisk/) modules.
+The APK also serves as the **target management UI** for the entire vpnhide_next project — it writes targets for both [kmod](../kmod/) and [zygisk](../zygisk/) modules.
 
 Zero presence in the target app's process -- only "System Framework" is needed in the LSPosed scope.
 

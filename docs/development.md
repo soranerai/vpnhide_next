@@ -1,6 +1,6 @@
 # Development setup
 
-How to build vpnhide from source.
+How to build vpnhide_next from source.
 
 ## Prerequisites
 

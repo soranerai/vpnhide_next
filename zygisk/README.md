@@ -1,6 +1,6 @@
-# vpnhide -- Zygisk module
+# vpnhide_next -- Zygisk module
 
-Native-layer VPN interface hiding via inline libc hooks. Part of [vpnhide](../README.md).
+Native-layer VPN interface hiding via inline libc hooks. Part of [vpnhide_next](../README.md).
 
 ## What it hooks
 
