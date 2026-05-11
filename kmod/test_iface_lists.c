@@ -16,10 +16,8 @@ static void check(const char *name, bool expected)
 {
 	bool got = vpnhide_iface_is_vpn(name);
 	if (got != expected) {
-		fprintf(stderr,
-			"FAIL: vpnhide_iface_is_vpn(\"%s\") = %s, expected %s\n",
-			name, got ? "true" : "false",
-			expected ? "true" : "false");
+		fprintf(stderr, "FAIL: vpnhide_iface_is_vpn(\"%s\") = %s, expected %s\n",
+			name, got ? "true" : "false", expected ? "true" : "false");
 		failures++;
 	}
 }
