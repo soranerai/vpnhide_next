@@ -1,4 +1,4 @@
-# CI image for vpnhide.
+# CI image for vpnhide_next.
 #
 # Bakes in everything needed for all three modules:
 #   - Rust + NDK + cargo-ndk (zygisk)
