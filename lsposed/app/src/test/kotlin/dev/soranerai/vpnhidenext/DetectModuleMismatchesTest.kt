@@ -16,7 +16,6 @@ class DetectModuleMismatchesTest {
         val modules =
             listOf(
                 ModuleState.NotInstalled to NativeModuleKind.Kmod,
-                ModuleState.NotInstalled to NativeModuleKind.Zygisk,
             )
         assertEquals(emptyList<ModuleMismatch>(), detectModuleMismatches(modules, "0.6.2"))
     }
@@ -32,7 +31,6 @@ class DetectModuleMismatchesTest {
         val modules =
             listOf(
                 installed("0.6.2") to NativeModuleKind.Kmod,
-                installed("v0.6.2") to NativeModuleKind.Zygisk,
             )
         assertEquals(emptyList<ModuleMismatch>(), detectModuleMismatches(modules, "0.6.2-14-g1f2205e"))
     }
@@ -42,7 +40,6 @@ class DetectModuleMismatchesTest {
         val modules =
             listOf(
                 installed("0.6.1") to NativeModuleKind.Kmod,
-                installed("0.6.2") to NativeModuleKind.Zygisk,
             )
         val result = detectModuleMismatches(modules, "0.6.2")
         assertEquals(
