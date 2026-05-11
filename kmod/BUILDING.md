@@ -1,6 +1,6 @@
 # Building vpnhide-kmod
 
-Most users should download pre-built modules from [Releases](https://github.com/soranerai/vpnhide/releases) — builds are provided for all supported GKI generations. This guide is for contributors or users who need to build from source.
+Most users should download pre-built modules from [Releases](https://github.com/soranerai/vpnhide_next/releases) — builds are provided for all supported GKI generations. This guide is for contributors or users who need to build from source.
 
 ## Quick build
 

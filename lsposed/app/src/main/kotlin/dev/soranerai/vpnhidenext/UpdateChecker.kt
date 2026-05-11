@@ -7,7 +7,7 @@ import java.net.URL
 
 private const val TAG = "VpnHide-Update"
 private const val GITHUB_RELEASES_URL =
-    "https://api.github.com/repos/okhsunrog/vpnhide/releases/latest"
+    "https://api.github.com/repos/soranerai/vpnhide_next/releases/latest"
 private const val PREFS_NAME = "vpnhide_prefs"
 private const val KEY_LAST_SEEN_VERSION = "last_seen_version"
 
