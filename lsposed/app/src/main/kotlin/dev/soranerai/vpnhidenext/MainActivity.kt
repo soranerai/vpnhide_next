@@ -144,7 +144,6 @@ private fun MainScreen(
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
-
         if (startup.addedToTargets) {
             withContext(Dispatchers.IO) {
                 applyKmodTargets(context)

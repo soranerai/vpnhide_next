@@ -26,7 +26,6 @@ internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
 internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
 internal const val KMOD_LOAD_DMESG_FILE = "/data/adb/vpnhide_kmod/load_dmesg"
 
-
 /** Default cap on a single su invocation. Most root commands here finish
  *  in milliseconds; this only fires if the su binary is genuinely stuck
  *  (e.g. waiting on a GUI prompt that the user dismissed). */
@@ -174,8 +173,6 @@ internal fun isVpnActiveBlocking(): Boolean {
         up
     }
 }
-
-
 
 /**
  * Ensure the VPNHide Next app itself is in all 3 target lists + resolve UIDs.

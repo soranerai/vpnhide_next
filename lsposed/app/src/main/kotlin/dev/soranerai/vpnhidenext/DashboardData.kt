@@ -658,7 +658,6 @@ internal suspend fun loadDashboardState(
         }
     VpnHideLog.i(TAG, "kmodRaw: $kmodRaw")
 
-
     val portsObserverCount = countTargets(snapshot.get("ports_targets"))
     // Recommendation based purely on the kernel
 
@@ -915,8 +914,6 @@ internal suspend fun loadDashboardState(
     }
 
     // ── Warnings: suboptimal-but-working setups ──
-
-
 
     // W3: user has debug logging turned on — VPNHide Next is writing verbose lines
     // to logcat that a forensic reader with root can see. The flag file is
