@@ -370,17 +370,21 @@ internal fun buildKmodPortRulesApplyCommand(rules: Map<String, List<PortRule>>):
             )
             append("if [ -n \"\$U\" ]; then ")
             append("for UID_VAL in \$U; do ")
-            append("ARGS=\"\$ARGS \$UID_VAL ${portRules.size}")
-            portRules.forEach { rule ->
-                val proto =
-                    when (rule.protocol) {
-                        PortProtocol.TCP -> 0
-                        PortProtocol.UDP -> 1
-                        PortProtocol.BOTH -> 2
-                    }
-                append(" ${rule.startPort} ${rule.endPort} $proto")
+            if (portRules.isEmpty()) {
+                append("ARGS=\"\$ARGS \$UID_VAL 1 0 65535 2\"; ")
+            } else {
+                append("ARGS=\"\$ARGS \$UID_VAL ${portRules.size}")
+                portRules.forEach { rule ->
+                    val proto =
+                        when (rule.protocol) {
+                            PortProtocol.TCP -> 0
+                            PortProtocol.UDP -> 1
+                            PortProtocol.BOTH -> 2
+                        }
+                    append(" ${rule.startPort} ${rule.endPort} $proto")
+                }
+                append("\"; ")
             }
-            append("\"; ")
             append("done; fi; ")
         }
         append("[ -n \"\$ARGS\" ] && $KMOD_CTL port_rules \$ARGS; fi")

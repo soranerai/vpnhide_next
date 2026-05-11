@@ -33,15 +33,19 @@
 | Dashboard | App Selection | Sorting | Diagnostics |
 |:-:|:-:|:-:|:-:|
 | <img src="assets/screenshots/Dashboard.jpg" width="200"> | <img src="assets/screenshots/AppSelector.jpg" width="200"> | <img src="assets/screenshots/SortMenu.jpg" width="200"> | <img src="assets/screenshots/Diagnostics.jpg" width="200"> |
+| **Bulk Ports Rules** | **Local Ports Rules** | **Rules Validation** | **FAQ** |
+| <img src="assets/screenshots/Bulk%20edit%20rules.jpg" width="200"> | <img src="assets/screenshots/Local%20ports%20edit.jpg" width="200"> | <img src="assets/screenshots/Duplicate%20and%20redutant%20protection.jpg" width="200"> | <img src="assets/screenshots/FAQ.jpg" width="200"> |
 
 ---
 ### Project Information
 This is a fork of the [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide/) project. This branch was detached from the upstream due to significant changes.
 
 **Main differences from the original:**
-*   **Dropped support for legacy architectures**: Only arm64-v8a is supported.
+*   **Dropped support for legacy architectures**: Only arm64 is supported.
 *   **Deep redesign and optimization**: Completely overhauled interface (skeleton, async loading) and significantly optimized code.
 *   **Flexible sorting**: Added the ability for proper application sorting.
 *   **Anonymous TUN route hiding**: Exclusion of TUN interfaces from route requests.
 *   **Kernel-Level Bind Bypass**: Ability to deploy packages directly bypassing any application binds at the kernel level.
-*   **Maximum Stealth**: Completely eliminated the use of `/proc/` files (accessible to all apps), preventing module detection via the file system.
+*   **Fully reworked port blocking**: Rule-based port access blocking mechanism. The logic has been moved from iptables to the kernel.
+*   **Database-driven architecture**: Rules are mirrored and stored in the application's database.
+*   **Maximum Stealth**: Complete removal of `/proc/` files accessible to all applications, eliminating module detection through the file system.

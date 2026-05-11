@@ -35,6 +35,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -136,9 +137,13 @@ private fun MainScreen(
     var sortOrder by remember { mutableStateOf(AppSortOrder.SELECTED_FIRST) }
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
+    var currentProtectionMode by remember { mutableStateOf(ProtectionMode.VpnTargets) }
+    var dirtyProtectionModes by remember { mutableStateOf(setOf<ProtectionMode>()) }
     var saveTrigger by remember { mutableStateOf(0) }
     var showFaq by remember { mutableStateOf(false) }
     var editingAppRules by remember { mutableStateOf<AppEntry?>(null) }
+    var showBulkRules by remember { mutableStateOf(false) }
+    var localMassRules by remember { mutableStateOf<List<PortRule>?>(null) }
     var rulesUpdatedApp by remember { mutableStateOf<AppEntry?>(null) }
     val refreshRestart = selfNeedsRestart ?: false
 
@@ -391,10 +396,19 @@ private fun MainScreen(
                                     showRussianOnly = showRussianOnly,
                                     showOnlySelected = showOnlySelected,
                                     sortOrder = sortOrder,
-                                    onDirtyChange = { isProtectionDirty = it },
+                                    onStateChange = { mode, dirtyModes ->
+                                        currentProtectionMode = mode
+                                        dirtyProtectionModes = dirtyModes
+                                        isProtectionDirty = dirtyModes.isNotEmpty()
+                                    },
                                     onAppPortConfig = { editingAppRules = it },
                                     updatedApp = rulesUpdatedApp,
                                     saveTrigger = saveTrigger,
+                                    pendingMassRules = localMassRules,
+                                    onSaved = {
+                                        localMassRules = null
+                                        rulesUpdatedApp = null
+                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -419,23 +433,42 @@ private fun MainScreen(
                             .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val showSave = isProtectionDirty && currentTab == Tab.Protection
+                    val showSave = currentTab == Tab.Protection && currentProtectionMode in dirtyProtectionModes
+                    val showBulk = currentTab == Tab.Protection && currentProtectionMode == ProtectionMode.PortHiding
+
+                    val controlsProgress by animateFloatAsState(
+                        targetValue = if (showSave || showBulk) 1f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+                        label = "controlsProgress",
+                    )
+
+                    val saveProgress by animateFloatAsState(
+                        targetValue = if (showSave) 1f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+                        label = "saveProgress",
+                    )
+
+                    val bulkProgress by animateFloatAsState(
+                        targetValue = if (showBulk) 1f else 0f,
+                        animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
+                        label = "bulkProgress",
+                    )
+
+                    val bulkColor by animateColorAsState(
+                        targetValue = if (showSave) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
+                        label = "bulkColor",
+                    )
+                    val bulkContentColor by animateColorAsState(
+                        targetValue = if (showSave) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary,
+                        label = "bulkContentColor",
+                    )
+
                     val tabs =
                         listOf(
                             Tab.Dashboard to Icons.Default.Home,
                             Tab.Protection to Icons.Default.Shield,
                             Tab.Diagnostics to Icons.Default.CheckCircle,
                         )
-
-                    val saveProgress by animateFloatAsState(
-                        targetValue = if (showSave) 1f else 0f,
-                        animationSpec =
-                            spring(
-                                dampingRatio = Spring.DampingRatioLowBouncy,
-                                stiffness = Spring.StiffnessLow,
-                            ),
-                        label = "saveProgress",
-                    )
 
                     // The bounding box for the entire Pill + Save FAB combo
                     Box(contentAlignment = Alignment.Center) {
@@ -445,7 +478,7 @@ private fun MainScreen(
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
                             Spacer(modifier = Modifier.width(260.dp))
-                            Spacer(modifier = Modifier.width(76.dp * saveProgress))
+                            Spacer(modifier = Modifier.width(76.dp * controlsProgress))
                         }
 
                         // Save Button (Anchored to the right, scales up)
@@ -470,6 +503,40 @@ private fun MainScreen(
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
                                         Icons.Default.Check,
+                                        contentDescription = null,
+                                        modifier = Modifier.size(28.dp),
+                                    )
+                                }
+                            }
+                        }
+
+                        // Bulk Button (Moves up if Save is visible)
+                        if (bulkProgress > 0.01f) {
+                            val bulkOffset by animateDpAsState(
+                                targetValue = if (showSave) (-72).dp else 0.dp,
+                                label = "bulkOffset",
+                            )
+                            Surface(
+                                onClick = { showBulkRules = true },
+                                color = bulkColor,
+                                contentColor = bulkContentColor,
+                                modifier =
+                                    Modifier
+                                        .align(Alignment.CenterEnd)
+                                        .offset(y = bulkOffset)
+                                        .size(60.dp)
+                                        .graphicsLayer {
+                                            shadowElevation = 8.dp.toPx()
+                                            shape = RoundedCornerShape(20.dp)
+                                            clip = true
+                                            alpha = bulkProgress
+                                            scaleX = 0.5f + (0.5f * bulkProgress)
+                                            scaleY = 0.5f + (0.5f * bulkProgress)
+                                        },
+                            ) {
+                                Box(contentAlignment = Alignment.Center) {
+                                    Icon(
+                                        Icons.Default.SettingsSuggest,
                                         contentDescription = null,
                                         modifier = Modifier.size(28.dp),
                                     )
@@ -551,8 +618,10 @@ private fun MainScreen(
         ) {
             editingAppRules?.let { app ->
                 BackHandler { editingAppRules = null }
+                val targets by TargetsCache.snapshot.collectAsState()
                 PortRulesScreen(
                     app = app,
+                    massRules = localMassRules ?: targets?.massPortRules ?: emptyList(),
                     onBack = { editingAppRules = null },
                     onSave = { updatedRules ->
                         if (updatedRules != app.portRules) {
@@ -563,6 +632,25 @@ private fun MainScreen(
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 )
             }
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showBulkRules,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            BackHandler { showBulkRules = false }
+            val targets by TargetsCache.snapshot.collectAsState()
+            BulkRulesScreen(
+                initialRules = localMassRules ?: targets?.massPortRules ?: emptyList(),
+                onBack = { showBulkRules = false },
+                onSave = { updatedRules ->
+                    localMassRules = updatedRules
+                    showBulkRules = false
+                },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
         }
     }
 }

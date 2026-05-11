@@ -1,6 +1,8 @@
 package dev.soranerai.vpnhidenext
 
 import android.content.Context
+import android.util.Base64
+import dev.soranerai.vpnhidenext.db.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -37,6 +39,7 @@ internal data class TargetsSnapshot(
     val lsposedTargets: Set<String>,
     val portsObservers: Set<String>,
     val portRules: Map<String, List<PortRule>>,
+    val massPortRules: List<PortRule>,
     val uidToPkg: Map<Int, String>,
 )
 
@@ -104,16 +107,179 @@ internal object TargetsCache {
         echo "$END"
         """.trimIndent()
 
-    private suspend fun reload(
-        @Suppress("UNUSED_PARAMETER") appContext: Context,
-    ) {
+    private suspend fun reload(appContext: Context) {
         _loading.value = true
         try {
-            val (_, out) =
-                withContext(Dispatchers.IO) { suExec(BATCH_SCRIPT) }
-            _snapshot.value = parse(out)
+            val db = AppDatabase.getInstance(appContext)
+            val appDao = db.appDao()
+            val portRuleDao = db.portRuleDao()
+            val massPortRuleDao = db.massPortRuleDao()
+
+            // Check if DB is empty
+            val allAppsSync = appDao.getAllAppProtectionSync()
+            if (allAppsSync.isEmpty()) {
+                // Initial migration: read from files
+                val (_, out) = withContext(Dispatchers.IO) { suExec(BATCH_SCRIPT) }
+                val snapshot = parse(out)
+
+                // Populate DB
+                val allPkgs =
+                    (
+                        snapshot.kmodTargets + snapshot.kmodDirectTargets +
+                            snapshot.zygiskTargets + snapshot.lsposedTargets +
+                            snapshot.portsObservers
+                    ).distinct()
+
+                for (pkg in allPkgs) {
+                    appDao.insertAppProtection(
+                        dev.soranerai.vpnhidenext.db.AppProtection(
+                            packageName = pkg,
+                            kmod = pkg in snapshot.kmodTargets,
+                            zygisk = pkg in snapshot.zygiskTargets,
+                            lsposed = pkg in snapshot.lsposedTargets,
+                            tunBypass = pkg in snapshot.kmodDirectTargets,
+                            portHiding = pkg in snapshot.portsObservers,
+                        ),
+                    )
+
+                    snapshot.portRules[pkg]?.forEach { rule ->
+                        portRuleDao.insertRule(
+                            dev.soranerai.vpnhidenext.db.DbPortRule(
+                                packageName = pkg,
+                                startPort = rule.startPort,
+                                endPort = rule.endPort,
+                                protocol = rule.protocol,
+                                label = rule.label,
+                                enabled = rule.enabled,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            // Now read from DB
+            val apps = appDao.getAllAppProtectionSync()
+            val massRules = massPortRuleDao.getMassRulesSync()
+
+            // Still need module status and PM list
+            val statusScript =
+                """
+                echo "$SENTINEL KMOD_MODULE_DIR"
+                [ -d $KMOD_MODULE_DIR ] && echo 1 || echo 0
+                echo "$SENTINEL LSMOD"
+                lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
+                echo "$SENTINEL ZYGISK_MODULE_DIR"
+                [ -d $ZYGISK_MODULE_DIR ] && echo 1 || echo 0
+                echo "$SENTINEL PM_LIST"
+                pm list packages -U --user all 2>/dev/null || true
+                echo "$END"
+                """.trimIndent()
+
+            val (_, statusOut) = withContext(Dispatchers.IO) { suExec(statusScript) }
+            val statusSnapshot = parse(statusOut)
+
+            val portRulesMap = mutableMapOf<String, List<PortRule>>()
+            for (app in apps) {
+                if (app.portHiding) {
+                    portRulesMap[app.packageName] =
+                        portRuleDao.getRulesForAppSync(app.packageName).map {
+                            PortRule(
+                                id = it.id.toString(),
+                                startPort = it.startPort,
+                                endPort = it.endPort,
+                                protocol = it.protocol,
+                                label = it.label,
+                                enabled = it.enabled,
+                            )
+                        }
+                }
+            }
+
+            _snapshot.value =
+                TargetsSnapshot(
+                    kmodModuleInstalled = statusSnapshot.kmodModuleInstalled,
+                    kmodActive = statusSnapshot.kmodActive,
+                    zygiskModuleInstalled = statusSnapshot.zygiskModuleInstalled,
+                    kmodTargets = apps.filter { it.kmod }.map { it.packageName }.toSet(),
+                    kmodDirectTargets = apps.filter { it.tunBypass }.map { it.packageName }.toSet(),
+                    zygiskTargets = apps.filter { it.zygisk }.map { it.packageName }.toSet(),
+                    lsposedTargets = apps.filter { it.lsposed }.map { it.packageName }.toSet(),
+                    portsObservers = apps.filter { it.portHiding }.map { it.packageName }.toSet(),
+                    portRules = portRulesMap,
+                    massPortRules =
+                        massRules.map { m ->
+                            PortRule(
+                                id = m.id.toString(),
+                                startPort = m.startPort,
+                                endPort = m.endPort,
+                                protocol = m.protocol,
+                                label = m.label,
+                                enabled = m.enabled,
+                            )
+                        },
+                    uidToPkg = statusSnapshot.uidToPkg,
+                )
         } finally {
             _loading.value = false
+        }
+    }
+
+    suspend fun applyPortRulesToKernel(context: Context) {
+        val db = AppDatabase.getInstance(context)
+        val appDao = db.appDao()
+        val portRuleDao = db.portRuleDao()
+        val massPortRuleDao = db.massPortRuleDao()
+
+        val apps = appDao.getAllAppProtectionSync().filter { it.portHiding }
+        val massRules =
+            massPortRuleDao.getMassRulesSync().filter { it.enabled }.map { m ->
+                PortRule(m.id.toString(), m.startPort, m.endPort, m.protocol, m.label, m.enabled)
+            }
+
+        val ruleMap =
+            apps.associate { app ->
+                val localRules =
+                    portRuleDao.getRulesForAppSync(app.packageName).map { r ->
+                        PortRule(r.id.toString(), r.startPort, r.endPort, r.protocol, r.label, r.enabled)
+                    }
+                app.packageName to (localRules + massRules)
+            }
+
+        val header = context.getString(R.string.save_header_comment)
+        val parts = mutableListOf<String>()
+
+        // Observers file
+        val pkgs = apps.map { it.packageName }.sorted()
+        parts += "echo '$header' > $PORTS_OBSERVERS_FILE"
+        pkgs.forEach { parts += "echo '$it' >> $PORTS_OBSERVERS_FILE" }
+        parts += "chmod 644 $PORTS_OBSERVERS_FILE"
+
+        // Rules persistence file
+        val rulesBody = StringBuilder(header).append("\n")
+        ruleMap.forEach { (pkg, rules) ->
+            if (rules.isNotEmpty()) {
+                rulesBody.append(pkg)
+                rules.forEach { rule ->
+                    val proto =
+                        when (rule.protocol) {
+                            PortProtocol.TCP -> 0
+                            PortProtocol.UDP -> 1
+                            PortProtocol.BOTH -> 2
+                        }
+                    rulesBody.append(" ${rule.startPort}-${rule.endPort}:$proto")
+                }
+                rulesBody.append("\n")
+            }
+        }
+        val b64Rules = android.util.Base64.encodeToString(rulesBody.toString().toByteArray(), android.util.Base64.NO_WRAP)
+        val rulesDir = PORTS_RULES_FILE.substringBeforeLast('/')
+        parts += "mkdir -p $rulesDir ; echo '$b64Rules' | base64 -d > $PORTS_RULES_FILE && chmod 644 $PORTS_RULES_FILE"
+
+        // Apply to kmod
+        parts += buildKmodPortRulesApplyCommand(ruleMap)
+
+        withContext(Dispatchers.IO) {
+            suExec(parts.joinToString(" ; "))
         }
     }
 
@@ -151,8 +317,17 @@ internal object TargetsCache {
         // UIDs: `package:com.android.chrome uid:10187,1010187`. Each UID
         // becomes its own entry in the reverse map so observer lookups
         // from any profile resolve back to the same package name.
-        val pmLine = Regex("^package:(\\S+) uid:(\\S+)")
+        val pmLine = Regex("""^package:(.+) uid:(\d+(?:,\d+)*)$""")
         val uidToPkg = mutableMapOf<Int, String>()
+        sections["PM_LIST"]?.lines()?.forEach { line ->
+            val match = pmLine.find(line) ?: return@forEach
+            val pkg = match.groupValues[1]
+            val uids = match.groupValues[2].split(",")
+            uids.forEach { uidStr ->
+                uidStr.toIntOrNull()?.let { uidToPkg[it] = pkg }
+            }
+        }
+
         val portRules = mutableMapOf<String, List<PortRule>>()
         sections["PORTS_RULES"]?.lines()?.forEach { line ->
             if (line.isBlank() || line.startsWith("#")) return@forEach
@@ -188,6 +363,7 @@ internal object TargetsCache {
             lsposedTargets = nonEmptyLines(sections["LSPOSED_TARGETS"]),
             portsObservers = nonEmptyLines(sections["PORTS_OBSERVERS"]),
             portRules = portRules,
+            massPortRules = emptyList(),
             uidToPkg = uidToPkg,
         )
     }

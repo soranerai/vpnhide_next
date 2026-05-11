@@ -20,6 +20,22 @@
     <string name="ports_hint_safe">Безопасно для банков, госуслуг, маркетплейсов, не-браузерных приложений. Chromium-браузеры используют localhost для dev/PWA — их не стоит делать observer\'ами.</string>
     <string name="ports_hint_reboot">Правила перезаписываются при каждом Save. После ребута модуль восстанавливает их автоматически через service.sh.</string>
     <string name="ports_save_success">Сохранено · наблюдателей: %1$d</string>
+    <string name="bulk_rules_title">Массовые правила</string>
+    <string name="bulk_rules_subtitle">Применяются ко всем защищённым приложениям</string>
+    <string name="no_rules">Правила не настроены</string>
+    <string name="back">Назад</string>
+    <string name="bulk_btn">Bulk</string>
+    <string name="cancel">Отмена</string>
+    <string name="apply_bulk_btn">Применить</string>
+    <string name="new_bulk_rule">Новое массовое правило</string>
+    <string name="edit_bulk_rule">Редактировать правило</string>
+    <string name="label_optional">Название (необязательно)</string>
+    <string name="port_start">Начальный порт</string>
+    <string name="port_end">Конечный порт</string>
+    <string name="protocol">Протокол</string>
+    <string name="add_rule">Добавить правило</string>
+    <string name="err_rule_redundant">Дубликат: перекрывается \"%s\"</string>
+    <string name="err_rule_exists">Такое правило уже существует</string>
 
     <!-- App picker -->
     <string name="selected_count">%d выбрано</string>

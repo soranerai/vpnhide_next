@@ -22,6 +22,22 @@
     <string name="ports_hint_reboot">Rules are re-applied on every Save. After reboot, the module restores them automatically via service.sh.</string>
     <string name="ports_save_success">Saved · %1$d observer(s)</string>
     <string name="ports_count" translatable="false">P: %d</string>
+    <string name="bulk_rules_title">Bulk Rules</string>
+    <string name="bulk_rules_subtitle">Applies to all protected apps</string>
+    <string name="no_rules">No rules defined</string>
+    <string name="back">Back</string>
+    <string name="bulk_btn">Bulk</string>
+    <string name="cancel">Cancel</string>
+    <string name="apply_bulk_btn">Apply</string>
+    <string name="new_bulk_rule">New Bulk Rule</string>
+    <string name="edit_bulk_rule">Edit Bulk Rule</string>
+    <string name="label_optional">Label (optional)</string>
+    <string name="port_start">Start Port</string>
+    <string name="port_end">End Port</string>
+    <string name="protocol">Protocol</string>
+    <string name="add_rule">Add Rule</string>
+    <string name="err_rule_redundant">Redundant: covered by \"%s\"</string>
+    <string name="err_rule_exists">This rule already exists</string>
 
     <!-- App picker -->
     <string name="selected_count">%d selected</string>
