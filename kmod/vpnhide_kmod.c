@@ -821,14 +821,17 @@ static int fib_dump_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	/* x0=skb, x4=fi (or fri in 6.1+) */
 	data->skb = (struct sk_buff *)regs->regs[0];
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 	{
 		struct fib_rt_info *fri = (struct fib_rt_info *)regs->regs[4];
 		if (fri)
 			fi = fri->fi;
 	}
 #else
-	fi = (struct fib_info *)regs->regs[4];
+	/* GKI 5.10 mapping: x4 is tb_id, fi is on stack (arg 10).
+	 * We don't try to pull from stack here; fi will remain NULL.
+	 * This means bulk dumps (ip route) won't hide VPN routes on 5.10
+	 * via this hook, but rtnl_fill_ifinfo still hides the interfaces. */
 #endif
 
 	rcu_read_lock();
@@ -1076,10 +1079,10 @@ static int rt_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 			dev = fri->fi->fib_nh[0].nh_common.nhc_dev;
 	}
 #else
-	/* GKI 5.10 / 5.15 mapping: x6=skb, x7=rt */
+	/* GKI 5.10 / 5.15 mapping: x6=skb, x3=rt */
 	data->skb = (struct sk_buff *)regs->regs[6];
 	{
-		struct rtable *rt = (struct rtable *)regs->regs[7];
+		struct rtable *rt = (struct rtable *)regs->regs[3];
 		if (rt)
 			dev = rt->dst.dev;
 	}
