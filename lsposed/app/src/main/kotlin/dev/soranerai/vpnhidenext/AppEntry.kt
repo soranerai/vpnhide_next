@@ -7,12 +7,11 @@ internal data class AppEntry(
     val label: String,
     val icon: Drawable?,
     val isSystem: Boolean,
-    val userIds: List<Int> = emptyList(),
+    val userId: Int = 0,
+    val uid: Int = 0,
     // Protection (VPN) flags
     val kmod: Boolean = false,
     val lsposed: Boolean = false,
-    // TUN Bypass
-    val tunBypass: Boolean = false,
     // Port Hiding
     val portHiding: Boolean = false,
     val portRules: List<PortRule> = emptyList(),

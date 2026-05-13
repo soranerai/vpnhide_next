@@ -308,6 +308,7 @@ private fun PortRuleCard(
                         text = rule.label,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
+                        color = if (isReadOnly) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
                     )
                 }
                 Text(

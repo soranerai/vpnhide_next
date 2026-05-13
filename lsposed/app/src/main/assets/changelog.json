@@ -1,6 +1,59 @@
 {
   "history": [
     {
+      "version": "1.2.5",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Full support for Work Profile and secondary users with visual distinction and profile filtering",
+              "ru": "Полная поддержка рабочих профилей и дополнительных пользователей с визуальным разделением и фильтрацией"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Improved app responsiveness by pre-loading application lists at startup",
+              "ru": "Улучшена отзывчивость приложения"
+            },
+            {
+              "en": "Significantly improved settings saving performance",
+              "ru": "Значительно ускорено сохранение настроек"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fixed incorrect label color for mass rules",
+              "ru": "Исправлен некорректный цвет лейбла массовых правил"
+            },
+            {
+              "en": "Fixed settings restore after reboot",
+              "ru": "Исправлено восстановление настроек после перезагрузки"
+            },
+            {
+              "en": "Restoration of protection targets and port rules after reboot",
+              "ru": "Восстановление настроек защиты и правил портов после перезагрузки"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Removed unstable VPN routing bypass logic",
+              "ru": "Удалена нестабильная логика обхода маршрутизации VPN"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.2.0",
       "sections": []
     },

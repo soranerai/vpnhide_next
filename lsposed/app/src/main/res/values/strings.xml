@@ -10,7 +10,6 @@
 
     <!-- Protection modes (segmented button) -->
     <string name="mode_vpn_targets">Tun</string>
-    <string name="mode_tun_bypass">Bypass</string>
     <string name="mode_port_hiding">Ports</string>
     <string name="port_hiding_coming_soon">Coming soon</string>
 
@@ -48,16 +47,13 @@
     <string name="filter_show_system">Show system apps</string>
     <string name="filter_russian_only">Russian apps only</string>
     <string name="filter_only_selected">Only selected</string>
+    <string name="filter_only_work_profile">Only work profile</string>
     <string name="sort_name_asc">Name (A-Z)</string>
     <string name="sort_name_desc">Name (Z-A)</string>
     <string name="sort_selected_first">Selected first</string>
     <string name="apps_help_title">How it works</string>
     <string name="apps_hint_toggles">Use the checkboxes to toggle individual layers: <b>LSPosed</b> and <b>Kernel</b>. Tapping the app row will toggle both layers at once.</string>
 
-    <!-- TUN bypass -->
-    <string name="bypass_help_title">How TUN bypass works</string>
-    <string name="bypass_hint_logic">Enable the <b>Kernel</b> bypass checkbox to force an app to ignore the VPN tunnel. Its traffic will go directly through your primary network interface (Wi-Fi or Mobile Data).</string>
-    <string name="bypass_hint_kmod">Requires the Kernel module (kmod) to be installed and active. This feature only works at the kernel level to ensure reliable routing redirection.</string>
 
     <!-- Root status -->
     <string name="root_error_title">Root access required</string>

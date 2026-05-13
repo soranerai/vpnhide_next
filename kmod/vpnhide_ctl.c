@@ -12,7 +12,7 @@
 void print_usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s <targets|direct|port_targets|port_rules|debug|phys> [args...]\n",
+		"Usage: %s <targets|port_targets|port_rules|debug> [args...]\n",
 		prog);
 	fprintf(stderr,
 		"  port_rules format: <uid> <rule_count> <start> <end> <proto> ...\n");
@@ -39,7 +39,7 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	if (strcmp(argv[1], "targets") == 0 || strcmp(argv[1], "direct") == 0 ||
+	if (strcmp(argv[1], "targets") == 0 ||
 	    strcmp(argv[1], "port_targets") == 0) {
 		data.count = argc - 2;
 		if (data.count > MAX_TARGET_UIDS)
@@ -52,8 +52,6 @@ int main(int argc, char **argv)
 		unsigned long cmd;
 		if (strcmp(argv[1], "targets") == 0)
 			cmd = VH_SET_TARGETS;
-		else if (strcmp(argv[1], "direct") == 0)
-			cmd = VH_SET_DIRECT_TARGETS;
 		else
 			cmd = VH_SET_PORT_TARGETS;
 
@@ -105,16 +103,6 @@ int main(int argc, char **argv)
 		val = atoi(argv[2]);
 		if (ioctl(fd, VH_SET_DEBUG, &val) < 0) {
 			perror("VH_SET_DEBUG");
-			return 1;
-		}
-	} else if (strcmp(argv[1], "phys") == 0) {
-		if (argc < 3) {
-			print_usage(argv[0]);
-			return 1;
-		}
-		val = atoi(argv[2]);
-		if (ioctl(fd, VH_SET_PHYS_IFINDEX, &val) < 0) {
-			perror("VH_SET_PHYS_IFINDEX");
 			return 1;
 		}
 	} else {

@@ -36,10 +36,7 @@ struct vpnhide_ioctl_data {
 #define VH_IOCTL_MAGIC 0x56
 
 #define VH_SET_TARGETS _IOW(VH_IOCTL_MAGIC, 0x01, struct vpnhide_ioctl_data)
-#define VH_SET_DIRECT_TARGETS \
-	_IOW(VH_IOCTL_MAGIC, 0x02, struct vpnhide_ioctl_data)
 #define VH_SET_DEBUG _IOW(VH_IOCTL_MAGIC, 0x03, int)
-#define VH_SET_PHYS_IFINDEX _IOW(VH_IOCTL_MAGIC, 0x04, int)
 #define VH_SET_PORT_TARGETS \
 	_IOW(VH_IOCTL_MAGIC, 0x05, struct vpnhide_ioctl_data)
 #define VH_SET_PORT_RULES _IO(VH_IOCTL_MAGIC, 0x06)

@@ -15,10 +15,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.room.withTransaction
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 
-internal enum class ProtectionMode { VpnTargets, TunBypass, PortHiding }
+internal enum class ProtectionMode { VpnTargets, PortHiding }
 
 @Composable
 internal fun ProtectionScreen(
@@ -26,6 +27,7 @@ internal fun ProtectionScreen(
     showSystem: Boolean,
     showRussianOnly: Boolean,
     showOnlySelected: Boolean,
+    showOnlyWorkProfile: Boolean,
     sortOrder: AppSortOrder,
     onStateChange: (ProtectionMode, Set<ProtectionMode>) -> Unit,
     onAppPortConfig: (AppEntry) -> Unit,
@@ -45,11 +47,9 @@ internal fun ProtectionScreen(
 
     // Unified states for each tab
     var vpnApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
-    var tunApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var portApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
 
     var originalVpn by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
-    var originalTun by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
     var originalPort by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
 
     var saving by remember { mutableStateOf(false) }
@@ -63,11 +63,6 @@ internal fun ProtectionScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        AppListCache.ensureLoaded(scope, context)
-        TargetsCache.ensureLoaded(scope, context)
-    }
-
     // Load/Sync apps when cache changes (only if not dirty)
     LaunchedEffect(cachedApps, targets) {
         val apps = cachedApps ?: return@LaunchedEffect
@@ -79,34 +74,19 @@ internal fun ProtectionScreen(
                 apps
                     .filter { it.packageName != selfPkg }
                     .map { app ->
+                        val key = app.packageName to app.userId
                         AppEntry(
                             packageName = app.packageName,
                             label = app.label,
                             icon = app.icon,
                             isSystem = app.isSystem,
-                            userIds = app.userIds,
-                            kmod = app.packageName in t.kmodTargets,
-                            lsposed = app.packageName in t.lsposedTargets,
+                            userId = app.userId,
+                            uid = app.uid,
+                            kmod = key in t.kmodTargets,
+                            lsposed = key in t.lsposedTargets,
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.kmod || it.lsposed }.thenBy { it.label })
             originalVpn = vpnApps
-        }
-
-        if (tunApps.isEmpty() || !dirtyTun(tunApps, originalTun)) {
-            tunApps =
-                apps
-                    .filter { it.packageName != selfPkg }
-                    .map { app ->
-                        AppEntry(
-                            packageName = app.packageName,
-                            label = app.label,
-                            icon = app.icon,
-                            isSystem = app.isSystem,
-                            userIds = app.userIds,
-                            tunBypass = app.packageName in t.kmodDirectTargets,
-                        )
-                    }.sortedWith(compareByDescending<AppEntry> { it.tunBypass }.thenBy { it.label })
-            originalTun = tunApps
         }
 
         if (portApps.isEmpty() || !dirtyPort(portApps, originalPort)) {
@@ -114,14 +94,16 @@ internal fun ProtectionScreen(
                 apps
                     .filter { it.packageName != selfPkg }
                     .map { app ->
+                        val key = app.packageName to app.userId
                         AppEntry(
                             packageName = app.packageName,
                             label = app.label,
                             icon = app.icon,
                             isSystem = app.isSystem,
-                            userIds = app.userIds,
-                            portHiding = app.packageName in t.portsObservers,
-                            portRules = t.portRules[app.packageName] ?: emptyList(),
+                            userId = app.userId,
+                            uid = app.uid,
+                            portHiding = key in t.portsObservers,
+                            portRules = t.portRules[key] ?: emptyList(),
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label })
             originalPort = portApps
@@ -129,7 +111,6 @@ internal fun ProtectionScreen(
     }
 
     val isVpnDirty = remember(vpnApps, originalVpn) { dirtyVpn(vpnApps, originalVpn) }
-    val isTunDirty = remember(tunApps, originalTun) { dirtyTun(tunApps, originalTun) }
     val isMassDirty =
         remember(pendingMassRules, targets) {
             val original = targets?.massPortRules ?: emptyList()
@@ -140,20 +121,17 @@ internal fun ProtectionScreen(
             dirtyPort(portApps, originalPort) || isMassDirty
         }
 
-    val anyDirty = isVpnDirty || isTunDirty || isPortDirty
+    val anyDirty = isVpnDirty || isPortDirty
 
-    LaunchedEffect(mode, isVpnDirty, isTunDirty, isPortDirty) {
+    LaunchedEffect(mode, isVpnDirty, isPortDirty) {
         val dirtyModes = mutableSetOf<ProtectionMode>()
         if (isVpnDirty) dirtyModes += ProtectionMode.VpnTargets
-        if (isTunDirty) dirtyModes += ProtectionMode.TunBypass
         if (isPortDirty) dirtyModes += ProtectionMode.PortHiding
         onStateChange(mode, dirtyModes)
     }
-
     val counts =
         mapOf(
             ProtectionMode.VpnTargets to vpnApps.count { it.anyProtection },
-            ProtectionMode.TunBypass to tunApps.count { it.tunBypass },
             ProtectionMode.PortHiding to portApps.count { it.portHiding },
         )
 
@@ -174,24 +152,10 @@ internal fun ProtectionScreen(
                             showSystem = showSystem,
                             showRussianOnly = showRussianOnly,
                             showOnlySelected = showOnlySelected,
+                            showOnlyWorkProfile = showOnlyWorkProfile,
                             sortOrder = sortOrder,
                             onUpdate = { newList ->
                                 vpnApps = newList
-                            },
-                            modifier = Modifier.fillMaxSize(),
-                        )
-                    }
-
-                    ProtectionMode.TunBypass -> {
-                        TunBypassScreen(
-                            apps = tunApps,
-                            searchQuery = searchQuery,
-                            showSystem = showSystem,
-                            showRussianOnly = showRussianOnly,
-                            showOnlySelected = showOnlySelected,
-                            sortOrder = sortOrder,
-                            onUpdate = { newList ->
-                                tunApps = newList
                             },
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -204,6 +168,7 @@ internal fun ProtectionScreen(
                             showSystem = showSystem,
                             showRussianOnly = showRussianOnly,
                             showOnlySelected = showOnlySelected,
+                            showOnlyWorkProfile = showOnlyWorkProfile,
                             sortOrder = sortOrder,
                             onUpdate = { newList ->
                                 portApps = newList
@@ -236,77 +201,85 @@ internal fun ProtectionScreen(
                     val parts = mutableListOf<String>()
 
                     val db = AppDatabase.getInstance(context)
-                    val appDao = db.appDao()
-                    val portRuleDao = db.portRuleDao()
+                    db.withTransaction {
+                        val appDao = db.appDao()
+                        val portRuleDao = db.portRuleDao()
 
-                    if (isVpnDirty || isTunDirty || isPortDirty) {
-                        // Persist to DB first
-                        val allPkgs =
-                            (
-                                vpnApps.map { it.packageName } +
-                                    tunApps.map { it.packageName } +
-                                    portApps.map { it.packageName }
-                            ).distinct()
+                        if (isVpnDirty || isPortDirty) {
+                            val vpnMap = vpnApps.associateBy { it.packageName to it.userId }
+                            val portMap = portApps.associateBy { it.packageName to it.userId }
+                            val allKeys = (vpnMap.keys + portMap.keys).distinct()
 
-                        for (pkg in allPkgs) {
-                            val vpnApp = vpnApps.find { it.packageName == pkg }
-                            val tunApp = tunApps.find { it.packageName == pkg }
-                            val portApp = portApps.find { it.packageName == pkg }
+                            val protections =
+                                allKeys.map { key ->
+                                    val (pkg, userId) = key
+                                    val vpnApp = vpnMap[key]
+                                    val portApp = portMap[key]
 
-                            appDao.insertAppProtection(
-                                dev.soranerai.vpnhidenext.db.AppProtection(
-                                    packageName = pkg,
-                                    kmod = vpnApp?.kmod ?: false,
-                                    lsposed = vpnApp?.lsposed ?: false,
-                                    tunBypass = tunApp?.tunBypass ?: false,
-                                    portHiding = portApp?.portHiding ?: false,
-                                ),
-                            )
-
-                            if (portApp != null && isPortDirty) {
-                                portRuleDao.deleteRulesForApp(pkg)
-                                portApp.portRules.forEach { rule ->
-                                    portRuleDao.insertRule(
-                                        dev.soranerai.vpnhidenext.db.DbPortRule(
-                                            packageName = pkg,
-                                            startPort = rule.startPort,
-                                            endPort = rule.endPort,
-                                            protocol = rule.protocol,
-                                            label = rule.label,
-                                            enabled = rule.enabled,
-                                        ),
+                                    dev.soranerai.vpnhidenext.db.AppProtection(
+                                        packageName = pkg,
+                                        userId = userId,
+                                        kmod = vpnApp?.kmod ?: false,
+                                        lsposed = vpnApp?.lsposed ?: false,
+                                        portHiding = portApp?.portHiding ?: false,
                                     )
+                                }
+                            appDao.insertAppProtections(protections)
+
+                            if (isPortDirty) {
+                                val originalPortMap = originalPort.associateBy { it.packageName to it.userId }
+                                for (key in allKeys) {
+                                    val (pkg, userId) = key
+                                    val portApp = portMap[key] ?: continue
+                                    val orig = originalPortMap[key]
+
+                                    // Only update if rules changed
+                                    if (orig == null || portApp.portRules != orig.portRules || portApp.portHiding != orig.portHiding) {
+                                        portRuleDao.deleteRulesForApp(pkg, userId)
+                                        if (portApp.portRules.isNotEmpty()) {
+                                            portRuleDao.insertRules(
+                                                portApp.portRules.map { rule ->
+                                                    dev.soranerai.vpnhidenext.db.DbPortRule(
+                                                        packageName = pkg,
+                                                        userId = userId,
+                                                        startPort = rule.startPort,
+                                                        endPort = rule.endPort,
+                                                        protocol = rule.protocol,
+                                                        label = rule.label,
+                                                        enabled = rule.enabled,
+                                                    )
+                                                },
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
-                    }
 
-                    if (isMassDirty && pendingMassRules != null) {
-                        val massDao = db.massPortRuleDao()
-                        massDao.deleteAllMassRules()
-                        pendingMassRules.forEach { rule ->
-                            massDao.insertMassRule(
-                                dev.soranerai.vpnhidenext.db.DbMassPortRule(
-                                    startPort = rule.startPort,
-                                    endPort = rule.endPort,
-                                    protocol = rule.protocol,
-                                    label = rule.label,
-                                    enabled = rule.enabled,
-                                ),
+                        if (isMassDirty && pendingMassRules != null) {
+                            val massDao = db.massPortRuleDao()
+                            massDao.deleteAllMassRules()
+                            massDao.insertMassRules(
+                                pendingMassRules.map { rule ->
+                                    dev.soranerai.vpnhidenext.db.DbMassPortRule(
+                                        startPort = rule.startPort,
+                                        endPort = rule.endPort,
+                                        protocol = rule.protocol,
+                                        label = rule.label,
+                                        enabled = rule.enabled,
+                                    )
+                                },
                             )
                         }
                     }
 
                     if (isVpnDirty) {
-                        val k = (vpnApps.filter { it.kmod }.map { it.packageName } + selfPkg).distinct().sorted()
-                        val l = (vpnApps.filter { it.lsposed }.map { it.packageName } + selfPkg).distinct().sorted()
+                        val selfUid = context.applicationInfo.uid
+                        val k = (vpnApps.filter { it.kmod }.map { it.uid } + selfUid).distinct().sorted()
+                        val l = (vpnApps.filter { it.lsposed }.map { it.uid } + selfUid).distinct().sorted()
                         parts += buildVpnSaveCommand(header, k, l)
                     }
-                    if (isTunDirty) {
-                        val k = (tunApps.filter { it.tunBypass }.map { it.packageName } + selfPkg).distinct().sorted()
-                        parts += buildTunSaveCommand(header, k)
-                    }
-                    if (isPortDirty) {
+                    if (isPortDirty || isMassDirty) {
                         parts += buildPortSaveCommand(header, portApps, pendingMassRules ?: targets?.massPortRules ?: emptyList())
                     }
 
@@ -317,7 +290,6 @@ internal fun ProtectionScreen(
                             DiagnosticsCache.reset()
                             TargetsCache.refresh(scope, context)
                             originalVpn = vpnApps
-                            originalTun = tunApps
                             originalPort = portApps
                             onSaved()
                         } else {
@@ -336,7 +308,7 @@ internal fun ProtectionScreen(
         updatedApp?.let { app ->
             portApps =
                 portApps.map {
-                    if (it.packageName == app.packageName) app else it
+                    if (it.packageName == app.packageName && it.userId == app.userId) app else it
                 }
         }
     }
@@ -348,19 +320,8 @@ private fun dirtyVpn(
 ): Boolean {
     if (current.size != original.size) return true
     return current.any { c ->
-        val o = original.find { it.packageName == c.packageName } ?: return@any true
+        val o = original.find { it.packageName == c.packageName && it.userId == c.userId } ?: return@any true
         c.kmod != o.kmod || c.lsposed != o.lsposed
-    }
-}
-
-private fun dirtyTun(
-    current: List<AppEntry>,
-    original: List<AppEntry>,
-): Boolean {
-    if (current.size != original.size) return true
-    return current.any { c ->
-        val o = original.find { it.packageName == c.packageName } ?: return@any true
-        c.tunBypass != o.tunBypass
     }
 }
 
@@ -370,7 +331,7 @@ private fun dirtyPort(
 ): Boolean {
     if (current.size != original.size) return true
     return current.any { c ->
-        val o = original.find { it.packageName == c.packageName } ?: return@any true
+        val o = original.find { it.packageName == c.packageName && it.userId == c.userId } ?: return@any true
         c.portHiding != o.portHiding || c.portRules != o.portRules
     }
 }
@@ -384,7 +345,6 @@ private fun ProtectionModeSwitcher(
     val options =
         listOf(
             ProtectionMode.VpnTargets to R.string.mode_vpn_targets,
-            ProtectionMode.TunBypass to R.string.mode_tun_bypass,
             ProtectionMode.PortHiding to R.string.mode_port_hiding,
         )
     SingleChoiceSegmentedButtonRow(
@@ -422,8 +382,8 @@ private fun ProtectionModeSwitcher(
 // Helpers for command building (need to be accessible or moved to a central place)
 private fun buildVpnSaveCommand(
     header: String,
-    kmod: List<String>,
-    lsposed: List<String>,
+    kmod: List<Int>,
+    lsposed: List<Int>,
 ): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(KMOD_TARGETS, header, kmod)
@@ -433,32 +393,34 @@ private fun buildVpnSaveCommand(
     return parts.joinToString(" ; ")
 }
 
-private fun buildTunSaveCommand(
-    header: String,
-    kmod: List<String>,
-): String {
-    val parts = mutableListOf<String>()
-    parts += buildWriteTargetsCommand(KMOD_DIRECT_TARGETS, header, kmod)
-    parts += buildKmodApplyCommand(kmod, targetType = "direct")
-    return parts.joinToString(" ; ")
-}
-
 private fun buildPortSaveCommand(
     header: String,
     apps: List<AppEntry>,
     massRules: List<PortRule>,
 ): String {
-    val pkgs = apps.filter { it.portHiding }.map { it.packageName }.sorted()
     val parts = mutableListOf<String>()
-    parts += buildWriteTargetsCommand(PORTS_OBSERVERS_FILE, header, pkgs)
 
-    val ruleMap = apps.filter { it.portHiding }.associate { it.packageName to (it.portRules + massRules.filter { r -> r.enabled }) }
+    // Observers file
+    // Observers file
+    val observersBody = StringBuilder(header).append("\n")
+    apps.filter { it.portHiding }.forEach { app ->
+        val entry = if (app.userId == 0) app.packageName else "${app.packageName}:${app.userId}"
+        observersBody.append(entry).append("\n")
+    }
+    val b64Observers = Base64.encodeToString(observersBody.toString().toByteArray(), Base64.NO_WRAP)
+    val observersDir = PORTS_OBSERVERS_FILE.substringBeforeLast('/')
+    parts += "mkdir -p $observersDir ; echo '$b64Observers' | base64 -d > $PORTS_OBSERVERS_FILE && chmod 644 $PORTS_OBSERVERS_FILE"
+
+    val ruleMap =
+        apps.filter { it.portHiding }.associate { app ->
+            app.uid to (app.portRules + massRules.filter { r -> r.enabled })
+        }
 
     // Build rule persistence file body
     val rulesBody = StringBuilder(header).append("\n")
-    ruleMap.forEach { (pkg, rules) ->
+    ruleMap.forEach { (uid, rules) ->
         if (rules.isNotEmpty()) {
-            rulesBody.append(pkg)
+            rulesBody.append(uid)
             rules.forEach { rule ->
                 val proto =
                     when (rule.protocol) {

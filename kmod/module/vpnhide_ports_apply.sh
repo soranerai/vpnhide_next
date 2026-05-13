@@ -43,10 +43,15 @@ resolve_uids() {
 
     local uids=""
     while IFS= read -r line || [ -n "$line" ]; do
-        local pkg
         pkg="$(echo "$line" | tr -d '[:space:]')"
         [ -z "$pkg" ] && continue
         case "$pkg" in \#*) continue ;; esac
+        
+        # If it's a numeric UID, just add it directly
+        if echo "$pkg" | grep -q "^[0-9]\+$"; then
+            uids="$uids $pkg"
+            continue
+        fi
         
         local pkg_esc
         pkg_esc="$(echo "$pkg" | sed 's/\./\\./g')"
@@ -95,17 +100,22 @@ if [ -n "$UIDS" ]; then
         u_list="$(echo "$u_csv" | tr ',\n' '  ')"
         
         # Check if granular rules exist for this package
-        # Format in rules.txt: <pkg> <start>-<end>:<proto> ...
-        rules_line="$(grep "^$pkg " "$RULES_FILE" | head -n1)"
-        
+        # Format in rules.txt: <pkg|uid> <start>-<end>:<proto> ...
+        rules_line=""
         for val in $u_list; do
+            # Try lookup by UID first
+            rules_line="$(grep "^$val " "$RULES_FILE" | head -n1)"
+            # Fallback to lookup by package name
+            [ -z "$rules_line" ] && rules_line="$(grep "^$pkg " "$RULES_FILE" | head -n1)"
+            
             if [ -n "$rules_line" ]; then
                 # Granular rules found
                 rule_count=0
                 r_args=""
-                # Skip the package name
+                # Skip the package name or UID
                 for r in $rules_line; do
                     [ "$r" = "$pkg" ] && continue
+                    [ "$r" = "$val" ] && continue
                     # r is <start>-<end>:<proto>
                     s_e="${r%:*}"
                     p="${r#*:}"

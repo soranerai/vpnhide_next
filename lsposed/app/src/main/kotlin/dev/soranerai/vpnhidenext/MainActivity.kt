@@ -130,6 +130,7 @@ private fun MainScreen(
     var showSystem by remember { mutableStateOf(false) }
     var showRussianOnly by remember { mutableStateOf(false) }
     var showOnlySelected by remember { mutableStateOf(false) }
+    var showOnlyWorkProfile by remember { mutableStateOf(false) }
     var sortOrder by remember { mutableStateOf(AppSortOrder.SELECTED_FIRST) }
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
@@ -141,6 +142,7 @@ private fun MainScreen(
     var showBulkRules by remember { mutableStateOf(false) }
     var localMassRules by remember { mutableStateOf<List<PortRule>?>(null) }
     var rulesUpdatedApp by remember { mutableStateOf<AppEntry?>(null) }
+    val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
 
     LaunchedEffect(Unit) {
@@ -162,7 +164,11 @@ private fun MainScreen(
     LaunchedEffect(selfNeedsRestart) {
         val r = selfNeedsRestart ?: return@LaunchedEffect
         DashboardCache.ensureLoaded(scope, context, r)
-        if (!r) DiagnosticsCache.run(scope, context)
+        if (!r) {
+            DiagnosticsCache.run(scope, context)
+            AppListCache.ensureLoaded(scope, context)
+            TargetsCache.ensureLoaded(scope, context)
+        }
     }
 
     // Hold the splash screen only until the Root / Startup check completes.
@@ -244,6 +250,7 @@ private fun MainScreen(
                                 context = context,
                             )
                             IconButton(onClick = { showFaq = true }) {
+                                @Suppress("DEPRECATION")
                                 Icon(
                                     Icons.Default.HelpOutline,
                                     contentDescription = stringResource(R.string.faq_title),
@@ -259,7 +266,8 @@ private fun MainScreen(
                                 }
                                 Box {
                                     val anyFilterActive =
-                                        showSystem || showRussianOnly || showOnlySelected || sortOrder != AppSortOrder.NAME_ASC
+                                        showSystem || showRussianOnly || showOnlySelected || showOnlyWorkProfile ||
+                                            sortOrder != AppSortOrder.NAME_ASC
                                     if (anyFilterActive) {
                                         FilledIconButton(onClick = { showFilterMenu = true }) {
                                             Icon(
@@ -309,6 +317,18 @@ private fun MainScreen(
                                                 )
                                             },
                                         )
+                                        if (userNames.size > 1) {
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.filter_only_work_profile)) },
+                                                onClick = { showOnlyWorkProfile = !showOnlyWorkProfile },
+                                                leadingIcon = {
+                                                    Checkbox(
+                                                        checked = showOnlyWorkProfile,
+                                                        onCheckedChange = null,
+                                                    )
+                                                },
+                                            )
+                                        }
                                         HorizontalDivider()
                                         DropdownMenuItem(
                                             text = { Text(stringResource(R.string.sort_name_asc)) },
@@ -388,6 +408,7 @@ private fun MainScreen(
                                     showSystem = showSystem,
                                     showRussianOnly = showRussianOnly,
                                     showOnlySelected = showOnlySelected,
+                                    showOnlyWorkProfile = showOnlyWorkProfile,
                                     sortOrder = sortOrder,
                                     onStateChange = { mode, dirtyModes ->
                                         currentProtectionMode = mode

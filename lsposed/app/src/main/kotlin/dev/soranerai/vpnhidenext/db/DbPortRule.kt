@@ -11,16 +11,17 @@ import dev.soranerai.vpnhidenext.PortProtocol
     foreignKeys = [
         ForeignKey(
             entity = AppProtection::class,
-            parentColumns = ["packageName"],
-            childColumns = ["packageName"],
+            parentColumns = ["packageName", "userId"],
+            childColumns = ["packageName", "userId"],
             onDelete = ForeignKey.CASCADE,
         ),
     ],
-    indices = [Index("packageName")],
+    indices = [Index(value = ["packageName", "userId"])],
 )
 internal data class DbPortRule(
     @PrimaryKey(autoGenerate = true) val id: Long = 0,
     val packageName: String,
+    val userId: Int = 0,
     val startPort: Int,
     val endPort: Int,
     internal val protocol: PortProtocol,
