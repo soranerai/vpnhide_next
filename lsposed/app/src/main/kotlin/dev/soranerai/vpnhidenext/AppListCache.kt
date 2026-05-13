@@ -21,10 +21,11 @@ import kotlinx.coroutines.withContext
  */
 internal data class AppSummary(
     val packageName: String,
+    val userId: Int,
+    val uid: Int,
     val label: String,
     val icon: Drawable?,
     val isSystem: Boolean,
-    val userIds: List<Int> = emptyList(),
 )
 
 /**
@@ -39,18 +40,11 @@ internal data class AppSummary(
  * numeric ID. This keeps the helper usable even before the user-name
  * map is loaded (no root / parse failure).
  */
-internal fun labelWithUsers(
+internal fun labelWithUser(
     label: String,
-    userIds: List<Int>,
+    userId: Int,
     userNames: Map<Int, String> = emptyMap(),
-): String {
-    if (userIds.isEmpty()) return label
-    val currentUser = Process.myUid() / 100000
-    val onlyCurrent = userIds.size == 1 && userIds[0] == currentUser
-    if (onlyCurrent) return label
-    val formatted = userIds.joinToString(", ") { userNames[it] ?: it.toString() }
-    return "$label ($formatted)"
-}
+): String = label
 
 /**
  * App-scoped cache for the installed-app list. Loaded asynchronously
@@ -68,7 +62,7 @@ internal object AppListCache {
 
     /** user_id → friendly profile name (e.g. 10 → "Work"). Populated
      * from `pm list users` alongside the package scan. Empty map if
-     * root isn't available or parsing failed — `labelWithUsers` falls
+     * root isn't available or parsing failed — `labelWithUser` falls
      * back to numeric IDs in that case.
      */
     private val _userNames = MutableStateFlow<Map<Int, String>>(emptyMap())
@@ -112,20 +106,12 @@ internal object AppListCache {
                     _userNames.value = users
                     if (packages.isNotEmpty()) {
                         packages.entries
-                            .map { (pkg, meta) ->
+                            .flatMap { (pkg, meta) ->
                                 val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull()
                                 val archiveInfo =
                                     if (info == null) loadArchiveApplicationInfo(pm, meta.apkPath) else null
                                 val effectiveInfo = info ?: archiveInfo
 
-                                // Archive-parsed ApplicationInfo doesn't carry
-                                // FLAG_SYSTEM (that bit is attached by PM at
-                                // install time, not stored in the manifest), so
-                                // for secondary-only packages we'd misclassify
-                                // every system app as user-installed. Fall back
-                                // to the APK path: /data/app/... is user-
-                                // installed, everything else is baked into the
-                                // system image.
                                 val isSystem =
                                     if (info != null) {
                                         (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
@@ -133,25 +119,33 @@ internal object AppListCache {
                                         !meta.apkPath.startsWith("/data/app/")
                                     }
 
-                                AppSummary(
-                                    packageName = pkg,
-                                    label = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg,
-                                    icon = effectiveInfo?.let { runCatching { pm.getApplicationIcon(it) }.getOrNull() },
-                                    isSystem = isSystem,
-                                    userIds = meta.userIds,
-                                )
+                                val baseLabel = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg
+                                val icon = effectiveInfo?.let { runCatching { pm.getApplicationIcon(it) }.getOrNull() }
+
+                                meta.users.map { (userId, uid) ->
+                                    AppSummary(
+                                        packageName = pkg,
+                                        userId = userId,
+                                        uid = uid,
+                                        label = labelWithUser(baseLabel, userId, users),
+                                        icon = icon,
+                                        isSystem = isSystem,
+                                    )
+                                }
                             }.sortedBy { it.label.lowercase() }
                     } else {
                         // Fallback: current-profile only (legacy behavior)
+                        val currentUser = Process.myUid() / 100000
                         pm
                             .getInstalledApplications(0)
                             .map { info ->
                                 AppSummary(
                                     packageName = info.packageName,
-                                    label = info.loadLabel(pm).toString(),
+                                    userId = currentUser,
+                                    uid = info.uid,
+                                    label = labelWithUser(info.loadLabel(pm).toString(), currentUser, _userNames.value),
                                     icon = runCatching { pm.getApplicationIcon(info) }.getOrNull(),
                                     isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                                    userIds = listOf(Process.myUid() / 100000),
                                 )
                             }.sortedBy { it.label.lowercase() }
                     }
@@ -166,8 +160,8 @@ internal object AppListCache {
 
     private data class PkgMeta(
         val apkPath: String,
-        val userIds: List<Int>,
-    )
+        val users: Map<Int, Int>,
+    ) // userId -> uid
 
     private const val USERS_SENTINEL = "===VPNHIDE-USERS-BOUNDARY==="
 
@@ -219,19 +213,19 @@ internal object AppListCache {
                 val pkg = pathAndPkg.substring(eq + 1).trim()
                 if (apkPath.isEmpty() || pkg.isEmpty()) return@forEach
 
-                val userIds =
+                val userMap =
                     uidPart
                         .split(',')
                         .mapNotNull { it.trim().toIntOrNull() }
-                        .map { it / 100000 }
+                        .associateBy { it / 100000 }
 
                 val existing = out[pkg]
                 out[pkg] =
                     if (existing == null) {
-                        PkgMeta(apkPath, userIds.distinct().sorted())
+                        PkgMeta(apkPath, userMap)
                     } else {
                         existing.copy(
-                            userIds = (existing.userIds + userIds).distinct().sorted(),
+                            users = existing.users + userMap,
                         )
                     }
             }

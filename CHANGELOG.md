@@ -5,7 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.2.5
+
+### Added
+- Full support for Work Profile and secondary users with visual distinction and profile filtering
+
+### Changed
+- Improved app responsiveness by pre-loading application lists at startup
+- Significantly improved settings saving performance
+
+### Fixed
+- Fixed incorrect label color for mass rules
+- Fixed settings restore after reboot
+- Restoration of protection targets and port rules after reboot
+
+### Removed
+- Removed unstable VPN routing bypass logic
+
 ## v1.2.0
+
+## v1.1.0
 
 ### Added
 - Granular Port Hiding: Ability to hide specific local ports from targeted applications via kernel-level socket filtering (connect() hook)

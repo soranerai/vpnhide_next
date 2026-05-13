@@ -3,11 +3,11 @@ package dev.soranerai.vpnhidenext.db
 import androidx.room.Entity
 import androidx.room.PrimaryKey
 
-@Entity(tableName = "app_protection")
+@Entity(tableName = "app_protection", primaryKeys = ["packageName", "userId"])
 internal data class AppProtection(
-    @PrimaryKey val packageName: String,
+    val packageName: String,
+    val userId: Int = 0,
     val kmod: Boolean = false,
     val lsposed: Boolean = false,
-    val tunBypass: Boolean = false,
     val portHiding: Boolean = false,
 )

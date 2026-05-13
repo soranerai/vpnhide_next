@@ -65,21 +65,6 @@ fun FaqScreen(
             )
 
             FaqSection(
-                title = stringResource(R.string.bypass_help_title),
-                content = {
-                    Text(
-                        text = annotatedStringResource(R.string.bypass_hint_logic),
-                        style = MaterialTheme.typography.bodyMedium,
-                    )
-                    Text(
-                        text = stringResource(R.string.bypass_hint_kmod),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                },
-            )
-
-            FaqSection(
                 title = stringResource(R.string.ports_help_title),
                 content = {
                     Text(

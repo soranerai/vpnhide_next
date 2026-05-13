@@ -272,6 +272,7 @@ private fun BulkRuleCard(
                         text = rule.label,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
                     )
                 }
                 Text(

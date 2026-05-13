@@ -50,6 +50,7 @@ internal fun AppPickerScreen(
     showSystem: Boolean,
     showRussianOnly: Boolean,
     showOnlySelected: Boolean,
+    showOnlyWorkProfile: Boolean,
     sortOrder: AppSortOrder,
     onUpdate: (List<AppEntry>) -> Unit,
     modifier: Modifier = Modifier,
@@ -65,10 +66,18 @@ internal fun AppPickerScreen(
 
     // Stable ID list for the display to prevent shuffling on toggle
     var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
-    val currentPackageNames = remember(apps) { apps.map { it.packageName }.toSet() }
 
     // Update the sort order only on filters/search/refresh OR initial load
-    LaunchedEffect(currentPackageNames.isEmpty(), searchQuery, showSystem, showRussianOnly, showOnlySelected, sortOrder, refreshTrigger) {
+    LaunchedEffect(
+        apps.isEmpty(),
+        searchQuery,
+        showSystem,
+        showRussianOnly,
+        showOnlySelected,
+        showOnlyWorkProfile,
+        sortOrder,
+        refreshTrigger,
+    ) {
         if (apps.isEmpty()) return@LaunchedEffect
 
         val q = searchQuery.trim().lowercase()
@@ -78,6 +87,7 @@ internal fun AppPickerScreen(
                     (showSystem || !app.isSystem || app.kmod || app.lsposed) &&
                         (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
                         (!showOnlySelected || app.anyProtection) &&
+                        (!showOnlyWorkProfile || app.userId != 0) &&
                         (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
                 }.let { list ->
                     when (sortOrder) {
@@ -95,13 +105,18 @@ internal fun AppPickerScreen(
                             )
                         }
                     }
-                }.map { it.packageName }
+                }.map { "${it.packageName}:${it.userId}" }
     }
 
     // Map current data to the stable order
     val displayApps =
         remember(apps, sortedIds) {
-            sortedIds.mapNotNull { pkg -> apps.find { it.packageName == pkg } }
+            sortedIds.mapNotNull { id ->
+                val parts = id.split(":")
+                val pkg = parts[0]
+                val uid = parts[1].toIntOrNull() ?: 0
+                apps.find { it.packageName == pkg && it.userId == uid }
+            }
         }
 
     val installed =
@@ -138,7 +153,7 @@ internal fun AppPickerScreen(
                         modifier = Modifier.fillMaxSize(),
                         contentPadding = PaddingValues(bottom = 88.dp),
                     ) {
-                        items(displayApps, key = { it.packageName }) { app ->
+                        items(displayApps, key = { "${it.packageName}:${it.userId}" }) { app ->
                             AppRow(
                                 app = app,
                                 userNames = emptyMap(),
@@ -146,7 +161,7 @@ internal fun AppPickerScreen(
                                 onToggle = { layer ->
                                     val newList =
                                         apps.map {
-                                            if (it.packageName != app.packageName) {
+                                            if (it.packageName != app.packageName || it.userId != app.userId) {
                                                 it
                                             } else {
                                                 when (layer) {
@@ -161,7 +176,7 @@ internal fun AppPickerScreen(
                                     val newState = !(app.kmod || app.lsposed)
                                     val newList =
                                         apps.map {
-                                            if (it.packageName != app.packageName) {
+                                            if (it.packageName != app.packageName || it.userId != app.userId) {
                                                 it
                                             } else {
                                                 it.copy(

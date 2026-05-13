@@ -13,7 +13,6 @@ import java.util.concurrent.atomic.AtomicReference
 private const val TAG = "VpnHide"
 
 internal const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
-internal const val KMOD_DIRECT_TARGETS = "/data/adb/vpnhide_kmod/direct_targets.txt"
 
 internal const val LSPOSED_TARGETS = "/data/adb/vpnhide_lsposed/targets.txt"
 internal const val KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
@@ -243,81 +242,49 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
 }
 
 internal fun buildUidResolver(
-    packages: List<String>,
+    uids: List<Int>,
     outputFile: String,
-): String =
-    buildString {
-        // `--user all` produces comma-separated UIDs for packages that
-        // exist in multiple profiles (e.g. work profile), like:
-        //   package:com.android.chrome uid:10187,1010187
-        // `tr ',' '\n'` expands each to its own line so every profile's
-        // copy of the target is individually filtered by the hooks.
-        // Literal field match via awk — grep would treat dots in `pkg`
-        // as regex wildcards, occasionally cross-matching distinct
-        // packages.
-        append("ALL_PKGS=\"\$(pm list packages -U --user all 2>/dev/null)\"")
-        append("; UIDS=\"\"")
-        for (pkg in packages) {
-            append(
-                "; U=\$(echo \"\$ALL_PKGS\" | awk -v p=\"package:$pkg\" " +
-                    "'\$1 == p { sub(/uid:/, \"\", \$2); print \$2; exit }' | tr ',' '\\n')",
-            )
-            append("; if [ -n \"\$U\" ]; then if [ -z \"\$UIDS\" ]; then UIDS=\"\$U\"; else UIDS=\"\$UIDS")
-            append("\n")
-            append("\$U\"; fi; fi")
-        }
-        append("; if [ -n \"\$UIDS\" ]; then echo \"\$UIDS\" > $outputFile 2>/dev/null")
-        append("; else echo > $outputFile 2>/dev/null; fi")
+): String {
+    if (uids.isEmpty()) {
+        return "echo > $outputFile 2>/dev/null"
     }
+    val body = uids.sorted().joinToString("\n") + "\n"
+    val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
+    return "echo '$b64' | base64 -d > $outputFile && chmod 644 $outputFile"
+}
 
 internal fun buildWriteTargetsCommand(
     path: String,
     header: String,
-    pkgs: List<String>,
+    uids: List<Int>,
 ): String {
-    val body = "$header\n" + pkgs.joinToString("\n") + if (pkgs.isNotEmpty()) "\n" else ""
+    val body = "$header\n" + uids.sorted().joinToString("\n") + if (uids.isNotEmpty()) "\n" else ""
     val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
     val dir = path.substringBeforeLast('/')
     return "mkdir -p $dir ; echo '$b64' | base64 -d > $path && chmod 644 $path"
 }
 
 internal fun buildKmodApplyCommand(
-    pkgs: List<String>,
+    uids: List<Int>,
     targetType: String = "targets",
 ): String {
-    if (pkgs.isEmpty()) {
-        return "[ -c $DEV_NODE ] && $KMOD_CTL $targetType; true"
-    }
-
-    val pkgList = pkgs.joinToString("|") { it.replace(".", "\\.") }
-    val awkCmd = "awk -v p=\"^package:($pkgList) \" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }'"
-    return "if [ -c $DEV_NODE ]; then " +
-        "UIDS=\$(pm list packages -U | $awkCmd | xargs); " +
-        "[ -n \"\$UIDS\" ] && $KMOD_CTL $targetType \$UIDS; fi"
+    if (uids.isEmpty()) return "$KMOD_CTL $targetType ; true"
+    return "$KMOD_CTL $targetType ${uids.sorted().joinToString(" ")}"
 }
 
-internal fun buildKmodPortRulesApplyCommand(rules: Map<String, List<PortRule>>): String {
+internal fun buildKmodPortRulesApplyCommand(rules: Map<Int, List<PortRule>>): String {
     if (rules.isEmpty()) {
         return "[ -c $DEV_NODE ] && $KMOD_CTL port_rules; true"
     }
 
-    // Since we need UIDs for vpnhide-ctl port_rules, we build a script that
-    // resolves UIDs for each package and then calls vpnhide-ctl with rules.
     return buildString {
         append("if [ -c $DEV_NODE ]; then ")
-        append("ALL_PKGS=\"\$(pm list packages -U)\"; ")
         append("ARGS=\"\"; ")
-        rules.forEach { (pkg, portRules) ->
-            val pkgEsc = pkg.replace(".", "\\.")
-            append(
-                "U=\$(echo \"\$ALL_PKGS\" | awk -v p=\"^package:$pkgEsc[ :]\" '\$0 ~ p { sub(/.*uid:/, \"\"); gsub(/,/, \" \"); print }' | xargs); ",
-            )
-            append("if [ -n \"\$U\" ]; then ")
-            append("for UID_VAL in \$U; do ")
+        rules.forEach { (uid, portRules) ->
             if (portRules.isEmpty()) {
-                append("ARGS=\"\$ARGS \$UID_VAL 1 0 65535 2\"; ")
+                append("ARGS=\"\$ARGS $uid 1 0 65535 2\"; ")
             } else {
-                append("ARGS=\"\$ARGS \$UID_VAL ${portRules.size}")
+                append("ARGS=\"\$ARGS $uid ${portRules.size}")
                 portRules.forEach { rule ->
                     val proto =
                         when (rule.protocol) {
@@ -329,21 +296,20 @@ internal fun buildKmodPortRulesApplyCommand(rules: Map<String, List<PortRule>>):
                 }
                 append("\"; ")
             }
-            append("done; fi; ")
         }
         append("[ -n \"\$ARGS\" ] && $KMOD_CTL port_rules \$ARGS; fi")
     }
 }
 
-internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
-    if (pkgs.isEmpty()) {
+internal fun buildLsposedApplyCommand(uids: List<Int>): String {
+    if (uids.isEmpty()) {
         return "echo > $SS_UIDS_FILE; chmod 640 $SS_UIDS_FILE; " +
             "chown root:system $SS_UIDS_FILE; " +
             "chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; true"
     }
 
     return buildString {
-        append(buildUidResolver(pkgs, SS_UIDS_FILE))
+        append(buildUidResolver(uids, SS_UIDS_FILE))
         append(" ; chmod 640 $SS_UIDS_FILE")
         append(" ; chown root:system $SS_UIDS_FILE")
         append(" ; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null")
@@ -351,14 +317,15 @@ internal fun buildLsposedApplyCommand(pkgs: List<String>): String {
 }
 
 internal fun applyKmodTargets(context: Context) {
-    val kmodFile = readPackageList(KMOD_TARGETS)
-    suExec(buildKmodApplyCommand(kmodFile, targetType = "targets"))
+    val uids = readTargetList(KMOD_TARGETS)
+    suExec(buildKmodApplyCommand(uids, targetType = "targets"))
 }
 
-internal fun readPackageList(path: String): List<String> {
+internal fun readTargetList(path: String): List<Int> {
     val (_, raw) = suExec("cat $path 2>/dev/null || true")
     return raw
         .lines()
         .map { it.trim() }
         .filter { it.isNotEmpty() && !it.startsWith("#") }
+        .mapNotNull { it.toIntOrNull() }
 }

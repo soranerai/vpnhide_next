@@ -22,10 +22,11 @@
 *   **Deep redesign and optimization**: Completely overhauled interface (skeleton, async loading) and significantly optimized code.
 *   **Flexible sorting**: Added the ability for proper application sorting.
 *   **Anonymous TUN route hiding**: Exclusion of TUN interfaces from route requests.
-*   **Kernel-Level Bind Bypass**: Ability to deploy packages directly bypassing any application binds at the kernel level.
 *   **Fully reworked port blocking**: Rule-based port access blocking mechanism. The logic has been moved from iptables to the kernel.
 *   **Database-driven architecture**: Rules are mirrored and stored in the application's database.
 *   **Maximum Stealth**: Complete removal of `/proc/` files accessible to all applications, eliminating module detection through the file system.
+*   **Apps tun0 binding bypass**: Target apps can't force bind to tun0.
+*   **Workprofiles support**: You can manage apps from workprofiles.
 
 ### Architecture
 *   **`kmod`** — kernel module (recommended), operating outside the application process context. Requirements: GKI + ARM64-v8a.
