@@ -78,8 +78,6 @@ internal fun AppPickerScreen(
         sortOrder,
         refreshTrigger,
     ) {
-        if (apps.isEmpty()) return@LaunchedEffect
-
         val q = searchQuery.trim().lowercase()
         sortedIds =
             apps
