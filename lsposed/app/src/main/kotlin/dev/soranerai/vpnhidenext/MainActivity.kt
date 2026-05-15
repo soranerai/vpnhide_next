@@ -187,6 +187,10 @@ private fun MainScreen(
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
                     UpdateCheckCache.ensureFresh(scope, BuildConfig.VERSION_NAME)
+                    if (AppListCache.apps.value != null) {
+                        AppListCache.refresh(scope, context)
+                        TargetsCache.refresh(scope, context)
+                    }
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)

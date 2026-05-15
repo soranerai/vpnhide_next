@@ -315,6 +315,19 @@ internal object TargetsCache {
             }
         }
 
+        val uidToPkg = mutableMapOf<Int, String>()
+        sections["PM_LIST"]?.lines()?.forEach { line ->
+            if (!line.startsWith("package:")) return@forEach
+            val parts = line.split(" uid:")
+            if (parts.size < 2) return@forEach
+            val pkg = parts[0].removePrefix("package:").trim()
+            val uidsStr = parts[1].trim()
+            uidsStr.split(",").forEach { uidStr ->
+                val uid = uidStr.trim().toIntOrNull()
+                if (uid != null) uidToPkg[uid] = pkg
+            }
+        }
+
         fun parseEntries(raw: String?): Set<Pair<String, Int>> =
             raw
                 ?.lines()
@@ -359,19 +372,6 @@ internal object TargetsCache {
                 }
             }
             portRules[key] = rulesList
-        }
-
-        val uidToPkg = mutableMapOf<Int, String>()
-        sections["PM_LIST"]?.lines()?.forEach { line ->
-            if (!line.startsWith("package:")) return@forEach
-            val parts = line.split(" uid:")
-            if (parts.size < 2) return@forEach
-            val pkg = parts[0].removePrefix("package:").trim()
-            val uidsStr = parts[1].trim()
-            uidsStr.split(",").forEach { uidStr ->
-                val uid = uidStr.trim().toIntOrNull()
-                if (uid != null) uidToPkg[uid] = pkg
-            }
         }
 
         return TargetsSnapshot(

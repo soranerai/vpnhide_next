@@ -75,8 +75,6 @@ internal fun PortsHidingScreen(
         sortOrder,
         refreshTrigger,
     ) {
-        if (apps.isEmpty()) return@LaunchedEffect
-
         val q = searchQuery.trim().lowercase()
         sortedIds =
             apps

@@ -105,14 +105,16 @@ internal fun performStartupOptimized(selfPkg: String): StartupResult {
         
         # Add self to module targets
         ADDED=0
-        for path in $KMOD_TARGETS $LSPOSED_TARGETS; do
+        for path in ${'$'}KMOD_TARGETS ${'$'}LSPOSED_TARGETS; do
           dir=${'$'}(dirname "${'$'}path")
           if [ -d "${'$'}dir" ]; then
-            if ! grep -q "^$selfPkg${'$'}" "${'$'}path" 2>/dev/null; then
-               echo "$selfPkg" >> "${'$'}path"
-               chmod 644 "${'$'}path"
-               ADDED=1
-            fi
+            for U in ${'$'}SELF_UIDS; do
+              if ! grep -q "^${'$'}U${'$'}" "${'$'}path" 2>/dev/null; then
+                 echo "${'$'}U" >> "${'$'}path"
+                 chmod 644 "${'$'}path"
+                 ADDED=1
+              fi
+            done
           fi
         done
 
@@ -199,13 +201,22 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
             VpnHideLog.d(TAG, "ensureSelfInTargets: $selfPkg already in $path")
             return
         }
-        val newBody =
-            "# Managed by VPNHide Next app\n" +
-                (existing + selfPkg).sorted().joinToString("\n") + "\n"
-        val b64 = Base64.encodeToString(newBody.toByteArray(), Base64.NO_WRAP)
-        suExec("echo '$b64' | base64 -d > $path && chmod 644 $path")
-        VpnHideLog.i(TAG, "ensureSelfInTargets: added $selfPkg to $path")
-        added = true
+        val (_, uidsRaw) =
+            suExec(
+                "pm list packages -U --user all 2>/dev/null | grep \"package:$selfPkg \" | " +
+                    "awk '{sub(/uid:/, \"\", ${'$'}2); print ${'$'}2}' | tr ',' '\\n'",
+            )
+        val selfUids = uidsRaw.lines().map { it.trim() }.filter { it.isNotEmpty() }
+
+        for (u in selfUids) {
+            if (u !in existing) {
+                val newBody = "# Managed by VPNHide Next app\n" + (existing + u).sorted().joinToString("\n") + "\n"
+                val b64 = Base64.encodeToString(newBody.toByteArray(), Base64.NO_WRAP)
+                suExec("echo '$b64' | base64 -d > $path && chmod 644 $path")
+                VpnHideLog.i(TAG, "ensureSelfInTargets: added $u to $path")
+                added = true
+            }
+        }
     }
 
     addIfMissing(KMOD_TARGETS, "/data/adb/vpnhide_kmod")
