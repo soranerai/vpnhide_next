@@ -37,6 +37,16 @@
     <string name="add_rule">Add Rule</string>
     <string name="err_rule_redundant">Redundant: covered by \"%s\"</string>
     <string name="err_rule_exists">This rule already exists</string>
+    
+    <!-- Interface Prefixes -->
+    <string name="iface_prefixes_title">Tun Interfaces</string>
+    <string name="iface_prefixes_subtitle">Manage custom network interface prefixes for VPN hiding</string>
+    <string name="section_system_ifaces">System Protected (Default)</string>
+    <string name="section_custom_ifaces">Custom Rules</string>
+    <string name="no_prefixes">No custom rules added yet</string>
+    <string name="new_prefix">New Prefix</string>
+    <string name="edit_prefix">Edit Prefix</string>
+    <string name="prefix_label">Interface prefix (e.g. tun, wg)</string>
 
     <!-- App picker -->
     <string name="selected_count">%d selected</string>

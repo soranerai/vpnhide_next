@@ -49,6 +49,7 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetTcp6
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
+import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -1064,17 +1065,25 @@ private suspend fun exportDebugZip(
             // Target UIDs
             val (_, procTargets) = suExec("cat /proc/vpnhide_targets 2>/dev/null")
             val (_, kmodTargets) = suExec("cat $KMOD_TARGETS 2>/dev/null")
-            val (_, lsposedTargets) = suExec("cat $LSPOSED_TARGETS 2>/dev/null")
+            val db = AppDatabase.getInstance(context)
+            val lsposedTargets = db.appDao().getAllAppProtectionSync().filter { it.lsposed }
             val targetsText =
                 buildString {
                     appendLine("=== /proc/vpnhide_targets (live UIDs) ===")
                     appendLine(procTargets.ifEmpty { "(empty)" })
                     appendLine()
-                    appendLine("=== kmod targets ===")
+                    appendLine("=== kmod targets (KMOD_TARGETS) ===")
                     appendLine(kmodTargets.ifEmpty { "(empty)" })
                     appendLine()
-                    appendLine("=== lsposed targets ===")
-                    appendLine(lsposedTargets.ifEmpty { "(empty)" })
+                    appendLine("=== lsposed targets (DB) ===")
+                    if (lsposedTargets.isEmpty()) {
+                        appendLine("(empty)")
+                    } else {
+                        lsposedTargets.forEach { app ->
+                            val entry = if (app.userId == 0) app.packageName else "${app.packageName}:${app.userId}"
+                            appendLine("$entry (uid: ${app.uid})")
+                        }
+                    }
                 }
             files["targets.txt"] = targetsText
 

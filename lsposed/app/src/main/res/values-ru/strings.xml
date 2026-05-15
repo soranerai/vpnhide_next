@@ -35,6 +35,16 @@
     <string name="add_rule">Добавить правило</string>
     <string name="err_rule_redundant">Дубликат: перекрывается \"%s\"</string>
     <string name="err_rule_exists">Такое правило уже существует</string>
+    
+    <!-- Interface Prefixes -->
+    <string name="iface_prefixes_title">Tun интерфейсы</string>
+    <string name="iface_prefixes_subtitle">Управление префиксами интерфейсов для скрытия VPN</string>
+    <string name="section_system_ifaces">Системные (по умолчанию)</string>
+    <string name="section_custom_ifaces">Пользовательские правила</string>
+    <string name="no_prefixes">Пользовательские правила не добавлены</string>
+    <string name="new_prefix">Новый префикс</string>
+    <string name="edit_prefix">Изменить префикс</string>
+    <string name="prefix_label">Префикс (напр. tun, wg)</string>
 
     <!-- App picker -->
     <string name="selected_count">%d выбрано</string>

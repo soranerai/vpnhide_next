@@ -83,6 +83,21 @@ internal interface MassPortRuleDao {
     suspend fun deleteAllMassRules()
 }
 
+@Dao
+internal interface IfacePrefixDao {
+    @Query("SELECT prefix FROM iface_prefixes")
+    fun getAllPrefixes(): Flow<List<String>>
+
+    @Query("SELECT prefix FROM iface_prefixes")
+    suspend fun getAllPrefixesSync(): List<String>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPrefixes(prefixes: List<DbIfacePrefix>)
+
+    @Query("DELETE FROM iface_prefixes")
+    suspend fun deleteAllPrefixes()
+}
+
 internal class Converters {
     @TypeConverter
     fun fromProtocol(protocol: PortProtocol): Int = protocol.ordinal
@@ -92,9 +107,9 @@ internal class Converters {
 }
 
 @Database(
-    entities = [AppProtection::class, DbPortRule::class, DbMassPortRule::class],
-    version = 4,
-    exportSchema = false,
+    entities = [AppProtection::class, DbPortRule::class, DbMassPortRule::class, DbIfacePrefix::class],
+    version = 6,
+    exportSchema = true,
 )
 @TypeConverters(Converters::class)
 internal abstract class AppDatabase : RoomDatabase() {
@@ -103,6 +118,8 @@ internal abstract class AppDatabase : RoomDatabase() {
     abstract fun portRuleDao(): PortRuleDao
 
     abstract fun massPortRuleDao(): MassPortRuleDao
+
+    abstract fun ifacePrefixDao(): IfacePrefixDao
 
     companion object {
         @Volatile
@@ -218,6 +235,53 @@ internal abstract class AppDatabase : RoomDatabase() {
                 }
             }
 
+        private val MIGRATION_4_5 =
+            object : Migration(4, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL(
+                        """
+                        CREATE TABLE IF NOT EXISTS iface_prefixes (
+                            prefix TEXT NOT NULL,
+                            PRIMARY KEY(prefix)
+                        )
+                        """.trimIndent(),
+                    )
+                }
+            }
+
+        private val MIGRATION_5_6 =
+            object : Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE app_protection ADD COLUMN uid INTEGER NOT NULL DEFAULT 0")
+                }
+            }
+
+        private val MIGRATION_1_5 =
+            object : Migration(1, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    MIGRATION_1_3.migrate(db)
+                    MIGRATION_3_4.migrate(db)
+                    MIGRATION_4_5.migrate(db)
+                }
+            }
+
+        private val MIGRATION_2_5 =
+            object : Migration(2, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    MIGRATION_2_3.migrate(db)
+                    MIGRATION_3_4.migrate(db)
+                    MIGRATION_4_5.migrate(db)
+                }
+            }
+
+        private val MIGRATION_3_5 =
+            object : Migration(3, 5) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    MIGRATION_3_4.migrate(db)
+                    MIGRATION_4_5.migrate(db)
+                }
+            }
+
         fun getInstance(context: Context): AppDatabase =
             instance ?: synchronized(this) {
                 val newInstance =
@@ -226,7 +290,16 @@ internal abstract class AppDatabase : RoomDatabase() {
                             context.applicationContext,
                             AppDatabase::class.java,
                             "vpnhide_database",
-                        ).addMigrations(MIGRATION_1_3, MIGRATION_2_3, MIGRATION_3_4)
+                        ).addMigrations(
+                            MIGRATION_1_3,
+                            MIGRATION_2_3,
+                            MIGRATION_3_4,
+                            MIGRATION_4_5,
+                            MIGRATION_1_5,
+                            MIGRATION_2_5,
+                            MIGRATION_3_5,
+                            MIGRATION_5_6,
+                        ).fallbackToDestructiveMigration()
                         .build()
                 instance = newInstance
                 newInstance

@@ -3,6 +3,7 @@ package dev.soranerai.vpnhidenext
 import android.util.Base64
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
@@ -17,6 +18,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.room.withTransaction
 import dev.soranerai.vpnhidenext.db.AppDatabase
+import dev.soranerai.vpnhidenext.db.DbIfacePrefix
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 
 internal enum class ProtectionMode { VpnTargets, PortHiding }
@@ -34,6 +36,7 @@ internal fun ProtectionScreen(
     updatedApp: AppEntry?,
     saveTrigger: Int,
     pendingMassRules: List<PortRule>?,
+    pendingIfacePrefixes: List<String>?,
     onSaved: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -55,6 +58,12 @@ internal fun ProtectionScreen(
     var saving by remember { mutableStateOf(false) }
     var snackMessage by remember { mutableStateOf<String?>(null) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val vpnListState = rememberLazyListState()
+    val portListState = rememberLazyListState()
+
+    var vpnSortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var portSortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
+    var refreshTrigger by remember { mutableStateOf(0) }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -63,11 +72,98 @@ internal fun ProtectionScreen(
         }
     }
 
+    // Explicit order reset: computes stable display ID lists from the latest targets snapshot.
+    // MUST be declared before any LaunchedEffect that calls it.
+    //
+    // When to call:
+    //   • First data load (sortedIds still empty)        → called from LaunchedEffect(cachedApps, targets)
+    //   • Filter / search / sortOrder changes             → called from LaunchedEffect(filters…)
+    //   • Pull-to-refresh (refreshTrigger++)              → called from LaunchedEffect(filters…) via trigger
+    //   • After successful save                           → called explicitly in save block
+    //
+    // When NOT to call:
+    //   • Toggle (vpnApps/portApps change) → sortedIds stays the same, remember(apps, sortedIds)
+    //     re-maps content with the same order, no jump occurs.
+    fun resetOrder() {
+        val apps = cachedApps ?: return
+        val t = targets ?: return
+        val q = searchQuery.trim().lowercase()
+        val selfPkg = context.packageName
+
+        vpnSortedIds =
+            apps
+                .filter { it.packageName != selfPkg }
+                .filter { app ->
+                    (
+                        showSystem || !app.isSystem || (app.packageName to app.userId) in t.kmodTargets ||
+                            (app.packageName to app.userId) in t.lsposedTargets
+                    ) &&
+                        (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
+                        (
+                            !showOnlySelected || (app.packageName to app.userId) in t.kmodTargets ||
+                                (app.packageName to app.userId) in t.lsposedTargets
+                        ) &&
+                        (!showOnlyWorkProfile || app.userId != 0) &&
+                        (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+                }.let { list ->
+                    when (sortOrder) {
+                        AppSortOrder.NAME_ASC -> {
+                            list.sortedBy { it.label.lowercase() }
+                        }
+
+                        AppSortOrder.NAME_DESC -> {
+                            list.sortedByDescending { it.label.lowercase() }
+                        }
+
+                        AppSortOrder.SELECTED_FIRST -> {
+                            list.sortedWith(
+                                compareByDescending<AppSummary> {
+                                    (it.packageName to it.userId) in
+                                        t.kmodTargets ||
+                                        (it.packageName to it.userId) in t.lsposedTargets
+                                }.thenBy { it.label.lowercase() },
+                            )
+                        }
+                    }
+                }.map { "${it.packageName}:${it.userId}" }
+
+        portSortedIds =
+            apps
+                .filter { it.packageName != selfPkg }
+                .filter { app ->
+                    (showSystem || !app.isSystem || (app.packageName to app.userId) in t.portsObservers) &&
+                        (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
+                        (!showOnlySelected || (app.packageName to app.userId) in t.portsObservers) &&
+                        (!showOnlyWorkProfile || app.userId != 0) &&
+                        (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
+                }.let { list ->
+                    when (sortOrder) {
+                        AppSortOrder.NAME_ASC -> {
+                            list.sortedBy { it.label.lowercase() }
+                        }
+
+                        AppSortOrder.NAME_DESC -> {
+                            list.sortedByDescending { it.label.lowercase() }
+                        }
+
+                        AppSortOrder.SELECTED_FIRST -> {
+                            list.sortedWith(
+                                compareByDescending<AppSummary> {
+                                    (it.packageName to it.userId) in
+                                        t.portsObservers
+                                }.thenBy { it.label.lowercase() },
+                            )
+                        }
+                    }
+                }.map { "${it.packageName}:${it.userId}" }
+    }
+
     // Load/Sync apps when cache changes (only if not dirty)
     LaunchedEffect(cachedApps, targets) {
         val apps = cachedApps ?: return@LaunchedEffect
         val t = targets ?: return@LaunchedEffect
         val selfPkg = context.packageName
+        var rebuilt = false
 
         if (vpnApps.isEmpty() || !dirtyVpn(vpnApps, originalVpn)) {
             vpnApps =
@@ -87,6 +183,7 @@ internal fun ProtectionScreen(
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.kmod || it.lsposed }.thenBy { it.label })
             originalVpn = vpnApps
+            rebuilt = true
         }
 
         if (portApps.isEmpty() || !dirtyPort(portApps, originalPort)) {
@@ -107,7 +204,29 @@ internal fun ProtectionScreen(
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label })
             originalPort = portApps
+            rebuilt = true
         }
+
+        // Refresh order whenever we actually rebuilt the lists from new targets data.
+        // Covers both first-load and pull-to-refresh.
+        // NOT called on toggle because toggle changes vpnApps via onUpdate (dirty check above),
+        // so rebuilt stays false and order is preserved.
+        if (rebuilt || vpnSortedIds.isEmpty() || portSortedIds.isEmpty()) {
+            resetOrder()
+        }
+    }
+
+    // Stable Re-sorting logic: only run when filters, search, sortOrder, or manual refresh change
+    LaunchedEffect(searchQuery, showSystem, showRussianOnly, showOnlySelected, showOnlyWorkProfile, sortOrder, refreshTrigger) {
+        if (targets != null) {
+            resetOrder()
+        }
+    }
+
+    val onRefresh = {
+        TargetsCache.refresh(scope, context)
+        refreshTrigger++
+        Unit
     }
 
     val isVpnDirty = remember(vpnApps, originalVpn) { dirtyVpn(vpnApps, originalVpn) }
@@ -116,16 +235,21 @@ internal fun ProtectionScreen(
             val original = targets?.massPortRules ?: emptyList()
             pendingMassRules != null && pendingMassRules != original
         }
+    val isIfaceDirty =
+        remember(pendingIfacePrefixes, targets) {
+            val original = targets?.ifacePrefixes ?: emptyList()
+            pendingIfacePrefixes != null && pendingIfacePrefixes != original
+        }
     val isPortDirty =
         remember(portApps, originalPort, isMassDirty) {
             dirtyPort(portApps, originalPort) || isMassDirty
         }
 
-    val anyDirty = isVpnDirty || isPortDirty
+    val anyDirty = isVpnDirty || isPortDirty || isIfaceDirty
 
-    LaunchedEffect(mode, isVpnDirty, isPortDirty) {
+    LaunchedEffect(mode, isVpnDirty, isPortDirty, isIfaceDirty) {
         val dirtyModes = mutableSetOf<ProtectionMode>()
-        if (isVpnDirty) dirtyModes += ProtectionMode.VpnTargets
+        if (isVpnDirty || isIfaceDirty) dirtyModes += ProtectionMode.VpnTargets
         if (isPortDirty) dirtyModes += ProtectionMode.PortHiding
         onStateChange(mode, dirtyModes)
     }
@@ -157,6 +281,9 @@ internal fun ProtectionScreen(
                             onUpdate = { newList ->
                                 vpnApps = newList
                             },
+                            sortedIds = vpnSortedIds,
+                            onRefresh = onRefresh,
+                            listState = vpnListState,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -174,6 +301,9 @@ internal fun ProtectionScreen(
                                 portApps = newList
                             },
                             onConfigClick = onAppPortConfig,
+                            sortedIds = portSortedIds,
+                            onRefresh = onRefresh,
+                            listState = portListState,
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
@@ -219,6 +349,7 @@ internal fun ProtectionScreen(
                                     dev.soranerai.vpnhidenext.db.AppProtection(
                                         packageName = pkg,
                                         userId = userId,
+                                        uid = vpnApp?.uid ?: portApp?.uid ?: 0,
                                         kmod = vpnApp?.kmod ?: false,
                                         lsposed = vpnApp?.lsposed ?: false,
                                         portHiding = portApp?.portHiding ?: false,
@@ -271,19 +402,32 @@ internal fun ProtectionScreen(
                                 },
                             )
                         }
+
+                        if (isIfaceDirty && pendingIfacePrefixes != null) {
+                            val ifaceDao = db.ifacePrefixDao()
+                            ifaceDao.deleteAllPrefixes()
+                            ifaceDao.insertPrefixes(
+                                pendingIfacePrefixes.map { DbIfacePrefix(it) },
+                            )
+                        }
                     }
 
                     if (isVpnDirty) {
                         val selfUid = context.applicationInfo.uid
                         val k = (vpnApps.filter { it.kmod }.map { it.uid } + selfUid).distinct().sorted()
-                        val l = (vpnApps.filter { it.lsposed }.map { it.uid } + selfUid).distinct().sorted()
-                        parts += buildVpnSaveCommand(header, k, l)
+                        parts += buildVpnSaveCommand(header, k)
+                    }
+                    if (isIfaceDirty) {
+                        parts += buildIfaceSaveCommand(header, pendingIfacePrefixes ?: targets?.ifacePrefixes ?: emptyList())
                     }
                     if (isPortDirty || isMassDirty) {
                         parts += buildPortSaveCommand(header, portApps, pendingMassRules ?: targets?.massPortRules ?: emptyList())
                     }
 
                     if (parts.isNotEmpty()) {
+                        // Always apply LSPosed permissions/trigger when saving any DB-backed settings
+                        parts += buildLsposedApplyCommand(context)
+
                         val (exitCode, _) = suExecAsync(parts.joinToString(" ; "))
                         if (exitCode == 0) {
                             DashboardCache.invalidate()
@@ -291,6 +435,8 @@ internal fun ProtectionScreen(
                             TargetsCache.refresh(scope, context)
                             originalVpn = vpnApps
                             originalPort = portApps
+                            // Re-sort after save to reflect new selection state (jump once, but after save is done)
+                            resetOrder()
                             onSaved()
                         } else {
                             snackMessage = context.getString(R.string.save_failed_exit, exitCode)
@@ -383,13 +529,11 @@ private fun ProtectionModeSwitcher(
 private fun buildVpnSaveCommand(
     header: String,
     kmod: List<Int>,
-    lsposed: List<Int>,
 ): String {
     val parts = mutableListOf<String>()
     parts += buildWriteTargetsCommand(KMOD_TARGETS, header, kmod)
-    parts += buildWriteTargetsCommand(LSPOSED_TARGETS, header, lsposed)
+    // LSPOSED_TARGETS is no longer needed as LSPosed reads directly from DB
     parts += buildKmodApplyCommand(kmod, targetType = "targets")
-    parts += buildLsposedApplyCommand(lsposed)
     return parts.joinToString(" ; ")
 }
 
@@ -441,4 +585,16 @@ private fun buildPortSaveCommand(
     parts += buildKmodPortRulesApplyCommand(ruleMap)
 
     return parts.joinToString(" ; ")
+}
+
+private fun buildIfaceSaveCommand(
+    header: String,
+    prefixes: List<String>,
+): String {
+    val body = "$header\n" + prefixes.joinToString("\n") + if (prefixes.isNotEmpty()) "\n" else ""
+    val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
+    val dir = IFACE_PREFIXES_FILE.substringBeforeLast('/')
+    val writeCmd = "mkdir -p $dir ; echo '$b64' | base64 -d > $IFACE_PREFIXES_FILE && chmod 644 $IFACE_PREFIXES_FILE"
+    val applyCmd = if (prefixes.isEmpty()) "$KMOD_CTL iface_prefixes" else "$KMOD_CTL iface_prefixes ${prefixes.joinToString(" ")}"
+    return "$writeCmd ; $applyCmd"
 }

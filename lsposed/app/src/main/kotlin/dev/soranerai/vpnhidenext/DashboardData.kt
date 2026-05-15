@@ -349,7 +349,6 @@ private fun collectDashboardSnapshot(cacheDir: File): RawDashboardSnapshot {
         """
         echo "kmod_prop=${'$'}(cat $KMOD_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
         echo "kmod_targets=${'$'}(cat $KMOD_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
-        echo "lsposed_targets=${'$'}(cat $LSPOSED_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "ports_targets=${'$'}(cat $PORTS_OBSERVERS_FILE 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "uname=${'$'}(uname -r)"
         echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id)"
@@ -768,7 +767,10 @@ internal suspend fun loadDashboardState(
     val hookVersion = hookProps["version"]
     val hookBootId = hookProps["boot_id"]
     val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
-    val lsposedTargetCount = countTargets(snapshot.get("lsposed_targets"))
+    val db =
+        dev.soranerai.vpnhidenext.db.AppDatabase
+            .getInstance(context)
+    val lsposedTargetCount = db.appDao().getAllAppProtectionSync().count { it.lsposed }
     val lsposedFramework = detectLsposedFramework()
     val lsposedConfig =
         when (lsposedFramework) {

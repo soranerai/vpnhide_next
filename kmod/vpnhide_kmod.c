@@ -24,6 +24,7 @@
 
 #include <linux/module.h>
 #include <linux/kernel.h>
+#include <linux/mutex.h>
 #include <linux/version.h>
 #include <linux/kprobes.h>
 #include <linux/slab.h>
@@ -96,7 +97,7 @@ static bool debug_enabled;
 /*  VPN interface name matching — see data/interfaces.toml            */
 /* ------------------------------------------------------------------ */
 
-#define is_vpn_ifname(name) vpnhide_iface_is_vpn(name)
+#define is_vpn_ifname(name) vpnhide_is_vpn_ifname(name)
 
 struct vpnhide_targets {
 	int count;
@@ -111,10 +112,46 @@ struct vpnhide_port_targets {
 };
 
 static struct vpnhide_targets __rcu *global_targets;
-static DEFINE_SPINLOCK(targets_update_lock);
+static DEFINE_MUTEX(targets_update_lock);
 
 static struct vpnhide_port_targets __rcu *global_port_targets;
-static DEFINE_SPINLOCK(port_targets_update_lock);
+static DEFINE_MUTEX(port_targets_update_lock);
+
+struct vpnhide_iface_prefixes {
+	int count;
+	char prefixes[MAX_IFACE_PREFIXES][MAX_IFACE_LEN];
+	struct rcu_head rcu;
+};
+
+static struct vpnhide_iface_prefixes __rcu *global_iface_prefixes;
+static DEFINE_MUTEX(iface_prefixes_lock);
+
+static bool vpnhide_is_vpn_ifname(const char *name)
+{
+	struct vpnhide_iface_prefixes *p;
+	int i;
+	bool found = false;
+
+	if (vpnhide_iface_is_vpn(name))
+		return true;
+
+	rcu_read_lock();
+	p = rcu_dereference(global_iface_prefixes);
+	if (p) {
+		for (i = 0; i < p->count; i++) {
+			if (vpnhide_iface_starts_with_ci(name,
+							 p->prefixes[i])) {
+				found = true;
+				break;
+			}
+		}
+	}
+	rcu_read_unlock();
+	return found;
+}
+
+#undef is_vpn_ifname
+#define is_vpn_ifname(name) vpnhide_is_vpn_ifname(name)
 
 static bool is_target_uid(void)
 {
@@ -1114,12 +1151,12 @@ static int update_port_rules(struct vpnhide_uid_port_rules *rules, int count)
 		memcpy(new_t->targets, rules,
 		       count * sizeof(struct vpnhide_uid_port_rules));
 
-	spin_lock(&port_targets_update_lock);
+	mutex_lock(&port_targets_update_lock);
 	old_t = rcu_dereference_protected(
 		global_port_targets,
 		lockdep_is_held(&port_targets_update_lock));
 	rcu_assign_pointer(global_port_targets, new_t);
-	spin_unlock(&port_targets_update_lock);
+	mutex_unlock(&port_targets_update_lock);
 
 	if (old_t) {
 		synchronize_rcu();
@@ -1142,11 +1179,11 @@ static int update_targets(uid_t *uids, int count)
 	if (count > 0)
 		memcpy(new_t->uids, uids, count * sizeof(uid_t));
 
-	spin_lock(&targets_update_lock);
+	mutex_lock(&targets_update_lock);
 	old_t = rcu_dereference_protected(
 		global_targets, lockdep_is_held(&targets_update_lock));
 	rcu_assign_pointer(global_targets, new_t);
-	spin_unlock(&targets_update_lock);
+	mutex_unlock(&targets_update_lock);
 
 	if (old_t) {
 		synchronize_rcu();
@@ -1238,6 +1275,51 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		pr_info(MODNAME ": debug logging %s\n",
 			READ_ONCE(debug_enabled) ? "enabled" : "disabled");
 		break;
+
+	case VH_SET_IFACE_PREFIXES: {
+		struct vpnhide_iface_ioctl_data *idata;
+		struct vpnhide_iface_prefixes *new_p, *old_p;
+
+		idata = kmalloc(sizeof(*idata), GFP_KERNEL);
+		if (!idata)
+			return -ENOMEM;
+
+		if (copy_from_user(idata, (void __user *)arg, sizeof(*idata))) {
+			kfree(idata);
+			return -EFAULT;
+		}
+
+		if (idata->count < 0 || idata->count > MAX_IFACE_PREFIXES) {
+			kfree(idata);
+			return -EINVAL;
+		}
+
+		new_p = kzalloc(sizeof(*new_p), GFP_KERNEL);
+		if (!new_p) {
+			kfree(idata);
+			return -ENOMEM;
+		}
+
+		new_p->count = idata->count;
+		memcpy(new_p->prefixes, idata->prefixes,
+		       sizeof(new_p->prefixes));
+
+		mutex_lock(&iface_prefixes_lock);
+		old_p = rcu_dereference_protected(
+			global_iface_prefixes,
+			lockdep_is_held(&iface_prefixes_lock));
+		rcu_assign_pointer(global_iface_prefixes, new_p);
+		mutex_unlock(&iface_prefixes_lock);
+
+		if (old_p) {
+			synchronize_rcu();
+			kfree(old_p);
+		}
+
+		kfree(idata);
+		ret = 0;
+		break;
+	}
 
 	default:
 		return -ENOIOCTLCMD;
@@ -1458,6 +1540,7 @@ static int __init vpnhide_init(void)
 	/* Initialize RCU targets pointers */
 	rcu_assign_pointer(global_targets, NULL);
 	rcu_assign_pointer(global_port_targets, NULL);
+	rcu_assign_pointer(global_iface_prefixes, NULL);
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		ret = register_kretprobe(probes[i].krp);
@@ -1500,11 +1583,11 @@ static void __exit vpnhide_exit(void)
 	}
 
 	/* Cleanup RCU targets */
-	spin_lock(&targets_update_lock);
+	mutex_lock(&targets_update_lock);
 	t = rcu_dereference_protected(global_targets,
 				      lockdep_is_held(&targets_update_lock));
 	rcu_assign_pointer(global_targets, NULL);
-	spin_unlock(&targets_update_lock);
+	mutex_unlock(&targets_update_lock);
 
 	if (t) {
 		synchronize_rcu();
@@ -1512,16 +1595,28 @@ static void __exit vpnhide_exit(void)
 	}
 
 	/* Cleanup RCU port targets */
-	spin_lock(&port_targets_update_lock);
+	mutex_lock(&port_targets_update_lock);
 	t_port = rcu_dereference_protected(
 		global_port_targets,
 		lockdep_is_held(&port_targets_update_lock));
 	rcu_assign_pointer(global_port_targets, NULL);
-	spin_unlock(&port_targets_update_lock);
+	mutex_unlock(&port_targets_update_lock);
 
 	if (t_port) {
 		synchronize_rcu();
 		kfree(t_port);
+	}
+
+	/* Cleanup RCU iface prefixes */
+	mutex_lock(&iface_prefixes_lock);
+	t = (struct vpnhide_targets *)rcu_dereference_protected(
+		global_iface_prefixes, lockdep_is_held(&iface_prefixes_lock));
+	rcu_assign_pointer(global_iface_prefixes, NULL);
+	mutex_unlock(&iface_prefixes_lock);
+
+	if (t) {
+		synchronize_rcu();
+		kfree(t);
 	}
 
 	misc_deregister(&vpnhide_misc);
