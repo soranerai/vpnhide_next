@@ -177,7 +177,7 @@ else
     # Resolve interface prefixes
     IFACE_PREFIXES_FILE="/data/adb/vpnhide_kmod_interfaces.txt"
     if [ -f "$IFACE_PREFIXES_FILE" ]; then
-        PREFIXES="$(cat "$IFACE_PREFIXES_FILE" | grep -v "^#" | grep -v "^$" | xargs)"
+        PREFIXES="$(grep -v "^#" "$IFACE_PREFIXES_FILE" | grep -v "^$" | xargs)"
         if [ -n "$PREFIXES" ]; then
             # shellcheck disable=SC2086
             "$CTL" iface_prefixes $PREFIXES
