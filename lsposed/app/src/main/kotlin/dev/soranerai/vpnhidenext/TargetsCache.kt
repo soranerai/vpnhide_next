@@ -374,7 +374,6 @@ internal object TargetsCache {
             portRules[key] = rulesList
         }
 
-
         return TargetsSnapshot(
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",
             kmodActive = sections["LSMOD"]?.trim() == "1",

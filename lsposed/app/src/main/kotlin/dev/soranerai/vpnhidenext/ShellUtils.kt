@@ -201,9 +201,13 @@ internal fun ensureSelfInTargets(selfPkg: String): Boolean {
             VpnHideLog.d(TAG, "ensureSelfInTargets: $selfPkg already in $path")
             return
         }
-        val (_, uidsRaw) = suExec("pm list packages -U --user all 2>/dev/null | grep \"package:${'$'}selfPkg \" | awk '{sub(/uid:/, \"\", ${'$'}2); print ${'$'}2}' | tr ',' '\\n'")
+        val (_, uidsRaw) =
+            suExec(
+                "pm list packages -U --user all 2>/dev/null | grep \"package:$selfPkg \" | " +
+                    "awk '{sub(/uid:/, \"\", ${'$'}2); print ${'$'}2}' | tr ',' '\\n'",
+            )
         val selfUids = uidsRaw.lines().map { it.trim() }.filter { it.isNotEmpty() }
-        
+
         for (u in selfUids) {
             if (u !in existing) {
                 val newBody = "# Managed by VPNHide Next app\n" + (existing + u).sorted().joinToString("\n") + "\n"
