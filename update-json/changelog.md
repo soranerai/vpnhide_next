@@ -1,3 +1,11 @@
+## v1.3.0
+
+### Changed
+- Some ui fixes
+- Custom interfaces hide ability
+- Migrated boot-time rule application to SQLite database for faster startup
+- Second stage of migration to Room
+
 ## v1.2.5
 
 ### Added
