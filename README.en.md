@@ -27,6 +27,7 @@
 *   **Maximum Stealth**: Complete removal of `/proc/` files accessible to all applications, eliminating module detection through the file system.
 *   **Apps tun0 binding bypass**: Target apps can't force bind to tun0.
 *   **Workprofiles support**: You can manage apps from workprofiles.
+*   **Hide custom interfaces**: You can add any custom prefix to hide.
 
 ### Architecture
 *   **`kmod`** — kernel module (recommended), operating outside the application process context. Requirements: GKI + ARM64-v8a.

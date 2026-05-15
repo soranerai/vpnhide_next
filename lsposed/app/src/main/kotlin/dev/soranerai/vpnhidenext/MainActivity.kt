@@ -20,6 +20,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
@@ -142,8 +144,11 @@ private fun MainScreen(
     var showBulkRules by remember { mutableStateOf(false) }
     var localMassRules by remember { mutableStateOf<List<PortRule>?>(null) }
     var rulesUpdatedApp by remember { mutableStateOf<AppEntry?>(null) }
+    var showIfacePrefixes by remember { mutableStateOf(false) }
+    var localIfacePrefixes by remember { mutableStateOf<List<String>?>(null) }
     val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
+    val searchFocusRequester = remember { FocusRequester() }
 
     LaunchedEffect(Unit) {
         if (startup.addedToTargets) {
@@ -209,6 +214,12 @@ private fun MainScreen(
             object : NestedScrollConnection {}
         }
 
+    LaunchedEffect(searchActive) {
+        if (searchActive) {
+            searchFocusRequester.requestFocus()
+        }
+    }
+
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             modifier = Modifier.nestedScroll(nestedScrollConnection),
@@ -236,7 +247,10 @@ private fun MainScreen(
                                 }
                             }
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .focusRequester(searchFocusRequester),
                     ) {}
                 } else {
                     TopAppBar(
@@ -423,8 +437,10 @@ private fun MainScreen(
                                     updatedApp = rulesUpdatedApp,
                                     saveTrigger = saveTrigger,
                                     pendingMassRules = localMassRules,
+                                    pendingIfacePrefixes = localIfacePrefixes,
                                     onSaved = {
                                         localMassRules = null
+                                        localIfacePrefixes = null
                                         rulesUpdatedApp = null
                                     },
                                     modifier = Modifier.fillMaxSize(),
@@ -452,10 +468,10 @@ private fun MainScreen(
                     contentAlignment = Alignment.Center,
                 ) {
                     val showSave = currentTab == Tab.Protection && currentProtectionMode in dirtyProtectionModes
-                    val showBulk = currentTab == Tab.Protection && currentProtectionMode == ProtectionMode.PortHiding
+                    val showExtraBtn = currentTab == Tab.Protection
 
                     val controlsProgress by animateFloatAsState(
-                        targetValue = if (showSave || showBulk) 1f else 0f,
+                        targetValue = if (showSave || showExtraBtn) 1f else 0f,
                         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
                         label = "controlsProgress",
                     )
@@ -466,10 +482,10 @@ private fun MainScreen(
                         label = "saveProgress",
                     )
 
-                    val bulkProgress by animateFloatAsState(
-                        targetValue = if (showBulk) 1f else 0f,
+                    val extraBtnProgress by animateFloatAsState(
+                        targetValue = if (showExtraBtn) 1f else 0f,
                         animationSpec = spring(dampingRatio = Spring.DampingRatioLowBouncy, stiffness = Spring.StiffnessLow),
-                        label = "bulkProgress",
+                        label = "extraBtnProgress",
                     )
 
                     val bulkColor by animateColorAsState(
@@ -528,28 +544,34 @@ private fun MainScreen(
                             }
                         }
 
-                        // Bulk Button (Moves up if Save is visible)
-                        if (bulkProgress > 0.01f) {
-                            val bulkOffset by animateDpAsState(
+                        // Extra Settings Button (Bulk Rules for Ports, Iface Prefixes for TUN)
+                        if (extraBtnProgress > 0.01f) {
+                            val extraBtnOffset by animateDpAsState(
                                 targetValue = if (showSave) (-72).dp else 0.dp,
-                                label = "bulkOffset",
+                                label = "extraBtnOffset",
                             )
                             Surface(
-                                onClick = { showBulkRules = true },
+                                onClick = {
+                                    if (currentProtectionMode == ProtectionMode.PortHiding) {
+                                        showBulkRules = true
+                                    } else {
+                                        showIfacePrefixes = true
+                                    }
+                                },
                                 color = bulkColor,
                                 contentColor = bulkContentColor,
                                 modifier =
                                     Modifier
                                         .align(Alignment.CenterEnd)
-                                        .offset(y = bulkOffset)
+                                        .offset(y = extraBtnOffset)
                                         .size(60.dp)
                                         .graphicsLayer {
                                             shadowElevation = 8.dp.toPx()
                                             shape = RoundedCornerShape(20.dp)
                                             clip = true
-                                            alpha = bulkProgress
-                                            scaleX = 0.5f + (0.5f * bulkProgress)
-                                            scaleY = 0.5f + (0.5f * bulkProgress)
+                                            alpha = extraBtnProgress
+                                            scaleX = 0.5f + (0.5f * extraBtnProgress)
+                                            scaleY = 0.5f + (0.5f * extraBtnProgress)
                                         },
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
@@ -666,6 +688,25 @@ private fun MainScreen(
                 onSave = { updatedRules ->
                     localMassRules = updatedRules
                     showBulkRules = false
+                },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showIfacePrefixes,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            BackHandler { showIfacePrefixes = false }
+            val targets by TargetsCache.snapshot.collectAsState()
+            IfacePrefixScreen(
+                initialPrefixes = localIfacePrefixes ?: targets?.ifacePrefixes ?: emptyList(),
+                onBack = { showIfacePrefixes = false },
+                onSave = { updatedPrefixes ->
+                    localIfacePrefixes = updatedPrefixes
+                    showIfacePrefixes = false
                 },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )

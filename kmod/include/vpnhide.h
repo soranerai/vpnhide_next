@@ -35,10 +35,20 @@ struct vpnhide_ioctl_data {
 
 #define VH_IOCTL_MAGIC 0x56
 
+#define MAX_IFACE_PREFIXES 32
+#define MAX_IFACE_LEN 16
+
+struct vpnhide_iface_ioctl_data {
+	int count;
+	char prefixes[MAX_IFACE_PREFIXES][MAX_IFACE_LEN];
+};
+
 #define VH_SET_TARGETS _IOW(VH_IOCTL_MAGIC, 0x01, struct vpnhide_ioctl_data)
 #define VH_SET_DEBUG _IOW(VH_IOCTL_MAGIC, 0x03, int)
 #define VH_SET_PORT_TARGETS \
 	_IOW(VH_IOCTL_MAGIC, 0x05, struct vpnhide_ioctl_data)
 #define VH_SET_PORT_RULES _IO(VH_IOCTL_MAGIC, 0x06)
+#define VH_SET_IFACE_PREFIXES \
+	_IOW(VH_IOCTL_MAGIC, 0x07, struct vpnhide_iface_ioctl_data)
 
 #endif /* _VPNHIDE_H */

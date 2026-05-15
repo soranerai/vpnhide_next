@@ -1,5 +1,6 @@
 package dev.soranerai.vpnhidenext
 
+import android.database.sqlite.SQLiteDatabase
 import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.net.NetworkInfo
@@ -72,7 +73,7 @@ class HookEntry : IXposedHookLoadPackage {
     //  Helpers
     // ------------------------------------------------------------------
 
-    private fun isVpnInterfaceName(name: String): Boolean = IfaceLists.isVpnIface(name)
+    private fun isVpnInterfaceName(name: String): Boolean = IfaceLists.isVpnIface(name, loadIfacePrefixes())
 
     private fun sanitizeLinkProperties(copy: LinkProperties): Boolean {
         var modified = false
@@ -153,8 +154,34 @@ class HookEntry : IXposedHookLoadPackage {
 
     @Volatile private var systemServerTargetUids: Set<Int>? = null
 
-    @Volatile private var targetUidsFileObserver: android.os.FileObserver? = null
+    @Volatile private var databaseFileObserver: android.os.FileObserver? = null
+
+    @Volatile private var selfUid: Int = -1
     private val uidLock = Any()
+
+    private fun getIPackageManager(): Any? =
+        try {
+            val appGlobals = XposedHelpers.findClass("android.app.AppGlobals", null)
+            XposedHelpers.callStaticMethod(appGlobals, "getPackageManager")
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to get IPackageManager: ${t.message}")
+            null
+        }
+
+    private fun getPackageUid(
+        pm: Any,
+        pkg: String,
+        userId: Int,
+    ): Int =
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                XposedHelpers.callMethod(pm, "getPackageUid", pkg, 0, userId) as Int
+            } else {
+                XposedHelpers.callMethod(pm, "getPackageUid", pkg, userId) as Int
+            }
+        } catch (t: Throwable) {
+            -1
+        }
 
     private fun loadTargetUids(): Set<Int> {
         // Fast path: already cached (volatile read)
@@ -166,25 +193,42 @@ class HookEntry : IXposedHookLoadPackage {
 
             val uids = mutableSetOf<Int>()
 
-            // Read pre-resolved numeric UIDs written by vpnhide-kmod's
-            // service.sh into /data/system/vpnhide_uids.txt.
-            // system_server can read /data/system/ (SELinux: system_data_file).
             try {
-                val file = File("/data/system/vpnhide_uids.txt")
-                if (file.exists()) {
-                    file.readLines().forEach { line ->
-                        line.trim().toIntOrNull()?.let { uids.add(it) }
-                    }
+                val dbFile = File(DB_PATH)
+                if (dbFile.exists()) {
+                    SQLiteDatabase
+                        .openDatabase(
+                            dbFile.absolutePath,
+                            null,
+                            SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                        ).use { db ->
+                            db.rawQuery("SELECT uid FROM app_protection WHERE lsposed = 1", null).use { cursor ->
+                                val uidIdx = cursor.getColumnIndex("uid")
+                                while (cursor.moveToNext()) {
+                                    val uid = cursor.getInt(uidIdx)
+                                    if (uid != 0) uids.add(uid)
+                                }
+                            }
+                        }
+                } else {
+                    HookLog.e("VpnHide: database not found at $DB_PATH")
                 }
             } catch (t: Throwable) {
-                HookLog.e("VpnHide: failed to read UIDs: ${t.message}")
+                HookLog.e("VpnHide: failed to read database: ${t.message}")
             }
 
-            val result: Set<Int> = uids.toSet()
-            if (result.isNotEmpty()) {
-                HookLog.i("VpnHide: system_server loaded ${result.size} target UIDs: $result")
+            // Robust self-protection: ensure our own UID is always in the list.
+            // Resolve it once per system_server lifetime.
+            if (selfUid == -1) {
+                val pm = getIPackageManager()
+                if (pm != null) {
+                    selfUid = getPackageUid(pm, "dev.soranerai.vpnhidenext", 0)
+                }
             }
-            // Always cache (even if empty) to avoid re-reading until invalidated
+            if (selfUid != -1) uids.add(selfUid)
+
+            val result: Set<Int> = uids.toSet()
+            HookLog.i("VpnHide: system_server loaded ${result.size} target UIDs: $result")
             systemServerTargetUids = result
             return result
         }
@@ -195,8 +239,46 @@ class HookEntry : IXposedHookLoadPackage {
         return loadTargetUids().contains(uid)
     }
 
+    @Volatile
+    private var systemServerIfacePrefixes: List<String>? = null
+
+    private fun loadIfacePrefixes(): List<String> {
+        val cached = systemServerIfacePrefixes
+        if (cached != null) return cached
+
+        synchronized(uidLock) {
+            val dbFile = File(DB_PATH)
+            if (!dbFile.exists()) return emptyList()
+
+            val prefixes = mutableListOf<String>()
+            try {
+                SQLiteDatabase
+                    .openDatabase(
+                        dbFile.absolutePath,
+                        null,
+                        SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                    ).use { db ->
+                        db.rawQuery("SELECT prefix FROM iface_prefixes", null).use { cursor ->
+                            val idx = cursor.getColumnIndex("prefix")
+                            while (cursor.moveToNext()) {
+                                prefixes.add(cursor.getString(idx))
+                            }
+                        }
+                    }
+            } catch (t: Throwable) {
+                HookLog.e("VpnHide: failed to read iface_prefixes from database: ${t.message}")
+            }
+
+            val result = prefixes.toList()
+            HookLog.i("VpnHide: system_server loaded ${result.size} interface prefixes: $result")
+            systemServerIfacePrefixes = result
+            return result
+        }
+    }
+
     private fun invalidateTargetUids() {
         systemServerTargetUids = null
+        systemServerIfacePrefixes = null
     }
 
     // Smoke-check at install time: every private AOSP field/ctor we touch
@@ -248,7 +330,7 @@ class HookEntry : IXposedHookLoadPackage {
             tryHook("NI.writeToParcel") { hookNIWriteToParcel() }
         }
 
-        tryHook("FileObserver") { watchTargetUidsFile() }
+        tryHook("FileObserver") { watchDatabaseFile() }
         return brokenFields
     }
 
@@ -338,34 +420,33 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     /**
-     * Watch /data/system/vpnhide_uids.txt for changes via inotify.
-     * When modified (e.g. by the VPNHide Next app), invalidate the
-     * cached UID set so the next writeToParcel call re-reads it.
+     * Watch the database directory for changes via inotify.
+     * When the .db file is written or moved (Room's atomic save),
+     * invalidate the cached UID set.
      */
-    private fun watchTargetUidsFile() {
-        val dir = "/data/system"
-        val filename = "vpnhide_uids.txt"
+    private fun watchDatabaseFile() {
+        val dbFile = File(DB_PATH)
+        val dir = dbFile.parent ?: "/data/system/vpnhide"
+        val filename = dbFile.name
+
         val observer =
             object : android.os.FileObserver(
-                File(dir),
-                // CLOSE_WRITE + MOVED_TO is enough: the writers we control
-                // either do a single short `> file` redirect (one write +
-                // close) or atomic-rename via `mv`. MODIFY would fire
-                // mid-write on multi-write writers and let the hook read
-                // a partially-populated file before the writer closes.
-                CREATE or CLOSE_WRITE or MOVED_TO,
+                dir,
+                CLOSE_WRITE or MOVED_TO or DELETE,
             ) {
                 override fun onEvent(
                     event: Int,
                     path: String?,
                 ) {
-                    if (path == filename) {
-                        HookLog.i("VpnHide: $filename changed (event=$event), invalidating UID cache")
-                        systemServerTargetUids = null
+                    // Room might update the .db file directly or replace it.
+                    // Also watch for -wal changes which indicate a commit.
+                    if (path != null && (path == filename || path.startsWith("$filename-"))) {
+                        HookLog.i("VpnHide: database changed ($path, event=$event), invalidating UID cache")
+                        invalidateTargetUids()
                     }
                 }
             }
-        targetUidsFileObserver = observer
+        databaseFileObserver = observer
         observer.startWatching()
         HookLog.i("VpnHide: watching $dir for $filename changes (inotify)")
     }
@@ -387,22 +468,9 @@ class HookEntry : IXposedHookLoadPackage {
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     if (writingCopy.get() == true) return
-                    val callerUid = Binder.getCallingUid()
-                    val targets = loadTargetUids()
-                    val isTarget = targets.contains(callerUid)
+                    if (!isTargetCaller()) return
                     val nc = param.thisObject as NetworkCapabilities
                     val transportTypes = XposedHelpers.getLongField(nc, "mTransportTypes")
-                    val hasVpn = (transportTypes and (1L shl TRANSPORT_VPN)) != 0L
-                    // Per-request diagnostic line. Gated by the debug-logging
-                    // toggle: these fire on every NC.writeToParcel inside
-                    // system_server and directly name the target UIDs we hook,
-                    // which is exactly what users hiding their setup want
-                    // kept out of logcat.
-                    HookLog.i(
-                        "VpnHide-NC: uid=$callerUid target=$isTarget hasVpn=$hasVpn " +
-                            "transports=0x${transportTypes.toString(16)}",
-                    )
-                    if (!isTarget) return
 
                     try {
                         val vpnBit = 1L shl TRANSPORT_VPN
@@ -429,7 +497,7 @@ class HookEntry : IXposedHookLoadPackage {
                             writingCopy.set(false)
                         }
                         param.result = null
-                        HookLog.i("VpnHide-NC: uid=$callerUid STRIPPED VPN")
+                        HookLog.i("VpnHide-NC: uid=${Binder.getCallingUid()} STRIPPED VPN")
                     } catch (t: Throwable) {
                         HookLog.e("VpnHide: NC.writeToParcel error: ${t.message}")
                     }
@@ -454,15 +522,11 @@ class HookEntry : IXposedHookLoadPackage {
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     if (writingCopy.get() == true) return
-                    val callerUid = Binder.getCallingUid()
-                    val isTarget = loadTargetUids().contains(callerUid)
+                    if (!isTargetCaller()) return
                     val ni = param.thisObject as NetworkInfo
                     val type = XposedHelpers.getIntField(ni, "mNetworkType")
                     val isVpn = type == TYPE_VPN
-                    HookLog.i(
-                        "VpnHide-NI: uid=$callerUid target=$isTarget isVpn=$isVpn type=$type",
-                    )
-                    if (!isTarget) return
+
                     try {
                         if (!isVpn) return
 
@@ -488,7 +552,7 @@ class HookEntry : IXposedHookLoadPackage {
                             writingCopy.set(false)
                         }
                         param.result = null
-                        HookLog.i("VpnHide-NI: uid=$callerUid STRIPPED VPN (disguised as WIFI)")
+                        HookLog.i("VpnHide-NI: uid=${Binder.getCallingUid()} STRIPPED VPN (disguised as WIFI)")
                     } catch (t: Throwable) {
                         HookLog.e("VpnHide: NI.writeToParcel error: ${t.message}")
                     }
@@ -513,12 +577,9 @@ class HookEntry : IXposedHookLoadPackage {
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     if (writingCopy.get() == true) return
-                    val callerUid = Binder.getCallingUid()
-                    val isTarget = loadTargetUids().contains(callerUid)
+                    if (!isTargetCaller()) return
                     val lp = param.thisObject as LinkProperties
-                    val ifname = XposedHelpers.getObjectField(lp, "mIfaceName") as? String
-                    HookLog.i("VpnHide-LP: uid=$callerUid target=$isTarget ifname=$ifname")
-                    if (!isTarget) return
+
                     try {
                         val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
                         ctor.isAccessible = true
@@ -534,7 +595,7 @@ class HookEntry : IXposedHookLoadPackage {
                             writingCopy.set(false)
                         }
                         param.result = null
-                        HookLog.i("VpnHide-LP: uid=$callerUid STRIPPED VPN (ifname was $ifname)")
+                        HookLog.i("VpnHide-LP: uid=${Binder.getCallingUid()} STRIPPED VPN")
                     } catch (t: Throwable) {
                         HookLog.e("VpnHide: LP.writeToParcel error: ${t.message}")
                     }
@@ -547,9 +608,10 @@ class HookEntry : IXposedHookLoadPackage {
     companion object {
         private const val TRANSPORT_VPN = 4
         private const val NET_CAPABILITY_NOT_VPN = 15
-        private const val TYPE_VPN = 17
-        private const val TYPE_WIFI = 1
+        const val TYPE_VPN = 17
+        const val TYPE_WIFI = 1
         const val HOOK_STATUS_FILE = "/data/system/vpnhide_hook_active"
+        const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
 
         private val FIELD_PROBES =
             listOf(

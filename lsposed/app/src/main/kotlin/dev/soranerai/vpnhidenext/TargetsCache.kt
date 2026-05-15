@@ -37,6 +37,7 @@ internal data class TargetsSnapshot(
     val portsObservers: Set<Pair<String, Int>>,
     val portRules: Map<Pair<String, Int>, List<PortRule>>,
     val massPortRules: List<PortRule>,
+    val ifacePrefixes: List<String>,
     val uidToPkg: Map<Int, String>,
 )
 
@@ -87,12 +88,12 @@ internal object TargetsCache {
         lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
         echo "$SENTINEL KMOD_TARGETS"
         cat $KMOD_TARGETS 2>/dev/null || true
-        echo "$SENTINEL LSPOSED_TARGETS"
-        cat $LSPOSED_TARGETS 2>/dev/null || true
         echo "$SENTINEL PORTS_OBSERVERS"
         cat $PORTS_OBSERVERS_FILE 2>/dev/null || true
         echo "$SENTINEL PORTS_RULES"
         cat $PORTS_RULES_FILE 2>/dev/null || true
+        echo "$SENTINEL IFACE_PREFIXES"
+        cat $IFACE_PREFIXES_FILE 2>/dev/null || true
         echo "$SENTINEL PM_LIST"
         pm list packages -U --user all 2>/dev/null || true
         echo "$END"
@@ -105,6 +106,7 @@ internal object TargetsCache {
             val appDao = db.appDao()
             val portRuleDao = db.portRuleDao()
             val massPortRuleDao = db.massPortRuleDao()
+            val ifacePrefixDao = db.ifacePrefixDao()
 
             // Check if DB is empty
             val allAppsSync = appDao.getAllAppProtectionSync()
@@ -114,19 +116,23 @@ internal object TargetsCache {
                 val snapshot = parse(out)
 
                 // Populate DB
-                // Populate DB
                 for (entry in snapshot.kmodTargets + snapshot.lsposedTargets + snapshot.portsObservers) {
                     val (pkg, userId) = entry
+                    val uid =
+                        snapshot.uidToPkg
+                            .filterValues { it == pkg }
+                            .keys
+                            .firstOrNull() ?: 0
                     appDao.insertAppProtection(
                         dev.soranerai.vpnhidenext.db.AppProtection(
                             packageName = pkg,
                             userId = userId,
+                            uid = uid,
                             kmod = entry in snapshot.kmodTargets,
                             lsposed = entry in snapshot.lsposedTargets,
                             portHiding = entry in snapshot.portsObservers,
                         ),
                     )
-
                     snapshot.portRules[entry]?.forEach { rule ->
                         portRuleDao.insertRule(
                             dev.soranerai.vpnhidenext.db.DbPortRule(
@@ -141,11 +147,25 @@ internal object TargetsCache {
                         )
                     }
                 }
+
+                // Migrate iface prefixes from file if DB is empty
+                val allPrefixesSync = ifacePrefixDao.getAllPrefixesSync()
+                if (allPrefixesSync.isEmpty()) {
+                    val (_, out) = withContext(Dispatchers.IO) { suExec(BATCH_SCRIPT) }
+                    val snapshot = parse(out)
+                    ifacePrefixDao.insertPrefixes(
+                        snapshot.ifacePrefixes.map {
+                            dev.soranerai.vpnhidenext.db
+                                .DbIfacePrefix(it)
+                        },
+                    )
+                }
             }
 
             // Now read from DB
             val apps = appDao.getAllAppProtectionSync()
             val massRules = massPortRuleDao.getMassRulesSync()
+            val ifacePrefixes = ifacePrefixDao.getAllPrefixesSync()
 
             // Still need module status and PM list
             val statusScript =
@@ -161,6 +181,22 @@ internal object TargetsCache {
 
             val (_, statusOut) = withContext(Dispatchers.IO) { suExec(statusScript) }
             val statusSnapshot = parse(statusOut)
+
+            // Database Healing: if any app has uid = 0 (after migration 5->6),
+            // populate it from the statusSnapshot (PM list) and update DB.
+            for (app in apps) {
+                if (app.uid == 0) {
+                    val actualUid =
+                        statusSnapshot.uidToPkg.entries
+                            .find {
+                                it.value == app.packageName && (it.key / 100000) == app.userId
+                            }?.key ?: 0
+
+                    if (actualUid != 0) {
+                        appDao.insertAppProtection(app.copy(uid = actualUid))
+                    }
+                }
+            }
 
             val portRulesMap = mutableMapOf<Pair<String, Int>, List<PortRule>>()
             for (app in apps) {
@@ -198,84 +234,11 @@ internal object TargetsCache {
                                 enabled = m.enabled,
                             )
                         },
+                    ifacePrefixes = ifacePrefixes,
                     uidToPkg = statusSnapshot.uidToPkg,
                 )
         } finally {
             _loading.value = false
-        }
-    }
-
-    suspend fun applyPortRulesToKernel(context: Context) {
-        val db = AppDatabase.getInstance(context)
-        val appDao = db.appDao()
-        val portRuleDao = db.portRuleDao()
-        val massPortRuleDao = db.massPortRuleDao()
-
-        val apps = appDao.getAllAppProtectionSync().filter { it.portHiding }
-        if (apps.isEmpty()) {
-            suExec("[ -c $DEV_NODE ] && $KMOD_CTL port_rules; true")
-            return
-        }
-
-        val massRules =
-            massPortRuleDao.getMassRulesSync().filter { it.enabled }.map { m ->
-                PortRule(m.id.toString(), m.startPort, m.endPort, m.protocol, m.label, m.enabled)
-            }
-
-        // Resolve UIDs once
-        val (_, pmRaw) = suExec("pm list packages -U --user all 2>/dev/null")
-        val pkgToUids = parsePmList(pmRaw)
-
-        val ruleMap = mutableMapOf<Int, List<PortRule>>()
-        apps.forEach { app ->
-            val uids = pkgToUids[app.packageName] ?: return@forEach
-            val uid = uids.find { it / 100000 == app.userId } ?: return@forEach
-            val localRules =
-                portRuleDao.getRulesForAppSync(app.packageName, app.userId).map { r ->
-                    PortRule(r.id.toString(), r.startPort, r.endPort, r.protocol, r.label, r.enabled)
-                }
-            ruleMap[uid] = localRules + massRules
-        }
-
-        val header = context.getString(R.string.save_header_comment)
-        val parts = mutableListOf<String>()
-
-        // Observers file
-        val observersBody = StringBuilder(header).append("\n")
-        apps.forEach { app ->
-            val entry = if (app.userId == 0) app.packageName else "${app.packageName}:${app.userId}"
-            observersBody.append(entry).append("\n")
-        }
-        val b64Observers = android.util.Base64.encodeToString(observersBody.toString().toByteArray(), android.util.Base64.NO_WRAP)
-        val observersDir = PORTS_OBSERVERS_FILE.substringBeforeLast('/')
-        parts += "mkdir -p $observersDir ; echo '$b64Observers' | base64 -d > $PORTS_OBSERVERS_FILE && chmod 644 $PORTS_OBSERVERS_FILE"
-
-        // Rules persistence file
-        val rulesBody = StringBuilder(header).append("\n")
-        ruleMap.forEach { (uid, rules) ->
-            if (rules.isNotEmpty()) {
-                rulesBody.append(uid)
-                rules.forEach { rule ->
-                    val proto =
-                        when (rule.protocol) {
-                            PortProtocol.TCP -> 0
-                            PortProtocol.UDP -> 1
-                            PortProtocol.BOTH -> 2
-                        }
-                    rulesBody.append(" ${rule.startPort}-${rule.endPort}:$proto")
-                }
-                rulesBody.append("\n")
-            }
-        }
-        val b64Rules = android.util.Base64.encodeToString(rulesBody.toString().toByteArray(), android.util.Base64.NO_WRAP)
-        val rulesDir = PORTS_RULES_FILE.substringBeforeLast('/')
-        parts += "mkdir -p $rulesDir ; echo '$b64Rules' | base64 -d > $PORTS_RULES_FILE && chmod 644 $PORTS_RULES_FILE"
-
-        // Apply to kmod
-        parts += buildKmodPortRulesApplyCommand(ruleMap)
-
-        withContext(Dispatchers.IO) {
-            suExec(parts.joinToString(" ; "))
         }
     }
 
@@ -378,10 +341,15 @@ internal object TargetsCache {
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",
             kmodActive = sections["LSMOD"]?.trim() == "1",
             kmodTargets = parseEntries(sections["KMOD_TARGETS"]),
-            lsposedTargets = parseEntries(sections["LSPOSED_TARGETS"]),
+            lsposedTargets = emptySet(),
             portsObservers = parseEntries(sections["PORTS_OBSERVERS"]),
             portRules = portRules,
             massPortRules = emptyList(),
+            ifacePrefixes =
+                sections["IFACE_PREFIXES"]
+                    ?.lines()
+                    ?.map { it.trim() }
+                    ?.filter { it.isNotEmpty() && !it.startsWith("#") } ?: emptyList(),
             uidToPkg = uidToPkg,
         )
     }

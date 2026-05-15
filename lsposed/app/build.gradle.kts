@@ -133,6 +133,10 @@ android {
     }
 }
 
+ksp {
+    arg("room.schemaLocation", "${projectDir}/schemas")
+}
+
 dependencies {
     // Xposed API — compileOnly so it's not bundled into the APK.
     compileOnly("de.robv.android.xposed:api:82")

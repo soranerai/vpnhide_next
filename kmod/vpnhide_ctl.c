@@ -12,7 +12,7 @@
 void print_usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s <targets|port_targets|port_rules|debug> [args...]\n",
+		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|debug> [args...]\n",
 		prog);
 	fprintf(stderr,
 		"  port_rules format: <uid> <rule_count> <start> <end> <proto> ...\n");
@@ -93,6 +93,23 @@ int main(int argc, char **argv)
 
 		if (ioctl(fd, VH_SET_PORT_RULES, &pdata) < 0) {
 			perror("VH_SET_PORT_RULES");
+			return 1;
+		}
+	} else if (strcmp(argv[1], "iface_prefixes") == 0) {
+		struct vpnhide_iface_ioctl_data idata;
+		memset(&idata, 0, sizeof(idata));
+		idata.count = argc - 2;
+		if (idata.count > MAX_IFACE_PREFIXES)
+			idata.count = MAX_IFACE_PREFIXES;
+
+		for (int i = 0; i < idata.count; i++) {
+			strncpy(idata.prefixes[i], argv[i + 2],
+				MAX_IFACE_LEN - 1);
+			idata.prefixes[i][MAX_IFACE_LEN - 1] = '\0';
+		}
+
+		if (ioctl(fd, VH_SET_IFACE_PREFIXES, &idata) < 0) {
+			perror("VH_SET_IFACE_PREFIXES");
 			return 1;
 		}
 	} else if (strcmp(argv[1], "debug") == 0) {
