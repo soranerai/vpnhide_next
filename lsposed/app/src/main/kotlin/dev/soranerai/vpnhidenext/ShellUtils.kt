@@ -14,13 +14,11 @@ private const val TAG = "VpnHide"
 
 internal const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
 
-internal const val LSPOSED_TARGETS = "/data/adb/vpnhide_lsposed/targets.txt"
 internal const val KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
-internal const val SS_UIDS_FILE = "/data/system/vpnhide_uids.txt"
 internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt"
 internal const val PORTS_RULES_FILE = "/data/adb/vpnhide_ports/rules.txt"
+internal const val IFACE_PREFIXES_FILE = "/data/adb/vpnhide_kmod_interfaces.txt"
 internal const val DEV_NODE = "/dev/vpnhide_ctrl"
-internal const val PORTS_APPLY_SCRIPT = "/data/adb/modules/vpnhide_kmod/vpnhide_ports_apply.sh"
 internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
 internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
 internal const val KMOD_LOAD_DMESG_FILE = "/data/adb/vpnhide_kmod/load_dmesg"
@@ -105,7 +103,7 @@ internal fun performStartupOptimized(selfPkg: String): StartupResult {
         
         # Add self to module targets
         ADDED=0
-        for path in ${'$'}KMOD_TARGETS ${'$'}LSPOSED_TARGETS; do
+        for path in ${'$'}KMOD_TARGETS; do
           dir=${'$'}(dirname "${'$'}path")
           if [ -d "${'$'}dir" ]; then
             for U in ${'$'}SELF_UIDS; do
@@ -115,18 +113,6 @@ internal fun performStartupOptimized(selfPkg: String): StartupResult {
                  ADDED=1
               fi
             done
-          fi
-        done
-
-        
-        
-        # UIDs list
-        for U in ${'$'}SELF_UIDS; do
-          if ! grep -q "^${'$'}U${'$'}" $SS_UIDS_FILE 2>/dev/null; then
-            echo "${'$'}U" >> $SS_UIDS_FILE
-            chmod 640 $SS_UIDS_FILE
-            chown root:system $SS_UIDS_FILE
-            chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null || true
           fi
         done
         
@@ -158,11 +144,11 @@ internal fun performStartupOptimized(selfPkg: String): StartupResult {
  * names the codegen-driven `IfaceLists.isVpnIface` catches (e.g. `if<N>`
  * from issue #86, `MyVPN`, `wg-client`).
  */
-internal fun isVpnActiveBlocking(): Boolean {
+internal fun isVpnActiveBlocking(customPrefixes: List<String> = emptyList()): Boolean {
     val (exitCode, output) = suExec("ls /sys/class/net/ 2>/dev/null")
     if (exitCode != 0) return false
     val vpnIfaces =
-        output.lines().map { it.trim() }.filter { name -> IfaceLists.isVpnIface(name) }
+        output.lines().map { it.trim() }.filter { name -> IfaceLists.isVpnIface(name, customPrefixes) }
     if (vpnIfaces.isEmpty()) {
         VpnHideLog.d(TAG, "isVpnActive: no VPN interfaces found")
         return false
@@ -173,83 +159,6 @@ internal fun isVpnActiveBlocking(): Boolean {
         VpnHideLog.d(TAG, "isVpnActive: $iface operstate=${state.trim()} up=$up")
         up
     }
-}
-
-/**
- * Ensure the VPNHide Next app itself is in all 3 target lists + resolve UIDs.
- * Returns true if self had to be added to any list (= hooks may not be
- * applied to the current process, restart needed).
- * Called once at app startup; result is shared with all screens.
- */
-internal fun ensureSelfInTargets(selfPkg: String): Boolean {
-    var added = false
-
-    fun addIfMissing(
-        path: String,
-        dirCheck: String?,
-    ) {
-        if (dirCheck != null) {
-            val (_, exists) = suExec("[ -d $dirCheck ] && echo 1 || echo 0")
-            if (exists.trim() != "1") {
-                VpnHideLog.d(TAG, "ensureSelfInTargets: $dirCheck not found, skipping $path")
-                return
-            }
-        }
-        val (_, raw) = suExec("cat $path 2>/dev/null || true")
-        val existing = raw.lines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
-        if (selfPkg in existing) {
-            VpnHideLog.d(TAG, "ensureSelfInTargets: $selfPkg already in $path")
-            return
-        }
-        val (_, uidsRaw) =
-            suExec(
-                "pm list packages -U --user all 2>/dev/null | grep \"package:$selfPkg \" | " +
-                    "awk '{sub(/uid:/, \"\", ${'$'}2); print ${'$'}2}' | tr ',' '\\n'",
-            )
-        val selfUids = uidsRaw.lines().map { it.trim() }.filter { it.isNotEmpty() }
-
-        for (u in selfUids) {
-            if (u !in existing) {
-                val newBody = "# Managed by VPNHide Next app\n" + (existing + u).sorted().joinToString("\n") + "\n"
-                val b64 = Base64.encodeToString(newBody.toByteArray(), Base64.NO_WRAP)
-                suExec("echo '$b64' | base64 -d > $path && chmod 644 $path")
-                VpnHideLog.i(TAG, "ensureSelfInTargets: added $u to $path")
-                added = true
-            }
-        }
-    }
-
-    addIfMissing(KMOD_TARGETS, "/data/adb/vpnhide_kmod")
-    suExec("mkdir -p /data/adb/vpnhide_lsposed")
-    addIfMissing(LSPOSED_TARGETS, null)
-
-    // Resolve UIDs so hooks pick us up immediately (kmod + lsposed support live reload).
-    // `--user all` catches the case where vpnhide is installed in a work profile too —
-    // each UID gets added to targets so both instances are covered. `tr ',' '\n'`
-    // expands comma-separated UIDs, then we iterate one per line and dedup against
-    // the existing file content.
-    val uidCmd =
-        buildString {
-            // Literal field match via awk — grep would treat dots in
-            // `selfPkg` as regex wildcards.
-            append("ALL_PKGS=\"\$(pm list packages -U --user all 2>/dev/null)\"")
-            append(
-                "; SELF_UIDS=\$(echo \"\$ALL_PKGS\" | awk -v p=\"package:$selfPkg\" " +
-                    "'\$1 == p { sub(/uid:/, \"\", \$2); print \$2; exit }' | tr ',' '\\n')",
-            )
-            append("; if [ -n \"\$SELF_UIDS\" ]; then")
-            append("   for U in \$SELF_UIDS; do")
-            append("     EXISTING2=\$(cat $SS_UIDS_FILE 2>/dev/null)")
-            append(
-                "   ; echo \"\$EXISTING2\" | grep -q \"^\$U\$\" || { echo \"\$U\" >> $SS_UIDS_FILE; chmod 640 $SS_UIDS_FILE; chown root:system $SS_UIDS_FILE; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; }",
-            )
-            append("   ; done")
-
-            append("; fi")
-        }
-    suExec(uidCmd)
-    VpnHideLog.d(TAG, "ensureSelfInTargets: done, added=$added")
-    return added
 }
 
 internal fun buildUidResolver(
@@ -312,18 +221,23 @@ internal fun buildKmodPortRulesApplyCommand(rules: Map<Int, List<PortRule>>): St
     }
 }
 
-internal fun buildLsposedApplyCommand(uids: List<Int>): String {
-    if (uids.isEmpty()) {
-        return "echo > $SS_UIDS_FILE; chmod 640 $SS_UIDS_FILE; " +
-            "chown root:system $SS_UIDS_FILE; " +
-            "chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null; true"
-    }
+internal fun buildLsposedApplyCommand(context: Context): String {
+    val dbFile = context.getDatabasePath("vpnhide_database").absolutePath
+    val publicDir = "/data/system/vpnhide"
+    val publicDb = "$publicDir/vpnhide_config.db"
 
+    // We copy the database and its WAL/SHM files to /data/system/vpnhide/
+    // so system_server can read them without SELinux issues.
     return buildString {
-        append(buildUidResolver(uids, SS_UIDS_FILE))
-        append(" ; chmod 640 $SS_UIDS_FILE")
-        append(" ; chown root:system $SS_UIDS_FILE")
-        append(" ; chcon u:object_r:system_data_file:s0 $SS_UIDS_FILE 2>/dev/null")
+        append("mkdir -p $publicDir && chmod 755 $publicDir && chown system:system $publicDir")
+        append(" ; rm -f $publicDb*")
+        // We use the sqlite3 binary if available, or fall back to a simple cp if not.
+        append(" ; cp $dbFile $publicDb")
+        append(" ; [ -f $dbFile-wal ] && cp $dbFile-wal $publicDb-wal || true")
+        append(" ; [ -f $dbFile-shm ] && cp $dbFile-shm $publicDb-shm || true")
+        append(" ; chmod 644 $publicDb*")
+        append(" ; chown system:system $publicDb*")
+        append(" ; chcon u:object_r:system_data_file:s0 $publicDb* 2>/dev/null || true")
     }
 }
 

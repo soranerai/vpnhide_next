@@ -8,6 +8,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -53,6 +54,9 @@ internal fun AppPickerScreen(
     showOnlyWorkProfile: Boolean,
     sortOrder: AppSortOrder,
     onUpdate: (List<AppEntry>) -> Unit,
+    sortedIds: List<String>,
+    onRefresh: () -> Unit,
+    listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
     val appList by AppListCache.apps.collectAsState()
@@ -64,49 +68,12 @@ internal fun AppPickerScreen(
     var refreshing by remember { mutableStateOf(false) }
     var refreshTrigger by remember { mutableStateOf(0) }
 
-    // Stable ID list for the display to prevent shuffling on toggle
-    var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
-
-    // Update the sort order only on filters/search/refresh OR initial load
-    LaunchedEffect(
-        apps.isEmpty(),
-        searchQuery,
-        showSystem,
-        showRussianOnly,
-        showOnlySelected,
-        showOnlyWorkProfile,
-        sortOrder,
-        refreshTrigger,
-    ) {
-        val q = searchQuery.trim().lowercase()
-        sortedIds =
-            apps
-                .filter { app ->
-                    (showSystem || !app.isSystem || app.kmod || app.lsposed) &&
-                        (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
-                        (!showOnlySelected || app.anyProtection) &&
-                        (!showOnlyWorkProfile || app.userId != 0) &&
-                        (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
-                }.let { list ->
-                    when (sortOrder) {
-                        AppSortOrder.NAME_ASC -> {
-                            list.sortedBy { it.label.lowercase() }
-                        }
-
-                        AppSortOrder.NAME_DESC -> {
-                            list.sortedByDescending { it.label.lowercase() }
-                        }
-
-                        AppSortOrder.SELECTED_FIRST -> {
-                            list.sortedWith(
-                                compareByDescending<AppEntry> { it.anyProtection }.thenBy { it.label.lowercase() },
-                            )
-                        }
-                    }
-                }.map { "${it.packageName}:${it.userId}" }
-    }
-
-    // Map current data to the stable order
+    // Map current data to the stable order.
+    // Key on BOTH apps and sortedIds:
+    //   - sortedIds changes  → order changes (filter/search/save)
+    //   - apps changes       → content changes (toggle), order is preserved
+    // NOTE: derivedStateOf cannot be used here because 'apps' is a plain parameter,
+    // not a State object, so derivedStateOf's lambda wouldn't react to it.
     val displayApps =
         remember(apps, sortedIds) {
             sortedIds.mapNotNull { id ->
@@ -131,14 +98,12 @@ internal fun AppPickerScreen(
                 items(10) { SkeletonAppRow() }
             }
         } else {
-            val listState = rememberLazyListState()
-
             PullToRefreshBox(
                 isRefreshing = refreshing,
                 onRefresh = {
                     scope.launch {
                         refreshing = true
-                        refreshTrigger++
+                        onRefresh()
                         delay(500)
                         refreshing = false
                     }

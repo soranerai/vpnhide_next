@@ -3,10 +3,16 @@
 package dev.soranerai.vpnhidenext.generated
 
 internal object IfaceLists {
-    /** True if `name` looks like a VPN tunnel per data/interfaces.toml. */
-    fun isVpnIface(name: String): Boolean {
+    /** True if `name` looks like a VPN tunnel per data/interfaces.toml or custom list. */
+    fun isVpnIface(
+        name: String,
+        customPrefixes: List<String> = emptyList(),
+    ): Boolean {
         if (name.isEmpty()) return false
         val n = name.lowercase()
+
+        // Custom prefixes
+        if (customPrefixes.any { n.startsWith(it.lowercase()) }) return true
         // OpenVPN, WireGuard userspace, Tailscale, generic tunneling
         if (n.startsWith("tun")) return true
         // OpenVPN bridged
