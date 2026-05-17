@@ -162,7 +162,9 @@ class HookEntry : IXposedHookLoadPackage {
     // ==================================================================
 
     @Volatile private var systemServerTargetUids: Set<Int>? = null
+
     @Volatile private var databaseFileObserver: android.os.FileObserver? = null
+
     @Volatile private var selfUid: Int = -1
     private val uidLock = Any()
 
@@ -270,23 +272,24 @@ class HookEntry : IXposedHookLoadPackage {
             try {
                 val dbFile = File(DB_PATH)
                 if (dbFile.exists()) {
-                    SQLiteDatabase.openDatabase(
-                        dbFile.absolutePath,
-                        null,
-                        SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
-                    ).use { db ->
-                        db.rawQuery("SELECT prefix FROM iface_prefixes", null)?.use { cursor ->
-                            val idx = cursor.getColumnIndex("prefix")
-                            if (idx != -1) {
-                                while (cursor.moveToNext()) {
-                                    val prefix = cursor.getString(idx)
-                                    if (prefix != null) {
-                                        prefixes.add(prefix)
+                    SQLiteDatabase
+                        .openDatabase(
+                            dbFile.absolutePath,
+                            null,
+                            SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                        ).use { db ->
+                            db.rawQuery("SELECT prefix FROM iface_prefixes", null)?.use { cursor ->
+                                val idx = cursor.getColumnIndex("prefix")
+                                if (idx != -1) {
+                                    while (cursor.moveToNext()) {
+                                        val prefix = cursor.getString(idx)
+                                        if (prefix != null) {
+                                            prefixes.add(prefix)
+                                        }
                                     }
                                 }
                             }
                         }
-                    }
                 }
             } catch (t: Throwable) {
                 HookLog.e("VpnHide: failed to load iface prefixes: ${t.message}")
@@ -304,6 +307,7 @@ class HookEntry : IXposedHookLoadPackage {
 
     private fun installSystemServerHooks(): List<String> {
         val brokenFields = runReflectionSmokeCheck()
+
         fun anyBroken(critical: Set<String>): Boolean = brokenFields.any { it.substringBefore(':') in critical }
 
         if (!anyBroken(LP_CRITICAL_KEYS)) tryHook("LP.writeToParcel") { hookLPWriteToParcel() }
@@ -322,7 +326,12 @@ class HookEntry : IXposedHookLoadPackage {
         val minSdk: Int = 0,
         val typeCheck: (Class<*>) -> Boolean,
     )
-    private data class CtorProbe(val key: String, val clazz: Class<*>, val params: Array<Class<*>>)
+
+    private data class CtorProbe(
+        val key: String,
+        val clazz: Class<*>,
+        val params: Array<Class<*>>,
+    )
 
     private fun runReflectionSmokeCheck(): List<String> {
         val broken = mutableListOf<String>()
@@ -351,11 +360,12 @@ class HookEntry : IXposedHookLoadPackage {
         try {
             val bootId = File("/proc/sys/kernel/random/boot_id").readText().trim()
             val timestamp = System.currentTimeMillis() / 1000
-            val version = try {
-                BuildConfig.VERSION_NAME
-            } catch (_: Throwable) {
-                "1.0.0"
-            }
+            val version =
+                try {
+                    BuildConfig.VERSION_NAME
+                } catch (_: Throwable) {
+                    "1.0.0"
+                }
             val sdk = Build.VERSION.SDK_INT
             val sb = java.lang.StringBuilder()
             sb.append("version=").append(version).append('\n')
@@ -510,7 +520,8 @@ class HookEntry : IXposedHookLoadPackage {
             if (ti != null && ti.javaClass.name == "android.net.VpnTransportInfo") {
                 XposedHelpers.setObjectField(copy, "mTransportInfo", null)
             }
-        } catch (_: Throwable) {}
+        } catch (_: Throwable) {
+        }
         return true
     }
 
@@ -542,17 +553,20 @@ class HookEntry : IXposedHookLoadPackage {
     private fun hookApexServices() {
         val smClass = XposedHelpers.findClass("android.os.ServiceManager", null)
 
-        XposedBridge.hookAllMethods(smClass, "addService", object : XC_MethodHook() {
-            override fun afterHookedMethod(param: MethodHookParam) {
-                val name = param.args[0] as? String ?: return
-                val binder = param.args[1] as? android.os.IBinder ?: return
-                val classLoader = binder.javaClass.classLoader ?: return
-                handleServiceHook(name, classLoader, "addService")
-            }
-        })
+        XposedBridge.hookAllMethods(
+            smClass,
+            "addService",
+            object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    val name = param.args[0] as? String ?: return
+                    val binder = param.args[1] as? android.os.IBinder ?: return
+                    val classLoader = binder.javaClass.classLoader ?: return
+                    handleServiceHook(name, classLoader, "addService")
+                }
+            },
+        )
 
         checkAndHookExistingService("connectivity", smClass)
-        checkAndHookExistingService("vpn_management", smClass)
     }
 
     private fun checkAndHookExistingService(
@@ -563,7 +577,8 @@ class HookEntry : IXposedHookLoadPackage {
             val binder = XposedHelpers.callStaticMethod(smClass, "getService", name) as? android.os.IBinder
             val classLoader = binder?.javaClass?.classLoader
             if (classLoader != null) handleServiceHook(name, classLoader, "getService")
-        } catch (t: Throwable) {}
+        } catch (t: Throwable) {
+        }
     }
 
     private fun handleServiceHook(
@@ -571,17 +586,13 @@ class HookEntry : IXposedHookLoadPackage {
         classLoader: ClassLoader,
         source: String,
     ) {
-        val hookKey = "${name}@${System.identityHashCode(classLoader)}"
+        val hookKey = "$name@${System.identityHashCode(classLoader)}"
         if (!hookedServices.add(hookKey)) return
 
         when (name) {
             "connectivity" -> {
                 HookLog.i("VpnHide: Installing APEX Connectivity hooks...")
                 tryHook("ConnectivityService.networkLogic") { hookConnectivityService(classLoader) }
-                tryHook("ConnectivityService.prepareVpn") { hookPrepareVpn(classLoader, "com.android.server.ConnectivityService") }
-            }
-            "vpn_management" -> {
-                tryHook("VpnManagerService.prepareVpn") { hookPrepareVpn(classLoader, "com.android.server.VpnManagerService") }
             }
         }
     }
@@ -684,49 +695,11 @@ class HookEntry : IXposedHookLoadPackage {
                             )
                         }
                     }
-                } catch (t: Throwable) {}
+                } catch (t: Throwable) {
+                }
             }
         }
         HookLog.e("VpnHide: Successfully applied Nekohasekai/VpnHide symbiosis architecture hooks.")
-    }
-
-    private fun hookPrepareVpn(
-        classLoader: ClassLoader,
-        className: String,
-    ) {
-        val clazz =
-            try {
-                XposedHelpers.findClass(className, classLoader)
-            } catch (t: Throwable) {
-                val fallbackName = if (className.startsWith("com.android.server.")) {
-                    "android.net.connectivity.$className"
-                } else {
-                    HookLog.e("VpnHide: failed to hook prepareVpn in $className: ${t.message}")
-                    return
-                }
-                try {
-                    XposedHelpers.findClass(fallbackName, classLoader)
-                } catch (t2: Throwable) {
-                    HookLog.e("VpnHide: failed to hook prepareVpn in $className and $fallbackName: ${t2.message}")
-                    return
-                }
-            }
-        try {
-            XposedHelpers.findAndHookMethod(
-                clazz,
-                "prepareVpn",
-                String::class.java,
-                String::class.java,
-                Integer.TYPE,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (isTargetCaller()) param.result = true
-                    }
-                },
-            )
-        } catch (t: Throwable) {
-            HookLog.e("VpnHide: failed to hook prepareVpn in ${clazz.name}: ${t.message}")
-        }
     }
 
     companion object {
@@ -740,25 +713,55 @@ class HookEntry : IXposedHookLoadPackage {
         private val FIELD_PROBES =
             listOf(
                 FieldProbe("LinkProperties.mIfaceName", LinkProperties::class.java, "mIfaceName") { it == String::class.java },
-                FieldProbe("LinkProperties.mRoutes", LinkProperties::class.java, "mRoutes") { MutableList::class.java.isAssignableFrom(it) },
-                FieldProbe("LinkProperties.mStackedLinks", LinkProperties::class.java, "mStackedLinks") { MutableMap::class.java.isAssignableFrom(it) },
-                FieldProbe("LinkProperties.mDnses", LinkProperties::class.java, "mDnses") { java.util.Collection::class.java.isAssignableFrom(it) },
+                FieldProbe(
+                    "LinkProperties.mRoutes",
+                    LinkProperties::class.java,
+                    "mRoutes",
+                ) { MutableList::class.java.isAssignableFrom(it) },
+                FieldProbe(
+                    "LinkProperties.mStackedLinks",
+                    LinkProperties::class.java,
+                    "mStackedLinks",
+                ) { MutableMap::class.java.isAssignableFrom(it) },
+                FieldProbe(
+                    "LinkProperties.mDnses",
+                    LinkProperties::class.java,
+                    "mDnses",
+                ) { java.util.Collection::class.java.isAssignableFrom(it) },
                 FieldProbe("LinkProperties.mDomains", LinkProperties::class.java, "mDomains") { it == String::class.java },
-                FieldProbe("NetworkCapabilities.mTransportTypes", NetworkCapabilities::class.java, "mTransportTypes") { it == java.lang.Long.TYPE },
-                FieldProbe("NetworkCapabilities.mNetworkCapabilities", NetworkCapabilities::class.java, "mNetworkCapabilities") { it == java.lang.Long.TYPE },
-                FieldProbe("NetworkCapabilities.mTransportInfo", NetworkCapabilities::class.java, "mTransportInfo", minSdk = Build.VERSION_CODES.Q) { fieldType ->
+                FieldProbe("NetworkCapabilities.mTransportTypes", NetworkCapabilities::class.java, "mTransportTypes") {
+                    it ==
+                        java.lang.Long.TYPE
+                },
+                FieldProbe("NetworkCapabilities.mNetworkCapabilities", NetworkCapabilities::class.java, "mNetworkCapabilities") {
+                    it ==
+                        java.lang.Long.TYPE
+                },
+                FieldProbe(
+                    "NetworkCapabilities.mTransportInfo",
+                    NetworkCapabilities::class.java,
+                    "mTransportInfo",
+                    minSdk = Build.VERSION_CODES.Q,
+                ) { fieldType ->
                     runCatching { Class.forName("android.net.TransportInfo") }.map { it.isAssignableFrom(fieldType) }.getOrDefault(false)
                 },
                 FieldProbe("NetworkInfo.mNetworkType", NetworkInfo::class.java, "mNetworkType") { it == Integer.TYPE },
                 FieldProbe("NetworkInfo.mState", NetworkInfo::class.java, "mState") { it == NetworkInfo.State::class.java },
-                FieldProbe("NetworkInfo.mDetailedState", NetworkInfo::class.java, "mDetailedState") { it == NetworkInfo.DetailedState::class.java },
+                FieldProbe("NetworkInfo.mDetailedState", NetworkInfo::class.java, "mDetailedState") {
+                    it ==
+                        NetworkInfo.DetailedState::class.java
+                },
                 FieldProbe("NetworkInfo.mIsAvailable", NetworkInfo::class.java, "mIsAvailable") { it == java.lang.Boolean.TYPE },
             )
 
         private val CTOR_PROBES =
             listOf(
                 CtorProbe("LinkProperties.<init>(LinkProperties)", LinkProperties::class.java, arrayOf(LinkProperties::class.java)),
-                CtorProbe("NetworkInfo.<init>(int,int,String,String)", NetworkInfo::class.java, arrayOf(Integer.TYPE, Integer.TYPE, String::class.java, String::class.java)),
+                CtorProbe(
+                    "NetworkInfo.<init>(int,int,String,String)",
+                    NetworkInfo::class.java,
+                    arrayOf(Integer.TYPE, Integer.TYPE, String::class.java, String::class.java),
+                ),
             )
 
         private val LP_CRITICAL_KEYS = setOf("LinkProperties.mIfaceName", "LinkProperties.<init>(LinkProperties)")

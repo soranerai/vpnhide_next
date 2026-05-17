@@ -666,7 +666,6 @@ internal fun runAllChecks(
             checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)),
             checkProxyHost(res.getString(R.string.check_proxy_host)),
             checkNetworkCallback(cm, res.getString(R.string.check_network_callback)),
-            checkVpnServicePrepare(context, res.getString(R.string.check_vpn_service_prepare)),
         )
 
     val all = native + java
@@ -941,37 +940,41 @@ private fun checkNetworkCallback(
     var receivedCallback = false
     var ifname = "none"
 
-    val callback = object : ConnectivityManager.NetworkCallback() {
-        override fun onCapabilitiesChanged(
-            network: android.net.Network,
-            caps: NetworkCapabilities,
-        ) {
-            if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                hasVpnTransport = true
-            }
-        }
-
-        override fun onLinkPropertiesChanged(
-            network: android.net.Network,
-            lp: android.net.LinkProperties,
-        ) {
-            val iface = lp.interfaceName
-            if (iface != null) {
-                ifname = iface
-                if (IfaceLists.isVpnIface(iface)) {
-                    hasVpnInterface = true
+    val callback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(
+                network: android.net.Network,
+                caps: NetworkCapabilities,
+            ) {
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    hasVpnTransport = true
                 }
             }
-            receivedCallback = true
-            latch.countDown()
+
+            override fun onLinkPropertiesChanged(
+                network: android.net.Network,
+                lp: android.net.LinkProperties,
+            ) {
+                val iface = lp.interfaceName
+                if (iface != null) {
+                    ifname = iface
+                    if (IfaceLists.isVpnIface(iface)) {
+                        hasVpnInterface = true
+                    }
+                }
+                receivedCallback = true
+                latch.countDown()
+            }
         }
-    }
 
     try {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             cm.registerDefaultNetworkCallback(callback)
         } else {
-            val request = android.net.NetworkRequest.Builder().build()
+            val request =
+                android.net.NetworkRequest
+                    .Builder()
+                    .build()
             cm.registerNetworkCallback(request, callback)
         }
         latch.await(500, java.util.concurrent.TimeUnit.MILLISECONDS)
@@ -980,7 +983,8 @@ private fun checkNetworkCallback(
     } finally {
         try {
             cm.unregisterNetworkCallback(callback)
-        } catch (_: Exception) {}
+        } catch (_: Exception) {
+        }
     }
 
     if (!receivedCallback) {
@@ -988,35 +992,18 @@ private fun checkNetworkCallback(
     }
 
     val failed = hasVpnTransport || hasVpnInterface
-    val detail = buildString {
-        append("hasTransport(VPN)=$hasVpnTransport")
-        append(", ifname=$ifname")
-        if (failed) {
-            append(" (VPN leaked via push callback!)")
-        } else {
-            append(" (clean)")
+    val detail =
+        buildString {
+            append("hasTransport(VPN)=$hasVpnTransport")
+            append(", ifname=$ifname")
+            if (failed) {
+                append(" (VPN leaked via push callback!)")
+            } else {
+                append(" (clean)")
+            }
         }
-    }
 
     return CheckResult(name, !failed, detail)
-}
-
-private fun checkVpnServicePrepare(
-    context: android.content.Context,
-    name: String,
-): CheckResult {
-    return try {
-        val intent = android.net.VpnService.prepare(context)
-        if (intent == null) {
-            CheckResult(name, true, "returned null (clean)")
-        } else {
-            val component = intent.component?.flattenToString() ?: "unknown"
-            val detail = "returned Intent [component=$component] (VPN leaked via VpnService.prepare!)"
-            CheckResult(name, false, detail)
-        }
-    } catch (e: Exception) {
-        CheckResult(name, false, "error: ${e.message}")
-    }
 }
 
 // ==========================================================================

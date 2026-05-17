@@ -208,5 +208,4 @@
     <string name="check_link_properties_dns" translatable="false">LinkProperties dns</string>
     <string name="check_proxy_host" translatable="false">System proxy properties</string>
     <string name="check_network_callback" translatable="false">NetworkCallback push model</string>
-    <string name="check_vpn_service_prepare" translatable="false">VpnService.prepare()</string>
 </resources>
