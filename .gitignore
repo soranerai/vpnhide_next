@@ -43,5 +43,4 @@ kmod/*log.txt
 /*.zip
 scripts/__pycache__/
 release.jks
-lsposed/.kotlin/sessions/kotlin-compiler-12753556154844234474.salive
-lsposed/.kotlin/sessions/kotlin-compiler-14372496663972207178.salive
+lsposed/.kotlin/sessions/kotlin-compiler*
