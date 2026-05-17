@@ -1,6 +1,32 @@
 {
   "history": [
     {
+      "version": "1.3.0",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Some ui fixes",
+              "ru": "Исправление некоторых багов ui"
+            },
+            {
+              "en": "Custom interfaces hide ability",
+              "ru": "Возможность скрывать кастомные интерфейсы"
+            },
+            {
+              "en": "Migrated boot-time rule application to SQLite database for faster startup",
+              "ru": "Переведена загрузочная инициализация правил на базу данных SQLite для ускорения запуска"
+            },
+            {
+              "en": "Second stage of migration to Room",
+              "ru": "Второй этап миграции на БД Room"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.2.5",
       "sections": [
         {

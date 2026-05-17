@@ -84,6 +84,29 @@ class HookEntry : IXposedHookLoadPackage {
             modified = true
         }
 
+        val currentIfaceName = XposedHelpers.getObjectField(copy, "mIfaceName") as? String
+        if (currentIfaceName == null) {
+            try {
+                @Suppress("UNCHECKED_CAST")
+                val dnsesField = XposedHelpers.getObjectField(copy, "mDnses") as? MutableCollection<java.net.InetAddress>
+                if (dnsesField != null && dnsesField.isNotEmpty()) {
+                    dnsesField.clear()
+                    modified = true
+                }
+            } catch (t: Throwable) {
+                HookLog.e("VpnHide: failed to sanitize mDnses: ${t.message}")
+            }
+
+            try {
+                if (XposedHelpers.getObjectField(copy, "mDomains") != null) {
+                    XposedHelpers.setObjectField(copy, "mDomains", null)
+                    modified = true
+                }
+            } catch (t: Throwable) {
+                HookLog.e("VpnHide: failed to sanitize mDomains: ${t.message}")
+            }
+        }
+
         try {
             @Suppress("UNCHECKED_CAST")
             val routesField = XposedHelpers.getObjectField(copy, "mRoutes") as? MutableList<RouteInfo>
@@ -630,6 +653,16 @@ class HookEntry : IXposedHookLoadPackage {
                     LinkProperties::class.java,
                     "mStackedLinks",
                 ) { MutableMap::class.java.isAssignableFrom(it) },
+                FieldProbe(
+                    "LinkProperties.mDnses",
+                    LinkProperties::class.java,
+                    "mDnses",
+                ) { java.util.Collection::class.java.isAssignableFrom(it) },
+                FieldProbe(
+                    "LinkProperties.mDomains",
+                    LinkProperties::class.java,
+                    "mDomains",
+                ) { it == String::class.java },
                 FieldProbe(
                     "NetworkCapabilities.mTransportTypes",
                     NetworkCapabilities::class.java,

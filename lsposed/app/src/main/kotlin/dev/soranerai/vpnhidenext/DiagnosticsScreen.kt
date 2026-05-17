@@ -663,6 +663,7 @@ internal fun runAllChecks(
             checkActiveNetworkVpn(cm, res.getString(R.string.check_active_network_vpn)),
             checkLinkPropertiesIfname(cm, res.getString(R.string.check_link_properties)),
             checkLinkPropertiesRoutes(cm, res.getString(R.string.check_link_properties_routes)),
+            checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)),
             checkProxyHost(res.getString(R.string.check_proxy_host)),
         )
 
@@ -845,6 +846,40 @@ private fun checkLinkPropertiesRoutes(
             "${vpnRoutes.size} route(s) via VPN"
         }
     return CheckResult(name, vpnRoutes.isEmpty(), detail)
+}
+
+private fun checkLinkPropertiesDns(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    val networks = cm.allNetworks
+    if (networks.isEmpty()) return CheckResult(name, true, "no networks")
+
+    val leaked = mutableListOf<String>()
+    for (net in networks) {
+        val lp = cm.getLinkProperties(net) ?: continue
+        val ifname = lp.interfaceName
+        val dns = lp.dnsServers.map { it.hostAddress ?: "?" }
+
+        if (dns.isNotEmpty()) {
+            if (ifname == null) {
+                // Anonymous interface (nulled out name but leaking DNS)
+                val netId = net.toString()
+                leaked.add("anonymous (ID $netId): dns=[${dns.joinToString()}]")
+            } else if (IfaceLists.isVpnIface(ifname)) {
+                // VPN interface is fully visible
+                leaked.add("$ifname: dns=[${dns.joinToString()}]")
+            }
+        }
+    }
+
+    val detail =
+        if (leaked.isEmpty()) {
+            "no DNS servers exposed via anonymous or VPN interfaces"
+        } else {
+            "leaked DNS detected:\n" + leaked.joinToString("\n") { "  $it" }
+        }
+    return CheckResult(name, leaked.isEmpty(), detail)
 }
 
 private fun checkProxyHost(name: String): CheckResult {
