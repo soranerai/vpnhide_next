@@ -21,11 +21,10 @@
 *   **Dropped support for legacy architectures**: Only arm64 is supported.
 *   **Deep redesign and optimization**: Completely overhauled interface (skeleton, async loading) and significantly optimized code.
 *   **Flexible sorting**: Added the ability for proper application sorting.
-*   **Anonymous TUN route hiding**: Exclusion of TUN interfaces from route requests.
+*   **Extended coverage of detection vectors**: Exclusion of hidden interfaces from route and DNS queries. Full coverage of the NetworkCallback leak. Preventing target applications from binding to tunnel interfaces.
 *   **Fully reworked port blocking**: Rule-based port access blocking mechanism. The logic has been moved from iptables to the kernel.
 *   **Database-driven architecture**: Rules are mirrored and stored in the application's database.
 *   **Maximum Stealth**: Complete removal of `/proc/` files accessible to all applications, eliminating module detection through the file system.
-*   **Apps tun0 binding bypass**: Target apps can't force bind to tun0.
 *   **Workprofiles support**: You can manage apps from workprofiles.
 *   **Hide custom interfaces**: You can add any custom prefix to hide.
 
