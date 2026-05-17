@@ -207,4 +207,5 @@
     <string name="check_link_properties_routes" translatable="false">LinkProperties routes</string>
     <string name="check_link_properties_dns" translatable="false">LinkProperties dns</string>
     <string name="check_proxy_host" translatable="false">System proxy properties</string>
+    <string name="check_network_callback" translatable="false">NetworkCallback push model</string>
 </resources>
