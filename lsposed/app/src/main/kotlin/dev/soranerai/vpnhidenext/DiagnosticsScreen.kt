@@ -854,13 +854,13 @@ private fun checkLinkPropertiesDns(
 ): CheckResult {
     val networks = cm.allNetworks
     if (networks.isEmpty()) return CheckResult(name, true, "no networks")
-    
+
     val leaked = mutableListOf<String>()
     for (net in networks) {
         val lp = cm.getLinkProperties(net) ?: continue
         val ifname = lp.interfaceName
         val dns = lp.dnsServers.map { it.hostAddress ?: "?" }
-        
+
         if (dns.isNotEmpty()) {
             if (ifname == null) {
                 // Anonymous interface (nulled out name but leaking DNS)
@@ -872,7 +872,7 @@ private fun checkLinkPropertiesDns(
             }
         }
     }
-    
+
     val detail =
         if (leaked.isEmpty()) {
             "no DNS servers exposed via anonymous or VPN interfaces"
