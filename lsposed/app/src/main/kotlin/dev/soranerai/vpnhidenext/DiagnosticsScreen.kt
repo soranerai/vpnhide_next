@@ -665,6 +665,7 @@ internal fun runAllChecks(
             checkLinkPropertiesRoutes(cm, res.getString(R.string.check_link_properties_routes)),
             checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)),
             checkProxyHost(res.getString(R.string.check_proxy_host)),
+            checkNetworkCallback(cm, res.getString(R.string.check_network_callback)),
         )
 
     val all = native + java
@@ -928,6 +929,82 @@ private fun checkProcNetRouteJava(name: String): CheckResult =
             CheckResult(name, false, "${e.message}")
         }
     }
+
+private fun checkNetworkCallback(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    val latch = java.util.concurrent.CountDownLatch(1)
+    var hasVpnTransport = false
+    var hasVpnInterface = false
+    var receivedCallback = false
+    var ifname = "none"
+
+    val callback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onCapabilitiesChanged(
+                network: android.net.Network,
+                caps: NetworkCapabilities,
+            ) {
+                if (caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                    hasVpnTransport = true
+                }
+            }
+
+            override fun onLinkPropertiesChanged(
+                network: android.net.Network,
+                lp: android.net.LinkProperties,
+            ) {
+                val iface = lp.interfaceName
+                if (iface != null) {
+                    ifname = iface
+                    if (IfaceLists.isVpnIface(iface)) {
+                        hasVpnInterface = true
+                    }
+                }
+                receivedCallback = true
+                latch.countDown()
+            }
+        }
+
+    try {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            cm.registerDefaultNetworkCallback(callback)
+        } else {
+            val request =
+                android.net.NetworkRequest
+                    .Builder()
+                    .build()
+            cm.registerNetworkCallback(request, callback)
+        }
+        latch.await(500, java.util.concurrent.TimeUnit.MILLISECONDS)
+    } catch (e: Exception) {
+        return CheckResult(name, false, "failed to register callback: ${e.message}")
+    } finally {
+        try {
+            cm.unregisterNetworkCallback(callback)
+        } catch (_: Exception) {
+        }
+    }
+
+    if (!receivedCallback) {
+        return CheckResult(name, true, "no callback received (timeout)")
+    }
+
+    val failed = hasVpnTransport || hasVpnInterface
+    val detail =
+        buildString {
+            append("hasTransport(VPN)=$hasVpnTransport")
+            append(", ifname=$ifname")
+            if (failed) {
+                append(" (VPN leaked via push callback!)")
+            } else {
+                append(" (clean)")
+            }
+        }
+
+    return CheckResult(name, !failed, detail)
+}
 
 // ==========================================================================
 //  Debug log export
