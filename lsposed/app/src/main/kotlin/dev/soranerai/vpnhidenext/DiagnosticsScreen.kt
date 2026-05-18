@@ -666,6 +666,9 @@ internal fun runAllChecks(
             checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)),
             checkProxyHost(res.getString(R.string.check_proxy_host)),
             checkNetworkCallback(cm, res.getString(R.string.check_network_callback)),
+            checkEmptyTransports(cm, res.getString(R.string.check_empty_transports)),
+            checkUnderlyingNetworks(cm, res.getString(R.string.check_underlying_networks)),
+            checkLinkPropertiesCompleteness(cm, res.getString(R.string.check_lp_completeness)),
         )
 
     val all = native + java
@@ -1004,6 +1007,100 @@ private fun checkNetworkCallback(
         }
 
     return CheckResult(name, !failed, detail)
+}
+
+private fun checkEmptyTransports(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "no active network")
+    val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "no capabilities")
+    val physicalTransports = mutableListOf<String>()
+    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) physicalTransports.add("WIFI")
+    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) physicalTransports.add("CELLULAR")
+    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) physicalTransports.add("ETHERNET")
+    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) physicalTransports.add("BLUETOOTH")
+
+    val hasVpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+    val passed = physicalTransports.isNotEmpty()
+    val detail = buildString {
+        append("hasTransport(VPN)=$hasVpn")
+        append(", physicalTransports=[${physicalTransports.joinToString()}]")
+        if (!passed) {
+            append(" (suspicious empty physical transports on active network!)")
+        }
+    }
+    return CheckResult(name, passed, detail)
+}
+
+private fun checkUnderlyingNetworks(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "no active network")
+    val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "no capabilities")
+    
+    var underlying: Any? = null
+    var methodUsed = "none"
+    try {
+        val method = caps.javaClass.getMethod("getUnderlyingNetworks")
+        underlying = method.invoke(caps)
+        methodUsed = "getUnderlyingNetworks()"
+    } catch (e: Exception) {
+        try {
+            val field = caps.javaClass.getDeclaredField("mUnderlyingNetworks")
+            field.isAccessible = true
+            underlying = field.get(caps)
+            methodUsed = "mUnderlyingNetworks field"
+        } catch (t: Throwable) {
+            return CheckResult(name, true, "not supported on this platform")
+        }
+    }
+
+    val list = when (underlying) {
+        is Array<*> -> underlying.toList()
+        is List<*> -> underlying
+        else -> null
+    }
+
+    val passed = list.isNullOrEmpty()
+    val detail = if (passed) {
+        "underlyingNetworks is null or empty ($methodUsed)"
+    } else {
+        "leaked underlyingNetworks=[${list.joinToString()}], method=$methodUsed"
+    }
+    return CheckResult(name, passed, detail)
+}
+
+private fun checkLinkPropertiesCompleteness(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    val net = cm.activeNetwork ?: return CheckResult(name, true, "no active network")
+    val lp = cm.getLinkProperties(net) ?: return CheckResult(name, true, "no link properties")
+    
+    val iface = lp.interfaceName
+    val dnsCount = lp.dnsServers.size
+    val hasDefaultRoute = lp.routes.any { route ->
+        route.destination?.prefixLength == 0
+    }
+
+    val passed = iface != null && dnsCount > 0 && hasDefaultRoute
+    val detail = buildString {
+        append("ifname=${iface ?: "(null)"}")
+        append(", dnsCount=$dnsCount")
+        append(", hasDefaultRoute=$hasDefaultRoute")
+        if (!passed) {
+            append(" (incomplete: ")
+            val issues = mutableListOf<String>()
+            if (iface == null) issues.add("missing ifname")
+            if (dnsCount == 0) issues.add("missing DNS")
+            if (!hasDefaultRoute) issues.add("missing default route")
+            append(issues.joinToString(", "))
+            append(")")
+        }
+    }
+    return CheckResult(name, passed, detail)
 }
 
 // ==========================================================================
