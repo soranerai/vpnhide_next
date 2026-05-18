@@ -1,6 +1,20 @@
 {
   "history": [
     {
+      "version": "1.4.1",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "rainbow hehe detection fix",
+              "ru": "исправлен детект VPN приложением \"Улыбка Радуги\""
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.4.0",
       "sections": [
         {

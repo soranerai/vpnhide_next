@@ -458,10 +458,10 @@ class HookEntry : IXposedHookLoadPackage {
                             String::class.java,
                         )
                     ctor.isAccessible = true
-                    val copy = ctor.newInstance(TYPE_WIFI, 0, "WIFI", "") as NetworkInfo
-                    XposedHelpers.setObjectField(copy, "mState", XposedHelpers.getObjectField(ni, "mState"))
-                    XposedHelpers.setObjectField(copy, "mDetailedState", XposedHelpers.getObjectField(ni, "mDetailedState"))
-                    XposedHelpers.setBooleanField(copy, "mIsAvailable", XposedHelpers.getBooleanField(ni, "mIsAvailable"))
+                    val copy = ctor.newInstance(TYPE_VPN, 0, "VPN", "") as NetworkInfo
+                    XposedHelpers.setObjectField(copy, "mState", NetworkInfo.State.DISCONNECTED)
+                    XposedHelpers.setObjectField(copy, "mDetailedState", NetworkInfo.DetailedState.DISCONNECTED)
+                    XposedHelpers.setBooleanField(copy, "mIsAvailable", false)
 
                     val parcel = param.args[0] as android.os.Parcel
                     val flags = param.args[1] as Int
