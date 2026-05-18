@@ -537,10 +537,13 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 			char zero = '\0';
 			int zero_len = 0;
 
-			vpnhide_dbg("sock_getsockopt_ret: spoofing empty SO_BINDTODEVICE (was %s)\n", name);
+			vpnhide_dbg(
+				"sock_getsockopt_ret: spoofing empty SO_BINDTODEVICE (was %s)\n",
+				name);
 
 			if (copy_to_user(data->optval, &zero, 1) == 0 &&
-			    copy_to_user(data->optlen, &zero_len, sizeof(int)) == 0) {
+			    copy_to_user(data->optlen, &zero_len,
+					 sizeof(int)) == 0) {
 				/* Success */
 			}
 		}
@@ -560,10 +563,12 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		dev = dev_get_by_index_rcu(net, ifindex);
 		if (dev && is_vpn_ifname(dev->name)) {
 			int zero_idx = 0;
-			vpnhide_dbg("sock_getsockopt_ret: spoofing SO_BINDTOIFINDEX %d (%s) to 0\n",
-				    ifindex, dev->name);
+			vpnhide_dbg(
+				"sock_getsockopt_ret: spoofing SO_BINDTOIFINDEX %d (%s) to 0\n",
+				ifindex, dev->name);
 			rcu_read_unlock();
-			if (copy_to_user(data->optval, &zero_idx, sizeof(int))) {
+			if (copy_to_user(data->optval, &zero_idx,
+					 sizeof(int))) {
 				/* error */
 			}
 		} else {

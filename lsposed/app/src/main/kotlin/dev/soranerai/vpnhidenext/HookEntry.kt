@@ -87,13 +87,14 @@ class HookEntry : IXposedHookLoadPackage {
                     if (routeIface != null && isVpnInterfaceName(routeIface)) {
                         // Clone the route via parcel to avoid mutating the shared original!
                         val parcel = android.os.Parcel.obtain()
-                        val clonedRoute = try {
-                            route.writeToParcel(parcel, 0)
-                            parcel.setDataPosition(0)
-                            RouteInfo.CREATOR.createFromParcel(parcel)
-                        } finally {
-                            parcel.recycle()
-                        }
+                        val clonedRoute =
+                            try {
+                                route.writeToParcel(parcel, 0)
+                                parcel.setDataPosition(0)
+                                RouteInfo.CREATOR.createFromParcel(parcel)
+                            } finally {
+                                parcel.recycle()
+                            }
                         XposedHelpers.setObjectField(clonedRoute, "mInterface", targetIface)
                         newRoutes.add(clonedRoute)
                         modified = true
@@ -172,7 +173,10 @@ class HookEntry : IXposedHookLoadPackage {
         return modified
     }
 
-    private fun getNetworkCapabilitiesSafe(cs: Any, net: android.net.Network): NetworkCapabilities? {
+    private fun getNetworkCapabilitiesSafe(
+        cs: Any,
+        net: android.net.Network,
+    ): NetworkCapabilities? {
         val token = android.os.Binder.clearCallingIdentity()
         try {
             return try {
@@ -189,15 +193,15 @@ class HookEntry : IXposedHookLoadPackage {
         val token = android.os.Binder.clearCallingIdentity()
         try {
             val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
-            
+
             // Pass 1: Try to find a WiFi network first (highest priority)
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
                 val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-                
+
                 val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                
+
                 if (hasWifi && !hasVpn) {
                     val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
                     if (lp != null) return lp
@@ -208,10 +212,10 @@ class HookEntry : IXposedHookLoadPackage {
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
                 val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-                
+
                 val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                
+
                 if (hasCell && !hasVpn) {
                     val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
                     if (lp != null) return lp
@@ -229,26 +233,26 @@ class HookEntry : IXposedHookLoadPackage {
         val token = android.os.Binder.clearCallingIdentity()
         try {
             val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
-            
+
             // Pass 1: Wi-Fi (highest priority)
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
                 val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-                
+
                 val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                
+
                 if (hasWifi && !hasVpn) return net
             }
-            
+
             // Pass 2: Cellular
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
                 val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-                
+
                 val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-                
+
                 if (hasCell && !hasVpn) return net
             }
         } catch (t: Throwable) {
@@ -635,13 +639,13 @@ class HookEntry : IXposedHookLoadPackage {
                     if (writingNetCopy.get() == true) return
                     val target = isTargetCaller()
                     if (!target) return
-                    
+
                     val net = param.thisObject as android.net.Network
                     writingNetCopy.set(true)
                     try {
                         val cs = getConnectivityService() ?: return
                         val nc = getNetworkCapabilitiesSafe(cs, net) ?: return
-                        
+
                         if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                             val physicalNet = getPhysicalNetwork(cs)
                             if (physicalNet != null) {
@@ -655,7 +659,7 @@ class HookEntry : IXposedHookLoadPackage {
                         writingNetCopy.set(false)
                     }
                 }
-            }
+            },
         )
     }
 
@@ -888,7 +892,7 @@ class HookEntry : IXposedHookLoadPackage {
                         csInstance = param.thisObject
                         HookLog.i("VpnHide: Captured ConnectivityService instance successfully")
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook ConnectivityService constructor: ${t.message}")
@@ -996,7 +1000,7 @@ class HookEntry : IXposedHookLoadPackage {
                             val activeNet = param.result as? android.net.Network ?: return
                             val cs = param.thisObject
                             val nc = getNetworkCapabilitiesSafe(cs, activeNet) ?: return
-                            
+
                             if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                                 val physicalNet = getPhysicalNetwork(cs)
                                 if (physicalNet != null) {
@@ -1005,7 +1009,7 @@ class HookEntry : IXposedHookLoadPackage {
                             }
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getActiveNetwork: ${t.message}")
@@ -1028,7 +1032,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 for (netObj in networks) {
                                     val net = netObj as? android.net.Network ?: continue
                                     val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-                                    
+
                                     if (!nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                                         filteredList.add(net)
                                     }
@@ -1036,18 +1040,20 @@ class HookEntry : IXposedHookLoadPackage {
                             } finally {
                                 android.os.Binder.restoreCallingIdentity(token)
                             }
-                            
-                            val newArray = java.lang.reflect.Array.newInstance(
-                                android.net.Network::class.java,
-                                filteredList.size
-                            ) as Array<*>
+
+                            val newArray =
+                                java.lang.reflect.Array.newInstance(
+                                    android.net.Network::class.java,
+                                    filteredList.size,
+                                ) as Array<*>
                             for (i in filteredList.indices) {
-                                java.lang.reflect.Array.set(newArray, i, filteredList[i])
+                                java.lang.reflect.Array
+                                    .set(newArray, i, filteredList[i])
                             }
                             param.result = newArray
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getAllNetworks: ${t.message}")

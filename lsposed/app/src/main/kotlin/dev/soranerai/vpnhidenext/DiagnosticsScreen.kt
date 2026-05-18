@@ -707,54 +707,57 @@ private fun checkActiveNetworkCapabilities(
 ): CheckResult {
     val net = cm.activeNetwork ?: return CheckResult(name, true, "no active network")
     val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "no capabilities")
-    
+
     val hasVpn = caps.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
     val notVpn = caps.hasCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
-    
+
     // TransportInfo
     val transportInfo = caps.transportInfo
     val hasVpnTransportInfo = transportInfo?.javaClass?.name?.contains("VpnTransportInfo") == true
-    
+
     // Physical transports presence
     val physicalTransports = mutableListOf<String>()
     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) physicalTransports.add("WIFI")
     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) physicalTransports.add("CELLULAR")
     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) physicalTransports.add("ETHERNET")
     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) physicalTransports.add("BLUETOOTH")
-    
+
     // Signal strength
     val ss = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) caps.signalStrength else -1
     val isUnspecifiedSignal = ss == NetworkCapabilities.SIGNAL_STRENGTH_UNSPECIFIED
     val hasWifi = caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     val suspiciousSignal = hasWifi && isUnspecifiedSignal
-    
+
     // Bandwidth
     val down = caps.linkDownstreamBandwidthKbps
     val up = caps.linkUpstreamBandwidthKbps
     val suspiciousHighBandwidth = !hasVpn && (down > 10_000_000 || up > 10_000_000)
     val suspiciousZeroBandwidth = !hasVpn && (down == 0 || up == 0)
 
-    val passed = !hasVpn && notVpn && !hasVpnTransportInfo && physicalTransports.isNotEmpty() && !suspiciousSignal && !suspiciousHighBandwidth && !suspiciousZeroBandwidth
-    
-    val detail = buildString {
-        append("hasTransport(VPN)=$hasVpn")
-        append(", NET_CAPABILITY_NOT_VPN=$notVpn")
-        append(", transportInfo=${transportInfo?.javaClass?.simpleName ?: "null"}")
-        append(", physical=[${physicalTransports.joinToString()}]")
-        val sigStr = if (isUnspecifiedSignal) "unspec" else ss.toString()
-        append(", signalStrength=$sigStr")
-        append(", bandwidth=${down}D/${up}U Kbps")
-        if (!passed) {
-            val issues = mutableListOf<String>()
-            if (hasVpn) issues.add("has TRANSPORT_VPN")
-            if (!notVpn) issues.add("missing NOT_VPN")
-            if (hasVpnTransportInfo) issues.add("has VpnTransportInfo")
-            if (physicalTransports.isEmpty()) issues.add("no physical transports")
-            if (suspiciousSignal) issues.add("suspicious unspecified signal")
-            if (suspiciousHighBandwidth || suspiciousZeroBandwidth) issues.add("suspicious bandwidth values")
-            append(" (issues: ${issues.joinToString(", ")})")
+    val passed =
+        !hasVpn && notVpn && !hasVpnTransportInfo && physicalTransports.isNotEmpty() && !suspiciousSignal && !suspiciousHighBandwidth &&
+            !suspiciousZeroBandwidth
+
+    val detail =
+        buildString {
+            append("hasTransport(VPN)=$hasVpn")
+            append(", NET_CAPABILITY_NOT_VPN=$notVpn")
+            append(", transportInfo=${transportInfo?.javaClass?.simpleName ?: "null"}")
+            append(", physical=[${physicalTransports.joinToString()}]")
+            val sigStr = if (isUnspecifiedSignal) "unspec" else ss.toString()
+            append(", signalStrength=$sigStr")
+            append(", bandwidth=${down}D/${up}U Kbps")
+            if (!passed) {
+                val issues = mutableListOf<String>()
+                if (hasVpn) issues.add("has TRANSPORT_VPN")
+                if (!notVpn) issues.add("missing NOT_VPN")
+                if (hasVpnTransportInfo) issues.add("has VpnTransportInfo")
+                if (physicalTransports.isEmpty()) issues.add("no physical transports")
+                if (suspiciousSignal) issues.add("suspicious unspecified signal")
+                if (suspiciousHighBandwidth || suspiciousZeroBandwidth) issues.add("suspicious bandwidth values")
+                append(" (issues: ${issues.joinToString(", ")})")
+            }
         }
-    }
     return CheckResult(name, passed, detail)
 }
 
@@ -806,36 +809,38 @@ private fun checkActiveLinkProperties(
 ): CheckResult {
     val net = cm.activeNetwork ?: return CheckResult(name, true, "no active network")
     val lp = cm.getLinkProperties(net) ?: return CheckResult(name, true, "no link properties")
-    
+
     val ifname = lp.interfaceName ?: "(null)"
     val isVpnIface = IfaceLists.isVpnIface(ifname)
-    
+
     val routes = lp.routes
-    val vpnRoutes = routes.filter { route ->
-        val iface = route.`interface` ?: return@filter false
-        IfaceLists.isVpnIface(iface)
-    }
-    
+    val vpnRoutes =
+        routes.filter { route ->
+            val iface = route.`interface` ?: return@filter false
+            IfaceLists.isVpnIface(iface)
+        }
+
     val dnsCount = lp.dnsServers.size
     val hasDefaultRoute = routes.any { route -> route.destination?.prefixLength == 0 }
-    
+
     val passed = !isVpnIface && vpnRoutes.isEmpty() && lp.interfaceName != null && dnsCount > 0 && hasDefaultRoute
-    
-    val detail = buildString {
-        append("ifname=$ifname")
-        append(", routes=${routes.size} (VPN routes=${vpnRoutes.size})")
-        append(", dnsCount=$dnsCount")
-        append(", hasDefaultRoute=$hasDefaultRoute")
-        if (!passed) {
-            val issues = mutableListOf<String>()
-            if (isVpnIface) issues.add("VPN interface detected")
-            if (vpnRoutes.isNotEmpty()) issues.add("${vpnRoutes.size} VPN routes")
-            if (lp.interfaceName == null) issues.add("missing interface name")
-            if (dnsCount == 0) issues.add("missing DNS servers")
-            if (!hasDefaultRoute) issues.add("missing default route")
-            append(" (issues: ${issues.joinToString(", ")})")
+
+    val detail =
+        buildString {
+            append("ifname=$ifname")
+            append(", routes=${routes.size} (VPN routes=${vpnRoutes.size})")
+            append(", dnsCount=$dnsCount")
+            append(", hasDefaultRoute=$hasDefaultRoute")
+            if (!passed) {
+                val issues = mutableListOf<String>()
+                if (isVpnIface) issues.add("VPN interface detected")
+                if (vpnRoutes.isNotEmpty()) issues.add("${vpnRoutes.size} VPN routes")
+                if (lp.interfaceName == null) issues.add("missing interface name")
+                if (dnsCount == 0) issues.add("missing DNS servers")
+                if (!hasDefaultRoute) issues.add("missing default route")
+                append(" (issues: ${issues.joinToString(", ")})")
+            }
         }
-    }
     return CheckResult(name, passed, detail)
 }
 
@@ -1010,15 +1015,13 @@ private fun checkNetworkCallback(
     return CheckResult(name, !failed, detail)
 }
 
-
-
 private fun checkUnderlyingNetworks(
     cm: ConnectivityManager,
     name: String,
 ): CheckResult {
     val net = cm.activeNetwork ?: return CheckResult(name, true, "no active network")
     val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "no capabilities")
-    
+
     var underlying: Any? = null
     var methodUsed = "none"
     try {
@@ -1036,23 +1039,22 @@ private fun checkUnderlyingNetworks(
         }
     }
 
-    val list = when (underlying) {
-        is Array<*> -> underlying.toList()
-        is List<*> -> underlying
-        else -> null
-    }
+    val list =
+        when (underlying) {
+            is Array<*> -> underlying.toList()
+            is List<*> -> underlying
+            else -> null
+        }
 
     val passed = list.isNullOrEmpty()
-    val detail = if (passed) {
-        "underlyingNetworks is null or empty ($methodUsed)"
-    } else {
-        "leaked underlyingNetworks=[${list.joinToString()}], method=$methodUsed"
-    }
+    val detail =
+        if (passed) {
+            "underlyingNetworks is null or empty ($methodUsed)"
+        } else {
+            "leaked underlyingNetworks=[${list.joinToString()}], method=$methodUsed"
+        }
     return CheckResult(name, passed, detail)
 }
-
-
-
 
 // ==========================================================================
 //  Debug log export

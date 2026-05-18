@@ -849,13 +849,17 @@ pub fn check_inet_diag() -> CheckOutput {
         if fd < 0 {
             let e = std::io::Error::last_os_error();
             if is_selinux_denial(&e) {
-                CheckOutput::pass(format!("inet_diag netlink socket denied by SELinux ({e}) — secure"))
+                CheckOutput::pass(format!(
+                    "inet_diag netlink socket denied by SELinux ({e}) — secure"
+                ))
             } else {
                 CheckOutput::pass(format!("inet_diag failed with error: {e} — secure"))
             }
         } else {
             libc::close(fd);
-            CheckOutput::fail("socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG) succeeded — potentially leaking socket diagnostics!")
+            CheckOutput::fail(
+                "socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG) succeeded — potentially leaking socket diagnostics!",
+            )
         }
     }
 }
