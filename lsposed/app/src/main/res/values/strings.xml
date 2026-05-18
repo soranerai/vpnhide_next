@@ -198,17 +198,13 @@
     <string name="check_proc_route_java" translatable="false">/proc/net/route (Java)</string>
 
     <!-- Java/LSPosed check names (technical, not translatable) -->
-    <string name="check_has_transport_vpn" translatable="false">hasTransport(VPN)</string>
-    <string name="check_has_capability_not_vpn" translatable="false">hasCapability(NOT_VPN)</string>
-    <string name="check_transport_info" translatable="false">getTransportInfo()</string>
+    <string name="check_active_capabilities" translatable="false">Active Network Capabilities</string>
+    <string name="check_active_properties" translatable="false">Active Network LinkProperties</string>
     <string name="check_all_networks_vpn" translatable="false">getAllNetworks() VPN scan</string>
-    <string name="check_active_network_vpn" translatable="false">ActiveNetwork transports</string>
-    <string name="check_link_properties" translatable="false">LinkProperties ifname</string>
-    <string name="check_link_properties_routes" translatable="false">LinkProperties routes</string>
     <string name="check_link_properties_dns" translatable="false">LinkProperties dns</string>
     <string name="check_proxy_host" translatable="false">System proxy properties</string>
     <string name="check_network_callback" translatable="false">NetworkCallback push model</string>
-    <string name="check_empty_transports" translatable="false">Empty transports fallback</string>
     <string name="check_underlying_networks" translatable="false">Underlying networks check</string>
-    <string name="check_lp_completeness" translatable="false">LinkProperties completeness</string>
+    <string name="check_getsockopt_bind" translatable="false">getsockopt SO_BINDTODEVICE</string>
+    <string name="check_inet_diag" translatable="false">inet_diag netlink scan</string>
 </resources>

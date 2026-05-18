@@ -172,6 +172,19 @@ class HookEntry : IXposedHookLoadPackage {
         return modified
     }
 
+    private fun getNetworkCapabilitiesSafe(cs: Any, net: android.net.Network): NetworkCapabilities? {
+        val token = android.os.Binder.clearCallingIdentity()
+        try {
+            return try {
+                XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
+            } catch (_: Throwable) {
+                XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
+            }
+        } finally {
+            android.os.Binder.restoreCallingIdentity(token)
+        }
+    }
+
     private fun getPhysicalLinkProperties(cs: Any): LinkProperties? {
         val token = android.os.Binder.clearCallingIdentity()
         try {
@@ -180,11 +193,7 @@ class HookEntry : IXposedHookLoadPackage {
             // Pass 1: Try to find a WiFi network first (highest priority)
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
-                val nc = try {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
-                } catch (_: Throwable) {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
-                } ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
                 
                 val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
@@ -198,11 +207,7 @@ class HookEntry : IXposedHookLoadPackage {
             // Pass 2: Fall back to Cellular if no WiFi is available
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
-                val nc = try {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
-                } catch (_: Throwable) {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
-                } ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
                 
                 val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
@@ -228,11 +233,7 @@ class HookEntry : IXposedHookLoadPackage {
             // Pass 1: Wi-Fi (highest priority)
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
-                val nc = try {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
-                } catch (_: Throwable) {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
-                } ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
                 
                 val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
@@ -243,11 +244,7 @@ class HookEntry : IXposedHookLoadPackage {
             // Pass 2: Cellular
             for (netObj in networks) {
                 val net = netObj as? android.net.Network ?: continue
-                val nc = try {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
-                } catch (_: Throwable) {
-                    XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
-                } ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
                 
                 val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
                 val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
@@ -461,6 +458,7 @@ class HookEntry : IXposedHookLoadPackage {
         if (!anyBroken(LP_CRITICAL_KEYS)) tryHook("LP.writeToParcel") { hookLPWriteToParcel() }
         if (!anyBroken(NC_CRITICAL_KEYS)) tryHook("NC.writeToParcel") { hookNCWriteToParcel() }
         if (!anyBroken(NI_CRITICAL_KEYS)) tryHook("NI.writeToParcel") { hookNIWriteToParcel() }
+        tryHook("Network.writeToParcel") { hookNetworkWriteToParcel() }
 
         tryHook("APEX_Services") { hookApexServices() }
         tryHook("FileObserver") { watchDatabaseFile() }
@@ -625,6 +623,42 @@ class HookEntry : IXposedHookLoadPackage {
         )
     }
 
+    private fun hookNetworkWriteToParcel() {
+        val writingNetCopy = ThreadLocal<Boolean>()
+        XposedHelpers.findAndHookMethod(
+            android.net.Network::class.java,
+            "writeToParcel",
+            android.os.Parcel::class.java,
+            Integer.TYPE,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (writingNetCopy.get() == true) return
+                    val target = isTargetCaller()
+                    if (!target) return
+                    
+                    val net = param.thisObject as android.net.Network
+                    writingNetCopy.set(true)
+                    try {
+                        val cs = getConnectivityService() ?: return
+                        val nc = getNetworkCapabilitiesSafe(cs, net) ?: return
+                        
+                        if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                            val physicalNet = getPhysicalNetwork(cs)
+                            if (physicalNet != null) {
+                                val parcel = param.args[0] as android.os.Parcel
+                                val flags = param.args[1] as Int
+                                physicalNet.writeToParcel(parcel, flags)
+                                param.result = null
+                            }
+                        }
+                    } finally {
+                        writingNetCopy.set(false)
+                    }
+                }
+            }
+        )
+    }
+
     private fun hookLPWriteToParcel() {
         val writingCopy = ThreadLocal<Boolean>()
         XposedHelpers.findAndHookMethod(
@@ -702,8 +736,60 @@ class HookEntry : IXposedHookLoadPackage {
         val ethBit = 1L shl 3
         val btBit = 1L shl 2
         val hasPhysical = (newTransports and (wifiBit or cellBit or ethBit or btBit)) != 0L
+
+        val cs = getConnectivityService()
+        val physicalNet = if (cs != null) getPhysicalNetwork(cs) else null
+        val physicalNc = if (cs != null && physicalNet != null) getNetworkCapabilitiesSafe(cs, physicalNet) else null
+
         if (!hasPhysical) {
-            XposedHelpers.setLongField(copy, "mTransportTypes", newTransports or wifiBit)
+            if (physicalNc != null) {
+                val realTransports = XposedHelpers.getLongField(physicalNc, "mTransportTypes")
+                XposedHelpers.setLongField(copy, "mTransportTypes", newTransports or (realTransports and vpnBit.inv()))
+            } else {
+                XposedHelpers.setLongField(copy, "mTransportTypes", newTransports or wifiBit)
+            }
+        }
+
+        try {
+            if (physicalNc != null) {
+                val realTi = XposedHelpers.getObjectField(physicalNc, "mTransportInfo")
+                XposedHelpers.setObjectField(copy, "mTransportInfo", realTi)
+            } else {
+                XposedHelpers.setObjectField(copy, "mTransportInfo", null)
+            }
+        } catch (_: Throwable) {
+        }
+
+        try {
+            if (physicalNc != null) {
+                val realSs = XposedHelpers.getIntField(physicalNc, "mSignalStrength")
+                XposedHelpers.setIntField(copy, "mSignalStrength", realSs)
+            } else {
+                val ss = XposedHelpers.getIntField(copy, "mSignalStrength")
+                if (ss == Integer.MIN_VALUE) { // SIGNAL_STRENGTH_UNSPECIFIED
+                    XposedHelpers.setIntField(copy, "mSignalStrength", -50)
+                }
+            }
+        } catch (_: Throwable) {
+        }
+
+        try {
+            if (physicalNc != null) {
+                val realDown = XposedHelpers.getIntField(physicalNc, "mLinkDownBandwidthKbps")
+                val realUp = XposedHelpers.getIntField(physicalNc, "mLinkUpBandwidthKbps")
+                XposedHelpers.setIntField(copy, "mLinkDownBandwidthKbps", realDown)
+                XposedHelpers.setIntField(copy, "mLinkUpBandwidthKbps", realUp)
+            } else {
+                val down = XposedHelpers.getIntField(copy, "mLinkDownBandwidthKbps")
+                val up = XposedHelpers.getIntField(copy, "mLinkUpBandwidthKbps")
+                if (down == 0 || down > 10_000_000) {
+                    XposedHelpers.setIntField(copy, "mLinkDownBandwidthKbps", 150_000) // 150 Mbps
+                }
+                if (up == 0 || up > 10_000_000) {
+                    XposedHelpers.setIntField(copy, "mLinkUpBandwidthKbps", 75_000) // 75 Mbps
+                }
+            }
+        } catch (_: Throwable) {
         }
 
         return true
@@ -909,11 +995,7 @@ class HookEntry : IXposedHookLoadPackage {
                         if (loadTargetUids().contains(callingUid)) {
                             val activeNet = param.result as? android.net.Network ?: return
                             val cs = param.thisObject
-                            val nc = try {
-                                XposedHelpers.callMethod(cs, "getNetworkCapabilities", activeNet, "android", null) as? NetworkCapabilities
-                            } catch (_: Throwable) {
-                                XposedHelpers.callMethod(cs, "getNetworkCapabilities", activeNet) as? NetworkCapabilities
-                            } ?: return
+                            val nc = getNetworkCapabilitiesSafe(cs, activeNet) ?: return
                             
                             if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                                 val physicalNet = getPhysicalNetwork(cs)
@@ -945,11 +1027,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 val cs = param.thisObject
                                 for (netObj in networks) {
                                     val net = netObj as? android.net.Network ?: continue
-                                    val nc = try {
-                                        XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
-                                    } catch (_: Throwable) {
-                                        XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
-                                    } ?: continue
+                                    val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
                                     
                                     if (!nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                                         filteredList.add(net)
