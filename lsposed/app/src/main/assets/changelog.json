@@ -1,6 +1,47 @@
 {
   "history": [
     {
+      "version": "1.4.1",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "rainbow hehe detection fix",
+              "ru": "исправлен детект VPN приложением \"Улыбка Радуги\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.4.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Added NetworkCallback check to Diagnostics",
+              "ru": "Добавлена проверка NetworkCallback в экран диагностики"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix DNS leak of target/VPN interfaces in LinkProperties hooks",
+              "ru": "Исправлена утечка DNS целевых/VPN интерфейсов в хуках LinkProperties"
+            },
+            {
+              "en": "Fixed NetworkCallback push-model and VpnService.prepare VPN detection leaks",
+              "ru": "Реализован перехват APEX лоадеров. Найдены и закрыты два новых критических вектора обнаружения VPN через NetworkCallback"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.3.0",
       "sections": [
         {

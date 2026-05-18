@@ -55,8 +55,8 @@ internal object HookLog {
         if (enabled) XposedBridge.log(msg)
     }
 
-    /** Always prints — used for install failures and other diagnostics we can't afford to lose. */
+    /** Always prints if debug logging is enabled — used for install failures and other diagnostics. */
     fun e(msg: String) {
-        XposedBridge.log(msg)
+        if (enabled) XposedBridge.log(msg)
     }
 }
