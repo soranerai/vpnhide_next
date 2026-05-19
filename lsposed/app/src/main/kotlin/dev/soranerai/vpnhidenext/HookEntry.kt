@@ -799,25 +799,6 @@ class HookEntry : IXposedHookLoadPackage {
         return true
     }
 
-    private fun poisonRequestCapabilities(copy: NetworkCapabilities): Boolean {
-        var modified = false
-        val transportTypes = XposedHelpers.getLongField(copy, "mTransportTypes")
-        val vpnBit = 1L shl TRANSPORT_VPN
-        // Remove VPN transport from request
-        if ((transportTypes and vpnBit) != 0L) {
-            XposedHelpers.setLongField(copy, "mTransportTypes", transportTypes and vpnBit.inv())
-            modified = true
-        }
-        val caps = XposedHelpers.getLongField(copy, "mNetworkCapabilities")
-        val notVpnBit = 1L shl NET_CAPABILITY_NOT_VPN
-        // Remove NOT_VPN capability requirement from request so it successfully matches VPN network
-        if ((caps and notVpnBit) != 0L) {
-            XposedHelpers.setLongField(copy, "mNetworkCapabilities", caps and notVpnBit.inv())
-            modified = true
-        }
-        return modified
-    }
-
     // ------------------------------------------------------------------
     //  APEX / Asynchronous Hooks (Nekohasekai / Sing-box Architecture)
     // ------------------------------------------------------------------
@@ -898,14 +879,6 @@ class HookEntry : IXposedHookLoadPackage {
             HookLog.e("VpnHide: failed to hook ConnectivityService constructor: ${t.message}")
         }
 
-        val requestMethods =
-            setOf(
-                "requestNetwork",
-                "listenForNetwork",
-                "pendingRequestForNetwork",
-                "pendingListenForNetwork",
-            )
-
         for (method in csClass.declaredMethods) {
             // 1. ThreadLocal Context Injection (Fixed UID fields for modern Android)
             if (method.name == "callCallbackForRequest" || method.name == "sendPendingIntentForRequest") {
@@ -943,52 +916,31 @@ class HookEntry : IXposedHookLoadPackage {
                 } catch (t: Throwable) {
                     HookLog.e("VpnHide: failed to hook callback injector: ${t.message}")
                 }
-            } else if (method.name in requestMethods || method.name.contains("DefaultNetworkCapabilities")) {
-                // 2. Request Poisoning (removes NOT_VPN so it matches VPN network)
+            } else if (method.name.contains("DefaultNetworkCapabilities")) {
                 try {
-                    if (method.name.contains("DefaultNetworkCapabilities")) {
-                        XposedBridge.hookMethod(
-                            method,
-                            object : XC_MethodHook() {
-                                override fun afterHookedMethod(param: MethodHookParam) {
-                                    val uid =
-                                        if (method.name.startsWith("copy")) {
-                                            param.args.getOrNull(2) as? Int
-                                        } else {
-                                            param.args.getOrNull(0) as? Int
-                                        }
-                                    if (uid != null && loadTargetUids().contains(uid)) {
-                                        val nc = param.result as? NetworkCapabilities ?: return
-                                        val copy = NetworkCapabilities(nc)
-                                        if (poisonRequestCapabilities(copy)) param.result = copy
+                    XposedBridge.hookMethod(
+                        method,
+                        object : XC_MethodHook() {
+                            override fun afterHookedMethod(param: MethodHookParam) {
+                                val uid =
+                                    if (method.name.startsWith("copy")) {
+                                        param.args.getOrNull(2) as? Int
+                                    } else {
+                                        param.args.getOrNull(0) as? Int
                                     }
+                                if (uid != null && loadTargetUids().contains(uid)) {
+                                    val nc = param.result as? NetworkCapabilities ?: return
+                                    val copy = NetworkCapabilities(nc)
+                                    if (sanitizeNetworkCapabilities(copy)) param.result = copy
                                 }
-                            },
-                        )
-                    } else {
-                        val ncIndex = method.parameterTypes.indexOfFirst { it == NetworkCapabilities::class.java }
-                        if (ncIndex != -1) {
-                            XposedBridge.hookMethod(
-                                method,
-                                object : XC_MethodHook() {
-                                    override fun beforeHookedMethod(param: MethodHookParam) {
-                                        val callingUid = Binder.getCallingUid()
-                                        if (loadTargetUids().contains(callingUid)) {
-                                            val nc = param.args[ncIndex] as? NetworkCapabilities ?: return
-                                            val copy = NetworkCapabilities(nc)
-                                            if (poisonRequestCapabilities(copy)) param.args[ncIndex] = copy
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
+                            }
+                        },
+                    )
                 } catch (t: Throwable) {
                 }
             }
         }
 
-        // Hide VPN from getActiveNetwork
         try {
             val getActiveNetworkMethod = XposedHelpers.findMethodExact(csClass, "getActiveNetwork", *emptyArray<Class<*>>())
             XposedBridge.hookMethod(
@@ -1015,7 +967,6 @@ class HookEntry : IXposedHookLoadPackage {
             HookLog.e("VpnHide: failed to hook getActiveNetwork: ${t.message}")
         }
 
-        // Hide VPN from getAllNetworks
         try {
             val getAllNetworksMethod = XposedHelpers.findMethodExact(csClass, "getAllNetworks", *emptyArray<Class<*>>())
             XposedBridge.hookMethod(

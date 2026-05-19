@@ -51,7 +51,8 @@ fi
 
 # Detect SQLite database
 DB="/data/system/vpnhide/vpnhide_config.db"
-SQLITE="/system/bin/sqlite3"
+SQLITE="$MODDIR/sqlite3"
+[ -f "$SQLITE" ] || SQLITE="/system/bin/sqlite3"
 [ -f "$SQLITE" ] || SQLITE="/data/adb/magisk/sqlite3"
 [ -f "$SQLITE" ] || SQLITE="$(which sqlite3 2>/dev/null)"
 
@@ -60,7 +61,15 @@ if [ -f "$DB" ] && [ -x "$SQLITE" ]; then
     
     # 1. VPN targets
     KMOD_UIDS="$($SQLITE "$DB" "SELECT uid FROM app_protection WHERE kmod = 1 AND uid != 0" | xargs)"
+    
+    # Resolve the app itself (dev.soranerai.vpnhidenext) UID and add it to targets (VPN hiding only)
+    SELF_UID="$(pm list packages -U --user all 2>/dev/null | grep "^package:dev.soranerai.vpnhidenext " | awk '{print $2}' | sed 's/uid://' | tr ',' '\n' | head -n 1)"
+    if [ -n "$SELF_UID" ]; then
+        KMOD_UIDS="$KMOD_UIDS $SELF_UID"
+    fi
+
     if [ -n "$KMOD_UIDS" ]; then
+        KMOD_UIDS="$(echo "$KMOD_UIDS" | tr ' ' '\n' | grep -v '^$' | sort -u | xargs)"
         log -t vpnhide "boot: applying VPN targets: $KMOD_UIDS"
         # shellcheck disable=SC2086
         "$CTL" targets $KMOD_UIDS
