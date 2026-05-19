@@ -69,53 +69,69 @@ class HookEntry : IXposedHookLoadPackage {
 
     private fun sanitizeLinkProperties(copy: LinkProperties): Boolean {
         var modified = false
+        val targetIface = getActivePhysicalInterfaceName()
 
         val ifaceName = XposedHelpers.getObjectField(copy, "mIfaceName") as? String
         if (ifaceName != null && isVpnInterfaceName(ifaceName)) {
-            XposedHelpers.setObjectField(copy, "mIfaceName", null)
+            XposedHelpers.setObjectField(copy, "mIfaceName", targetIface)
             modified = true
-        }
-
-        val currentIfaceName = XposedHelpers.getObjectField(copy, "mIfaceName") as? String
-        if (currentIfaceName == null) {
-            try {
-                @Suppress("UNCHECKED_CAST")
-                val dnsesField = XposedHelpers.getObjectField(copy, "mDnses") as? MutableCollection<java.net.InetAddress>
-                if (dnsesField != null && dnsesField.isNotEmpty()) {
-                    dnsesField.clear()
-                    modified = true
-                }
-            } catch (t: Throwable) {
-                HookLog.e("VpnHide: failed to sanitize mDnses: ${t.message}")
-            }
-
-            try {
-                if (XposedHelpers.getObjectField(copy, "mDomains") != null) {
-                    XposedHelpers.setObjectField(copy, "mDomains", null)
-                    modified = true
-                }
-            } catch (t: Throwable) {
-                HookLog.e("VpnHide: failed to sanitize mDomains: ${t.message}")
-            }
         }
 
         try {
             @Suppress("UNCHECKED_CAST")
             val routesField = XposedHelpers.getObjectField(copy, "mRoutes") as? MutableList<RouteInfo>
             if (routesField != null) {
-                val filtered =
-                    routesField.filterNot { route ->
-                        val routeIface = route.`interface`
-                        routeIface != null && isVpnInterfaceName(routeIface)
+                val newRoutes = ArrayList<RouteInfo>()
+                for (route in routesField) {
+                    val routeIface = route.`interface`
+                    if (routeIface != null && isVpnInterfaceName(routeIface)) {
+                        // Clone the route via parcel to avoid mutating the shared original!
+                        val parcel = android.os.Parcel.obtain()
+                        val clonedRoute =
+                            try {
+                                route.writeToParcel(parcel, 0)
+                                parcel.setDataPosition(0)
+                                RouteInfo.CREATOR.createFromParcel(parcel)
+                            } finally {
+                                parcel.recycle()
+                            }
+                        XposedHelpers.setObjectField(clonedRoute, "mInterface", targetIface)
+                        newRoutes.add(clonedRoute)
+                        modified = true
+                    } else {
+                        newRoutes.add(route)
                     }
-                if (filtered.size != routesField.size) {
+                }
+                if (modified) {
                     routesField.clear()
-                    routesField.addAll(filtered)
-                    modified = true
+                    routesField.addAll(newRoutes)
                 }
             }
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to sanitize mRoutes: ${t.message}")
+        }
+
+        try {
+            @Suppress("UNCHECKED_CAST")
+            val linkAddresses = XposedHelpers.getObjectField(copy, "mLinkAddresses") as? MutableList<Any>
+            if (linkAddresses != null) {
+                val cs = getConnectivityService()
+                val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
+                if (physicalLp != null) {
+                    @Suppress("UNCHECKED_CAST")
+                    val physicalAddresses = XposedHelpers.getObjectField(physicalLp, "mLinkAddresses") as? List<Any>
+                    if (physicalAddresses != null) {
+                        linkAddresses.clear()
+                        linkAddresses.addAll(physicalAddresses)
+                        modified = true
+                    }
+                } else {
+                    linkAddresses.clear()
+                    modified = true
+                }
+            }
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to sanitize mLinkAddresses: ${t.message}")
         }
 
         try {
@@ -155,6 +171,139 @@ class HookEntry : IXposedHookLoadPackage {
         }
 
         return modified
+    }
+
+    private fun getNetworkCapabilitiesSafe(
+        cs: Any,
+        net: android.net.Network,
+    ): NetworkCapabilities? {
+        val token = android.os.Binder.clearCallingIdentity()
+        try {
+            return try {
+                XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
+            } catch (_: Throwable) {
+                XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
+            }
+        } finally {
+            android.os.Binder.restoreCallingIdentity(token)
+        }
+    }
+
+    private fun getPhysicalLinkProperties(cs: Any): LinkProperties? {
+        val token = android.os.Binder.clearCallingIdentity()
+        try {
+            val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
+
+            // Pass 1: Try to find a WiFi network first (highest priority)
+            for (netObj in networks) {
+                val net = netObj as? android.net.Network ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
+
+                val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+
+                if (hasWifi && !hasVpn) {
+                    val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
+                    if (lp != null) return lp
+                }
+            }
+
+            // Pass 2: Fall back to Cellular if no WiFi is available
+            for (netObj in networks) {
+                val net = netObj as? android.net.Network ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
+
+                val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+
+                if (hasCell && !hasVpn) {
+                    val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
+                    if (lp != null) return lp
+                }
+            }
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to get physical link properties: ${t.message}")
+        } finally {
+            android.os.Binder.restoreCallingIdentity(token)
+        }
+        return null
+    }
+
+    private fun getPhysicalNetwork(cs: Any): android.net.Network? {
+        val token = android.os.Binder.clearCallingIdentity()
+        try {
+            val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
+
+            // Pass 1: Wi-Fi (highest priority)
+            for (netObj in networks) {
+                val net = netObj as? android.net.Network ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
+
+                val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
+                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+
+                if (hasWifi && !hasVpn) return net
+            }
+
+            // Pass 2: Cellular
+            for (netObj in networks) {
+                val net = netObj as? android.net.Network ?: continue
+                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
+
+                val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
+                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
+
+                if (hasCell && !hasVpn) return net
+            }
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to get physical network: ${t.message}")
+        } finally {
+            android.os.Binder.restoreCallingIdentity(token)
+        }
+        return null
+    }
+
+    private fun getConnectivityService(): Any? {
+        val cached = csInstance
+        if (cached != null) return cached
+        try {
+            val smClass = XposedHelpers.findClass("android.os.ServiceManager", null)
+            val binder = XposedHelpers.callStaticMethod(smClass, "getService", "connectivity") ?: return null
+            val className = binder.javaClass.name
+            if (className.contains("ConnectivityService")) {
+                if (className.endsWith("ConnectivityService")) {
+                    csInstance = binder
+                    return binder
+                }
+                try {
+                    val this0Field = XposedHelpers.findField(binder.javaClass, "this$0")
+                    this0Field.isAccessible = true
+                    val outer = this0Field.get(binder)
+                    if (outer != null && outer.javaClass.name.contains("ConnectivityService")) {
+                        csInstance = outer
+                        return outer
+                    }
+                } catch (_: Throwable) {
+                }
+                csInstance = binder
+                return binder
+            }
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to get ConnectivityService: ${t.message}")
+        }
+        return null
+    }
+
+    private fun getActivePhysicalInterfaceName(): String {
+        val cs = getConnectivityService()
+        if (cs != null) {
+            val lp = getPhysicalLinkProperties(cs)
+            val iface = lp?.interfaceName
+            if (iface != null) {
+                return iface
+            }
+        }
+        return "wlan0" // final fallback
     }
 
     // ==================================================================
@@ -313,6 +462,7 @@ class HookEntry : IXposedHookLoadPackage {
         if (!anyBroken(LP_CRITICAL_KEYS)) tryHook("LP.writeToParcel") { hookLPWriteToParcel() }
         if (!anyBroken(NC_CRITICAL_KEYS)) tryHook("NC.writeToParcel") { hookNCWriteToParcel() }
         if (!anyBroken(NI_CRITICAL_KEYS)) tryHook("NI.writeToParcel") { hookNIWriteToParcel() }
+        tryHook("Network.writeToParcel") { hookNetworkWriteToParcel() }
 
         tryHook("APEX_Services") { hookApexServices() }
         tryHook("FileObserver") { watchDatabaseFile() }
@@ -477,6 +627,42 @@ class HookEntry : IXposedHookLoadPackage {
         )
     }
 
+    private fun hookNetworkWriteToParcel() {
+        val writingNetCopy = ThreadLocal<Boolean>()
+        XposedHelpers.findAndHookMethod(
+            android.net.Network::class.java,
+            "writeToParcel",
+            android.os.Parcel::class.java,
+            Integer.TYPE,
+            object : XC_MethodHook() {
+                override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (writingNetCopy.get() == true) return
+                    val target = isTargetCaller()
+                    if (!target) return
+
+                    val net = param.thisObject as android.net.Network
+                    writingNetCopy.set(true)
+                    try {
+                        val cs = getConnectivityService() ?: return
+                        val nc = getNetworkCapabilitiesSafe(cs, net) ?: return
+
+                        if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                            val physicalNet = getPhysicalNetwork(cs)
+                            if (physicalNet != null) {
+                                val parcel = param.args[0] as android.os.Parcel
+                                val flags = param.args[1] as Int
+                                physicalNet.writeToParcel(parcel, flags)
+                                param.result = null
+                            }
+                        }
+                    } finally {
+                        writingNetCopy.set(false)
+                    }
+                }
+            },
+        )
+    }
+
     private fun hookLPWriteToParcel() {
         val writingCopy = ThreadLocal<Boolean>()
         XposedHelpers.findAndHookMethod(
@@ -488,20 +674,38 @@ class HookEntry : IXposedHookLoadPackage {
                 override fun beforeHookedMethod(param: MethodHookParam) {
                     if (writingCopy.get() == true || !isTargetCaller()) return
                     val lp = param.thisObject as LinkProperties
-                    val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
-                    ctor.isAccessible = true
-                    val copy = ctor.newInstance(lp) as LinkProperties
-                    if (!sanitizeLinkProperties(copy)) return
-
-                    val parcel = param.args[0] as android.os.Parcel
-                    val flags = param.args[1] as Int
-                    writingCopy.set(true)
-                    try {
-                        copy.writeToParcel(parcel, flags)
-                    } finally {
-                        writingCopy.set(false)
+                    val isVpn = lp.interfaceName?.let { isVpnInterfaceName(it) } ?: false
+                    if (isVpn) {
+                        val cs = getConnectivityService()
+                        val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
+                        if (physicalLp != null) {
+                            val parcel = param.args[0] as android.os.Parcel
+                            val flags = param.args[1] as Int
+                            writingCopy.set(true)
+                            try {
+                                physicalLp.writeToParcel(parcel, flags)
+                            } finally {
+                                writingCopy.set(false)
+                            }
+                            param.result = null
+                            return
+                        } else {
+                            val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
+                            ctor.isAccessible = true
+                            val copy = ctor.newInstance(lp) as LinkProperties
+                            if (sanitizeLinkProperties(copy)) {
+                                val parcel = param.args[0] as android.os.Parcel
+                                val flags = param.args[1] as Int
+                                writingCopy.set(true)
+                                try {
+                                    copy.writeToParcel(parcel, flags)
+                                } finally {
+                                    writingCopy.set(false)
+                                }
+                                param.result = null
+                            }
+                        }
                     }
-                    param.result = null
                 }
             },
         )
@@ -522,26 +726,77 @@ class HookEntry : IXposedHookLoadPackage {
             }
         } catch (_: Throwable) {
         }
-        return true
-    }
 
-    private fun poisonRequestCapabilities(copy: NetworkCapabilities): Boolean {
-        var modified = false
-        val transportTypes = XposedHelpers.getLongField(copy, "mTransportTypes")
-        val vpnBit = 1L shl TRANSPORT_VPN
-        // Remove VPN transport from request
-        if ((transportTypes and vpnBit) != 0L) {
-            XposedHelpers.setLongField(copy, "mTransportTypes", transportTypes and vpnBit.inv())
-            modified = true
+        try {
+            if (XposedHelpers.getObjectField(copy, "mUnderlyingNetworks") != null) {
+                XposedHelpers.setObjectField(copy, "mUnderlyingNetworks", null)
+            }
+        } catch (_: Throwable) {
         }
-        val caps = XposedHelpers.getLongField(copy, "mNetworkCapabilities")
-        val notVpnBit = 1L shl NET_CAPABILITY_NOT_VPN
-        // Remove NOT_VPN capability requirement from request so it successfully matches VPN network
-        if ((caps and notVpnBit) != 0L) {
-            XposedHelpers.setLongField(copy, "mNetworkCapabilities", caps and notVpnBit.inv())
-            modified = true
+
+        val newTransports = XposedHelpers.getLongField(copy, "mTransportTypes")
+        val wifiBit = 1L shl TYPE_WIFI
+        val cellBit = 1L shl 0
+        val ethBit = 1L shl 3
+        val btBit = 1L shl 2
+        val hasPhysical = (newTransports and (wifiBit or cellBit or ethBit or btBit)) != 0L
+
+        val cs = getConnectivityService()
+        val physicalNet = if (cs != null) getPhysicalNetwork(cs) else null
+        val physicalNc = if (cs != null && physicalNet != null) getNetworkCapabilitiesSafe(cs, physicalNet) else null
+
+        if (!hasPhysical) {
+            if (physicalNc != null) {
+                val realTransports = XposedHelpers.getLongField(physicalNc, "mTransportTypes")
+                XposedHelpers.setLongField(copy, "mTransportTypes", newTransports or (realTransports and vpnBit.inv()))
+            } else {
+                XposedHelpers.setLongField(copy, "mTransportTypes", newTransports or wifiBit)
+            }
         }
-        return modified
+
+        try {
+            if (physicalNc != null) {
+                val realTi = XposedHelpers.getObjectField(physicalNc, "mTransportInfo")
+                XposedHelpers.setObjectField(copy, "mTransportInfo", realTi)
+            } else {
+                XposedHelpers.setObjectField(copy, "mTransportInfo", null)
+            }
+        } catch (_: Throwable) {
+        }
+
+        try {
+            if (physicalNc != null) {
+                val realSs = XposedHelpers.getIntField(physicalNc, "mSignalStrength")
+                XposedHelpers.setIntField(copy, "mSignalStrength", realSs)
+            } else {
+                val ss = XposedHelpers.getIntField(copy, "mSignalStrength")
+                if (ss == Integer.MIN_VALUE) { // SIGNAL_STRENGTH_UNSPECIFIED
+                    XposedHelpers.setIntField(copy, "mSignalStrength", -50)
+                }
+            }
+        } catch (_: Throwable) {
+        }
+
+        try {
+            if (physicalNc != null) {
+                val realDown = XposedHelpers.getIntField(physicalNc, "mLinkDownBandwidthKbps")
+                val realUp = XposedHelpers.getIntField(physicalNc, "mLinkUpBandwidthKbps")
+                XposedHelpers.setIntField(copy, "mLinkDownBandwidthKbps", realDown)
+                XposedHelpers.setIntField(copy, "mLinkUpBandwidthKbps", realUp)
+            } else {
+                val down = XposedHelpers.getIntField(copy, "mLinkDownBandwidthKbps")
+                val up = XposedHelpers.getIntField(copy, "mLinkUpBandwidthKbps")
+                if (down == 0 || down > 10_000_000) {
+                    XposedHelpers.setIntField(copy, "mLinkDownBandwidthKbps", 150_000) // 150 Mbps
+                }
+                if (up == 0 || up > 10_000_000) {
+                    XposedHelpers.setIntField(copy, "mLinkUpBandwidthKbps", 75_000) // 75 Mbps
+                }
+            }
+        } catch (_: Throwable) {
+        }
+
+        return true
     }
 
     // ------------------------------------------------------------------
@@ -610,13 +865,19 @@ class HookEntry : IXposedHookLoadPackage {
                 }
             }
 
-        val requestMethods =
-            setOf(
-                "requestNetwork",
-                "listenForNetwork",
-                "pendingRequestForNetwork",
-                "pendingListenForNetwork",
+        try {
+            XposedBridge.hookAllConstructors(
+                csClass,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        csInstance = param.thisObject
+                        HookLog.i("VpnHide: Captured ConnectivityService instance successfully")
+                    }
+                },
             )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook ConnectivityService constructor: ${t.message}")
+        }
 
         for (method in csClass.declaredMethods) {
             // 1. ThreadLocal Context Injection (Fixed UID fields for modern Android)
@@ -655,54 +916,106 @@ class HookEntry : IXposedHookLoadPackage {
                 } catch (t: Throwable) {
                     HookLog.e("VpnHide: failed to hook callback injector: ${t.message}")
                 }
-            } else if (method.name in requestMethods || method.name.contains("DefaultNetworkCapabilities")) {
-                // 2. Request Poisoning (removes NOT_VPN so it matches VPN network)
+            } else if (method.name.contains("DefaultNetworkCapabilities")) {
                 try {
-                    if (method.name.contains("DefaultNetworkCapabilities")) {
-                        XposedBridge.hookMethod(
-                            method,
-                            object : XC_MethodHook() {
-                                override fun afterHookedMethod(param: MethodHookParam) {
-                                    val uid =
-                                        if (method.name.startsWith("copy")) {
-                                            param.args.getOrNull(2) as? Int
-                                        } else {
-                                            param.args.getOrNull(0) as? Int
-                                        }
-                                    if (uid != null && loadTargetUids().contains(uid)) {
-                                        val nc = param.result as? NetworkCapabilities ?: return
-                                        val copy = NetworkCapabilities(nc)
-                                        if (poisonRequestCapabilities(copy)) param.result = copy
+                    XposedBridge.hookMethod(
+                        method,
+                        object : XC_MethodHook() {
+                            override fun afterHookedMethod(param: MethodHookParam) {
+                                val uid =
+                                    if (method.name.startsWith("copy")) {
+                                        param.args.getOrNull(2) as? Int
+                                    } else {
+                                        param.args.getOrNull(0) as? Int
                                     }
+                                if (uid != null && loadTargetUids().contains(uid)) {
+                                    val nc = param.result as? NetworkCapabilities ?: return
+                                    val copy = NetworkCapabilities(nc)
+                                    if (sanitizeNetworkCapabilities(copy)) param.result = copy
                                 }
-                            },
-                        )
-                    } else {
-                        val ncIndex = method.parameterTypes.indexOfFirst { it == NetworkCapabilities::class.java }
-                        if (ncIndex != -1) {
-                            XposedBridge.hookMethod(
-                                method,
-                                object : XC_MethodHook() {
-                                    override fun beforeHookedMethod(param: MethodHookParam) {
-                                        val callingUid = Binder.getCallingUid()
-                                        if (loadTargetUids().contains(callingUid)) {
-                                            val nc = param.args[ncIndex] as? NetworkCapabilities ?: return
-                                            val copy = NetworkCapabilities(nc)
-                                            if (poisonRequestCapabilities(copy)) param.args[ncIndex] = copy
-                                        }
-                                    }
-                                },
-                            )
-                        }
-                    }
+                            }
+                        },
+                    )
                 } catch (t: Throwable) {
                 }
             }
         }
+
+        try {
+            val getActiveNetworkMethod = XposedHelpers.findMethodExact(csClass, "getActiveNetwork", *emptyArray<Class<*>>())
+            XposedBridge.hookMethod(
+                getActiveNetworkMethod,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val callingUid = Binder.getCallingUid()
+                        if (loadTargetUids().contains(callingUid)) {
+                            val activeNet = param.result as? android.net.Network ?: return
+                            val cs = param.thisObject
+                            val nc = getNetworkCapabilitiesSafe(cs, activeNet) ?: return
+
+                            if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                                val physicalNet = getPhysicalNetwork(cs)
+                                if (physicalNet != null) {
+                                    param.result = physicalNet
+                                }
+                            }
+                        }
+                    }
+                },
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getActiveNetwork: ${t.message}")
+        }
+
+        try {
+            val getAllNetworksMethod = XposedHelpers.findMethodExact(csClass, "getAllNetworks", *emptyArray<Class<*>>())
+            XposedBridge.hookMethod(
+                getAllNetworksMethod,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val callingUid = Binder.getCallingUid()
+                        if (loadTargetUids().contains(callingUid)) {
+                            val networks = param.result as? Array<*> ?: return
+                            val filteredList = ArrayList<android.net.Network>()
+                            val token = android.os.Binder.clearCallingIdentity()
+                            try {
+                                val cs = param.thisObject
+                                for (netObj in networks) {
+                                    val net = netObj as? android.net.Network ?: continue
+                                    val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
+
+                                    if (!nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                                        filteredList.add(net)
+                                    }
+                                }
+                            } finally {
+                                android.os.Binder.restoreCallingIdentity(token)
+                            }
+
+                            val newArray =
+                                java.lang.reflect.Array.newInstance(
+                                    android.net.Network::class.java,
+                                    filteredList.size,
+                                ) as Array<*>
+                            for (i in filteredList.indices) {
+                                java.lang.reflect.Array
+                                    .set(newArray, i, filteredList[i])
+                            }
+                            param.result = newArray
+                        }
+                    }
+                },
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getAllNetworks: ${t.message}")
+        }
+
         HookLog.e("VpnHide: Successfully applied Nekohasekai/VpnHide symbiosis architecture hooks.")
     }
 
     companion object {
+        @Volatile var csInstance: Any? = null
+
         private const val TRANSPORT_VPN = 4
         private const val NET_CAPABILITY_NOT_VPN = 15
         const val TYPE_VPN = 17

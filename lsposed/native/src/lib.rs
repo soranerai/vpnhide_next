@@ -749,3 +749,117 @@ fn check_proc_net_dev() -> CheckOutput {
 fn check_proc_net_fib_trie() -> CheckOutput {
     check_proc_file("/proc/net/fib_trie")
 }
+
+fn find_vpn_iface() -> String {
+    unsafe {
+        let mut addrs: *mut libc::ifaddrs = std::ptr::null_mut();
+        if libc::getifaddrs(&mut addrs) == 0 {
+            let mut ifa = addrs;
+            while !ifa.is_null() {
+                let entry = &*ifa;
+                if !entry.ifa_name.is_null() {
+                    let name = cstr_to_str(entry.ifa_name);
+                    if is_vpn_iface(&name) {
+                        libc::freeifaddrs(addrs);
+                        return name;
+                    }
+                }
+                ifa = entry.ifa_next;
+            }
+            libc::freeifaddrs(addrs);
+        }
+    }
+    "tun0".to_string()
+}
+
+#[uniffi::export]
+pub fn check_getsockopt_bind() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
+        }
+
+        let vpn_iface = find_vpn_iface();
+        let vpn_bytes = vpn_iface.as_bytes();
+
+        let mut name_buf = [0u8; libc::IFNAMSIZ];
+        let optlen = std::cmp::min(vpn_bytes.len(), name_buf.len() - 1);
+        name_buf[..optlen].copy_from_slice(&vpn_bytes[..optlen]);
+
+        let set_ret = libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_BINDTODEVICE,
+            name_buf.as_ptr().cast(),
+            (optlen + 1) as libc::socklen_t,
+        );
+
+        if set_ret < 0 {
+            let err = std::io::Error::last_os_error();
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "setsockopt SO_BINDTODEVICE for '{vpn}' failed with: {err} — secure (interface not active or blocked)",
+                vpn = vpn_iface,
+                err = err
+            ));
+        }
+
+        let mut get_buf = [0u8; libc::IFNAMSIZ];
+        let mut get_len = get_buf.len() as libc::socklen_t;
+        let get_ret = libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_BINDTODEVICE,
+            get_buf.as_mut_ptr().cast(),
+            &mut get_len,
+        );
+
+        let mut bound_device = String::new();
+        if get_ret == 0 && get_len > 0 {
+            bound_device = cstr_to_str(get_buf.as_ptr().cast());
+        }
+
+        libc::close(fd);
+
+        let detail = format!(
+            "setsockopt('{vpn}') -> getsockopt() returned: dev='{dev}'",
+            vpn = vpn_iface,
+            dev = bound_device
+        );
+
+        if !bound_device.is_empty() && is_vpn_iface(&bound_device) {
+            CheckOutput::fail(format!(
+                "{detail} — leaked VPN interface binding! Kernel setsockopt hook bypassed or inactive!",
+                detail = detail
+            ))
+        } else {
+            CheckOutput::pass(format!(
+                "{detail} — secure (setsockopt successfully spoofed/sabotaged by kernel!)",
+                detail = detail
+            ))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_inet_diag() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_NETLINK, libc::SOCK_RAW | libc::SOCK_CLOEXEC, 4); // 4 is NETLINK_INET_DIAG
+        if fd < 0 {
+            let e = std::io::Error::last_os_error();
+            if is_selinux_denial(&e) {
+                CheckOutput::pass(format!(
+                    "inet_diag netlink socket denied by SELinux ({e}) — secure"
+                ))
+            } else {
+                CheckOutput::pass(format!("inet_diag failed with error: {e} — secure"))
+            }
+        } else {
+            libc::close(fd);
+            CheckOutput::fail(
+                "socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG) succeeded — potentially leaking socket diagnostics!",
+            )
+        }
+    }
+}

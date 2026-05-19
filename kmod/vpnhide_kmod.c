@@ -475,6 +475,119 @@ static struct kretprobe sock_setsockopt_krp = {
 };
 
 /* ================================================================== */
+/*  Hook 2c: sock_getsockopt — Bind Query Sabotage                    */
+/*                                                                    */
+/*  sock_getsockopt(struct socket *sock, int level, int optname,      */
+/*                  char __user *optval, int __user *optlen)          */
+/*  arm64: x1=level, x2=optname, x3=optval, x4=optlen                 */
+/* ================================================================== */
+
+struct sock_getsockopt_data {
+	int level;
+	int optname;
+	void __user *optval;
+	int __user *optlen;
+	bool active;
+};
+
+static int sock_getsockopt_entry(struct kretprobe_instance *ri,
+				 struct pt_regs *regs)
+{
+	struct sock_getsockopt_data *data = (void *)ri->data;
+
+	data->level = (int)regs->regs[1];
+	data->optname = (int)regs->regs[2];
+	data->optval = (void __user *)regs->regs[3];
+	data->optlen = (int __user *)regs->regs[4];
+	data->active = is_target_uid();
+
+	return 0;
+}
+
+static int sock_getsockopt_ret(struct kretprobe_instance *ri,
+			       struct pt_regs *regs)
+{
+	struct sock_getsockopt_data *data = (void *)ri->data;
+	int ret = regs_return_value(regs);
+
+	if (!data->active || ret != 0)
+		return 0;
+
+	if (data->level != SOL_SOCKET)
+		return 0;
+
+	if (data->optname == SO_BINDTODEVICE) {
+		int len;
+		char name[IFNAMSIZ];
+
+		if (get_user(len, data->optlen))
+			return 0;
+
+		if (len <= 0)
+			return 0;
+
+		if (len > IFNAMSIZ)
+			len = IFNAMSIZ;
+
+		if (copy_from_user(name, data->optval, len))
+			return 0;
+		name[len - 1] = '\0';
+
+		if (is_vpn_ifname(name)) {
+			char zero = '\0';
+			int zero_len = 0;
+
+			vpnhide_dbg(
+				"sock_getsockopt_ret: spoofing empty SO_BINDTODEVICE (was %s)\n",
+				name);
+
+			if (copy_to_user(data->optval, &zero, 1) == 0 &&
+			    copy_to_user(data->optlen, &zero_len,
+					 sizeof(int)) == 0) {
+				/* Success */
+			}
+		}
+	} else if (data->optname == SO_BINDTOIFINDEX) {
+		int ifindex;
+		struct net_device *dev;
+		struct net *net;
+
+		if (copy_from_user(&ifindex, data->optval, sizeof(int)))
+			return 0;
+
+		if (ifindex <= 0)
+			return 0;
+
+		net = current->nsproxy->net_ns;
+		rcu_read_lock();
+		dev = dev_get_by_index_rcu(net, ifindex);
+		if (dev && is_vpn_ifname(dev->name)) {
+			int zero_idx = 0;
+			vpnhide_dbg(
+				"sock_getsockopt_ret: spoofing SO_BINDTOIFINDEX %d (%s) to 0\n",
+				ifindex, dev->name);
+			rcu_read_unlock();
+			if (copy_to_user(data->optval, &zero_idx,
+					 sizeof(int))) {
+				/* error */
+			}
+		} else {
+			rcu_read_unlock();
+		}
+	}
+
+	return 0;
+}
+
+static struct kretprobe sock_getsockopt_krp = {
+	.entry_handler = sock_getsockopt_entry,
+	.handler = sock_getsockopt_ret,
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.data_size = sizeof(struct sock_getsockopt_data),
+	.kp.symbol_name = "sock_getsockopt",
+};
+
+/* ================================================================== */
 /*  Hook 3: rtnl_fill_ifinfo — netlink RTM_NEWLINK (getifaddrs path)  */
 /*                                                                    */
 /*  rtnl_fill_ifinfo fills one interface's data into a netlink skb    */
@@ -1396,7 +1509,8 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 
 	if (addr->sa_family == AF_INET) {
 		struct sockaddr_in *sin = (struct sockaddr_in *)addr;
-		if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+		if (ipv4_is_loopback(sin->sin_addr.s_addr) ||
+		    sin->sin_addr.s_addr == htonl(INADDR_ANY)) {
 			unsigned short port = ntohs(sin->sin_port);
 			unsigned char proto =
 				(sock->sk->sk_type == SOCK_STREAM) ?
@@ -1425,7 +1539,20 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 		}
 	} else if (addr->sa_family == AF_INET6) {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
-		if (ipv6_addr_loopback(&sin6->sin6_addr)) {
+		bool is_loopback = false;
+
+		if (ipv6_addr_loopback(&sin6->sin6_addr) ||
+		    ipv6_addr_any(&sin6->sin6_addr)) {
+			is_loopback = true;
+		} else if (ipv6_addr_v4mapped(&sin6->sin6_addr)) {
+			__be32 v4addr = sin6->sin6_addr.s6_addr32[3];
+			if (ipv4_is_loopback(v4addr) ||
+			    v4addr == htonl(INADDR_ANY)) {
+				is_loopback = true;
+			}
+		}
+
+		if (is_loopback) {
 			unsigned short port = ntohs(sin6->sin6_port);
 			unsigned char proto =
 				(sock->sk->sk_type == SOCK_STREAM) ?
@@ -1530,6 +1657,7 @@ static struct kretprobe_reg probes[] = {
 	{ &rt6_fill_krp, "rt6_fill_node", false },
 	{ &rt_fill_krp, "rt_fill_info", false },
 	{ &sock_setsockopt_krp, "sock_setsockopt", false },
+	{ &sock_getsockopt_krp, "sock_getsockopt", false },
 	{ &socket_connect_krp, "security_socket_connect", false },
 };
 
