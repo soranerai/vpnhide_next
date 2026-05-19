@@ -39,6 +39,7 @@ set_perm "$PERSIST_OBSERVERS" 0 0 0644
 
 set_perm "$MODPATH/vpnhide_kmod.ko" 0 0 0644
 set_perm "$MODPATH/vpnhide-ctl" 0 0 0755
+set_perm "$MODPATH/sqlite3" 0 0 0755
 set_perm "$MODPATH/vpnhide_ports_apply.sh" 0 0 0755
 
 ui_print "- Targets: $PERSIST_TARGETS"

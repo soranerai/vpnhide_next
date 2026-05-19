@@ -1509,7 +1509,8 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 
 	if (addr->sa_family == AF_INET) {
 		struct sockaddr_in *sin = (struct sockaddr_in *)addr;
-		if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+		if (ipv4_is_loopback(sin->sin_addr.s_addr) ||
+		    sin->sin_addr.s_addr == htonl(INADDR_ANY)) {
 			unsigned short port = ntohs(sin->sin_port);
 			unsigned char proto =
 				(sock->sk->sk_type == SOCK_STREAM) ?
@@ -1538,7 +1539,20 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 		}
 	} else if (addr->sa_family == AF_INET6) {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
-		if (ipv6_addr_loopback(&sin6->sin6_addr)) {
+		bool is_loopback = false;
+
+		if (ipv6_addr_loopback(&sin6->sin6_addr) ||
+		    ipv6_addr_any(&sin6->sin6_addr)) {
+			is_loopback = true;
+		} else if (ipv6_addr_v4mapped(&sin6->sin6_addr)) {
+			__be32 v4addr = sin6->sin6_addr.s6_addr32[3];
+			if (ipv4_is_loopback(v4addr) ||
+			    v4addr == htonl(INADDR_ANY)) {
+				is_loopback = true;
+			}
+		}
+
+		if (is_loopback) {
 			unsigned short port = ntohs(sin6->sin6_port);
 			unsigned char proto =
 				(sock->sk->sk_type == SOCK_STREAM) ?
