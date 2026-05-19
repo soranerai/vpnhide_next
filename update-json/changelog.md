@@ -1,3 +1,20 @@
+## v1.5.0
+
+### Added
+- Add NetworkCapabilities signal strength and bandwidth checks to diagnostics with stealth masking
+- Added getsockopt SO_BINDTODEVICE and inet_diag socket diagnostics to native checks screen
+- Implement dynamic Network netId replacement with physical network to prevent cross-id leakage
+
+### Changed
+- Consolidated diagnostic checks on the screen
+- Implement dynamic physical network properties propagation and add Wi-Fi state/WifiInfo diagnostic checks
+- Moved all Xposed logs under the debug flag
+
+### Fixed
+- Fix Java-level VPN interface detection leak by dynamically redirecting to physical network properties
+- Fix false-positive VPN detection in some apps (e.g. MTS)
+- Fix loopback port bypass via 0.0.0.0, loopback subnets, IPv6 wildcard, and IPv4-mapped IPv6 loopback addresses
+
 ## v1.4.1
 
 ### Fixed
@@ -36,5 +53,3 @@
 
 ### Removed
 - Removed unstable VPN routing bypass logic
-
-## v1.2.0

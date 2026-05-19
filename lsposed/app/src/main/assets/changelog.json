@@ -1,6 +1,62 @@
 {
   "history": [
     {
+      "version": "1.5.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add NetworkCapabilities signal strength and bandwidth checks to diagnostics with stealth masking",
+              "ru": "Добавлены проверки уровня сигнала и пропускной способности NetworkCapabilities в диагностику со скрытой маскировкой"
+            },
+            {
+              "en": "Added getsockopt SO_BINDTODEVICE and inet_diag socket diagnostics to native checks screen",
+              "ru": "Добавлены проверки getsockopt SO_BINDTODEVICE и inet_diag сокет-диагностики на экран нативных проверок"
+            },
+            {
+              "en": "Implement dynamic Network netId replacement with physical network to prevent cross-id leakage",
+              "ru": "Реализована динамическая подмена Network netId физической сетью для исключения перекрестных утечек"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Consolidated diagnostic checks on the screen",
+              "ru": "Объединены диагностические проверки на экране"
+            },
+            {
+              "en": "Implement dynamic physical network properties propagation and add Wi-Fi state/WifiInfo diagnostic checks",
+              "ru": "Внедрено динамическое наследование свойств физической сети и добавлены проверки модулей Wi-Fi в диагностику"
+            },
+            {
+              "en": "Moved all Xposed logs under the debug flag",
+              "ru": "Все Xposed-логи убраны под debug-флаг"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix Java-level VPN interface detection leak by dynamically redirecting to physical network properties",
+              "ru": "Исправлена утечка детекта VPN-интерфейса в Java API через динамическую подмену на свойства физической сети"
+            },
+            {
+              "en": "Fix false-positive VPN detection in some apps (e.g. MTS)",
+              "ru": "Исправлено ложноположительное детектирование VPN в некоторых приложениях (например, МТС)"
+            },
+            {
+              "en": "Fix loopback port bypass via 0.0.0.0, loopback subnets, IPv6 wildcard, and IPv4-mapped IPv6 loopback addresses",
+              "ru": "Исправление обхода блокировки портов через 0.0.0.0, loopback-подсети, IPv6 wildcard и IPv4-mapped IPv6 loopback-адреса"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.4.1",
       "sections": [
         {
