@@ -410,15 +410,36 @@ struct sock_setsockopt_data {
 	bool override_ret;
 };
 
+/*
+ * sockptr_t ABI: on 5.10–6.3, sockptr_t is a 16-byte struct split
+ * across x3 (pointer) + x4 (is_kernel bool, low byte), pushing optlen
+ * to x5.  On 6.4+ (including android15-6.6), sockptr_t was compacted
+ * to 8 bytes — low bit of x3 encodes is_kernel, the rest is the
+ * pointer — so optlen moves back to x4.  Reading optlen from x5 on
+ * 6.6 yields register garbage, causing optlen<=0 early-return and the
+ * SO_BINDTODEVICE sabotage to silently no-op.
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+#define SETSOCKOPT_REG_OPTLEN 4
+#else
+#define SETSOCKOPT_REG_OPTLEN 5
+#endif
+
 static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 				 struct pt_regs *regs)
 {
 	struct sock_setsockopt_data *sdata = (void *)ri->data;
 	int level = (int)regs->regs[1];
 	int optname = (int)regs->regs[2];
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+	/* sockptr_t fits in x3: low bit = is_kernel, rest = user pointer */
+	void __user *optval_ptr = (void __user *)(regs->regs[3] & ~1UL);
+	bool is_kernel = (bool)(regs->regs[3] & 1);
+#else
 	void __user *optval_ptr = (void __user *)regs->regs[3];
-	bool is_kernel = (regs->regs[4] & 1); /* sockptr_t.is_kernel */
-	int optlen = (int)regs->regs[5];
+	bool is_kernel = (bool)(regs->regs[4] & 1); /* sockptr_t.is_kernel */
+#endif
+	int optlen = (int)regs->regs[SETSOCKOPT_REG_OPTLEN];
 	char name[IFNAMSIZ];
 
 	sdata->override_ret = false;
@@ -465,7 +486,7 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 			vpnhide_dbg(
 				"sock_setsockopt: spoofing SO_BINDTODEVICE to %s\n",
 				name);
-			regs->regs[5] = 0;
+			regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
 		}
 	} else if (optname == SO_BINDTOIFINDEX) {
 		int ifindex;
@@ -489,7 +510,7 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 				"sock_setsockopt: spoofing SO_BINDTOIFINDEX %d (%s)\n",
 				ifindex, dev->name);
 			regs->regs[2] = SO_BINDTODEVICE;
-			regs->regs[5] = 0;
+			regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
 		}
 		rcu_read_unlock();
 	} else if (optname == SO_MARK) {
@@ -1233,8 +1254,8 @@ static struct kretprobe ipv6_route_krp = {
 /* ================================================================== */
 /*  Hook 9: rt_fill_info — IPv4 single route lookup                   */
 /*                                                                    */
-/*  rt_fill_info(skb, dst, src, rt, ...)                              */
-/*  arm64: x0=skb, x3=rt (struct rtable*)                             */
+/*  6.6: rt_fill_info(net, dst, src, rt, table_id, fl4, skb, ...)     */
+/*  arm64: x0=net, x3=rt (struct rtable*), x6=skb                    */
 /* ================================================================== */
 
 struct rt_fill_data {
@@ -1253,13 +1274,8 @@ static int rt_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (!is_target_uid())
 		return 0;
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
-	/* GKI 6.6+ mapping: x7=skb, x3=rt */
-	data->skb = (struct sk_buff *)regs->regs[7];
-#else
-	/* GKI 5.10 / 5.15 / 6.1 mapping: x6=skb, x3=rt */
 	data->skb = (struct sk_buff *)regs->regs[6];
-#endif
+
 	{
 		struct rtable *rt = (struct rtable *)regs->regs[3];
 		if (rt)
@@ -1575,7 +1591,8 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 
 	if (addr->sa_family == AF_INET) {
 		struct sockaddr_in *sin = (struct sockaddr_in *)addr;
-		if (sin->sin_addr.s_addr == htonl(INADDR_LOOPBACK)) {
+		if (ipv4_is_loopback(sin->sin_addr.s_addr) ||
+		    sin->sin_addr.s_addr == htonl(INADDR_ANY)) {
 			unsigned short port = ntohs(sin->sin_port);
 			unsigned char proto =
 				(sock->sk->sk_type == SOCK_STREAM) ?
@@ -1604,7 +1621,20 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 		}
 	} else if (addr->sa_family == AF_INET6) {
 		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
-		if (ipv6_addr_loopback(&sin6->sin6_addr)) {
+		bool is_loopback = false;
+
+		if (ipv6_addr_loopback(&sin6->sin6_addr) ||
+		    ipv6_addr_any(&sin6->sin6_addr)) {
+			is_loopback = true;
+		} else if (ipv6_addr_v4mapped(&sin6->sin6_addr)) {
+			__be32 v4addr = sin6->sin6_addr.s6_addr32[3];
+			if (ipv4_is_loopback(v4addr) ||
+			    v4addr == htonl(INADDR_ANY)) {
+				is_loopback = true;
+			}
+		}
+
+		if (is_loopback) {
 			unsigned short port = ntohs(sin6->sin6_port);
 			unsigned char proto =
 				(sock->sk->sk_type == SOCK_STREAM) ?
