@@ -35,6 +35,7 @@ import dev.soranerai.vpnhidenext.checks.CheckStatus
 import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkGetsockoptBind
 import dev.soranerai.vpnhidenext.checks.checkInetDiag
+import dev.soranerai.vpnhidenext.checks.checkGetsocknameSpoof
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
@@ -656,6 +657,7 @@ internal fun runAllChecks(
             checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)),
             nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() },
             nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() },
+            nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() },
         )
 
     val java =

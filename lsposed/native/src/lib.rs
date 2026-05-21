@@ -863,3 +863,93 @@ pub fn check_inet_diag() -> CheckOutput {
         }
     }
 }
+
+#[uniffi::export]
+pub fn check_getsockname_spoof() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8 (endianness-independent since all bytes are 8)
+
+        let ret = libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        );
+        if ret < 0 {
+            let err = last_os_errno();
+            libc::close(fd);
+            if err == libc::ECONNREFUSED {
+                return CheckOutput::network_blocked(
+                    "connect() returned ECONNREFUSED — network access disabled for this app",
+                );
+            }
+            return CheckOutput::fail(format!("connect() failed: {}", last_os_error()));
+        }
+
+        let mut local: libc::sockaddr_in = std::mem::zeroed();
+        let mut local_len = std::mem::size_of_val(&local) as libc::socklen_t;
+        let ret = libc::getsockname(
+            fd,
+            std::ptr::from_mut(&mut local).cast(),
+            &mut local_len,
+        );
+        if ret < 0 {
+            libc::close(fd);
+            return CheckOutput::fail(format!("getsockname() failed: {}", last_os_error()));
+        }
+        libc::close(fd);
+
+        let ip_u32 = u32::from_be(local.sin_addr.s_addr);
+        let ip_str = format!(
+            "{}.{}.{}.{}",
+            (ip_u32 >> 24) & 0xFF,
+            (ip_u32 >> 16) & 0xFF,
+            (ip_u32 >> 8) & 0xFF,
+            ip_u32 & 0xFF
+        );
+
+        let mut addrs: *mut libc::ifaddrs = std::ptr::null_mut();
+        if libc::getifaddrs(&mut addrs) != 0 {
+            return CheckOutput::fail(format!("getifaddrs error: {}", last_os_error()));
+        }
+
+        let mut iface_name = "unknown/none".to_string();
+        let mut is_vpn = false;
+        let mut found = false;
+
+        let mut ifa = addrs;
+        while !ifa.is_null() {
+            let entry = &*ifa;
+            if !entry.ifa_addr.is_null() && (*entry.ifa_addr).sa_family == libc::AF_INET as libc::sa_family_t {
+                let sin = &*(entry.ifa_addr as *const libc::sockaddr_in);
+                if sin.sin_addr.s_addr == local.sin_addr.s_addr {
+                    iface_name = cstr_to_str(entry.ifa_name);
+                    found = true;
+                    if is_vpn_iface(&iface_name) {
+                        is_vpn = true;
+                        break;
+                    }
+                }
+            }
+            ifa = entry.ifa_next;
+        }
+        libc::freeifaddrs(addrs);
+
+        let details = format!("getsockname() returned {ip_str} on interface {iface_name}");
+        if is_vpn {
+            CheckOutput::fail(format!("{details} — leaked VPN IP address! Kernel getsockname hook bypassed or inactive!"))
+        } else if !found {
+            CheckOutput::fail(format!("{details} — leaked VPN IP address! (Interface hidden by other hooks, but IP still leaked!)"))
+        } else {
+            CheckOutput::pass(format!("{details} — secure (physical interface IP returned)"))
+        }
+    }
+}
+

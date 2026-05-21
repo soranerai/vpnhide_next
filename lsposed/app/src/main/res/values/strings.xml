@@ -207,4 +207,5 @@
     <string name="check_underlying_networks" translatable="false">Underlying networks check</string>
     <string name="check_getsockopt_bind" translatable="false">getsockopt SO_BINDTODEVICE</string>
     <string name="check_inet_diag" translatable="false">inet_diag netlink scan</string>
+    <string name="check_getsockname_spoof" translatable="false">getsockname() IP spoofing</string>
 </resources>

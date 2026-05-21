@@ -30,6 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class HookEntry : IXposedHookLoadPackage {
     private val hookInstalled = AtomicBoolean(false)
+    private val monitoringStarted = AtomicBoolean(false)
 
     // ThreadLocal context to track the target UID during system_server push callbacks
     private val currentCallbackUid = ThreadLocal<Int>()
@@ -65,7 +66,14 @@ class HookEntry : IXposedHookLoadPackage {
     //  Helpers
     // ------------------------------------------------------------------
 
-    private fun isVpnInterfaceName(name: String): Boolean = IfaceLists.isVpnIface(name, loadIfacePrefixes())
+    private fun isVpnInterfaceName(name: String): Boolean {
+        if (IfaceLists.isVpnIface(name)) return true
+        val prefixes = loadIfacePrefixes()
+        for (prefix in prefixes) {
+            if (name.startsWith(prefix, ignoreCase = true)) return true
+        }
+        return false
+    }
 
     private fun sanitizeLinkProperties(copy: LinkProperties): Boolean {
         var modified = false
@@ -189,37 +197,75 @@ class HookEntry : IXposedHookLoadPackage {
         }
     }
 
+    private fun getNetworkScore(nc: NetworkCapabilities, lp: LinkProperties?): Int {
+        var score = 0
+
+        // Base priorities for physical connections
+        if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+            score += 10000
+        } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+            score += 8000
+        } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+            score += 5000
+        }
+
+        // Add internet capability score (highest priority to ensure active routing works)
+        if (nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
+            score += 10000
+        }
+
+        // Add validated capability score (active working internet connection check)
+        if (nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+            score += 2000
+        }
+
+        // Add DNS capability score (if network has DNS servers configured)
+        if (lp != null && lp.dnsServers.isNotEmpty()) {
+            score += 3000
+        }
+
+        return score
+    }
+
+    private fun getBestPhysicalNetwork(cs: Any): android.net.Network? {
+        val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
+        var bestNet: android.net.Network? = null
+        var bestScore = Int.MIN_VALUE
+
+        for (netObj in networks) {
+            val net = netObj as? android.net.Network ?: continue
+            val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
+
+            // Skip VPN networks
+            if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                continue
+            }
+
+            // Must have some physical transport
+            val hasPhysicalTransport = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+                    nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
+                    nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
+            if (!hasPhysicalTransport) {
+                continue
+            }
+
+            val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
+            val score = getNetworkScore(nc, lp)
+            if (score > bestScore) {
+                bestScore = score
+                bestNet = net
+            }
+        }
+        return bestNet
+    }
+
     private fun getPhysicalLinkProperties(cs: Any): LinkProperties? {
         val token = android.os.Binder.clearCallingIdentity()
         try {
-            val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
-
-            // Pass 1: Try to find a WiFi network first (highest priority)
-            for (netObj in networks) {
-                val net = netObj as? android.net.Network ?: continue
-                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-
-                val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-
-                if (hasWifi && !hasVpn) {
-                    val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
-                    if (lp != null) return lp
-                }
-            }
-
-            // Pass 2: Fall back to Cellular if no WiFi is available
-            for (netObj in networks) {
-                val net = netObj as? android.net.Network ?: continue
-                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-
-                val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-
-                if (hasCell && !hasVpn) {
-                    val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
-                    if (lp != null) return lp
-                }
+            val bestNet = getBestPhysicalNetwork(cs)
+            if (bestNet != null) {
+                val lp = XposedHelpers.callMethod(cs, "getLinkProperties", bestNet) as? LinkProperties
+                if (lp != null) return lp
             }
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to get physical link properties: ${t.message}")
@@ -232,35 +278,25 @@ class HookEntry : IXposedHookLoadPackage {
     private fun getPhysicalNetwork(cs: Any): android.net.Network? {
         val token = android.os.Binder.clearCallingIdentity()
         try {
-            val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
-
-            // Pass 1: Wi-Fi (highest priority)
-            for (netObj in networks) {
-                val net = netObj as? android.net.Network ?: continue
-                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-
-                val hasWifi = nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
-                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-
-                if (hasWifi && !hasVpn) return net
-            }
-
-            // Pass 2: Cellular
-            for (netObj in networks) {
-                val net = netObj as? android.net.Network ?: continue
-                val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-
-                val hasCell = nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)
-                val hasVpn = nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-
-                if (hasCell && !hasVpn) return net
-            }
+            return getBestPhysicalNetwork(cs)
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to get physical network: ${t.message}")
         } finally {
             android.os.Binder.restoreCallingIdentity(token)
         }
         return null
+    }
+
+    private fun getActivePhysicalInterfaceName(): String {
+        val cs = getConnectivityService()
+        if (cs != null) {
+            val lp = getPhysicalLinkProperties(cs)
+            val iface = lp?.interfaceName
+            if (iface != null) {
+                return iface
+            }
+        }
+        return "wlan0" // final fallback
     }
 
     private fun getConnectivityService(): Any? {
@@ -294,17 +330,7 @@ class HookEntry : IXposedHookLoadPackage {
         return null
     }
 
-    private fun getActivePhysicalInterfaceName(): String {
-        val cs = getConnectivityService()
-        if (cs != null) {
-            val lp = getPhysicalLinkProperties(cs)
-            val iface = lp?.interfaceName
-            if (iface != null) {
-                return iface
-            }
-        }
-        return "wlan0" // final fallback
-    }
+
 
     // ==================================================================
     //  system_server hooks — per-UID Binder filtering
@@ -466,7 +492,74 @@ class HookEntry : IXposedHookLoadPackage {
 
         tryHook("APEX_Services") { hookApexServices() }
         tryHook("FileObserver") { watchDatabaseFile() }
+        tryHook("NetworkMonitoring") { startNetworkMonitoring() }
         return brokenFields
+    }
+
+    private fun startNetworkMonitoring() {
+        if (!monitoringStarted.compareAndSet(false, true)) return
+        val thread = Thread({
+            HookLog.i("VpnHide: Network monitoring daemon thread started")
+            var lastIpv4: String? = null
+            var lastIpv6: String? = null
+            var firstRun = true
+
+            while (true) {
+                try {
+                    val cs = getConnectivityService()
+                    if (cs != null) {
+                        val lp = getPhysicalLinkProperties(cs)
+                        var ipv4: String? = null
+                        var ipv6: String? = null
+
+                        if (lp != null) {
+                            for (linkAddr in lp.linkAddresses) {
+                                val inetAddr = linkAddr.address
+                                val hostAddress = inetAddr.hostAddress
+                                if (hostAddress != null) {
+                                    if (inetAddr is java.net.Inet4Address) {
+                                        ipv4 = hostAddress
+                                    } else if (inetAddr is java.net.Inet6Address) {
+                                        ipv6 = hostAddress.substringBefore('%')
+                                    }
+                                }
+                            }
+                        }
+
+                        if (firstRun || ipv4 != lastIpv4 || ipv6 != lastIpv6) {
+                            HookLog.i("VpnHide: Physical IP changed or initial sync: IPv4=$ipv4, IPv6=$ipv6")
+                            sendSpoofIpToKernel(ipv4, ipv6)
+                            lastIpv4 = ipv4
+                            lastIpv6 = ipv6
+                            firstRun = false
+                        }
+                    }
+                } catch (t: Throwable) {
+                    HookLog.e("VpnHide: Error in network monitoring loop: ${t::class.java.simpleName}: ${t.message}")
+                }
+
+                try {
+                    Thread.sleep(3000)
+                } catch (e: InterruptedException) {
+                    HookLog.i("VpnHide: Network monitoring daemon thread interrupted")
+                    break
+                }
+            }
+        }, "VpnHideNetworkMonitor")
+        thread.isDaemon = true
+        thread.start()
+    }
+
+    private fun sendSpoofIpToKernel(ipv4: String?, ipv6: String?) {
+        try {
+            val file = File("/data/system/vpnhide_physical_ip")
+            val v4 = if (ipv4.isNullOrEmpty() || ipv4 == "none") "none" else ipv4
+            val v6 = if (ipv6.isNullOrEmpty() || ipv6 == "none") "none" else ipv6
+            file.writeText("$v4 $v6\n")
+            HookLog.i("VpnHide: Successfully wrote spoof IP to /data/system/vpnhide_physical_ip: IPv4=$v4, IPv6=$v6")
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to write spoof IP to file: ${t::class.java.simpleName}: ${t.message}")
+        }
     }
 
     private data class FieldProbe(
