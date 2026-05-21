@@ -57,6 +57,63 @@ SQLITE="$MODDIR/sqlite3"
 [ -f "$SQLITE" ] || SQLITE="/data/adb/magisk/sqlite3"
 [ -f "$SQLITE" ] || SQLITE="$(which sqlite3 2>/dev/null)"
 
+# resolve_uids <targets_file> — prints a space-separated list of UIDs to stdout.
+resolve_uids() {
+    local targets_file="$1"
+    [ -f "$targets_file" ] || return
+    
+    local all_pkgs=""
+    local uids=""
+    
+    while IFS= read -r line || [ -n "$line" ]; do
+        local entry
+        entry="$(echo "$line" | tr -d '[:space:]')"
+        [ -z "$entry" ] && continue
+        case "$entry" in "#"*) continue ;; esac
+
+        # If it's a numeric UID, just add it directly
+        case "$entry" in
+            "" | *[!0-9]*) ;;
+            *)
+                uids="$uids $entry"
+                continue
+                ;;
+        esac
+
+        # Lazy-load all packages if needed
+        [ -z "$all_pkgs" ] && all_pkgs="$(pm list packages -U --user all 2>/dev/null)"
+        [ -n "$all_pkgs" ] || break
+
+        local pkg
+        local user_id
+        if echo "$entry" | grep -q ":"; then
+            pkg="${entry%:*}"
+            user_id="${entry#*:}"
+        else
+            pkg="$entry"
+            user_id="all"
+        fi
+        
+        local pkg_esc
+        pkg_esc="$(echo "$pkg" | sed 's/\./\\./g')"
+        
+        # Search in the cached list
+        local uid_csv
+        uid_csv="$(echo "$all_pkgs" | awk -v p="^package:${pkg_esc}[ :]" '$0 ~ p { sub(/.*uid:/, "", $0); print $0 }')"
+        
+        if [ -n "$uid_csv" ]; then
+            local expanded
+            expanded="$(echo "$uid_csv" | tr ',\n' '  ')"
+            uids="$uids $expanded"
+        else
+            log -t vpnhide "package not found: $pkg"
+        fi
+    done < "$targets_file"
+    
+    # Clean up, sort, and return
+    [ -n "$uids" ] && echo "$uids" | tr ' ' '\n' | grep -v '^$' | sort -u | xargs
+}
+
 apply_all_rules_from_db() {
     if [ -f "$DB" ] && [ -x "$SQLITE" ]; then
         log -t vpnhide "applying rules from DB..."
@@ -143,64 +200,7 @@ if [ -f "$DB" ] && [ -x "$SQLITE" ]; then
     apply_all_rules_from_db
 else
     log -t vpnhide "boot: database or sqlite3 not found, falling back to legacy text files"
-    
-    # [LEGACY FALLBACK START]
-    # resolve_uids <targets_file> — prints a space-separated list of UIDs to stdout.
-    resolve_uids() {
-        local targets_file="$1"
-        [ -f "$targets_file" ] || return
-        
-        local all_pkgs=""
-        local uids=""
-        
-        while IFS= read -r line || [ -n "$line" ]; do
-            local entry
-            entry="$(echo "$line" | tr -d '[:space:]')"
-            [ -z "$entry" ] && continue
-            case "$entry" in \#*) continue ;; esac
-
-        # If it's a numeric UID, just add it directly
-        case "$entry" in
-            "" | *[!0-9]*) ;;
-            *)
-                uids="$uids $entry"
-                continue
-                ;;
-        esac
-
-        # Lazy-load all packages if needed
-        [ -z "$all_pkgs" ] && all_pkgs="$(pm list packages -U --user all 2>/dev/null)"
-        [ -n "$all_pkgs" ] || break
-
-        local pkg
-        local user_id
-        if echo "$entry" | grep -q ":"; then
-            pkg="${entry%:*}"
-            user_id="${entry#*:}"
-        else
-            pkg="$entry"
-            user_id="all"
-        fi
-        
-        local pkg_esc
-        pkg_esc="$(echo "$pkg" | sed 's/\./\\./g')"
-        
-        # Search in the cached list
-        local uid_csv
-        uid_csv="$(echo "$all_pkgs" | awk -v p="^package:${pkg_esc}[ :]" '$0 ~ p { sub(/.*uid:/, "", $0); print $0 }')"
-        
-        if [ -n "$uid_csv" ]; then
-            local expanded
-            expanded="$(echo "$uid_csv" | tr ',\n' '  ')"
-            uids="$uids $expanded"
-        else
-            log -t vpnhide "package not found: $pkg"
-        fi
-    done < "$targets_file"
-    
-    # Clean up, sort, and return
-    [ -n "$uids" ] && echo "$uids" | tr ' ' '\n' | grep -v '^$' | sort -u | xargs
-}
+fi
 
 # Resolve kmod targets via IOCTL
 if [ -f "$KMOD_TARGETS" ]; then
