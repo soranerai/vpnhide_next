@@ -1261,7 +1261,14 @@ static int rt_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (!is_target_uid())
 		return 0;
 
-	data->skb = (struct sk_buff *)regs->regs[6];
+	/*
+	 * rt_fill_info(net, dst, src, rt, table_id, dscp, fl4, skb, ...)
+	 * On ARM64, the 8th argument (skb) is passed in register x7.
+	 * Reading from x6 would load 'fl4' (flowi4 pointer), causing stack
+	 * corruption in skb_trim and immediate kernel panic.
+	 */
+	data->skb = (struct sk_buff *)regs->regs[7];
+
 
 	{
 		struct rtable *rt = (struct rtable *)regs->regs[3];
