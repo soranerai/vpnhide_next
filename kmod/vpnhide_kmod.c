@@ -411,19 +411,12 @@ struct sock_setsockopt_data {
 };
 
 /*
- * sockptr_t ABI: on 5.10–6.3, sockptr_t is a 16-byte struct split
- * across x3 (pointer) + x4 (is_kernel bool, low byte), pushing optlen
- * to x5.  On 6.4+ (including android15-6.6), sockptr_t was compacted
- * to 8 bytes — low bit of x3 encodes is_kernel, the rest is the
- * pointer — so optlen moves back to x4.  Reading optlen from x5 on
- * 6.6 yields register garbage, causing optlen<=0 early-return and the
- * SO_BINDTODEVICE sabotage to silently no-op.
+ * On ARM64, sockptr_t is a 16-byte structure split across x3 and x4.
+ * Therefore, the 5th argument (optlen) is always passed in register x5
+ * for both 6.1 and 6.6 kernels.
  */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-#define SETSOCKOPT_REG_OPTLEN 4
-#else
 #define SETSOCKOPT_REG_OPTLEN 5
-#endif
+
 
 static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 				 struct pt_regs *regs)
@@ -431,15 +424,9 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 	struct sock_setsockopt_data *sdata = (void *)ri->data;
 	int level = (int)regs->regs[1];
 	int optname = (int)regs->regs[2];
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
-	/* sockptr_t fits in x3: low bit = is_kernel, rest = user pointer */
-	void __user *optval_ptr = (void __user *)(regs->regs[3] & ~1UL);
-	bool is_kernel = (bool)(regs->regs[3] & 1);
-#else
 	void __user *optval_ptr = (void __user *)regs->regs[3];
 	bool is_kernel = (bool)(regs->regs[4] & 1); /* sockptr_t.is_kernel */
-#endif
-	int optlen = (int)regs->regs[SETSOCKOPT_REG_OPTLEN];
+	int optlen = (int)regs->regs[5];            /* Всегда x5 на ARM64 */
 	char name[IFNAMSIZ];
 
 	sdata->override_ret = false;
