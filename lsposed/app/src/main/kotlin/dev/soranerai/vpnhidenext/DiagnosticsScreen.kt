@@ -42,6 +42,9 @@ import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
 import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetlink
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetroute
+import dev.soranerai.vpnhidenext.checks.checkNetlinkGetrule
+import dev.soranerai.vpnhidenext.checks.checkTcpMss
+import dev.soranerai.vpnhidenext.checks.checkNetlinkGetneigh
 import dev.soranerai.vpnhidenext.checks.checkProcNetDev
 import dev.soranerai.vpnhidenext.checks.checkProcNetFibTrie
 import dev.soranerai.vpnhidenext.checks.checkProcNetIfInet6
@@ -658,6 +661,9 @@ internal fun runAllChecks(
             nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() },
             nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() },
             nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() },
+            nativeCheck(res.getString(R.string.check_netlink_getrule)) { checkNetlinkGetrule() },
+            nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() },
+            nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() },
         )
 
     val java =

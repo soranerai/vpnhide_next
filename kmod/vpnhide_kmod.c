@@ -46,6 +46,7 @@
 #include <net/ip6_fib.h>
 #include <net/ip6_route.h>
 #include <net/route.h>
+#include <net/fib_rules.h>
 #include <linux/socket.h>
 #include <linux/in.h>
 #include <linux/in6.h>
@@ -1064,6 +1065,89 @@ static struct kretprobe fib_dump_krp = {
 };
 
 /* ================================================================== */
+/*  Hook 7b: fib_nl_fill_rule — policy routing rules (RTM_GETRULE)    */
+/*                                                                    */
+/*  fib_nl_fill_rule(skb, rule, pid, seq, type, flags, ops)           */
+/*  arm64: x0=skb, x1=rule (struct fib_rule*)                          */
+/* ================================================================== */
+
+struct fib_rule_dump_data {
+	struct sk_buff *skb;
+	unsigned int saved_len;
+	bool should_filter;
+};
+
+static int fib_rule_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_rule_dump_data *data = (void *)ri->data;
+	struct fib_rule *rule;
+	uid_t my_uid;
+
+	data->should_filter = false;
+
+	if (!is_target_uid())
+		return 0;
+
+	rule = (struct fib_rule *)regs->regs[1]; /* x1 = struct fib_rule* */
+	if (!rule)
+		return 0;
+
+	data->skb = (struct sk_buff *)regs->regs[0]; /* x0 = struct sk_buff* */
+	my_uid = from_kuid(&init_user_ns, current_uid());
+
+	rcu_read_lock();
+	/* 1. Filter if rule references a VPN interface (input or output) */
+	if ((rule->iifname[0] != '\0' && is_vpn_ifname(rule->iifname)) ||
+	    (rule->oifname[0] != '\0' && is_vpn_ifname(rule->oifname))) {
+		data->saved_len = data->skb ? data->skb->len : 0;
+		data->should_filter = true;
+		vpnhide_dbg("fib_rule_fill_entry: hiding rule via VPN interface %s / %s\n",
+			    rule->iifname, rule->oifname);
+	} else {
+		/* 2. Filter if rule targets the app's specific UID range and routes to a custom table */
+		uid_t start = from_kuid(&init_user_ns, rule->uid_range.start);
+		uid_t end = from_kuid(&init_user_ns, rule->uid_range.end);
+		if (my_uid >= start && my_uid <= end) {
+			if (start != 0 || end != (uid_t)~0) {
+				/* Skip standard system tables (253, 254, 255) and filter custom rules */
+				if (rule->table != 254 && rule->table != 255 && rule->table != 253 && rule->table > 100) {
+					data->saved_len = data->skb ? data->skb->len : 0;
+					data->should_filter = true;
+					vpnhide_dbg("fib_rule_fill_entry: hiding policy rule for UID range %u-%u, table %u\n",
+						    start, end, rule->table);
+				}
+			}
+		}
+	}
+	rcu_read_unlock();
+
+	return 0;
+}
+
+static int fib_rule_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_rule_dump_data *data = (void *)ri->data;
+
+	if (!data->should_filter || !data->skb)
+		return 0;
+
+	if (regs_return_value(regs) >= 0) {
+		/* Trim the Netlink buffer back to remove the serialized rule */
+		skb_trim(data->skb, data->saved_len);
+		regs_set_return_value(regs, 0);
+	}
+	return 0;
+}
+
+static struct kretprobe fib_rule_fill_krp = {
+	.handler = fib_rule_fill_ret,
+	.entry_handler = fib_rule_fill_entry,
+	.data_size = sizeof(struct fib_rule_dump_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "fib_nl_fill_rule",
+};
+
+/* ================================================================== */
 /*  Hook 8: rt6_fill_node — IPv6 routes                                */
 /*                                                                    */
 /*  rt6_fill_node(net, skb, rt, dst, ...)                             */
@@ -1838,6 +1922,7 @@ static struct kretprobe_reg probes[] = {
 	{ &fib_route_krp, "fib_route_seq_show", false },
 	{ &ipv6_route_krp, "ipv6_route_seq_show", false },
 	{ &fib_dump_krp, "fib_dump_info", false },
+	{ &fib_rule_fill_krp, "fib_nl_fill_rule", false },
 	{ &rt6_fill_krp, "rt6_fill_node", false },
 	{ &rt_fill_krp, "rt_fill_info", false },
 	{ &sock_setsockopt_krp, "sock_setsockopt", false },
