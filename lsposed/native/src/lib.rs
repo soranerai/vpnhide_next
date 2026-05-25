@@ -1039,7 +1039,7 @@ pub fn check_netlink_getrule() -> CheckOutput {
             let cont = parse_netlink_msgs(
                 &buf,
                 len as usize,
-                libc::RTM_NEWRULE as u16,
+                libc::RTM_NEWRULE,
                 |b, offset, msg_len| {
                     total += 1;
                     let data_start = offset + hdr_plus_frh;
@@ -1065,17 +1065,13 @@ pub fn check_netlink_getrule() -> CheckOutput {
                         FRA_OIFNAME => {
                             oifname = cstr_to_str(payload.as_ptr().cast());
                         }
-                        FRA_TABLE => {
-                            if payload.len() >= 4 {
-                                table_id = u32::from_ne_bytes(payload[..4].try_into().unwrap());
-                            }
+                        FRA_TABLE if payload.len() >= 4 => {
+                            table_id = u32::from_ne_bytes(payload[..4].try_into().unwrap());
                         }
-                        FRA_UID_RANGE => {
-                            if payload.len() >= 8 {
-                                uid_start = u32::from_ne_bytes(payload[..4].try_into().unwrap());
-                                uid_end = u32::from_ne_bytes(payload[4..8].try_into().unwrap());
-                                has_uid_range = true;
-                            }
+                        FRA_UID_RANGE if payload.len() >= 8 => {
+                            uid_start = u32::from_ne_bytes(payload[..4].try_into().unwrap());
+                            uid_end = u32::from_ne_bytes(payload[4..8].try_into().unwrap());
+                            has_uid_range = true;
                         }
                         _ => {}
                     });
@@ -1088,16 +1084,16 @@ pub fn check_netlink_getrule() -> CheckOutput {
                         leaked_rules.push(format!("table={table_id} VPN iface={iface}"));
                     } else if has_uid_range {
                         let my_uid = libc::getuid();
-                        if my_uid >= uid_start && my_uid <= uid_end {
-                            if table_id != 254
-                                && table_id != 255
-                                && table_id != 253
-                                && table_id > 100
-                            {
-                                leaked_rules.push(format!(
-                                    "table={table_id} for app UID={my_uid} (range {uid_start}-{uid_end})"
-                                ));
-                            }
+                        if my_uid >= uid_start
+                            && my_uid <= uid_end
+                            && table_id != 254
+                            && table_id != 255
+                            && table_id != 253
+                            && table_id > 100
+                        {
+                            leaked_rules.push(format!(
+                                "table={table_id} for app UID={my_uid} (range {uid_start}-{uid_end})"
+                            ));
                         }
                     }
                 },
@@ -1276,7 +1272,7 @@ pub fn check_netlink_getneigh() -> CheckOutput {
             let cont = parse_netlink_msgs(
                 &buf,
                 len as usize,
-                libc::RTM_NEWNEIGH as u16,
+                libc::RTM_NEWNEIGH,
                 |b, offset, msg_len| {
                     total += 1;
                     let data_start = offset + hdr_plus_ndmsg;
@@ -1313,18 +1309,16 @@ pub fn check_netlink_getneigh() -> CheckOutput {
                                 ip_str = "IPv6".to_string();
                             }
                         }
-                        NDA_LLADDR => {
-                            if payload.len() == 6 {
-                                mac_str = format!(
-                                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                                    payload[0],
-                                    payload[1],
-                                    payload[2],
-                                    payload[3],
-                                    payload[4],
-                                    payload[5]
-                                );
-                            }
+                        NDA_LLADDR if payload.len() == 6 => {
+                            mac_str = format!(
+                                "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                                payload[0],
+                                payload[1],
+                                payload[2],
+                                payload[3],
+                                payload[4],
+                                payload[5]
+                            );
                         }
                         _ => {}
                     });
