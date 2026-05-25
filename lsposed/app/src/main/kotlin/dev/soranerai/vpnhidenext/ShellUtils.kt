@@ -2,7 +2,6 @@ package dev.soranerai.vpnhidenext
 
 import android.content.Context
 import android.util.Base64
-import android.util.Log
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -57,7 +56,7 @@ internal fun suExec(
 
             val finished = proc.waitFor(timeoutSec, TimeUnit.SECONDS)
             if (!finished) {
-                Log.w(TAG, "su exec timed out after ${timeoutSec}s: $cmd")
+                VpnHideLog.w(TAG, "su exec timed out after ${timeoutSec}s: $cmd")
                 proc.destroyForcibly()
             }
             // After destroyForcibly the pipes close and the drains exit;
@@ -71,7 +70,7 @@ internal fun suExec(
             proc.destroy()
         }
     } catch (e: Exception) {
-        Log.e(TAG, "su exec failed: ${e.message}")
+        VpnHideLog.e(TAG, "su exec failed: ${e.message}")
         -1 to ""
     }
 
@@ -253,4 +252,57 @@ internal fun readTargetList(path: String): List<Int> {
         .map { it.trim() }
         .filter { it.isNotEmpty() && !it.startsWith("#") }
         .mapNotNull { it.toIntOrNull() }
+}
+
+internal data class CrashInfo(
+    val detected: Boolean,
+    val file: String = "",
+    val trace: String = "",
+    val crashedHookIndex: Int? = null,
+)
+
+internal fun readCrashInfo(): CrashInfo {
+    val crashFilePath = "/data/adb/vpnhide_kmod/last_crash.txt"
+    val (exit, raw) = suExec("cat $crashFilePath 2>/dev/null || true")
+    if (exit != 0 || raw.trim().isEmpty() || !raw.contains("CRASH_DETECTED")) {
+        return CrashInfo(detected = false)
+    }
+
+    var file = ""
+    var crashedHookIndex: Int? = null
+    val traceBuilder = StringBuilder()
+    var isTrace = false
+
+    raw.lines().forEach { line ->
+        val trimmed = line.trim()
+        if (trimmed.startsWith("File:")) {
+            file = trimmed.substringAfter("File:").trim()
+        } else if (trimmed.startsWith("crashed_hook=")) {
+            crashedHookIndex = trimmed.substringAfter("crashed_hook=").trim().toIntOrNull()
+        } else if (trimmed == "Trace:") {
+            isTrace = true
+        } else if (isTrace) {
+            if (trimmed.startsWith("crashed_hook=")) {
+                isTrace = false
+                crashedHookIndex = trimmed.substringAfter("crashed_hook=").trim().toIntOrNull()
+            } else {
+                traceBuilder.append(line).append("\n")
+            }
+        }
+    }
+
+    return CrashInfo(
+        detected = true,
+        file = file,
+        trace = traceBuilder.toString().trim(),
+        crashedHookIndex = crashedHookIndex,
+    )
+}
+
+internal fun clearCrashInfo(): Boolean {
+    val crashFilePath = "/data/adb/vpnhide_kmod/last_crash.txt"
+    val autodisablePath = "/data/adb/vpnhide_kmod/autodisable_mask.txt"
+    val (exit1, _) = suExec("rm -f $crashFilePath && rm -f $autodisablePath")
+    val (exit2, _) = suExec("$KMOD_CTL active_hooks 65535")
+    return exit1 == 0 && exit2 == 0
 }

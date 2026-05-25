@@ -5,7 +5,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
-import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -33,6 +32,7 @@ import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
 import dev.soranerai.vpnhidenext.checks.CheckStatus
 import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
+import dev.soranerai.vpnhidenext.checks.checkGetsocknameSpoof
 import dev.soranerai.vpnhidenext.checks.checkGetsockoptBind
 import dev.soranerai.vpnhidenext.checks.checkInetDiag
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
@@ -40,7 +40,9 @@ import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
 import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetlink
+import dev.soranerai.vpnhidenext.checks.checkNetlinkGetneigh
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetroute
+import dev.soranerai.vpnhidenext.checks.checkNetlinkGetrule
 import dev.soranerai.vpnhidenext.checks.checkProcNetDev
 import dev.soranerai.vpnhidenext.checks.checkProcNetFibTrie
 import dev.soranerai.vpnhidenext.checks.checkProcNetIfInet6
@@ -51,6 +53,7 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetTcp6
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
+import dev.soranerai.vpnhidenext.checks.checkTcpMss
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.ui.theme.*
@@ -87,6 +90,7 @@ internal suspend fun isVpnActive(): Boolean = withContext(Dispatchers.IO) { isVp
 @Composable
 fun DiagnosticsScreen(
     selfNeedsRestart: Boolean,
+    onOpenHookTesting: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -97,6 +101,18 @@ fun DiagnosticsScreen(
     var exporting by remember { mutableStateOf(false) }
     var debugZipFile by remember { mutableStateOf<File?>(null) }
     val summaryFmt = stringResource(R.string.summary_format)
+
+    var crashInfo by remember { mutableStateOf<CrashInfo?>(null) }
+    var showTraceDialog by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val info = readCrashInfo()
+            if (info.detected) {
+                crashInfo = info
+            }
+        }
+    }
 
     // Kick off the diagnostics run once per process. If selfNeedsRestart
     // is true we skip — hooks aren't applied to this app yet, results
@@ -141,6 +157,133 @@ fun DiagnosticsScreen(
                 .verticalScroll(rememberScrollState()),
     ) {
         Spacer(Modifier.height(8.dp))
+
+        crashInfo?.let { info ->
+            var resetting by remember { mutableStateOf(false) }
+            val isRussian =
+                java.util.Locale
+                    .getDefault()
+                    .language == "ru"
+
+            Card(
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            text = if (isRussian) "⚠️ ОБНАРУЖЕН СБОЙ ЯДРА" else "⚠️ KERNEL CRASH DETECTED",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                    Spacer(Modifier.height(8.dp))
+
+                    val hookName =
+                        info.crashedHookIndex?.let { idx ->
+                            ALL_HOOKS.getOrNull(idx)?.name ?: "Unknown"
+                        } ?: "Unknown"
+
+                    val hookSymbol =
+                        info.crashedHookIndex?.let { idx ->
+                            ALL_HOOKS.getOrNull(idx)?.symbol ?: ""
+                        } ?: ""
+
+                    Text(
+                        text =
+                            if (isRussian) {
+                                "На прошлой загрузке произошел краш ядра в хуке $hookName ($hookSymbol). Чтобы защитить систему от вечного ребута, этот хук был автоматически отключен."
+                            } else {
+                                "A kernel crash was detected in hook $hookName ($hookSymbol) during the previous boot. To protect your device from bootloops, this hook has been automatically disabled."
+                            },
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+
+                    Spacer(Modifier.height(12.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        OutlinedButton(
+                            onClick = { showTraceDialog = true },
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                ),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(if (isRussian) "Подробнее" else "Details")
+                        }
+
+                        Button(
+                            onClick = {
+                                resetting = true
+                                scope.launch(Dispatchers.IO) {
+                                    clearCrashInfo()
+                                    crashInfo = null
+                                    resetting = false
+                                }
+                            },
+                            enabled = !resetting,
+                            colors =
+                                ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.error,
+                                    contentColor = MaterialTheme.colorScheme.onError,
+                                ),
+                            modifier = Modifier.weight(1.5f),
+                        ) {
+                            if (resetting) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(18.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.onError,
+                                )
+                            } else {
+                                Text(if (isRussian) "Сбросить и включить" else "Reset & Re-enable")
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (showTraceDialog && crashInfo != null) {
+            val isRussian =
+                java.util.Locale
+                    .getDefault()
+                    .language == "ru"
+            AlertDialog(
+                onDismissRequest = { showTraceDialog = false },
+                title = { Text(if (isRussian) "Лог падения ядра" else "Kernel Crash Log") },
+                text = {
+                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                        Text(
+                            text = "File: ${crashInfo?.file}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = crashInfo?.trace ?: "",
+                            fontFamily = FontFamily.Monospace,
+                            fontSize = 11.sp,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showTraceDialog = false }) {
+                        Text("OK")
+                    }
+                },
+            )
+        }
 
         // Protection check section — its content depends on cache state,
         // but the bottom debug-tools section always renders below so
@@ -222,6 +365,10 @@ fun DiagnosticsScreen(
                 }
             }
         }
+
+        Spacer(Modifier.height(16.dp))
+
+        KernelHooksTestingCard(onOpenHookTesting)
 
         Spacer(Modifier.height(16.dp))
 
@@ -656,6 +803,10 @@ internal fun runAllChecks(
             checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)),
             nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() },
             nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() },
+            nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() },
+            nativeCheck(res.getString(R.string.check_netlink_getrule)) { checkNetlinkGetrule() },
+            nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() },
+            nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() },
         )
 
     val java =
@@ -667,6 +818,8 @@ internal fun runAllChecks(
             checkProxyHost(res.getString(R.string.check_proxy_host)),
             checkNetworkCallback(cm, res.getString(R.string.check_network_callback)),
             checkUnderlyingNetworks(cm, res.getString(R.string.check_underlying_networks)),
+            checkVpnCallbackSuppression(cm, res.getString(R.string.check_vpn_callback_suppression)),
+            checkWifiInfoSpoof(context, res.getString(R.string.check_wifi_info_spoof)),
         )
 
     val all = native + java
@@ -693,7 +846,7 @@ private fun nativeCheck(
         CheckResult(name, passed, out.detail)
     } catch (e: Exception) {
         val detail = e.message ?: e.javaClass.simpleName
-        Log.e(TAG, "[$name] $detail", e)
+        VpnHideLog.e(TAG, "[$name] $detail", e)
         CheckResult(name, false, detail)
     }
 
@@ -1056,6 +1209,102 @@ private fun checkUnderlyingNetworks(
     return CheckResult(name, passed, detail)
 }
 
+private fun checkVpnCallbackSuppression(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    val latch = java.util.concurrent.CountDownLatch(1)
+    var callbackTriggered = false
+    val callback =
+        object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: android.net.Network) {
+                callbackTriggered = true
+                latch.countDown()
+            }
+        }
+    try {
+        val request =
+            android.net.NetworkRequest
+                .Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_VPN)
+                .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VPN)
+                .build()
+        cm.registerNetworkCallback(request, callback)
+        // Wait 300ms to see if it triggers (our hook blocks it completely)
+        latch.await(300, java.util.concurrent.TimeUnit.MILLISECONDS)
+    } catch (e: Exception) {
+        return CheckResult(name, false, "failed to register callback: ${e.message}")
+    } finally {
+        try {
+            cm.unregisterNetworkCallback(callback)
+        } catch (_: Exception) {
+        }
+    }
+    val passed = !callbackTriggered
+    val detail =
+        if (passed) {
+            "VPN network callback suppressed successfully"
+        } else {
+            "leak detected: VPN network callback triggered onAvailable!"
+        }
+    return CheckResult(name, passed, detail)
+}
+
+private fun checkWifiInfoSpoof(
+    context: android.content.Context,
+    name: String,
+): CheckResult {
+    val wm =
+        context.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+            ?: return CheckResult(name, true, "WifiManager not available")
+    val wifiInfo =
+        try {
+            @Suppress("DEPRECATION")
+            wm.connectionInfo
+        } catch (e: Exception) {
+            return CheckResult(name, false, "failed to get connectionInfo: ${e.message}")
+        } ?: return CheckResult(name, true, "no active Wi-Fi connection info")
+
+    val cm = context.getSystemService(ConnectivityManager::class.java)
+    val net = cm.activeNetwork
+    val caps = if (net != null) cm.getNetworkCapabilities(net) else null
+    val isOnWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+
+    if (!isOnWifi) {
+        return CheckResult(name, true, "not connected to Wi-Fi (bypass check skipped)")
+    }
+
+    val ssid = wifiInfo.ssid
+    val ip = wifiInfo.ipAddress
+
+    val redactedSSID = ssid == "<unknown ssid>" || ssid.isNullOrEmpty()
+    val redactedIP = ip == 0
+
+    val passed = !redactedIP
+    val detail =
+        buildString {
+            append("ssid=$ssid")
+            append(", ip=${ipAddressToString(ip)}")
+            if (redactedIP) {
+                append(" (issues: redacted IP)")
+            } else if (redactedSSID) {
+                append(" (SSID redacted - expected behavior without location permission)")
+            } else {
+                append(" (fully unredacted)")
+            }
+        }
+    return CheckResult(name, passed, detail)
+}
+
+private fun ipAddressToString(ip: Int): String =
+    String.format(
+        "%d.%d.%d.%d",
+        ip and 0xff,
+        (ip shr 8) and 0xff,
+        (ip shr 16) and 0xff,
+        (ip shr 24) and 0xff,
+    )
+
 // ==========================================================================
 //  Debug log export
 // ==========================================================================
@@ -1324,7 +1573,7 @@ private suspend fun exportDebugZip(
             }
             zipFile
         } catch (e: Exception) {
-            Log.e(TAG, "Debug export failed", e)
+            VpnHideLog.e(TAG, "Debug export failed", e)
             null
         } finally {
             if (loggingWasForced) {
@@ -1333,3 +1582,42 @@ private suspend fun exportDebugZip(
             }
         }
     }
+
+@Composable
+private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
+    val isRussian =
+        java.util.Locale
+            .getDefault()
+            .language == "ru"
+    ElevatedCard(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Text(
+                text = if (isRussian) "Изоляция хуков ядра" else "Kernel Hook Isolation",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text =
+                    if (isRussian) {
+                        "Тестирование и отключение отдельных хуков на уровне ядра. Полезно для точного выявления конкретного хука, вызывающего перезагрузку или нестабильность системы/приложений."
+                    } else {
+                        "Test and isolate individual kernel-level hooks. Helpful for pinpointing which specific hook is causing system or app instability."
+                    },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(14.dp))
+            Button(
+                onClick = onOpenHookTesting,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(if (isRussian) "Настроить хуки" else "Configure Hooks")
+            }
+        }
+    }
+}

@@ -126,6 +126,30 @@ struct Rtattr {
     rta_type: u16,
 }
 
+#[repr(C)]
+struct FibRuleHdr {
+    family: u8,
+    dst_len: u8,
+    src_len: u8,
+    tos: u8,
+    table: u8,
+    res1: u8,
+    res2: u8,
+    action: u8,
+    flags: u32,
+}
+
+#[repr(C)]
+struct Ndmsg {
+    ndm_family: u8,
+    ndm_pad1: u8,
+    ndm_pad2: u16,
+    ndm_ifindex: i32,
+    ndm_state: u16,
+    ndm_flags: u8,
+    ndm_type: u8,
+}
+
 const IFLA_IFNAME: u16 = 3;
 const RTA_OIF: u16 = 4;
 
@@ -860,6 +884,481 @@ pub fn check_inet_diag() -> CheckOutput {
             CheckOutput::fail(
                 "socket(AF_NETLINK, SOCK_RAW, NETLINK_INET_DIAG) succeeded — potentially leaking socket diagnostics!",
             )
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_getsockname_spoof() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8 (endianness-independent since all bytes are 8)
+
+        let ret = libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        );
+        if ret < 0 {
+            let err = last_os_errno();
+            libc::close(fd);
+            if err == libc::ECONNREFUSED {
+                return CheckOutput::network_blocked(
+                    "connect() returned ECONNREFUSED — network access disabled for this app",
+                );
+            }
+            return CheckOutput::fail(format!("connect() failed: {}", last_os_error()));
+        }
+
+        let mut local: libc::sockaddr_in = std::mem::zeroed();
+        let mut local_len = std::mem::size_of_val(&local) as libc::socklen_t;
+        let ret = libc::getsockname(fd, std::ptr::from_mut(&mut local).cast(), &mut local_len);
+        if ret < 0 {
+            libc::close(fd);
+            return CheckOutput::fail(format!("getsockname() failed: {}", last_os_error()));
+        }
+        libc::close(fd);
+
+        let ip_u32 = u32::from_be(local.sin_addr.s_addr);
+        let ip_str = format!(
+            "{}.{}.{}.{}",
+            (ip_u32 >> 24) & 0xFF,
+            (ip_u32 >> 16) & 0xFF,
+            (ip_u32 >> 8) & 0xFF,
+            ip_u32 & 0xFF
+        );
+
+        let mut addrs: *mut libc::ifaddrs = std::ptr::null_mut();
+        if libc::getifaddrs(&mut addrs) != 0 {
+            return CheckOutput::fail(format!("getifaddrs error: {}", last_os_error()));
+        }
+
+        let mut iface_name = "unknown/none".to_string();
+        let mut is_vpn = false;
+        let mut found = false;
+
+        let mut ifa = addrs;
+        while !ifa.is_null() {
+            let entry = &*ifa;
+            if !entry.ifa_addr.is_null()
+                && (*entry.ifa_addr).sa_family == libc::AF_INET as libc::sa_family_t
+            {
+                let sin = &*(entry.ifa_addr as *const libc::sockaddr_in);
+                if sin.sin_addr.s_addr == local.sin_addr.s_addr {
+                    iface_name = cstr_to_str(entry.ifa_name);
+                    found = true;
+                    if is_vpn_iface(&iface_name) {
+                        is_vpn = true;
+                        break;
+                    }
+                }
+            }
+            ifa = entry.ifa_next;
+        }
+        libc::freeifaddrs(addrs);
+
+        let details = format!("getsockname() returned {ip_str} on interface {iface_name}");
+        if is_vpn {
+            CheckOutput::fail(format!(
+                "{details} — leaked VPN IP address! Kernel getsockname hook bypassed or inactive!"
+            ))
+        } else if !found {
+            CheckOutput::fail(format!(
+                "{details} — leaked VPN IP address! (Interface hidden by other hooks, but IP still leaked!)"
+            ))
+        } else {
+            CheckOutput::pass(format!(
+                "{details} — secure (physical interface IP returned)"
+            ))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_netlink_getrule() -> CheckOutput {
+    let fd = match open_netlink() {
+        Ok(fd) => fd,
+        Err(out) => return out,
+    };
+
+    unsafe {
+        #[repr(C)]
+        struct Req {
+            nlh: libc::nlmsghdr,
+            frh: FibRuleHdr,
+        }
+        let mut req: Req = std::mem::zeroed();
+        req.nlh.nlmsg_len = std::mem::size_of::<Req>() as u32;
+        req.nlh.nlmsg_type = libc::RTM_GETRULE;
+        req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
+        req.nlh.nlmsg_seq = 1;
+
+        let mut dest_addr: libc::sockaddr_nl = std::mem::zeroed();
+        dest_addr.nl_family = libc::AF_NETLINK as u16;
+        if libc::sendto(
+            fd,
+            std::ptr::from_ref(&req).cast(),
+            req.nlh.nlmsg_len as usize,
+            0,
+            std::ptr::from_ref(&dest_addr).cast(),
+            std::mem::size_of_val(&dest_addr) as libc::socklen_t,
+        ) < 0
+        {
+            let e = std::io::Error::last_os_error();
+            libc::close(fd);
+            return if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("netlink RTM_GETRULE denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("send error: {e}"))
+            };
+        }
+
+        let mut buf = [0u8; 32768];
+        let mut total = 0u32;
+        let mut leaked_rules = Vec::new();
+        let hdr_plus_frh =
+            std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<FibRuleHdr>();
+
+        const FRA_IIFNAME: u16 = 3;
+        const FRA_OIFNAME: u16 = 4;
+        const FRA_TABLE: u16 = 15;
+        const FRA_UID_RANGE: u16 = 20;
+
+        loop {
+            let len = netlink_recv(fd, &mut buf);
+            if len <= 0 {
+                break;
+            }
+            let cont = parse_netlink_msgs(
+                &buf,
+                len as usize,
+                libc::RTM_NEWRULE,
+                |b, offset, msg_len| {
+                    total += 1;
+                    let data_start = offset + hdr_plus_frh;
+                    let msg_end = offset + msg_len;
+
+                    let frh_ptr = b
+                        .as_ptr()
+                        .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                        as *const FibRuleHdr;
+                    let frh = &*frh_ptr;
+                    let mut table_id = frh.table as u32;
+
+                    let mut iifname = String::new();
+                    let mut oifname = String::new();
+                    let mut has_uid_range = false;
+                    let mut uid_start = 0u32;
+                    let mut uid_end = 0u32;
+
+                    for_each_rtattr(b, data_start, msg_end, |rta, payload| match rta.rta_type {
+                        FRA_IIFNAME => {
+                            iifname = cstr_to_str(payload.as_ptr().cast());
+                        }
+                        FRA_OIFNAME => {
+                            oifname = cstr_to_str(payload.as_ptr().cast());
+                        }
+                        FRA_TABLE if payload.len() >= 4 => {
+                            table_id = u32::from_ne_bytes(payload[..4].try_into().unwrap());
+                        }
+                        FRA_UID_RANGE if payload.len() >= 8 => {
+                            uid_start = u32::from_ne_bytes(payload[..4].try_into().unwrap());
+                            uid_end = u32::from_ne_bytes(payload[4..8].try_into().unwrap());
+                            has_uid_range = true;
+                        }
+                        _ => {}
+                    });
+
+                    let matches_vpn_iif = !iifname.is_empty() && is_vpn_iface(&iifname);
+                    let matches_vpn_oif = !oifname.is_empty() && is_vpn_iface(&oifname);
+
+                    if matches_vpn_iif || matches_vpn_oif {
+                        let iface = if matches_vpn_iif { &iifname } else { &oifname };
+                        leaked_rules.push(format!("table={table_id} VPN iface={iface}"));
+                    } else if has_uid_range {
+                        let my_uid = libc::getuid();
+                        if my_uid >= uid_start
+                            && my_uid <= uid_end
+                            && table_id != 254
+                            && table_id != 255
+                            && table_id != 253
+                            && table_id > 100
+                        {
+                            leaked_rules.push(format!(
+                                "table={table_id} for app UID={my_uid} (range {uid_start}-{uid_end})"
+                            ));
+                        }
+                    }
+                },
+            );
+            if !cont {
+                break;
+            }
+        }
+        libc::close(fd);
+
+        if leaked_rules.is_empty() {
+            CheckOutput::pass(format!("{total} routing rules, no VPN leaks detected"))
+        } else {
+            CheckOutput::fail(format!(
+                "leaked VPN policy rules (total {total}):\n  {}",
+                leaked_rules.join("\n  ")
+            ))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_tcp_mss() -> CheckOutput {
+    unsafe {
+        let udp_fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        let mut udp_mtu = 0;
+        if udp_fd >= 0 {
+            let mut dest: libc::sockaddr_in = std::mem::zeroed();
+            dest.sin_family = libc::AF_INET as libc::sa_family_t;
+            dest.sin_port = 53u16.to_be();
+            dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+            let ret = libc::connect(
+                udp_fd,
+                std::ptr::from_ref(&dest).cast(),
+                std::mem::size_of_val(&dest) as libc::socklen_t,
+            );
+            if ret == 0 {
+                let mut mtu: libc::c_int = 0;
+                let mut len = std::mem::size_of_val(&mtu) as libc::socklen_t;
+                let opt_ret = libc::getsockopt(
+                    udp_fd,
+                    libc::IPPROTO_IP,
+                    14, // IP_MTU
+                    std::ptr::from_mut(&mut mtu).cast(),
+                    &mut len,
+                );
+                if opt_ret == 0 {
+                    udp_mtu = mtu;
+                }
+            }
+            libc::close(udp_fd);
+        }
+
+        let tcp_fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
+        if tcp_fd < 0 {
+            return CheckOutput::fail(format!("cannot create TCP socket: {}", last_os_error()));
+        }
+
+        let timeout = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 800000, // 800ms
+        };
+        libc::setsockopt(
+            tcp_fd,
+            libc::SOL_SOCKET,
+            libc::SO_SNDTIMEO,
+            std::ptr::from_ref(&timeout).cast(),
+            std::mem::size_of_val(&timeout) as libc::socklen_t,
+        );
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        let connect_ret = libc::connect(
+            tcp_fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        );
+
+        let mut tcp_mss = 0;
+        if connect_ret == 0 {
+            let mut mss: libc::c_int = 0;
+            let mut len = std::mem::size_of_val(&mss) as libc::socklen_t;
+            let opt_ret = libc::getsockopt(
+                tcp_fd,
+                libc::IPPROTO_TCP,
+                libc::TCP_MAXSEG,
+                std::ptr::from_mut(&mut mss).cast(),
+                &mut len,
+            );
+            if opt_ret == 0 {
+                tcp_mss = mss;
+            }
+        }
+        libc::close(tcp_fd);
+
+        let details = format!("UDP PMTU={udp_mtu}, TCP MSS={tcp_mss}");
+        let mut suspicious = false;
+        let mut reasons = Vec::new();
+
+        if udp_mtu > 0 && udp_mtu < 1450 {
+            suspicious = true;
+            reasons.push(format!("UDP PMTU {udp_mtu} < 1450"));
+        }
+        if tcp_mss > 0 && tcp_mss < 1420 {
+            suspicious = true;
+            reasons.push(format!("TCP MSS {tcp_mss} < 1420"));
+        }
+
+        if suspicious {
+            CheckOutput::fail(format!(
+                "{details} — encapsulation detected: {}",
+                reasons.join(", ")
+            ))
+        } else {
+            CheckOutput::pass(format!("{details} — secure (normal physical MTU/MSS)"))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_netlink_getneigh() -> CheckOutput {
+    let fd = match open_netlink() {
+        Ok(fd) => fd,
+        Err(out) => return out,
+    };
+
+    unsafe {
+        #[repr(C)]
+        struct Req {
+            nlh: libc::nlmsghdr,
+            ndm: Ndmsg,
+        }
+        let mut req: Req = std::mem::zeroed();
+        req.nlh.nlmsg_len = std::mem::size_of::<Req>() as u32;
+        req.nlh.nlmsg_type = libc::RTM_GETNEIGH;
+        req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
+        req.nlh.nlmsg_seq = 1;
+
+        let mut dest_addr: libc::sockaddr_nl = std::mem::zeroed();
+        dest_addr.nl_family = libc::AF_NETLINK as u16;
+        if libc::sendto(
+            fd,
+            std::ptr::from_ref(&req).cast(),
+            req.nlh.nlmsg_len as usize,
+            0,
+            std::ptr::from_ref(&dest_addr).cast(),
+            std::mem::size_of_val(&dest_addr) as libc::socklen_t,
+        ) < 0
+        {
+            let e = std::io::Error::last_os_error();
+            libc::close(fd);
+            return if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("netlink RTM_GETNEIGH denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("send error: {e}"))
+            };
+        }
+
+        let mut buf = [0u8; 32768];
+        let mut neighbors = Vec::new();
+        let mut total = 0u32;
+        let hdr_plus_ndmsg = std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<Ndmsg>();
+
+        const NDA_DST: u16 = 1;
+        const NDA_LLADDR: u16 = 2;
+
+        loop {
+            let len = netlink_recv(fd, &mut buf);
+            if len <= 0 {
+                break;
+            }
+            let cont = parse_netlink_msgs(
+                &buf,
+                len as usize,
+                libc::RTM_NEWNEIGH,
+                |b, offset, msg_len| {
+                    total += 1;
+                    let data_start = offset + hdr_plus_ndmsg;
+                    let msg_end = offset + msg_len;
+
+                    let ndm_ptr = b
+                        .as_ptr()
+                        .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                        as *const Ndmsg;
+                    let ndm = &*ndm_ptr;
+
+                    let mut ifname_buf = [0u8; libc::IF_NAMESIZE];
+                    let ptr = libc::if_indextoname(
+                        ndm.ndm_ifindex as u32,
+                        ifname_buf.as_mut_ptr().cast(),
+                    );
+                    let ifname = if !ptr.is_null() {
+                        cstr_to_str(ptr)
+                    } else {
+                        format!("ifindex_{}", ndm.ndm_ifindex)
+                    };
+
+                    let mut ip_str = String::new();
+                    let mut mac_str = String::new();
+
+                    for_each_rtattr(b, data_start, msg_end, |rta, payload| match rta.rta_type {
+                        NDA_DST => {
+                            if payload.len() == 4 {
+                                ip_str = format!(
+                                    "{}.{}.{}.{}",
+                                    payload[0], payload[1], payload[2], payload[3]
+                                );
+                            } else if payload.len() == 16 {
+                                ip_str = "IPv6".to_string();
+                            }
+                        }
+                        NDA_LLADDR if payload.len() == 6 => {
+                            mac_str = format!(
+                                "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                                payload[0],
+                                payload[1],
+                                payload[2],
+                                payload[3],
+                                payload[4],
+                                payload[5]
+                            );
+                        }
+                        _ => {}
+                    });
+
+                    neighbors.push((ifname, ip_str, mac_str, ndm.ndm_state));
+                },
+            );
+            if !cont {
+                break;
+            }
+        }
+        libc::close(fd);
+
+        let mut physical_has_mac = false;
+        let mut list = Vec::new();
+        for (iface, ip, mac, state) in &neighbors {
+            let is_phys =
+                iface.starts_with("wlan") || iface.starts_with("eth") || iface.starts_with("rmnet");
+            if is_phys && !mac.is_empty() {
+                physical_has_mac = true;
+            }
+            list.push(format!("{iface} {ip} mac={mac} state=0x{state:02x}"));
+        }
+
+        let details = if list.is_empty() {
+            "empty table".to_string()
+        } else {
+            list.join(", ")
+        };
+
+        let has_wlan = neighbors
+            .iter()
+            .any(|(iface, _, _, _)| iface.starts_with("wlan"));
+
+        if has_wlan && !physical_has_mac {
+            CheckOutput::fail(format!(
+                "wlan has no ARP neighbors (MACs hidden) — table: {details}"
+            ))
+        } else {
+            CheckOutput::pass(format!("neighbor table: {details}"))
         }
     }
 }

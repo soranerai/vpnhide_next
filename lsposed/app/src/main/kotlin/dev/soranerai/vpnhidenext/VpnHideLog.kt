@@ -57,4 +57,19 @@ internal object VpnHideLog {
     ) {
         if (enabled) Log.w(tag, msg, tr)
     }
+
+    fun e(
+        tag: String,
+        msg: String,
+    ) {
+        if (enabled) Log.e(tag, msg)
+    }
+
+    fun e(
+        tag: String,
+        msg: String,
+        tr: Throwable,
+    ) {
+        if (enabled) Log.e(tag, msg, tr)
+    }
 }

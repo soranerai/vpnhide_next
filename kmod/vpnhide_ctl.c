@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
+#include <arpa/inet.h>
 #include <linux/types.h>
 
 #include "include/vpnhide.h"
@@ -12,11 +13,12 @@
 void print_usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|debug> [args...]\n",
+		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|set_spoof_ip|debug|active_hooks> [args...]\n",
 		prog);
 	fprintf(stderr,
 		"  port_rules format: <uid> <rule_count> <start> <end> <proto> ...\n");
 	fprintf(stderr, "  proto: 0=TCP, 1=UDP, 2=BOTH\n");
+	fprintf(stderr, "  set_spoof_ip format: <ipv4|none> <ipv6|none>\n");
 }
 
 int main(int argc, char **argv)
@@ -112,6 +114,36 @@ int main(int argc, char **argv)
 			perror("VH_SET_IFACE_PREFIXES");
 			return 1;
 		}
+	} else if (strcmp(argv[1], "set_spoof_ip") == 0) {
+		struct vpnhide_spoof_ip spoof;
+		memset(&spoof, 0, sizeof(spoof));
+
+		if (argc < 4) {
+			fprintf(stderr, "Error: set_spoof_ip requires <ipv4|none> <ipv6|none>\n");
+			print_usage(argv[0]);
+			return 1;
+		}
+
+		if (strcmp(argv[2], "none") != 0) {
+			if (inet_pton(AF_INET, argv[2], &spoof.ipv4_addr) != 1) {
+				fprintf(stderr, "Invalid IPv4 address: %s\n", argv[2]);
+				return 1;
+			}
+			spoof.has_ipv4 = 1;
+		}
+
+		if (strcmp(argv[3], "none") != 0) {
+			if (inet_pton(AF_INET6, argv[3], spoof.ipv6_addr) != 1) {
+				fprintf(stderr, "Invalid IPv6 address: %s\n", argv[3]);
+				return 1;
+			}
+			spoof.has_ipv6 = 1;
+		}
+
+		if (ioctl(fd, VH_SET_SPOOF_IP, &spoof) < 0) {
+			perror("VH_SET_SPOOF_IP");
+			return 1;
+		}
 	} else if (strcmp(argv[1], "debug") == 0) {
 		if (argc < 3) {
 			print_usage(argv[0]);
@@ -121,6 +153,21 @@ int main(int argc, char **argv)
 		if (ioctl(fd, VH_SET_DEBUG, &val) < 0) {
 			perror("VH_SET_DEBUG");
 			return 1;
+		}
+	} else if (strcmp(argv[1], "active_hooks") == 0) {
+		if (argc < 3) {
+			unsigned int mask = 0;
+			if (ioctl(fd, VH_GET_ACTIVE_HOOKS, &mask) < 0) {
+				perror("VH_GET_ACTIVE_HOOKS");
+				return 1;
+			}
+			printf("%u\n", mask);
+		} else {
+			unsigned int mask = (unsigned int)strtoul(argv[2], NULL, 0);
+			if (ioctl(fd, VH_SET_ACTIVE_HOOKS, &mask) < 0) {
+				perror("VH_SET_ACTIVE_HOOKS");
+				return 1;
+			}
 		}
 	} else {
 		print_usage(argv[0]);

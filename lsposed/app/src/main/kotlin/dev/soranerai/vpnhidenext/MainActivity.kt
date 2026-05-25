@@ -146,6 +146,7 @@ private fun MainScreen(
     var rulesUpdatedApp by remember { mutableStateOf<AppEntry?>(null) }
     var showIfacePrefixes by remember { mutableStateOf(false) }
     var localIfacePrefixes by remember { mutableStateOf<List<String>?>(null) }
+    var showHookTesting by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
     val searchFocusRequester = remember { FocusRequester() }
@@ -450,6 +451,7 @@ private fun MainScreen(
                             Tab.Diagnostics -> {
                                 DiagnosticsScreen(
                                     selfNeedsRestart = restart,
+                                    onOpenHookTesting = { showHookTesting = true },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -708,6 +710,19 @@ private fun MainScreen(
                     localIfacePrefixes = updatedPrefixes
                     showIfacePrefixes = false
                 },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showHookTesting,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            BackHandler { showHookTesting = false }
+            HookTestingScreen(
+                onBack = { showHookTesting = false },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
