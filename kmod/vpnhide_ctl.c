@@ -13,7 +13,7 @@
 void print_usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|set_spoof_ip|debug> [args...]\n",
+		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|set_spoof_ip|debug|active_hooks> [args...]\n",
 		prog);
 	fprintf(stderr,
 		"  port_rules format: <uid> <rule_count> <start> <end> <proto> ...\n");
@@ -153,6 +153,21 @@ int main(int argc, char **argv)
 		if (ioctl(fd, VH_SET_DEBUG, &val) < 0) {
 			perror("VH_SET_DEBUG");
 			return 1;
+		}
+	} else if (strcmp(argv[1], "active_hooks") == 0) {
+		if (argc < 3) {
+			unsigned int mask = 0;
+			if (ioctl(fd, VH_GET_ACTIVE_HOOKS, &mask) < 0) {
+				perror("VH_GET_ACTIVE_HOOKS");
+				return 1;
+			}
+			printf("%u\n", mask);
+		} else {
+			unsigned int mask = (unsigned int)strtoul(argv[2], NULL, 0);
+			if (ioctl(fd, VH_SET_ACTIVE_HOOKS, &mask) < 0) {
+				perror("VH_SET_ACTIVE_HOOKS");
+				return 1;
+			}
 		}
 	} else {
 		print_usage(argv[0]);

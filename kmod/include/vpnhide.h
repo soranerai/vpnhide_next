@@ -59,6 +59,7 @@ struct vpnhide_spoof_ip {
 	_IOW(VH_IOCTL_MAGIC, 0x07, struct vpnhide_iface_ioctl_data)
 #define VH_SET_SPOOF_IP \
 	_IOW(VH_IOCTL_MAGIC, 0x08, struct vpnhide_spoof_ip)
+#define VH_SET_ACTIVE_HOOKS _IOW(VH_IOCTL_MAGIC, 0x09, unsigned int)
+#define VH_GET_ACTIVE_HOOKS _IOR(VH_IOCTL_MAGIC, 0x0A, unsigned int)
 
 #endif /* _VPNHIDE_H */
-

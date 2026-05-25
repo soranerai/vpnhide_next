@@ -266,6 +266,16 @@ if [ -f "$SS_DEBUG_LOGGING" ]; then
     "$CTL" debug $(cat "$SS_DEBUG_LOGGING")
 fi
 
+# Apply autodisable / testing active hooks mask if configured
+AUTODISABLE_FILE="/data/adb/vpnhide_kmod/autodisable_mask.txt"
+if [ -f "$AUTODISABLE_FILE" ] && [ -x "$CTL" ]; then
+    MASK=$(tr -d '\r\n' < "$AUTODISABLE_FILE")
+    if [ -n "$MASK" ]; then
+        log -t vpnhide "boot: applying active hooks mask $MASK"
+        "$CTL" active_hooks "$MASK"
+    fi
+fi
+
 log -t vpnhide "service.sh background monitoring daemon starting in foreground"
 
 IP_FILE="/data/system/vpnhide_physical_ip"

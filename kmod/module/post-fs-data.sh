@@ -16,6 +16,74 @@ if grep -q vpnhide_kmod /proc/modules 2>/dev/null; then
     exit 0
 fi
 
+# Crash detection and automatic hook mitigation
+CRASH_DIR="/data/adb/vpnhide_kmod"
+CRASH_FILE="$CRASH_DIR/last_crash.txt"
+AUTODISABLE_FILE="$CRASH_DIR/autodisable_mask.txt"
+
+detect_previous_crash() {
+    # Scan standard pstore and last_kmsg locations
+    local log_files="/sys/fs/pstore/console-ramoops /sys/fs/pstore/console-ramoops-0 /sys/fs/pstore/dmesg-ramoops-0 /sys/fs/pstore/dmesg-ramoops-1 /proc/last_kmsg"
+    for f in $log_files; do
+        # resolved in case of wildcards or spaces
+        # shellcheck disable=SC2086
+        for resolved_file in $f; do
+            [ -f "$resolved_file" ] || continue
+            # Check if the log contains a panic from our module (stack trace symbol)
+            if grep -q -F "[vpnhide_kmod]" "$resolved_file" 2>/dev/null; then
+                local crash_traces
+                crash_traces=$(grep -B 15 -A 15 -F "[vpnhide_kmod]" "$resolved_file" 2>/dev/null | head -n 40)
+                if [ -n "$crash_traces" ]; then
+                    mkdir -p "$CRASH_DIR"
+                    {
+                        echo "CRASH_DETECTED"
+                        echo "File: $resolved_file"
+                        echo "Trace:"
+                        echo "$crash_traces"
+                    } > "$CRASH_FILE"
+                    
+                    # Identify which hook caused the crash
+                    local hook_index=-1
+                    if echo "$crash_traces" | grep -q "dev_ioctl"; then hook_index=0
+                    elif echo "$crash_traces" | grep -q "sock_ioctl"; then hook_index=1
+                    elif echo "$crash_traces" | grep -q "rtnl_fill"; then hook_index=2
+                    elif echo "$crash_traces" | grep -q "inet6_fill"; then hook_index=3
+                    elif echo "$crash_traces" | grep -q "inet_fill"; then hook_index=4
+                    elif echo "$crash_traces" | grep -q "fib_route"; then hook_index=5
+                    elif echo "$crash_traces" | grep -q "ipv6_route"; then hook_index=6
+                    elif echo "$crash_traces" | grep -q "fib_dump"; then hook_index=7
+                    elif echo "$crash_traces" | grep -q "fib_rule_fill"; then hook_index=8
+                    elif echo "$crash_traces" | grep -q "rt6_fill"; then hook_index=9
+                    elif echo "$crash_traces" | grep -q "rt_fill"; then hook_index=10
+                    elif echo "$crash_traces" | grep -q "sock_setsockopt"; then hook_index=11
+                    elif echo "$crash_traces" | grep -q "sock_getsockopt"; then hook_index=12
+                    elif echo "$crash_traces" | grep -q "socket_connect"; then hook_index=13
+                    elif echo "$crash_traces" | grep -q "inet_getname"; then hook_index=14
+                    elif echo "$crash_traces" | grep -q "inet6_getname"; then hook_index=15
+                    fi
+                    
+                    if [ "$hook_index" -ge 0 ]; then
+                        echo "crashed_hook=$hook_index" >> "$CRASH_FILE"
+                        
+                        local current_mask=65535
+                        if [ -f "$AUTODISABLE_FILE" ]; then
+                            current_mask=$(cat "$AUTODISABLE_FILE")
+                        fi
+                        
+                        # Clear the bit
+                        local new_mask=$((current_mask & ~(1 << hook_index)))
+                        echo "$new_mask" > "$AUTODISABLE_FILE"
+                    fi
+                    return 0
+                fi
+            fi
+        done
+    done
+}
+
+# Run previous crash detection
+detect_previous_crash
+
 mkdir -p "$STATUS_DIR"
 
 # Collapse newlines and tabs in a value so the key=value parser in the

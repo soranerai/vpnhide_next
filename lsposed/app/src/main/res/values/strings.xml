@@ -211,4 +211,6 @@
     <string name="check_netlink_getrule" translatable="false">netlink RTM_GETRULE</string>
     <string name="check_tcp_mss" translatable="false">getsockopt TCP_MAXSEG</string>
     <string name="check_netlink_getneigh" translatable="false">netlink RTM_GETNEIGH</string>
+    <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
+    <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
 </resources>

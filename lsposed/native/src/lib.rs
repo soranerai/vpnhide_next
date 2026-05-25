@@ -919,11 +919,7 @@ pub fn check_getsockname_spoof() -> CheckOutput {
 
         let mut local: libc::sockaddr_in = std::mem::zeroed();
         let mut local_len = std::mem::size_of_val(&local) as libc::socklen_t;
-        let ret = libc::getsockname(
-            fd,
-            std::ptr::from_mut(&mut local).cast(),
-            &mut local_len,
-        );
+        let ret = libc::getsockname(fd, std::ptr::from_mut(&mut local).cast(), &mut local_len);
         if ret < 0 {
             libc::close(fd);
             return CheckOutput::fail(format!("getsockname() failed: {}", last_os_error()));
@@ -951,7 +947,9 @@ pub fn check_getsockname_spoof() -> CheckOutput {
         let mut ifa = addrs;
         while !ifa.is_null() {
             let entry = &*ifa;
-            if !entry.ifa_addr.is_null() && (*entry.ifa_addr).sa_family == libc::AF_INET as libc::sa_family_t {
+            if !entry.ifa_addr.is_null()
+                && (*entry.ifa_addr).sa_family == libc::AF_INET as libc::sa_family_t
+            {
                 let sin = &*(entry.ifa_addr as *const libc::sockaddr_in);
                 if sin.sin_addr.s_addr == local.sin_addr.s_addr {
                     iface_name = cstr_to_str(entry.ifa_name);
@@ -968,11 +966,17 @@ pub fn check_getsockname_spoof() -> CheckOutput {
 
         let details = format!("getsockname() returned {ip_str} on interface {iface_name}");
         if is_vpn {
-            CheckOutput::fail(format!("{details} — leaked VPN IP address! Kernel getsockname hook bypassed or inactive!"))
+            CheckOutput::fail(format!(
+                "{details} — leaked VPN IP address! Kernel getsockname hook bypassed or inactive!"
+            ))
         } else if !found {
-            CheckOutput::fail(format!("{details} — leaked VPN IP address! (Interface hidden by other hooks, but IP still leaked!)"))
+            CheckOutput::fail(format!(
+                "{details} — leaked VPN IP address! (Interface hidden by other hooks, but IP still leaked!)"
+            ))
         } else {
-            CheckOutput::pass(format!("{details} — secure (physical interface IP returned)"))
+            CheckOutput::pass(format!(
+                "{details} — secure (physical interface IP returned)"
+            ))
         }
     }
 }
@@ -1019,7 +1023,8 @@ pub fn check_netlink_getrule() -> CheckOutput {
         let mut buf = [0u8; 32768];
         let mut total = 0u32;
         let mut leaked_rules = Vec::new();
-        let hdr_plus_frh = std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<FibRuleHdr>();
+        let hdr_plus_frh =
+            std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<FibRuleHdr>();
 
         const FRA_IIFNAME: u16 = 3;
         const FRA_OIFNAME: u16 = 4;
@@ -1040,7 +1045,10 @@ pub fn check_netlink_getrule() -> CheckOutput {
                     let data_start = offset + hdr_plus_frh;
                     let msg_end = offset + msg_len;
 
-                    let frh_ptr = b.as_ptr().add(offset + std::mem::size_of::<libc::nlmsghdr>()) as *const FibRuleHdr;
+                    let frh_ptr = b
+                        .as_ptr()
+                        .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                        as *const FibRuleHdr;
                     let frh = &*frh_ptr;
                     let mut table_id = frh.table as u32;
 
@@ -1050,28 +1058,26 @@ pub fn check_netlink_getrule() -> CheckOutput {
                     let mut uid_start = 0u32;
                     let mut uid_end = 0u32;
 
-                    for_each_rtattr(b, data_start, msg_end, |rta, payload| {
-                        match rta.rta_type {
-                            FRA_IIFNAME => {
-                                iifname = cstr_to_str(payload.as_ptr().cast());
-                            }
-                            FRA_OIFNAME => {
-                                oifname = cstr_to_str(payload.as_ptr().cast());
-                            }
-                            FRA_TABLE => {
-                                if payload.len() >= 4 {
-                                    table_id = u32::from_ne_bytes(payload[..4].try_into().unwrap());
-                                }
-                            }
-                            FRA_UID_RANGE => {
-                                if payload.len() >= 8 {
-                                    uid_start = u32::from_ne_bytes(payload[..4].try_into().unwrap());
-                                    uid_end = u32::from_ne_bytes(payload[4..8].try_into().unwrap());
-                                    has_uid_range = true;
-                                }
-                            }
-                            _ => {}
+                    for_each_rtattr(b, data_start, msg_end, |rta, payload| match rta.rta_type {
+                        FRA_IIFNAME => {
+                            iifname = cstr_to_str(payload.as_ptr().cast());
                         }
+                        FRA_OIFNAME => {
+                            oifname = cstr_to_str(payload.as_ptr().cast());
+                        }
+                        FRA_TABLE => {
+                            if payload.len() >= 4 {
+                                table_id = u32::from_ne_bytes(payload[..4].try_into().unwrap());
+                            }
+                        }
+                        FRA_UID_RANGE => {
+                            if payload.len() >= 8 {
+                                uid_start = u32::from_ne_bytes(payload[..4].try_into().unwrap());
+                                uid_end = u32::from_ne_bytes(payload[4..8].try_into().unwrap());
+                                has_uid_range = true;
+                            }
+                        }
+                        _ => {}
                     });
 
                     let matches_vpn_iif = !iifname.is_empty() && is_vpn_iface(&iifname);
@@ -1079,13 +1085,15 @@ pub fn check_netlink_getrule() -> CheckOutput {
 
                     if matches_vpn_iif || matches_vpn_oif {
                         let iface = if matches_vpn_iif { &iifname } else { &oifname };
-                        leaked_rules.push(format!(
-                            "table={table_id} VPN iface={iface}"
-                        ));
+                        leaked_rules.push(format!("table={table_id} VPN iface={iface}"));
                     } else if has_uid_range {
                         let my_uid = libc::getuid();
                         if my_uid >= uid_start && my_uid <= uid_end {
-                            if table_id != 254 && table_id != 255 && table_id != 253 && table_id > 100 {
+                            if table_id != 254
+                                && table_id != 255
+                                && table_id != 253
+                                && table_id > 100
+                            {
                                 leaked_rules.push(format!(
                                     "table={table_id} for app UID={my_uid} (range {uid_start}-{uid_end})"
                                 ));
@@ -1203,7 +1211,10 @@ pub fn check_tcp_mss() -> CheckOutput {
         }
 
         if suspicious {
-            CheckOutput::fail(format!("{details} — encapsulation detected: {}", reasons.join(", ")))
+            CheckOutput::fail(format!(
+                "{details} — encapsulation detected: {}",
+                reasons.join(", ")
+            ))
         } else {
             CheckOutput::pass(format!("{details} — secure (normal physical MTU/MSS)"))
         }
@@ -1271,35 +1282,51 @@ pub fn check_netlink_getneigh() -> CheckOutput {
                     let data_start = offset + hdr_plus_ndmsg;
                     let msg_end = offset + msg_len;
 
-                    let ndm_ptr = b.as_ptr().add(offset + std::mem::size_of::<libc::nlmsghdr>()) as *const Ndmsg;
+                    let ndm_ptr = b
+                        .as_ptr()
+                        .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                        as *const Ndmsg;
                     let ndm = &*ndm_ptr;
 
                     let mut ifname_buf = [0u8; libc::IF_NAMESIZE];
-                    let ptr = libc::if_indextoname(ndm.ndm_ifindex as u32, ifname_buf.as_mut_ptr().cast());
-                    let ifname = if !ptr.is_null() { cstr_to_str(ptr) } else { format!("ifindex_{}", ndm.ndm_ifindex) };
+                    let ptr = libc::if_indextoname(
+                        ndm.ndm_ifindex as u32,
+                        ifname_buf.as_mut_ptr().cast(),
+                    );
+                    let ifname = if !ptr.is_null() {
+                        cstr_to_str(ptr)
+                    } else {
+                        format!("ifindex_{}", ndm.ndm_ifindex)
+                    };
 
                     let mut ip_str = String::new();
                     let mut mac_str = String::new();
 
-                    for_each_rtattr(b, data_start, msg_end, |rta, payload| {
-                        match rta.rta_type {
-                            NDA_DST => {
-                                if payload.len() == 4 {
-                                    ip_str = format!("{}.{}.{}.{}", payload[0], payload[1], payload[2], payload[3]);
-                                } else if payload.len() == 16 {
-                                    ip_str = "IPv6".to_string();
-                                }
+                    for_each_rtattr(b, data_start, msg_end, |rta, payload| match rta.rta_type {
+                        NDA_DST => {
+                            if payload.len() == 4 {
+                                ip_str = format!(
+                                    "{}.{}.{}.{}",
+                                    payload[0], payload[1], payload[2], payload[3]
+                                );
+                            } else if payload.len() == 16 {
+                                ip_str = "IPv6".to_string();
                             }
-                            NDA_LLADDR => {
-                                if payload.len() == 6 {
-                                    mac_str = format!(
-                                        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                                        payload[0], payload[1], payload[2], payload[3], payload[4], payload[5]
-                                    );
-                                }
-                            }
-                            _ => {}
                         }
+                        NDA_LLADDR => {
+                            if payload.len() == 6 {
+                                mac_str = format!(
+                                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                                    payload[0],
+                                    payload[1],
+                                    payload[2],
+                                    payload[3],
+                                    payload[4],
+                                    payload[5]
+                                );
+                            }
+                        }
+                        _ => {}
                     });
 
                     neighbors.push((ifname, ip_str, mac_str, ndm.ndm_state));
@@ -1314,7 +1341,8 @@ pub fn check_netlink_getneigh() -> CheckOutput {
         let mut physical_has_mac = false;
         let mut list = Vec::new();
         for (iface, ip, mac, state) in &neighbors {
-            let is_phys = iface.starts_with("wlan") || iface.starts_with("eth") || iface.starts_with("rmnet");
+            let is_phys =
+                iface.starts_with("wlan") || iface.starts_with("eth") || iface.starts_with("rmnet");
             if is_phys && !mac.is_empty() {
                 physical_has_mac = true;
             }
@@ -1327,14 +1355,16 @@ pub fn check_netlink_getneigh() -> CheckOutput {
             list.join(", ")
         };
 
-        let has_wlan = neighbors.iter().any(|(iface, _, _, _)| iface.starts_with("wlan"));
+        let has_wlan = neighbors
+            .iter()
+            .any(|(iface, _, _, _)| iface.starts_with("wlan"));
 
         if has_wlan && !physical_has_mac {
-            CheckOutput::fail(format!("wlan has no ARP neighbors (MACs hidden) — table: {details}"))
+            CheckOutput::fail(format!(
+                "wlan has no ARP neighbors (MACs hidden) — table: {details}"
+            ))
         } else {
             CheckOutput::pass(format!("neighbor table: {details}"))
         }
     }
 }
-
-
