@@ -1,3 +1,8 @@
+## v1.6.1
+
+### Fixed
+- Fix potential kernel panic on rt_fill_info hook, and implement stealth getsockopt spoofing via sock_common_getsockopt for IP_MTU, IPV6_MTU, and TCP_MAXSEG to prevent detection of MTU/MSS clamping.
+
 ## v1.6.0
 
 ### Added
@@ -47,11 +52,3 @@
 ### Fixed
 - Fix DNS leak of target/VPN interfaces in LinkProperties hooks
 - Fixed NetworkCallback push-model and VpnService.prepare VPN detection leaks
-
-## v1.3.0
-
-### Changed
-- Some ui fixes
-- Custom interfaces hide ability
-- Migrated boot-time rule application to SQLite database for faster startup
-- Second stage of migration to Room
