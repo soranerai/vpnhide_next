@@ -1,3 +1,22 @@
+## v1.6.0
+
+### Added
+- Add getsockname diagnostic check to verify VPN hiding on connected sockets
+- Implement getsockname spoofing via userspace IP service
+- Intercept setsockopt(SO_MARK) calls to reset physical/non-VPN interface routing binds
+- Added RTM_GETRULE, TCP_MAXSEG, and RTM_GETNEIGH checks to diagnostics suite
+- Added dynamic kernel hook isolation screen to diagnostics for crash debugging
+- - WifiInfo hooks in system_server: restore IP/SSID/BSSID redacted by Android 12+ privacy controls (fixes MTS detection on Wi-Fi)
+- Suppress VPN-specific network callbacks for target apps in system_server (fixes MTS detection on cellular networks)
+- Add new diagnostic checks in the companion app to verify VPN callback suppression and WifiInfo unredaction
+
+### Fixed
+- Fix critical kernel panic (Null dereference and invalid skb register mapping in GKI 6.1+ rt_fill_info)
+- Implement robust score-based physical interface ranking to select default internet-routing interface (e.g. ccmni2 with DNS) rather than secondary cellular interfaces (e.g. ccmni1).
+- Fix register mapping in rt_fill_info hook to prevent kernel panics on ARM64
+- Fix setsockopt registers mapping for ARM64 kernels >= 6.4 (including 6.6 and 6.12)
+- Hid routing policy database rules from target apps
+
 ## v1.5.0
 
 ### Added
@@ -36,20 +55,3 @@
 - Custom interfaces hide ability
 - Migrated boot-time rule application to SQLite database for faster startup
 - Second stage of migration to Room
-
-## v1.2.5
-
-### Added
-- Full support for Work Profile and secondary users with visual distinction and profile filtering
-
-### Changed
-- Improved app responsiveness by pre-loading application lists at startup
-- Significantly improved settings saving performance
-
-### Fixed
-- Fixed incorrect label color for mass rules
-- Fixed settings restore after reboot
-- Restoration of protection targets and port rules after reboot
-
-### Removed
-- Removed unstable VPN routing bypass logic

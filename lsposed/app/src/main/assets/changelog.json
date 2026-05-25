@@ -1,6 +1,65 @@
 {
   "history": [
     {
+      "version": "1.6.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add getsockname diagnostic check to verify VPN hiding on connected sockets",
+              "ru": "Добавлена проверка getsockname на экран диагностики для проверки скрытия VPN на сокетах"
+            },
+            {
+              "en": "Implement getsockname spoofing via userspace IP service",
+              "ru": "Реализация подмены getsockname через службу получения IP-адресов в пространстве пользователя"
+            },
+            {
+              "en": "Intercept setsockopt(SO_MARK) calls to reset physical/non-VPN interface routing binds",
+              "ru": "Перехват вызовов setsockopt(SO_MARK) для сброса привязок маршрутизации к физическим интерфейсам вне VPN"
+            },
+            {
+              "en": "Added RTM_GETRULE, TCP_MAXSEG, and RTM_GETNEIGH checks to diagnostics suite",
+              "ru": "Добавлены проверки RTM_GETRULE, TCP_MAXSEG и RTM_GETNEIGH на экран диагностики"
+            },
+            {
+              "en": "Added dynamic kernel hook isolation screen to diagnostics for crash debugging",
+              "ru": "Добавлен экран изоляции хуков ядра на вкладку диагностики для поиска причин падений"
+            },
+            {
+              "en": "- WifiInfo hooks in system_server: restore IP/SSID/BSSID redacted by Android 12+ privacy controls (fixes MTS detection on Wi-Fi)\n- Suppress VPN-specific network callbacks for target apps in system_server (fixes MTS detection on cellular networks)\n- Add new diagnostic checks in the companion app to verify VPN callback suppression and WifiInfo unredaction",
+              "ru": "- Хуки WifiInfo в system_server: восстановление IP/SSID/BSSID, которые Android 12+ скрывает для приложений без ACCESS_FINE_LOCATION (исправляет детект МТС на Wi-Fi)\n- Блокировка специфичных для VPN сетевых коллбеков в system_server для целевых приложений (исправляет детект МТС на мобильных сетях)\n- Добавлены новые диагностические проверки для верификации блокировки VPN-коллбеков и восстановления параметров WifiInfo"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix critical kernel panic (Null dereference and invalid skb register mapping in GKI 6.1+ rt_fill_info)",
+              "ru": "Устранение критической ошибки ядра (Null-разыменование и неверное сопоставление регистра skb в GKI 6.1+ rt_fill_info)"
+            },
+            {
+              "en": "Implement robust score-based physical interface ranking to select default internet-routing interface (e.g. ccmni2 with DNS) rather than secondary cellular interfaces (e.g. ccmni1).",
+              "ru": "Внедрено надежное ранжирование физических интерфейсов по приоритетам и интернет-способностям для правильного выбора основного интернет-интерфейса."
+            },
+            {
+              "en": "Fix register mapping in rt_fill_info hook to prevent kernel panics on ARM64",
+              "ru": "Исправление маппинга регистров в хуке rt_fill_info для предотвращения паники ядра на ARM64"
+            },
+            {
+              "en": "Fix setsockopt registers mapping for ARM64 kernels >= 6.4 (including 6.6 and 6.12)",
+              "ru": "Исправление маппинга регистров sock_setsockopt для ядер ARM64 >= 6.4 (включая 6.6 и 6.12)"
+            },
+            {
+              "en": "Hid routing policy database rules from target apps",
+              "ru": "Скрыты правила маршрутизации политик от целевых приложений"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.5.0",
       "sections": [
         {

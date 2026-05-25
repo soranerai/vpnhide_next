@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.6.0
+
+### Added
+- Add getsockname diagnostic check to verify VPN hiding on connected sockets
+- Implement getsockname spoofing via userspace IP service
+- Intercept setsockopt(SO_MARK) calls to reset physical/non-VPN interface routing binds
+- Added RTM_GETRULE, TCP_MAXSEG, and RTM_GETNEIGH checks to diagnostics suite
+- Added dynamic kernel hook isolation screen to diagnostics for crash debugging
+- - WifiInfo hooks in system_server: restore IP/SSID/BSSID redacted by Android 12+ privacy controls (fixes MTS detection on Wi-Fi)
+- Suppress VPN-specific network callbacks for target apps in system_server (fixes MTS detection on cellular networks)
+- Add new diagnostic checks in the companion app to verify VPN callback suppression and WifiInfo unredaction
+
+### Fixed
+- Fix critical kernel panic (Null dereference and invalid skb register mapping in GKI 6.1+ rt_fill_info)
+- Implement robust score-based physical interface ranking to select default internet-routing interface (e.g. ccmni2 with DNS) rather than secondary cellular interfaces (e.g. ccmni1).
+- Fix register mapping in rt_fill_info hook to prevent kernel panics on ARM64
+- Fix setsockopt registers mapping for ARM64 kernels >= 6.4 (including 6.6 and 6.12)
+- Hid routing policy database rules from target apps
+
 ## v1.5.0
 
 ### Added
