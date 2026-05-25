@@ -609,6 +609,69 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 	if (!data->active || ret != 0)
 		return 0;
 
+	if (data->level == IPPROTO_IP && data->optname == IP_MTU) {
+		int mtu = 0;
+		int len = 0;
+		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
+			if (copy_from_user(&mtu, data->optval, sizeof(int)) ==
+			    0) {
+				if (mtu > 0 && mtu < 1500) {
+					int fake_mtu = 1500;
+					if (copy_to_user(data->optval,
+							 &fake_mtu,
+							 sizeof(int)) == 0) {
+						vpnhide_dbg(
+							"sock_getsockopt_ret: spoofed IP_MTU from %d to 1500\n",
+							mtu);
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
+	if (data->level == IPPROTO_IPV6 && data->optname == IPV6_MTU) {
+		int mtu = 0;
+		int len = 0;
+		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
+			if (copy_from_user(&mtu, data->optval, sizeof(int)) ==
+			    0) {
+				if (mtu > 0 && mtu < 1500) {
+					int fake_mtu = 1500;
+					if (copy_to_user(data->optval,
+							 &fake_mtu,
+							 sizeof(int)) == 0) {
+						vpnhide_dbg(
+							"sock_getsockopt_ret: spoofed IPV6_MTU from %d to 1500\n",
+							mtu);
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
+	if (data->level == IPPROTO_TCP && data->optname == TCP_MAXSEG) {
+		int mss = 0;
+		int len = 0;
+		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
+			if (copy_from_user(&mss, data->optval, sizeof(int)) ==
+			    0) {
+				if (mss > 0 && mss < 1460) {
+					int fake_mss = 1460;
+					if (copy_to_user(data->optval,
+							 &fake_mss,
+							 sizeof(int)) == 0) {
+						vpnhide_dbg(
+							"sock_getsockopt_ret: spoofed TCP_MAXSEG from %d to 1460\n",
+							mss);
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
 	if (data->level != SOL_SOCKET)
 		return 0;
 
@@ -680,6 +743,14 @@ static struct kretprobe sock_getsockopt_krp = {
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
 	.data_size = sizeof(struct sock_getsockopt_data),
 	.kp.symbol_name = "sock_getsockopt",
+};
+
+static struct kretprobe sock_common_getsockopt_krp = {
+	.entry_handler = sock_getsockopt_entry,
+	.handler = sock_getsockopt_ret,
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.data_size = sizeof(struct sock_getsockopt_data),
+	.kp.symbol_name = "sock_common_getsockopt",
 };
 
 /* ================================================================== */
@@ -1410,36 +1481,55 @@ static int rt_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct rt_fill_data *data;
 	struct net_device *dev = NULL;
+	struct rtable *rt = NULL;
+	struct sk_buff *skb = NULL;
+	struct net_device *dev_ptr = NULL;
+	unsigned int temp_len = 0;
+	char ifname[IFNAMSIZ];
 
 	if (!is_hook_active(10))
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_filter = false;
+	data->skb = NULL;
+	data->saved_len = 0;
 
 	if (!is_target_uid())
 		return 0;
 
-	/*
-	 * rt_fill_info(net, dst, src, rt, table_id, dscp, fl4, skb, ...)
-	 * On ARM64, the 8th argument (skb) is passed in register x7.
-	 * Reading from x6 would load 'fl4' (flowi4 pointer), causing stack
-	 * corruption in skb_trim and immediate kernel panic.
-	 */
-	data->skb = (struct sk_buff *)regs->regs[7];
+	/* Get rt (x3) and skb (x7) directly from registers */
+	rt = (struct rtable *)regs->regs[3];
+	skb = (struct sk_buff *)regs->regs[7];
 
-	{
-		struct rtable *rt = (struct rtable *)regs->regs[3];
-		if (rt)
-			dev = rt->dst.dev;
+	/* Safely read dev from rt->dst.dev */
+	if (rt) {
+		if (copy_from_kernel_nofault(&dev_ptr, &rt->dst.dev,
+					     sizeof(dev_ptr)) == 0 &&
+		    dev_ptr) {
+			/* Safely read interface name from dev_ptr->name */
+			memset(ifname, 0, sizeof(ifname));
+			if (copy_from_kernel_nofault(ifname, dev_ptr->name,
+						     IFNAMSIZ - 1) == 0) {
+				ifname[IFNAMSIZ - 1] = '\0';
+				dev = dev_ptr;
+			}
+		}
+	}
+
+	/* Safely read skb->len */
+	if (skb) {
+		if (copy_from_kernel_nofault(&temp_len, &skb->len,
+					     sizeof(temp_len)) == 0) {
+			data->skb = skb;
+			data->saved_len = temp_len;
+		}
 	}
 
 	rcu_read_lock();
-	if (dev && is_vpn_ifname(dev->name)) {
-		data->saved_len = data->skb ? data->skb->len : 0;
+	if (dev && is_vpn_ifname(ifname)) {
 		data->should_filter = true;
-		vpnhide_dbg("rt_fill_entry: hiding route via %s\n", dev->name);
+		vpnhide_dbg("rt_fill_entry: hiding route via %s\n", ifname);
 	}
 	rcu_read_unlock();
 
@@ -2040,6 +2130,7 @@ static struct kretprobe_reg probes[] = {
 	{ &rt_fill_krp, "rt_fill_info", false },
 	{ &sock_setsockopt_krp, "sock_setsockopt", false },
 	{ &sock_getsockopt_krp, "sock_getsockopt", false },
+	{ &sock_common_getsockopt_krp, "sock_common_getsockopt", false },
 	{ &socket_connect_krp, "security_socket_connect", false },
 	{ &inet_getname_krp, "inet_getname", false },
 	{ &inet6_getname_krp, "inet6_getname", false },
