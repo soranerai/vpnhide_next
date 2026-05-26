@@ -28,6 +28,25 @@
 *   **Workprofiles support**: You can manage apps from workprofiles.
 *   **Hide custom interfaces**: You can add any custom prefix to hide.
 
+### Comparison with the original (okhsunrog/vpnhide)
+
+| Detection Vector / Feature | Original vpnhide (okhsunrog) | VPNHide Next (This fork) | Hiding Approach & Advantages |
+| :--- | :--- | :--- | :--- |
+| **Operation Level & Process Footprint** | Zygisk (injection into target process) / LSPosed / kmod | **Only kmod (Kernel) + LSPosed (system_server)** | **Absolute Stealth**: No memory injections, libraries, or hooks in the target process context. Prevents detection by advanced Anti-Tamper/Anti-Cheat memory scanners (MirPay, banking apps). |
+| **Java Hiding Philosophy (LSPosed in system_server)** | **Brute-Force Removal (Interface Cutting)**: VPN interfaces and routes are deleted or nulled out in structures. | **Surgical Mimicry**: Replaces `tun0` / VPN name with active physical interface (`wlan0`/`rmnet_data0`), clones and projects physical `LinkAddresses`, `Dnses`, `Domains`, `Mtu`, and routes. | **Physical Interface Simulation**: Target application receives coherent, legimate network structures matching standard Wi-Fi/cellular properties (no anomalous zero-DNS/empty structures). |
+| **Local Port Probing (Localhost / Loopback)** | External Magisk module `portshide` via `iptables` rules. | **Integrated Kernel Socket Connect Hook `security_socket_connect` (Hook 12)** | **No Network Footprint**: Port blocking (TCP/UDP, IPv4/IPv6, loopback subnets, wildcard addresses) is implemented inside the kernel. Leaves zero suspicious custom chains in `iptables`. |
+| **Local Socket Address (`getsockname`)** | Missed (leaks the local IP address of the VPN gateway). | **Kernel-level address spoofing via `inet_getname` / `inet6_getname` (Hook 13)** | **Socket Mimicry**: Returns the real physical IP address (synchronized by a daemon) instead of the VPN-tunnel address to the target application. |
+| **Direct Bind to VPN (`setsockopt` SO_BINDTODEVICE)** | Missed (application can bind sockets directly to the VPN interface). | **Bind Sabotage via `sock_setsockopt` (Hook 2b)** | **Anti-Bypassing**: Intercepts and sets `optlen = 0` for binds to VPN interfaces. Kernel treats it as "remove binding" and returns `0` (Success) to the application. |
+| **MTU/MSS Clamping Detection** | Missed (lower MTU/MSS sizes typical of VPN overhead like 1400 leak presence). | **MTU/MSS Spoofing in `getsockopt` / `sock_common_getsockopt` (Hook 2c / 1.6.1)** | **Packet Size Mimicry**: Overwrites `IP_MTU`/`IPV6_MTU` to 1500 and `TCP_MAXSEG` to 1460 to match standard physical networks. |
+| **Routing Policy Database (RPDB / Netlink)** | Missed. | **Netlink `RTM_GETRULE` filtering (`fib_nl_fill_rule` / Hook 7b)** | Hidden policy routing database rules from target apps. |
+| **DNS Queries / DNS Leaks** | VPN DNS servers could leak inside LinkProperties. | **Precision DNS Filtering** | Completely removes VPN DNS entries, replacing them with physical DNS properties or Google Public DNS (8.8.8.8). |
+| **NetworkCallback Events** | Missed. | **Complete system-level suppression of VPN-specific callbacks** | Prevents targeted apps from receiving VPN status changes in AOSP network callbacks (e.g., `onAvailable`). |
+| **Wi-Fi Scanning (WifiInfo Redaction)** | Missed. | **Physical IP/SSID/BSSID restoration (AOSP 12+)** | Restores real parameters anonymized by Android 12+ without location permission, bypassing telemetry checks (e.g. MTS). |
+| **Network NetID Leak** | Missed (VPN network has a distinct network ID). | **Dynamic NetID Replacement** | Substitutes the VPN network NetID with the active physical NetID. |
+| **FileSystem Stealth (ProcFS)** | Creates public `/proc/vpnhide_targets` and `/proc/vpnhide_debug` nodes. | **Absolute ProcFS-stealth via `/dev/vpnhide_ctrl` character device** | Completely removes `/proc` nodes. Root controller communicates via misc character device with `0660` permissions (root/system only), invisible to untrusted apps. |
+| **Rules DB & Boot Performance** | Plaintext configuration files, slow startup parsing. | **SQLite (Room) database with `inotify` FileObservers** | Immediate loading and instantaneous, transaction-based rule synchronization. |
+| **Work Profiles** | Not supported. | **Full Native Support** | Isolates and filters targets in secondary profiles and work profiles with profile separation. |
+
 ### Architecture
 *   **`kmod`** — kernel module (recommended), operating outside the application process context. Requirements: GKI + ARM64-v8a.
 *   **`lsposed`** — Binder transaction filtering in `system_server`. Optional.
