@@ -17,18 +17,17 @@
 
 **vpnhide** is a tool to hide VPN usage from Android applications. It makes the VPN connection invisible even to services that actively try to detect it (such as banking apps, streaming platforms, or region-restricted services).
 
-**Main differences from the original:**
-*   **Dropped support for legacy architectures**: Only arm64 is supported.
-*   **Deep redesign and optimization**: Completely overhauled interface (skeleton, async loading) and significantly optimized code.
-*   **Flexible sorting**: Added the ability for proper application sorting.
-*   **Extended coverage of detection vectors**: Exclusion of hidden interfaces from route and DNS queries. Full coverage of the NetworkCallback leak. Preventing target applications from binding to tunnel interfaces.
-*   **Fully reworked port blocking**: Rule-based port access blocking mechanism. The logic has been moved from iptables to the kernel.
-*   **Database-driven architecture**: Rules are mirrored and stored in the application's database.
-*   **Maximum Stealth**: Complete removal of `/proc/` files accessible to all applications, eliminating module detection through the file system.
-*   **Workprofiles support**: You can manage apps from workprofiles.
-*   **Hide custom interfaces**: You can add any custom prefix to hide.
+**Main differences from the original (in brief):**
+*   **Dropped Zygisk**: The module is strictly focused on zero-in-process stealth via kmod + LSPosed.
+*   **In-Kernel Port Blocking**: Loopback blocking is moved from iptables to `security_socket_connect` kernel hooks.
+*   **Surgical Mimicry in LSPosed**: VPN properties are substituted with active physical network properties in `system_server` rather than suspicious data blanking.
+*   **New Native Vectors**: Spoofing of `getsockname`, MTU/MSS clamping, setsockopt binds, and RPDB policy routing.
+*   **Absolute Stealth**: Complete removal of ProcFS (files in `/proc/`) in favor of a secure char device `/dev/vpnhide_ctrl`.
+*   **Work Profiles Support**: Full native profile filtering and separation.
+*   **Modern DB Engine**: Driven by Room (SQLite) database with automatic inotify reload.
+*   **ARM64 Only**: Dropped support for legacy architectures and optimized for arm64-v8a.
 
-### Comparison with the original (okhsunrog/vpnhide)
+### Detailed comparison with the original (in detail)
 
 | Detection Vector / Feature | Original vpnhide (okhsunrog) | VPNHide Next (This fork) | Hiding Approach & Advantages |
 | :--- | :--- | :--- | :--- |
