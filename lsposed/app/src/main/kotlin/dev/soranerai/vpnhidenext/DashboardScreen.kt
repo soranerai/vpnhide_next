@@ -99,21 +99,16 @@ private fun SkeletonDashboard() {
             fontWeight = FontWeight.Bold,
         )
         Spacer(Modifier.height(8.dp))
-        repeat(2) {
-            SkeletonModuleCard()
-            Spacer(Modifier.height(8.dp))
-        }
-
-        Spacer(Modifier.height(20.dp))
-        Text(
-            text = stringResource(R.string.dashboard_protection),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-        )
-        Spacer(Modifier.height(8.dp))
-        repeat(2) {
-            SkeletonProtectionCard()
-            Spacer(Modifier.height(8.dp))
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                SkeletonModuleCard()
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                SkeletonModuleCard()
+            }
         }
     }
 }
@@ -121,59 +116,28 @@ private fun SkeletonDashboard() {
 @Composable
 private fun SkeletonModuleCard() {
     ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
+        shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier.padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
         ) {
-            ShimmerPlaceholder(
-                modifier = Modifier.size(12.dp),
-                shape = CircleShape,
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 ShimmerPlaceholder(
-                    modifier =
-                        Modifier
-                            .width(100.dp)
-                            .height(18.dp),
+                    modifier = Modifier.width(70.dp).height(16.dp),
                 )
-                Spacer(Modifier.height(8.dp))
                 ShimmerPlaceholder(
-                    modifier =
-                        Modifier
-                            .width(160.dp)
-                            .height(14.dp),
+                    modifier = Modifier.size(8.dp),
+                    shape = CircleShape,
                 )
             }
-        }
-    }
-}
-
-@Composable
-private fun SkeletonProtectionCard() {
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(24.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+            Spacer(Modifier.height(8.dp))
             ShimmerPlaceholder(
-                modifier =
-                    Modifier
-                        .width(140.dp)
-                        .height(20.dp),
-            )
-            ShimmerPlaceholder(
-                modifier =
-                    Modifier
-                        .width(60.dp)
-                        .height(18.dp),
+                modifier = Modifier.width(100.dp).height(12.dp),
             )
         }
     }
@@ -203,30 +167,35 @@ private fun DashboardContent(
             modifier = Modifier.padding(vertical = 8.dp),
         )
 
-        val kmodActive = (s.kmod as? ModuleState.Installed)?.active == true
-        LsposedCard(s.lsposed)
-        Spacer(Modifier.height(12.dp))
-        ModuleCard(stringResource(R.string.dashboard_kmod), s.kmod)
-        s.nativeInstallRecommendation?.let { recommendation ->
-            Spacer(Modifier.height(12.dp))
-            NativeInstallRecommendationCard(recommendation)
-        }
-        updateInfo?.let { info ->
-            Spacer(Modifier.height(12.dp))
-            UpdateAvailableCard(info)
+        val (javaResult, nativeResult) = when (val p = s.protection) {
+            is ProtectionCheck.Checked -> Pair(p.java, p.native)
+            else -> Pair(null, null)
         }
 
-        // Protection status
-        Spacer(Modifier.height(24.dp))
-        Text(
-            text = stringResource(R.string.dashboard_protection),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Box(modifier = Modifier.weight(1f)) {
+                LsposedCard(
+                    state = s.lsposed,
+                    javaResult = javaResult,
+                    selfNeedsRestart = selfNeedsRestart,
+                )
+            }
+            Box(modifier = Modifier.weight(1f)) {
+                ModuleCard(
+                    name = stringResource(R.string.dashboard_kmod),
+                    state = s.kmod,
+                    nativeResult = nativeResult,
+                    selfNeedsRestart = selfNeedsRestart,
+                )
+            }
+        }
 
         when (val p = s.protection) {
             is ProtectionCheck.NoVpn -> {
+                Spacer(Modifier.height(12.dp))
                 VpnOffPrompt(
                     onRetry = {
                         DashboardCache.refresh(scope, context, selfNeedsRestart)
@@ -236,18 +205,23 @@ private fun DashboardContent(
             }
 
             is ProtectionCheck.NeedsRestart -> {
+                Spacer(Modifier.height(12.dp))
                 StatusBanner(
                     text = stringResource(R.string.dashboard_needs_restart),
                     containerColor = MaterialTheme.colorScheme.errorContainer,
                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
+            else -> {}
+        }
 
-            is ProtectionCheck.Checked -> {
-                NativeProtectionCard(p.native)
-                Spacer(Modifier.height(12.dp))
-                JavaProtectionCard(p.java)
-            }
+        s.nativeInstallRecommendation?.let { recommendation ->
+            Spacer(Modifier.height(12.dp))
+            NativeInstallRecommendationCard(recommendation)
+        }
+        updateInfo?.let { info ->
+            Spacer(Modifier.height(12.dp))
+            UpdateAvailableCard(info)
         }
 
         // Issues
@@ -300,17 +274,21 @@ private fun DashboardContent(
 private fun ModuleCard(
     name: String,
     state: ModuleState,
+    nativeResult: NativeResult?,
     selfNeedsRestart: Boolean = false,
 ) {
     val darkTheme = isSystemInDarkTheme()
     when (state) {
         is ModuleState.NotInstalled -> {
+            val containerColor = MaterialTheme.colorScheme.surfaceVariant
+            val contentColor = MaterialTheme.colorScheme.onSurface
             ModuleCardShell(
                 name = name,
                 version = null,
                 subtitle = stringResource(R.string.dashboard_not_installed),
                 dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                containerColor = containerColor,
+                contentColor = contentColor,
             )
         }
 
@@ -326,83 +304,161 @@ private fun ModuleCard(
                     KmodBrokenReason.AmbiguousLoadFailed -> R.string.dashboard_kmod_broken_ambiguous
                     null -> null
                 }
+
+            val targetsText = when {
+                brokenSubtitleRes != null -> stringResource(brokenSubtitleRes)
+                active -> stringResource(R.string.dashboard_active_targets, state.targetCount)
+                selfNeedsRestart -> stringResource(R.string.dashboard_installed_restart_app)
+                else -> stringResource(R.string.dashboard_installed_inactive)
+            }
+
+            val protectionText = if (active) {
+                when (nativeResult) {
+                    is NativeResult.Ok -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
+                    is NativeResult.Fail -> {
+                        val failText = if (nativeResult.passed > 0) {
+                            stringResource(R.string.dashboard_protection_partial)
+                        } else {
+                            stringResource(R.string.dashboard_protection_fail)
+                        }
+                        "\n" + stringResource(R.string.dashboard_protection_prefix, failText)
+                    }
+                    is NativeResult.NoModule -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_no_module))
+                    null -> ""
+                }
+            } else ""
+
+            val subtitle = targetsText + protectionText
+
+            val isFail = broken != null || (active && nativeResult is NativeResult.Fail)
+            val isOk = active && nativeResult is NativeResult.Ok
+
+            val (containerColor, contentColor, dotColor) = when {
+                isFail -> {
+                    if (darkTheme) {
+                        Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
+                    } else {
+                        Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
+                    }
+                }
+                isOk -> {
+                    if (darkTheme) {
+                        Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
+                    } else {
+                        Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
+                    }
+                }
+                else -> {
+                    val dot = when {
+                        active -> TelGreen
+                        else -> TelOrange
+                    }
+                    Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, dot)
+                }
+            }
+
             ModuleCardShell(
                 name = name,
                 version = state.version,
-                subtitle =
-                    when {
-                        brokenSubtitleRes != null -> stringResource(brokenSubtitleRes)
-                        active -> stringResource(R.string.dashboard_active_targets, state.targetCount)
-                        selfNeedsRestart -> stringResource(R.string.dashboard_installed_restart_app)
-                        else -> stringResource(R.string.dashboard_installed_inactive)
-                    },
-                dotColor =
-                    when {
-                        broken != null -> TelRed
-                        active -> TelGreen
-                        else -> TelOrange
-                    },
-                containerColor =
-                    when {
-                        broken != null -> TelRed.copy(alpha = 0.15f)
-                        active -> MaterialTheme.colorScheme.surfaceVariant
-                        else -> MaterialTheme.colorScheme.surfaceVariant
-                    },
+                subtitle = subtitle,
+                dotColor = dotColor,
+                containerColor = containerColor,
+                contentColor = contentColor,
             )
         }
     }
 }
 
 @Composable
-private fun LsposedCard(state: LsposedState) {
+private fun LsposedCard(
+    state: LsposedState,
+    javaResult: JavaResult?,
+    selfNeedsRestart: Boolean,
+) {
     val darkTheme = isSystemInDarkTheme()
     val moduleName = stringResource(R.string.dashboard_lsposed_module)
     val installedVersion = BuildConfig.VERSION_NAME
     when (state) {
         is LsposedState.NotInstalled -> {
+            val containerColor = MaterialTheme.colorScheme.surfaceVariant
+            val contentColor = MaterialTheme.colorScheme.onSurface
             ModuleCardShell(
                 name = moduleName,
                 version = installedVersion,
                 subtitle = stringResource(R.string.dashboard_not_installed),
                 dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                containerColor = containerColor,
+                contentColor = contentColor,
             )
         }
 
         is LsposedState.InstalledInactive -> {
+            val containerColor = MaterialTheme.colorScheme.surfaceVariant
+            val contentColor = MaterialTheme.colorScheme.onSurface
             ModuleCardShell(
                 name = moduleName,
                 version = installedVersion,
                 subtitle = stringResource(R.string.dashboard_installed_inactive),
                 dotColor = TelOrange,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                containerColor = containerColor,
+                contentColor = contentColor,
             )
         }
 
         is LsposedState.NeedsReboot -> {
+            val containerColor = MaterialTheme.colorScheme.surfaceVariant
+            val contentColor = MaterialTheme.colorScheme.onSurface
             ModuleCardShell(
                 name = moduleName,
                 version = installedVersion,
                 subtitle = stringResource(R.string.dashboard_reboot_needed),
                 dotColor = TelOrange,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                containerColor = containerColor,
+                contentColor = contentColor,
             )
         }
 
         is LsposedState.Active -> {
-            val subtitle =
-                stringResource(R.string.dashboard_active_targets, state.targetCount) +
-                    if (state.version != null) {
-                        "\n" + stringResource(R.string.dashboard_running_version, state.version)
+            val targetsText = stringResource(R.string.dashboard_active_targets, state.targetCount)
+            val protectionText = when (javaResult) {
+                is JavaResult.Ok -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
+                is JavaResult.Fail -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_fail))
+                is JavaResult.HooksInactive -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_hooks_inactive))
+                null -> ""
+            }
+
+            val subtitle = targetsText + protectionText
+
+            val isFail = javaResult is JavaResult.Fail
+            val isOk = javaResult is JavaResult.Ok
+
+            val (containerColor, contentColor, dotColor) = when {
+                isFail -> {
+                    if (darkTheme) {
+                        Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
                     } else {
-                        ""
+                        Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
                     }
+                }
+                isOk -> {
+                    if (darkTheme) {
+                        Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
+                    } else {
+                        Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
+                    }
+                }
+                else -> {
+                    Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, TelGreen)
+                }
+            }
+
             ModuleCardShell(
                 name = moduleName,
                 version = installedVersion,
                 subtitle = subtitle,
-                dotColor = TelGreen,
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                dotColor = dotColor,
+                containerColor = containerColor,
+                contentColor = contentColor,
             )
         }
     }
@@ -415,43 +471,64 @@ private fun ModuleCardShell(
     subtitle: String,
     dotColor: Color,
     containerColor: Color,
+    contentColor: Color = MaterialTheme.colorScheme.onSurface,
 ) {
     ElevatedCard(
-        shape = RoundedCornerShape(12.dp),
+        shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Row(
-            modifier = Modifier.padding(24.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        Column(
+            modifier =
+                Modifier
+                    .padding(14.dp)
+                    .fillMaxWidth(),
         ) {
-            Box(
-                modifier =
-                    Modifier
-                        .size(10.dp)
-                        .background(color = dotColor, shape = CircleShape),
-            )
-            Spacer(Modifier.width(16.dp))
-            Column(Modifier.weight(1f)) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = name,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    if (version != null) {
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = version,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
-                }
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Text(
-                    text = subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
+                    text = name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                    maxLines = 1,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+
+                Box(
+                    modifier =
+                        Modifier
+                            .size(8.dp)
+                            .background(color = dotColor, shape = CircleShape),
+                )
+            }
+
+            Spacer(Modifier.height(6.dp))
+
+            Text(
+                text = subtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = contentColor.copy(alpha = 0.7f),
+                maxLines = 4,
+                lineHeight = MaterialTheme.typography.bodySmall.fontSize * 1.2f,
+            )
+
+            if (version != null) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    text = "v$version",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Medium,
+                    color = contentColor,
+                    modifier =
+                        Modifier
+                            .background(
+                                color = contentColor.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp),
+                            ).padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
         }
@@ -552,120 +629,7 @@ private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecomme
     }
 }
 
-@Composable
-private fun NativeProtectionCard(result: NativeResult) {
-    val darkTheme = isSystemInDarkTheme()
-    val (containerColor, statusText, statusColor) =
-        when (result) {
-            is NativeResult.Ok -> {
-                Triple(
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    stringResource(R.string.dashboard_protection_ok),
-                    MaterialTheme.colorScheme.primary,
-                )
-            }
 
-            is NativeResult.Fail -> {
-                val text =
-                    if (result.passed > 0) {
-                        stringResource(R.string.dashboard_protection_partial)
-                    } else {
-                        stringResource(R.string.dashboard_protection_fail)
-                    }
-                val color = if (result.passed > 0) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error
-                val bg =
-                    if (result.passed > 0) {
-                        MaterialTheme.colorScheme.surfaceVariant
-                    } else {
-                        MaterialTheme.colorScheme.errorContainer
-                    }
-                Triple(bg, text, color)
-            }
-
-            is NativeResult.NoModule -> {
-                Triple(
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    stringResource(R.string.dashboard_protection_no_module),
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    ProtectionCardShell(
-        label = stringResource(R.string.dashboard_native_protection),
-        statusText = statusText,
-        statusColor = statusColor,
-        containerColor = containerColor,
-    )
-}
-
-@Composable
-private fun JavaProtectionCard(result: JavaResult) {
-    val darkTheme = isSystemInDarkTheme()
-    val (containerColor, statusText, statusColor) =
-        when (result) {
-            is JavaResult.Ok -> {
-                Triple(
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    stringResource(R.string.dashboard_protection_ok),
-                    MaterialTheme.colorScheme.primary,
-                )
-            }
-
-            is JavaResult.Fail -> {
-                Triple(
-                    MaterialTheme.colorScheme.errorContainer,
-                    stringResource(R.string.dashboard_protection_fail),
-                    MaterialTheme.colorScheme.error,
-                )
-            }
-
-            is JavaResult.HooksInactive -> {
-                Triple(
-                    MaterialTheme.colorScheme.surfaceVariant,
-                    stringResource(R.string.dashboard_protection_hooks_inactive),
-                    MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-        }
-    ProtectionCardShell(
-        label = stringResource(R.string.dashboard_java_protection),
-        statusText = statusText,
-        statusColor = statusColor,
-        containerColor = containerColor,
-    )
-}
-
-@Composable
-private fun ProtectionCardShell(
-    label: String,
-    statusText: String,
-    statusColor: Color,
-    containerColor: Color,
-) {
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Row(
-            modifier = Modifier.padding(24.dp).fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Text(
-                text = label,
-                style = MaterialTheme.typography.bodyLarge,
-                fontWeight = FontWeight.SemiBold,
-            )
-            Text(
-                text = statusText,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                color = statusColor,
-            )
-        }
-    }
-}
 
 @Composable
 private fun StatusBanner(

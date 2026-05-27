@@ -74,9 +74,9 @@
 
     <!-- Dashboard -->
     <string name="dashboard_modules">Модули</string>
-    <string name="dashboard_kmod">Модуль ядра</string>
+    <string name="dashboard_kmod">Native</string>
 
-    <string name="dashboard_lsposed_module">VPNHide Next LSPosed-хук</string>
+    <string name="dashboard_lsposed_module">Framework</string>
     <string name="dashboard_not_installed">Не установлен</string>
     <string name="dashboard_installed_inactive">Установлен, неактивен</string>
     <string name="dashboard_installed_restart_app">Установлен, перезапустите VPNHide Next</string>
@@ -88,6 +88,7 @@
     <string name="dashboard_active_targets">Активен · целей: %d</string>
     <string name="dashboard_reboot_needed">Требуется перезагрузка устройства</string>
     <string name="dashboard_protection">Статус защиты</string>
+    <string name="dashboard_protection_prefix">Защита: %s</string>
     <string name="dashboard_native_protection">Нативный уровень</string>
     <string name="dashboard_java_protection">Java API уровень</string>
     <string name="dashboard_protection_ok">ОК</string>
