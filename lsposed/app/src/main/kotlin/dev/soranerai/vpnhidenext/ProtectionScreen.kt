@@ -357,6 +357,15 @@ internal fun ProtectionScreen(
                                 }
                             appDao.insertAppProtections(protections)
 
+                            val existingProtections = appDao.getAllAppProtectionSync()
+                            val keysToKeep = allKeys.toSet()
+                            for (existing in existingProtections) {
+                                val key = existing.packageName to existing.userId
+                                if (existing.packageName != selfPkg && key !in keysToKeep) {
+                                    appDao.deleteAppProtection(existing)
+                                }
+                            }
+
                             if (isPortDirty) {
                                 val originalPortMap = originalPort.associateBy { it.packageName to it.userId }
                                 for (key in allKeys) {
