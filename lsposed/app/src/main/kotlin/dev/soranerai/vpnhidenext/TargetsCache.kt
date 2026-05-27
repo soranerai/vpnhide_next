@@ -177,7 +177,7 @@ internal object TargetsCache {
                         kmod = true,
                         lsposed = selfProto?.lsposed ?: false,
                         portHiding = selfProto?.portHiding ?: false,
-                    )
+                    ),
                 )
                 dbPopulatedOrUpdated = true
             }
@@ -340,12 +340,13 @@ internal object TargetsCache {
                 ?.map { it.trim() }
                 ?.filter { it.isNotEmpty() && !it.startsWith("#") }
                 ?.map { entry ->
-                    val cleanEntry = if (entry.contains(":")) {
-                        val parts = entry.split(":")
-                        parts[0] to (parts[1].toIntOrNull() ?: 0)
-                    } else {
-                        entry to 0
-                    }
+                    val cleanEntry =
+                        if (entry.contains(":")) {
+                            val parts = entry.split(":")
+                            parts[0] to (parts[1].toIntOrNull() ?: 0)
+                        } else {
+                            entry to 0
+                        }
                     val uid = cleanEntry.first.toIntOrNull()
                     if (uid != null) {
                         val resolvedPkg = uidToPkg[uid]
