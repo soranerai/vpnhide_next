@@ -110,6 +110,7 @@ internal object TargetsCache {
 
             // Check if DB is empty
             val allAppsSync = appDao.getAllAppProtectionSync()
+            var dbPopulatedOrUpdated = false
             if (allAppsSync.isEmpty()) {
                 // Initial migration: read from files
                 val (_, out) = withContext(Dispatchers.IO) { suExec(BATCH_SCRIPT) }
@@ -160,10 +161,29 @@ internal object TargetsCache {
                         },
                     )
                 }
+                dbPopulatedOrUpdated = true
             }
 
-            // Now read from DB
-            val apps = appDao.getAllAppProtectionSync()
+            // Ensure the app itself (dev.soranerai.vpnhidenext) is in the database with kmod = true
+            val selfPkg = appContext.packageName
+            val selfProto = appDao.getAppProtection(selfPkg, 0)
+            if (selfProto == null || !selfProto.kmod) {
+                val selfUid = appContext.applicationInfo.uid
+                appDao.insertAppProtection(
+                    dev.soranerai.vpnhidenext.db.AppProtection(
+                        packageName = selfPkg,
+                        userId = 0,
+                        uid = selfUid,
+                        kmod = true,
+                        lsposed = selfProto?.lsposed ?: false,
+                        portHiding = selfProto?.portHiding ?: false,
+                    )
+                )
+                dbPopulatedOrUpdated = true
+            }
+
+            // Now read from DB to heal and get the actual data
+            var apps = appDao.getAllAppProtectionSync()
             val massRules = massPortRuleDao.getMassRulesSync()
             val ifacePrefixes = ifacePrefixDao.getAllPrefixesSync()
 
@@ -182,19 +202,42 @@ internal object TargetsCache {
             val (_, statusOut) = withContext(Dispatchers.IO) { suExec(statusScript) }
             val statusSnapshot = parse(statusOut)
 
-            // Database Healing: if any app has uid = 0 (after migration 5->6),
-            // populate it from the statusSnapshot (PM list) and update DB.
-            for (app in apps) {
-                if (app.uid == 0) {
+            // Database Healing:
+            // 1. Populate missing UIDs (if uid = 0)
+            // 2. Prune uninstalled apps (if actualUid == 0 and not selfPkg)
+            if (statusSnapshot.uidToPkg.isNotEmpty()) {
+                var modified = false
+                for (app in apps) {
+                    if (app.packageName == selfPkg) continue
+
                     val actualUid =
                         statusSnapshot.uidToPkg.entries
                             .find {
                                 it.value == app.packageName && (it.key / 100000) == app.userId
                             }?.key ?: 0
 
-                    if (actualUid != 0) {
+                    if (actualUid == 0) {
+                        // App was uninstalled!
+                        appDao.deleteAppProtection(app)
+                        modified = true
+                    } else if (app.uid == 0) {
+                        // Populate missing UID
                         appDao.insertAppProtection(app.copy(uid = actualUid))
+                        modified = true
                     }
+                }
+                if (modified) {
+                    apps = appDao.getAllAppProtectionSync()
+                    dbPopulatedOrUpdated = true
+                }
+            }
+
+            // Copy to system database location if needed
+            val publicDb = java.io.File("/data/system/vpnhide/vpnhide_config.db")
+            val (exitCode, _) = withContext(Dispatchers.IO) { suExec("[ -f ${publicDb.absolutePath} ]") }
+            if (dbPopulatedOrUpdated || exitCode != 0) {
+                withContext(Dispatchers.IO) {
+                    suExec(buildLsposedApplyCommand(appContext))
                 }
             }
 
@@ -297,11 +340,22 @@ internal object TargetsCache {
                 ?.map { it.trim() }
                 ?.filter { it.isNotEmpty() && !it.startsWith("#") }
                 ?.map { entry ->
-                    if (entry.contains(":")) {
+                    val cleanEntry = if (entry.contains(":")) {
                         val parts = entry.split(":")
                         parts[0] to (parts[1].toIntOrNull() ?: 0)
                     } else {
                         entry to 0
+                    }
+                    val uid = cleanEntry.first.toIntOrNull()
+                    if (uid != null) {
+                        val resolvedPkg = uidToPkg[uid]
+                        if (resolvedPkg != null) {
+                            resolvedPkg to (uid / 100000)
+                        } else {
+                            cleanEntry
+                        }
+                    } else {
+                        cleanEntry
                     }
                 }?.toSet() ?: emptySet()
 
