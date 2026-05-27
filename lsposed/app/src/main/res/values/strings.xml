@@ -213,4 +213,5 @@
     <string name="check_netlink_getneigh" translatable="false">netlink RTM_GETNEIGH</string>
     <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
     <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
+    <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
 </resources>

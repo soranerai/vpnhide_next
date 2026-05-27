@@ -820,6 +820,7 @@ internal fun runAllChecks(
             checkUnderlyingNetworks(cm, res.getString(R.string.check_underlying_networks)),
             checkVpnCallbackSuppression(cm, res.getString(R.string.check_vpn_callback_suppression)),
             checkWifiInfoSpoof(context, res.getString(R.string.check_wifi_info_spoof)),
+            checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)),
         )
 
     val all = native + java
@@ -1304,6 +1305,28 @@ private fun ipAddressToString(ip: Int): String =
         (ip shr 16) and 0xff,
         (ip shr 24) and 0xff,
     )
+
+private fun checkGetNetworkForType(
+    cm: ConnectivityManager,
+    name: String,
+): CheckResult {
+    try {
+        // ConnectivityManager.TYPE_VPN is 17
+        val method = ConnectivityManager::class.java.getMethod("getNetworkForType", java.lang.Integer.TYPE)
+        val net = method.invoke(cm, 17) as? android.net.Network
+
+        val passed = net == null
+        val detail =
+            if (passed) {
+                "getNetworkForType(TYPE_VPN) returned null"
+            } else {
+                "leaked Network via getNetworkForType(TYPE_VPN): $net"
+            }
+        return CheckResult(name, passed, detail)
+    } catch (e: Exception) {
+        return CheckResult(name, true, "not supported or error: ${e.message}")
+    }
+}
 
 // ==========================================================================
 //  Debug log export
