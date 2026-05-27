@@ -43,6 +43,7 @@
 #include <linux/fs.h>
 #include <net/if_inet6.h>
 #include <net/ip_fib.h>
+#include <net/nexthop.h>
 #include <net/ip6_fib.h>
 #include <net/ip6_route.h>
 #include <net/route.h>
@@ -185,20 +186,21 @@ static bool is_target_uid(void)
 
 /* ================================================================== */
 /*  Hook 1: dev_ioctl — all per-interface ioctls                      */
+/*  Android source path: net/core/dev_ioctl.c                         */
 /*                                                                    */
-/*  dev_ioctl() on GKI 6.1:                                          */
+/*  dev_ioctl() on GKI 6.1:                                           */
 /*    int dev_ioctl(struct net *net, unsigned int cmd,                */
-/*                  struct ifreq *ifr, void __user *data,            */
+/*                  struct ifreq *ifr, void __user *data,             */
 /*                  bool *need_copyout)                               */
-/*  arm64: x0=net, x1=cmd, x2=ifr (KERNEL ptr), x3=data (__user)   */
+/*  arm64: x0=net, x1=cmd, x2=ifr (KERNEL ptr), x3=data (__user)      */
 /*                                                                    */
-/*  Covers SIOCGIFFLAGS, SIOCGIFNAME, SIOCGIFMTU, SIOCGIFINDEX,     */
-/*  SIOCGIFHWADDR, SIOCGIFADDR, and any other cmd that goes through  */
-/*  dev_ioctl with a VPN interface name in ifr_name. Returns ENODEV  */
+/*  Covers SIOCGIFFLAGS, SIOCGIFNAME, SIOCGIFMTU, SIOCGIFINDEX,       */
+/*  SIOCGIFHWADDR, SIOCGIFADDR, and any other cmd that goes through   */
+/*  dev_ioctl with a VPN interface name in ifr_name. Returns ENODEV   */
 /*  for all of them.                                                  */
 /*                                                                    */
-/*  Note: SIOCGIFCONF goes through sock_ioctl -> dev_ifconf, not     */
-/*  through dev_ioctl, so it is not covered here.                    */
+/*  Note: SIOCGIFCONF goes through sock_ioctl -> dev_ifconf, not      */
+/*  through dev_ioctl, so it is not covered here.                     */
 /* ================================================================== */
 
 struct dev_ioctl_data {
@@ -262,6 +264,7 @@ static struct kretprobe dev_ioctl_krp = {
 
 /* ================================================================== */
 /*  Hook 2: sock_ioctl — SIOCGIFCONF interface enumeration            */
+/*  Android source path: net/socket.c                                 */
 /*                                                                    */
 /*  Why sock_ioctl instead of dev_ifconf?                             */
 /*                                                                    */
@@ -269,10 +272,8 @@ static struct kretprobe dev_ioctl_krp = {
 /*  devices), the linker inlines dev_ifconf() into sock_do_ioctl().   */
 /*  The symbol "dev_ifconf" stays in kallsyms as a dead stub, so      */
 /*  kretprobe registration succeeds but the probe never fires.        */
-/*  Confirmed by disassembly on Xiaomi 13 Lite (5.10.136) and Lenovo  */
-/*  Legion 2 Pro (5.10.101): no `bl dev_ifconf` in sock_do_ioctl.    */
 /*                                                                    */
-/*  On 6.1+, SIOCGIFCONF was moved out of sock_do_ioctl() into       */
+/*  On 6.1+, SIOCGIFCONF was moved out of sock_do_ioctl() into        */
 /*  sock_ioctl() directly (handled in the switch statement), so       */
 /*  hooking sock_do_ioctl would miss it on newer kernels.             */
 /*                                                                    */
@@ -284,9 +285,6 @@ static struct kretprobe dev_ioctl_krp = {
 /*  3. After sock_ioctl returns, the ifconf data (ifreq array +       */
 /*     ifc_len) is already in userspace — we filter it uniformly via  */
 /*     copy_from_user/copy_to_user regardless of kernel version.      */
-/*                                                                    */
-/*  sock_ioctl(struct file *file, unsigned int cmd, unsigned long arg) */
-/*  arm64: x0=file, x1=cmd, x2=arg (__user ptr)                      */
 /*                                                                    */
 /*  Performance: entry handler checks cmd == SIOCGIFCONF first (one   */
 /*  compare), then is_target_uid(). For all other ioctls, overhead    */
@@ -405,7 +403,8 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 }
 
 /* ================================================================== */
-/*  Hook 2b: sock_setsockopt — Aikido Bind Sabotage                   */
+/*  Hook 2b: sock_setsockopt — Aikido Bind Sabotage                    */
+/*  Android source path: net/socket.c                                 */
 /*                                                                    */
 /*  sock_setsockopt(struct socket *sock, int level, int optname,      */
 /*                  sockptr_t optval, unsigned int optlen)            */
@@ -420,11 +419,6 @@ struct sock_setsockopt_data {
 	bool override_ret;
 };
 
-/*
- * On ARM64, sockptr_t is a 16-byte structure split across x3 and x4.
- * Therefore, the 5th argument (optlen) is always passed in register x5
- * for both 6.1 and 6.6 kernels.
- */
 #define SETSOCKOPT_REG_OPTLEN 5
 
 static int sock_setsockopt_entry(struct kretprobe_instance *ri,
@@ -434,15 +428,14 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 	int level = (int)regs->regs[1];
 	int optname = (int)regs->regs[2];
 	void __user *optval_ptr = (void __user *)regs->regs[3];
-	bool is_kernel = (bool)(regs->regs[4] & 1); /* sockptr_t.is_kernel */
-	int optlen = (int)regs->regs[5]; /* Всегда x5 на ARM64 */
+	bool is_kernel = (bool)(regs->regs[4] & 1);
+	int optlen = (int)regs->regs[5];
 	char name[IFNAMSIZ];
 
 	if (!is_hook_active(11))
 		return 1;
 
 	sdata = (void *)ri->data;
-
 	sdata->override_ret = false;
 
 	if (level == 0x5648 && optname == 0x88) {
@@ -560,7 +553,11 @@ static struct kretprobe sock_setsockopt_krp = {
 };
 
 /* ================================================================== */
-/*  Hook 2c: sock_getsockopt — Bind Query Sabotage                    */
+/*  Hook 2c: sock_getsockopt & sock_common_getsockopt — Bind Query    */
+/*           Sabotage                                                 */
+/*  Android source path:                                              */
+/*    - sock_getsockopt: net/socket.c                                 */
+/*    - sock_common_getsockopt: net/core/sock.c                       */
 /*                                                                    */
 /*  sock_getsockopt(struct socket *sock, int level, int optname,      */
 /*                  char __user *optval, int __user *optlen)          */
@@ -755,6 +752,7 @@ static struct kretprobe sock_common_getsockopt_krp = {
 
 /* ================================================================== */
 /*  Hook 3: rtnl_fill_ifinfo — netlink RTM_NEWLINK (getifaddrs path)  */
+/*  Android source path: net/core/rtnetlink.c                         */
 /*                                                                    */
 /*  rtnl_fill_ifinfo fills one interface's data into a netlink skb    */
 /*  during a RTM_GETLINK dump. If the device is a VPN and the caller  */
@@ -782,7 +780,6 @@ static int rtnl_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_filter = false;
 
 	if (!is_target_uid()) {
@@ -791,13 +788,7 @@ static int rtnl_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 0;
 	}
 
-	/*
-	 * rtnl_fill_ifinfo(struct sk_buff *skb, struct net_device *dev, ...)
-	 * arm64: x0=skb, x1=dev
-	 */
 	dev = (struct net_device *)regs->regs[1];
-	/* Callers hold RTNL which protects dev->name, but take RCU as
-	 * belt-and-suspenders — same rationale as inet6_fill_entry. */
 	rcu_read_lock();
 	if (dev && is_vpn_ifname(dev->name)) {
 		data->skb = (struct sk_buff *)regs->regs[0];
@@ -826,7 +817,6 @@ static int rtnl_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("rtnl_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
-	/* Undo whatever the fill function wrote to the skb */
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -841,20 +831,21 @@ static struct kretprobe rtnl_fill_krp = {
 };
 
 /* ================================================================== */
-/*  Hook 4: inet6_fill_ifaddr — RTM_GETADDR IPv6 (getifaddrs path)   */
+/*  Hook 4: inet6_fill_ifaddr — RTM_GETADDR IPv6 (getifaddrs path)    */
+/*  Android source path: net/ipv6/addrconf.c                          */
 /*                                                                    */
 /*  inet6_fill_ifaddr(struct sk_buff *skb, struct inet6_ifaddr *ifa,  */
 /*                    struct inet6_fill_args *args)                   */
-/*  arm64: x0=skb, x1=ifa                                           */
+/*  arm64: x0=skb, x1=ifa                                             */
 /*                                                                    */
-/*  getifaddrs() does RTM_GETLINK (filtered by hook 3) then          */
-/*  RTM_GETADDR. Addresses for VPN interfaces still appear in        */
-/*  RTM_GETADDR, so bionic reconstructs a tun0 entry with flags=0.  */
-/*  Filtering here prevents that.                                    */
+/*  getifaddrs() does RTM_GETLINK (filtered by hook 3) then           */
+/*  RTM_GETADDR. Addresses for VPN interfaces still appear in         */
+/*  RTM_GETADDR, so bionic reconstructs a tun0 entry with flags=0.    */
+/*  Filtering here prevents that.                                     */
 /*                                                                    */
-/*  We can't return -EMSGSIZE (causes infinite retry on empty skb).  */
-/*  Instead, save skb->len before and trim the skb back on return,   */
-/*  making it look like the entry was never written. Return 0.       */
+/*  We can't return -EMSGSIZE (causes infinite retry on empty skb).   */
+/*  Instead, save skb->len before and trim the skb back on return,    */
+/*  making it look like the entry was never written. Return 0.        */
 /* ================================================================== */
 
 struct inet6_fill_data {
@@ -872,18 +863,12 @@ static int inet6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_filter = false;
 
 	if (!is_target_uid())
 		return 0;
 
 	ifa = (struct inet6_ifaddr *)regs->regs[1];
-	/*
-	 * The callers of inet6_fill_ifaddr() hold either rcu_read_lock()
-	 * (netlink dump path) or RTNL. We take rcu_read_lock() explicitly
-	 * so the kretprobe handler doesn't rely on that implicit guarantee.
-	 */
 	rcu_read_lock();
 	if (ifa && ifa->idev && ifa->idev->dev &&
 	    is_vpn_ifname(ifa->idev->dev->name)) {
@@ -908,7 +893,6 @@ static int inet6_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("inet6_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
-	/* Undo whatever the fill function wrote to the skb */
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -923,12 +907,13 @@ static struct kretprobe inet6_fill_krp = {
 };
 
 /* ================================================================== */
-/*  Hook 5: inet_fill_ifaddr — RTM_GETADDR IPv4 (getifaddrs path)    */
+/*  Hook 5: inet_fill_ifaddr — RTM_GETADDR IPv4 (getifaddrs path)     */
+/*  Android source path: net/ipv4/devinet.c                           */
 /*                                                                    */
-/*  inet_fill_ifaddr(struct sk_buff *skb, struct in_ifaddr *ifa,     */
-/*                   struct inet_fill_args *args)                    */
-/*  arm64: x0=skb, x1=ifa                                           */
-/*  Same skb-trim approach as hook 4.                                */
+/*  inet_fill_ifaddr(struct sk_buff *skb, struct in_ifaddr *ifa,      */
+/*                   struct inet_fill_args *args)                     */
+/*  arm64: x0=skb, x1=ifa                                             */
+/*  Same skb-trim approach as hook 4.                                 */
 /* ================================================================== */
 
 struct inet_fill_data {
@@ -946,14 +931,12 @@ static int inet_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_filter = false;
 
 	if (!is_target_uid())
 		return 0;
 
 	ifa = (struct in_ifaddr *)regs->regs[1];
-	/* Same RCU rationale as inet6_fill_entry above. */
 	rcu_read_lock();
 	if (ifa && ifa->ifa_dev && ifa->ifa_dev->dev &&
 	    is_vpn_ifname(ifa->ifa_dev->dev->name)) {
@@ -993,13 +976,14 @@ static struct kretprobe inet_fill_krp = {
 
 /* ================================================================== */
 /*  Hook 6: fib_route_seq_show — /proc/net/route                      */
+/*  Android source path: net/ipv4/fib_trie.c                          */
 /*                                                                    */
-/*  fib_route_seq_show(struct seq_file *seq, void *v) writes one or  */
-/*  more tab-separated route lines into seq->buf, each ending with   */
+/*  fib_route_seq_show(struct seq_file *seq, void *v) writes one or   */
+/*  more tab-separated route lines into seq->buf, each ending with    */
 /*  '\n'. The first field is the interface name.                      */
 /*                                                                    */
-/*  We save seq and seq->count on entry. In the return handler we    */
-/*  scan what was written, compact out VPN lines, and adjust count.  */
+/*  We save seq and seq->count on entry. In the return handler we     */
+/*  scan what was written, compact out VPN lines, and adjust count.   */
 /* ================================================================== */
 
 struct fib_route_data {
@@ -1015,11 +999,6 @@ static int fib_route_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 1;
 	data = (void *)ri->data;
 
-	/*
-	 * arm64: x0 = seq_file*, x1 = v (iterator element).
-	 * Save seq pointer and current buffer position so the
-	 * return handler knows where this call's output begins.
-	 */
 	data->seq = (struct seq_file *)regs->regs[0];
 	data->target = is_target_uid();
 
@@ -1034,12 +1013,6 @@ static int fib_route_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	return 0;
 }
 
-/*
- * We access seq->buf and seq->count without seq_file's internal mutex.
- * This is safe because seq_read() drives the ->show() callback
- * synchronously under its own fd context — no concurrent access to
- * the same seq_file is possible between our entry and return handlers.
- */
 static int fib_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct fib_route_data *data = (void *)ri->data;
@@ -1054,13 +1027,6 @@ static int fib_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (seq->count <= data->start_count)
 		return 0;
 
-	/*
-	 * Scan the region [start_count, seq->count) for lines whose
-	 * first tab-separated field is a VPN interface name. Compact
-	 * out matching lines in place and adjust seq->count.
-	 *
-	 * Each route line looks like: "tun0\t08000000\t...\n"
-	 */
 	buf = seq->buf;
 	src = buf + data->start_count;
 	dst = src;
@@ -1071,7 +1037,6 @@ static int fib_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		char *line_end = nl ? nl + 1 : end;
 		size_t line_len = line_end - src;
 
-		/* Extract the interface name (first field, tab-delimited) */
 		for (j = 0; j < IFNAMSIZ - 1 && j < (int)line_len &&
 			    src[j] != '\t' && src[j] != '\n';
 		     j++)
@@ -1081,12 +1046,10 @@ static int fib_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		if (is_vpn_ifname(ifname)) {
 			vpnhide_dbg("fib_route_ret: hiding route for %s\n",
 				    ifname);
-			/* Skip this line */
 			src = line_end;
 			continue;
 		}
 
-		/* Keep this line — move it down if there's a gap */
 		if (dst != src)
 			memmove(dst, src, line_len);
 		dst += line_len;
@@ -1107,10 +1070,90 @@ static struct kretprobe fib_route_krp = {
 
 /* ================================================================== */
 /*  Hook 7: fib_dump_info — IPv4 routes dump                          */
+/*  Android source path: net/ipv4/fib_semantics.c                     */
 /*                                                                    */
 /*  fib_dump_info(skb, portid, seq, event, fri, flags)                */
 /*  arm64: x0=skb, x4=fri (struct fib_rt_info*)                       */
 /* ================================================================== */
+
+static struct net_device *vpnhide_get_fib_info_dev(struct fib_info *fi)
+{
+	struct net_device *dev = NULL;
+
+	if (!fi)
+		return NULL;
+
+	rcu_read_lock();
+	{
+		struct nexthop *nh = NULL;
+		if (copy_from_kernel_nofault(&nh, &fi->nh, sizeof(nh)) == 0 &&
+		    nh) {
+			/* Route uses nexthop objects */
+			bool is_group = false;
+			copy_from_kernel_nofault(&is_group, &nh->is_group,
+						 sizeof(is_group));
+			if (is_group) {
+				struct nh_group *nh_grp = NULL;
+				if (copy_from_kernel_nofault(
+					    &nh_grp, &nh->nh_grp,
+					    sizeof(nh_grp)) == 0 &&
+				    nh_grp) {
+					u16 num_nh = 0;
+					copy_from_kernel_nofault(
+						&num_nh, &nh_grp->num_nh,
+						sizeof(num_nh));
+					if (num_nh > 0) {
+						struct nexthop *nhe = NULL;
+						if (copy_from_kernel_nofault(
+							    &nhe,
+							    &nh_grp->nh_entries[0]
+								     .nh,
+							    sizeof(nhe)) == 0 &&
+						    nhe) {
+							struct nh_info *nhi =
+								NULL;
+							if (copy_from_kernel_nofault(
+								    &nhi,
+								    &nhe->nh_info,
+								    sizeof(nhi)) ==
+								    0 &&
+							    nhi) {
+								copy_from_kernel_nofault(
+									&dev,
+									&nhi->fib_nhc
+										 .nhc_dev,
+									sizeof(dev));
+							}
+						}
+					}
+				}
+			} else {
+				struct nh_info *nhi = NULL;
+				if (copy_from_kernel_nofault(&nhi, &nh->nh_info,
+							     sizeof(nhi)) ==
+					    0 &&
+				    nhi) {
+					copy_from_kernel_nofault(
+						&dev, &nhi->fib_nhc.nhc_dev,
+						sizeof(dev));
+				}
+			}
+		} else {
+			/* Traditional fib_nh array */
+			int fib_nhs = 0;
+			copy_from_kernel_nofault(&fib_nhs, &fi->fib_nhs,
+						 sizeof(fib_nhs));
+			if (fib_nhs > 0) {
+				copy_from_kernel_nofault(
+					&dev, &fi->fib_nh[0].nh_common.nhc_dev,
+					sizeof(dev));
+			}
+		}
+	}
+	rcu_read_unlock();
+
+	return dev;
+}
 
 struct fib_dump_data {
 	struct sk_buff *skb;
@@ -1122,37 +1165,30 @@ static int fib_dump_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct fib_dump_data *data;
 	struct fib_info *fi = NULL;
+	struct fib_rt_info *fri;
+	struct fib_rt_info fri_copy;
 
 	if (!is_hook_active(7))
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_filter = false;
 
 	if (!is_target_uid())
 		return 0;
 
-	/* x0=skb, x4=fi (or fri in 6.1+) */
 	data->skb = (struct sk_buff *)regs->regs[0];
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
-	{
-		struct fib_rt_info *fri = (struct fib_rt_info *)regs->regs[4];
-		if (fri)
-			fi = fri->fi;
+	/* GKI 5.10 and 5.15+ both pass struct fib_rt_info* in x4 (regs->regs[4]) */
+	fri = (struct fib_rt_info *)regs->regs[4];
+	if (fri &&
+	    copy_from_kernel_nofault(&fri_copy, fri, sizeof(fri_copy)) == 0) {
+		fi = fri_copy.fi;
 	}
-#else
-	/* GKI 5.10 mapping: x4 is tb_id, fi is on stack (arg 10).
-	 * We don't try to pull from stack here; fi will remain NULL.
-	 * This means bulk dumps (ip route) won't hide VPN routes on 5.10
-	 * via this hook, but rtnl_fill_ifinfo still hides the interfaces. */
-#endif
 
 	rcu_read_lock();
-	if (fi && fi->fib_nhs > 0) {
-		/* Access first nexthop interface */
-		struct net_device *dev = fi->fib_nh[0].nh_common.nhc_dev;
+	if (fi) {
+		struct net_device *dev = vpnhide_get_fib_info_dev(fi);
 		if (dev && is_vpn_ifname(dev->name)) {
 			data->saved_len = data->skb ? data->skb->len : 0;
 			data->should_filter = true;
@@ -1189,9 +1225,10 @@ static struct kretprobe fib_dump_krp = {
 
 /* ================================================================== */
 /*  Hook 7b: fib_nl_fill_rule — policy routing rules (RTM_GETRULE)    */
+/*  Android source path: net/core/fib_rules.c                         */
 /*                                                                    */
 /*  fib_nl_fill_rule(skb, rule, pid, seq, type, flags, ops)           */
-/*  arm64: x0=skb, x1=rule (struct fib_rule*)                          */
+/*  arm64: x0=skb, x1=rule (struct fib_rule*)                         */
 /* ================================================================== */
 
 struct fib_rule_dump_data {
@@ -1211,21 +1248,19 @@ static int fib_rule_fill_entry(struct kretprobe_instance *ri,
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_filter = false;
 
 	if (!is_target_uid())
 		return 0;
 
-	rule = (struct fib_rule *)regs->regs[1]; /* x1 = struct fib_rule* */
+	rule = (struct fib_rule *)regs->regs[1];
 	if (!rule)
 		return 0;
 
-	data->skb = (struct sk_buff *)regs->regs[0]; /* x0 = struct sk_buff* */
+	data->skb = (struct sk_buff *)regs->regs[0];
 	my_uid = from_kuid(&init_user_ns, current_uid());
 
 	rcu_read_lock();
-	/* 1. Filter if rule references a VPN interface (input or output) */
 	if ((rule->iifname[0] != '\0' && is_vpn_ifname(rule->iifname)) ||
 	    (rule->oifname[0] != '\0' && is_vpn_ifname(rule->oifname))) {
 		data->saved_len = data->skb ? data->skb->len : 0;
@@ -1234,12 +1269,10 @@ static int fib_rule_fill_entry(struct kretprobe_instance *ri,
 			"fib_rule_fill_entry: hiding rule via VPN interface %s / %s\n",
 			rule->iifname, rule->oifname);
 	} else {
-		/* 2. Filter if rule targets the app's specific UID range and routes to a custom table */
 		uid_t start = from_kuid(&init_user_ns, rule->uid_range.start);
 		uid_t end = from_kuid(&init_user_ns, rule->uid_range.end);
 		if (my_uid >= start && my_uid <= end) {
 			if (start != 0 || end != (uid_t)~0) {
-				/* Skip standard system tables (253, 254, 255) and filter custom rules */
 				if (rule->table != 254 && rule->table != 255 &&
 				    rule->table != 253 && rule->table > 100) {
 					data->saved_len =
@@ -1282,7 +1315,8 @@ static struct kretprobe fib_rule_fill_krp = {
 };
 
 /* ================================================================== */
-/*  Hook 8: rt6_fill_node — IPv6 routes                                */
+/*  Hook 8: rt6_fill_node — IPv6 routes                               */
+/*  Android source path: net/ipv6/route.c                             */
 /*                                                                    */
 /*  rt6_fill_node(net, skb, rt, dst, ...)                             */
 /*  arm64: x1=skb, x3=dst (struct dst_entry*)                         */
@@ -1304,26 +1338,18 @@ static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_filter = false;
 
 	if (!is_target_uid())
 		return 0;
 
-	/*
-	 * rt6_fill_node(net, skb, rt, dst, ...)
-	 * arm64: x0=net, x1=skb, x2=rt, x3=dst
-	 *
-	 * In most route dumps, dst is NULL and information is in rt.
-	 */
 	data->skb = (struct sk_buff *)regs->regs[1];
 	rt = (struct fib6_info *)regs->regs[2];
 	dst = (struct dst_entry *)regs->regs[3];
 
 	rcu_read_lock();
 	if (rt) {
-		struct net_device *dev = NULL;
-		dev = rt->fib6_nh->nh_common.nhc_dev;
+		struct net_device *dev = rt->fib6_nh->nh_common.nhc_dev;
 		if (dev && is_vpn_ifname(dev->name)) {
 			data->saved_len = data->skb ? data->skb->len : 0;
 			data->should_filter = true;
@@ -1365,7 +1391,8 @@ static struct kretprobe rt6_fill_krp = {
 };
 
 /* ================================================================== */
-/*  Hook 8b: ipv6_route_seq_show — /proc/net/ipv6_route                */
+/*  Hook 8b: ipv6_route_seq_show — /proc/net/ipv6_route               */
+/*  Android source path: net/ipv6/route.c                             */
 /*                                                                    */
 /*  ipv6_route_seq_show(seq, v) is the IPv6 equivalent of hook 6.     */
 /*  The interface name is the LAST field in the line.                 */
@@ -1417,13 +1444,11 @@ static int ipv6_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		size_t line_len = line_end - src;
 		char *p;
 
-		/* Interface name is the last field: "dest ... flags ifname\n" */
 		p = line_end - 1;
 		while (p >= src &&
 		       (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t'))
 			p--;
 
-		/* Now p points to the end of ifname. Backtrack to start. */
 		j = 0;
 		while (p >= src && *p != ' ' && *p != '\t' &&
 		       j < IFNAMSIZ - 1) {
@@ -1466,9 +1491,10 @@ static struct kretprobe ipv6_route_krp = {
 
 /* ================================================================== */
 /*  Hook 9: rt_fill_info — IPv4 single route lookup                   */
+/*  Android source path: net/ipv4/route.c                             */
 /*                                                                    */
 /*  6.6: rt_fill_info(net, dst, src, rt, table_id, fl4, skb, ...)     */
-/*  arm64: x0=net, x3=rt (struct rtable*), x6=skb                    */
+/*  arm64: x0=net, x3=rt (struct rtable*), x6=skb                     */
 /* ================================================================== */
 
 struct rt_fill_data {
@@ -1498,16 +1524,13 @@ static int rt_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (!is_target_uid())
 		return 0;
 
-	/* Get rt (x3) and skb (x7) directly from registers */
 	rt = (struct rtable *)regs->regs[3];
 	skb = (struct sk_buff *)regs->regs[7];
 
-	/* Safely read dev from rt->dst.dev */
 	if (rt) {
 		if (copy_from_kernel_nofault(&dev_ptr, &rt->dst.dev,
 					     sizeof(dev_ptr)) == 0 &&
 		    dev_ptr) {
-			/* Safely read interface name from dev_ptr->name */
 			memset(ifname, 0, sizeof(ifname));
 			if (copy_from_kernel_nofault(ifname, dev_ptr->name,
 						     IFNAMSIZ - 1) == 0) {
@@ -1517,7 +1540,6 @@ static int rt_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		}
 	}
 
-	/* Safely read skb->len */
 	if (skb) {
 		if (copy_from_kernel_nofault(&temp_len, &skb->len,
 					     sizeof(temp_len)) == 0) {
@@ -1559,7 +1581,7 @@ static struct kretprobe rt_fill_krp = {
 };
 
 /* ================================================================== */
-/*  UID List Update Logic                                              */
+/*  UID List Update Logic                                             */
 /* ================================================================== */
 
 static int update_port_rules(struct vpnhide_uid_port_rules *rules, int count)
@@ -1618,7 +1640,6 @@ static int update_targets(uid_t *uids, int count)
 	return 0;
 }
 
-/* Handle configuration IOCTLs from root manager/app */
 static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 {
 	struct vpnhide_ioctl_data *kdata;
@@ -1647,7 +1668,6 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		if (cmd == VH_SET_TARGETS)
 			ret = update_targets(kdata->uids, kdata->count);
 		else {
-			/* Backward compatibility: if app sends just UIDs, block ALL loopback for them */
 			struct vpnhide_uid_port_rules *rules;
 			rules = kvmalloc_array(kdata->count, sizeof(*rules),
 					       GFP_KERNEL);
@@ -1782,7 +1802,6 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 	return ret;
 }
 
-/* Misc device IOCTL wrapper */
 static long vpnhide_dev_ioctl(struct file *file, unsigned int cmd,
 			      unsigned long arg)
 {
@@ -1806,6 +1825,7 @@ static struct miscdevice vpnhide_misc = {
 
 /* ================================================================== */
 /*  Hook 12: security_socket_connect — Port Hiding                    */
+/*  Android source path: security/security.c                          */
 /*                                                                    */
 /*  security_socket_connect(struct socket *sock,                      */
 /*                          struct sockaddr *address, int addrlen)    */
@@ -1834,7 +1854,6 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 		return 1;
 
 	data = (void *)ri->data;
-
 	data->should_block = false;
 
 	rcu_read_lock();
@@ -1952,7 +1971,10 @@ static struct kretprobe socket_connect_krp = {
 };
 
 /* ================================================================== */
-/*  Hook 13: inet_getname & inet6_getname — getsockname Spoofing       */
+/*  Hook 13: inet_getname & inet6_getname — getsockname Spoofing      */
+/*  Android source path:                                              */
+/*    - inet_getname: net/ipv4/af_inet.c                              */
+/*    - inet6_getname: net/ipv6/af_inet6.c                            */
 /* ================================================================== */
 
 struct getname_data {
