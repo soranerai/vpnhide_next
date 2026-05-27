@@ -103,7 +103,7 @@ internal fun PortsHidingScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 88.dp),
+                        contentPadding = PaddingValues(bottom = 100.dp),
                     ) {
                         items(displayApps, key = { "${it.packageName}:${it.userId}" }) { app ->
                             PortAppRow(

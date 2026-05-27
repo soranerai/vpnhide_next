@@ -3,6 +3,8 @@ package dev.soranerai.vpnhidenext
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -12,22 +14,30 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.core.graphics.drawable.toBitmap
 import dev.soranerai.vpnhidenext.ShimmerPlaceholder
 import dev.soranerai.vpnhidenext.shimmer
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DashboardScreen(
     selfNeedsRestart: Boolean,
@@ -37,15 +47,20 @@ fun DashboardScreen(
     val scope = rememberCoroutineScope()
 
     val state by DashboardCache.state.collectAsState()
+    val stats by InterceptStatsCache.stats.collectAsState()
+    val appsList by AppListCache.apps.collectAsState()
     val updateInfo by UpdateCheckCache.info.collectAsState()
     var showChangelog by remember { mutableStateOf(false) }
     var changelogData by remember { mutableStateOf<ChangelogData?>(null) }
+    var refreshing by remember { mutableStateOf(false) }
 
     // Both caches are reactive to tab switches without re-doing work:
     // ensureLoaded / ensureFresh are no-ops if the data is already
     // populated or an inflight job hasn't finished yet.
     LaunchedEffect(Unit) {
+        AppListCache.ensureLoaded(scope, context)
         DashboardCache.ensureLoaded(scope, context, selfNeedsRestart)
+        InterceptStatsCache.ensureLoaded(scope, context)
         UpdateCheckCache.ensureFresh(scope, BuildConfig.VERSION_NAME)
     }
     LaunchedEffect(Unit) {
@@ -66,26 +81,46 @@ fun DashboardScreen(
         )
     }
 
-    Column(
-        modifier =
-            modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp),
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = {
+            scope.launch {
+                refreshing = true
+                AppListCache.refresh(scope, context)
+                DashboardCache.refresh(scope, context, selfNeedsRestart)
+                InterceptStatsCache.refresh(scope, context)
+                DiagnosticsCache.retry(scope, context)
+                kotlinx.coroutines.delay(500)
+                refreshing = false
+            }
+        },
+        modifier = modifier.fillMaxSize(),
     ) {
-        Spacer(Modifier.height(12.dp))
+        Column(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 16.dp),
+        ) {
+            Spacer(Modifier.height(12.dp))
 
-        val s = state
-        if (s == null) {
-            SkeletonDashboard()
-        } else {
-            DashboardContent(
-                s = s,
-                selfNeedsRestart = selfNeedsRestart,
-                updateInfo = updateInfo,
-                scope = scope,
-                context = context,
-            )
+            val s = state
+            if (s == null) {
+                SkeletonDashboard()
+            } else {
+                DashboardContent(
+                    s = s,
+                    stats = stats,
+                    selfNeedsRestart = selfNeedsRestart,
+                    updateInfo = updateInfo,
+                    scope = scope,
+                    context = context,
+                    appsList = appsList,
+                )
+            }
+
+            Spacer(Modifier.height(100.dp))
         }
     }
 }
@@ -146,10 +181,12 @@ private fun SkeletonModuleCard() {
 @Composable
 private fun DashboardContent(
     s: DashboardState,
+    stats: List<AppInterceptStats>?,
     selfNeedsRestart: Boolean,
     updateInfo: UpdateInfo?,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
+    appsList: List<AppSummary>?,
 ) {
     val darkTheme = isSystemInDarkTheme()
     val errorBg = if (darkTheme) Color(0xFFB71C1C).copy(alpha = 0.3f) else Color(0xFFFFEBEE)
@@ -265,6 +302,11 @@ private fun DashboardContent(
                 Spacer(Modifier.height(8.dp))
             }
         }
+
+        InterceptStatisticsSection(
+            stats = stats,
+            appsList = appsList,
+        )
     }
 }
 
@@ -779,4 +821,282 @@ private fun ChangelogDialog(
             }
         },
     )
+}
+
+@Composable
+private fun InterceptStatisticsSection(
+    stats: List<AppInterceptStats>?,
+    appsList: List<AppSummary>?,
+) {
+    var expandedApps by remember { mutableStateOf(setOf<String>()) }
+
+    Spacer(Modifier.height(24.dp))
+    
+    Text(
+        text = "Intercept Statistics",
+        style = MaterialTheme.typography.titleMedium,
+        fontWeight = FontWeight.Bold,
+        modifier = Modifier.padding(vertical = 8.dp),
+    )
+
+    if (stats == null) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            SkeletonStatsCard()
+            SkeletonStatsCard()
+        }
+    } else if (stats.isEmpty()) {
+        Card(
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "No Intercepts Recorded",
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text = "Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    textAlign = TextAlign.Center
+                )
+            }
+        }
+    } else {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            for (appStat in stats) {
+                val isExpanded = expandedApps.contains(appStat.packageName)
+                val appSummary = appsList?.find { it.packageName == appStat.packageName }
+                val icon = appSummary?.icon
+
+                ElevatedCard(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surface
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            expandedApps = if (isExpanded) {
+                                expandedApps - appStat.packageName
+                            } else {
+                                expandedApps + appStat.packageName
+                            }
+                        }
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // App Icon
+                            Box(modifier = Modifier.size(40.dp)) {
+                                if (icon != null) {
+                                    Image(
+                                        bitmap = icon.toBitmap(48, 48).asImageBitmap(),
+                                        contentDescription = null,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                } else {
+                                    Surface(
+                                        modifier = Modifier.fillMaxSize(),
+                                        shape = CircleShape,
+                                        color = MaterialTheme.colorScheme.primaryContainer
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier.fillMaxSize()
+                                        ) {
+                                            Text(
+                                                text = appStat.appLabel.take(1).uppercase(),
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+
+                            Spacer(Modifier.width(12.dp))
+
+                            // App Label & Package Name
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = appStat.appLabel,
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                                Text(
+                                    text = appStat.packageName,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+
+                            // Badges for totals
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                if (appStat.frameworkTotal > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    ) {
+                                        Text(
+                                            text = "F: ${appStat.frameworkTotal}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                                if (appStat.nativeTotal > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.tertiaryContainer,
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                    ) {
+                                        Text(
+                                            text = "N: ${appStat.nativeTotal}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                        )
+                                    }
+                                }
+                                
+                                Icon(
+                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                        }
+
+                        // Expandable breakdowns
+                        if (isExpanded) {
+                            Spacer(Modifier.height(12.dp))
+                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            Spacer(Modifier.height(8.dp))
+                            
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                // Framework Breakdown Column
+                                if (appStat.frameworkTotal > 0) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Framework Intercepts",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        for ((hook, count) in appStat.frameworkBreakdown) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                Text(
+                                                    text = hook,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = count.toString(),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                // Native Breakdown Column
+                                if (appStat.nativeTotal > 0) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Native Intercepts",
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.tertiary
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        for ((vector, count) in appStat.nativeBreakdown) {
+                                            Row(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween
+                                            ) {
+                                                val vectorLabel = when (vector) {
+                                                    "ioctl" -> "ioctl / SIOCGIF"
+                                                    "netlink" -> "netlink RTNETLINK"
+                                                    "connect" -> "Loopback Block"
+                                                    "getname" -> "getsockname Spoof"
+                                                    else -> vector
+                                                }
+                                                Text(
+                                                    text = vectorLabel,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                )
+                                                Text(
+                                                    text = count.toString(),
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SkeletonStatsCard() {
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            ShimmerPlaceholder(
+                modifier = Modifier.size(40.dp),
+                shape = CircleShape
+            )
+            Spacer(Modifier.width(12.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                ShimmerPlaceholder(modifier = Modifier.width(120.dp).height(16.dp))
+                Spacer(Modifier.height(6.dp))
+                ShimmerPlaceholder(modifier = Modifier.width(80.dp).height(12.dp))
+            }
+        }
+    }
 }

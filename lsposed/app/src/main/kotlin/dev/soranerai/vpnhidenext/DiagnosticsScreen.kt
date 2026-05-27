@@ -456,7 +456,7 @@ fun DiagnosticsScreen(
             }
         }
 
-        Spacer(Modifier.height(88.dp))
+        Spacer(Modifier.height(100.dp))
     }
 }
 
