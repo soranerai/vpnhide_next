@@ -54,20 +54,24 @@ class HookEntry : IXposedHookLoadPackage {
 
     private fun recordIntercept(hookName: String) {
         val callingUid = Binder.getCallingUid()
-        val targetUid = if (callingUid == 1000) {
-            currentCallbackUid.get() ?: return
-        } else {
-            callingUid
-        }
+        val targetUid =
+            if (callingUid == 1000) {
+                currentCallbackUid.get() ?: return
+            } else {
+                callingUid
+            }
         if (!loadTargetUids().contains(targetUid)) return
         if (targetUid == selfUid) return
 
-        val appStats = hookStats.computeIfAbsent(targetUid) {
-            java.util.concurrent.ConcurrentHashMap()
-        }
-        appStats.computeIfAbsent(hookName) {
-            java.util.concurrent.atomic.AtomicInteger(0)
-        }.incrementAndGet()
+        val appStats =
+            hookStats.computeIfAbsent(targetUid) {
+                java.util.concurrent.ConcurrentHashMap()
+            }
+        appStats
+            .computeIfAbsent(hookName) {
+                java.util.concurrent.atomic
+                    .AtomicInteger(0)
+            }.incrementAndGet()
     }
 
     /**
@@ -82,7 +86,13 @@ class HookEntry : IXposedHookLoadPackage {
                 for ((hook, atomicCount) in appStats) {
                     val count = atomicCount.get()
                     if (count > 0) {
-                        sb.append(uid).append(';').append(hook).append(';').append(count).append('\n')
+                        sb
+                            .append(uid)
+                            .append(';')
+                            .append(hook)
+                            .append(';')
+                            .append(count)
+                            .append('\n')
                     }
                 }
             }
@@ -110,7 +120,10 @@ class HookEntry : IXposedHookLoadPackage {
                         val reqFile = File(STATS_REQ_FILE)
                         if (reqFile.exists()) {
                             // Delete first so the manager app can't see a stale request
-                            try { reqFile.delete() } catch (_: Throwable) {}
+                            try {
+                                reqFile.delete()
+                            } catch (_: Throwable) {
+                            }
                             dumpHookStats()
                         }
                     } catch (t: Throwable) {
@@ -127,7 +140,6 @@ class HookEntry : IXposedHookLoadPackage {
         thread.start()
         HookLog.i("VpnHide: stats request watcher started (polling every 500 ms)")
     }
-
 
     private inline fun tryHook(
         name: String,
@@ -1571,14 +1583,18 @@ class HookEntry : IXposedHookLoadPackage {
         const val TYPE_VPN = 17
         const val TYPE_WIFI = 1
         const val HOOK_STATUS_FILE = "/data/system/vpnhide_hook_active"
+
         /** Written on-demand when the manager app creates STATS_REQ_FILE. */
         const val STATS_FILE = "/data/system/vpnhide_hook_stats.txt"
+
         /** Manager app creates this file to trigger an on-demand stats dump from system_server. */
         const val STATS_REQ_FILE = "/data/system/vpnhide_hook_stats_req"
         const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
 
         /** All intercept stats live only in memory. Written to disk only when the manager requests it. */
-        private val hookStats = java.util.concurrent.ConcurrentHashMap<Int, java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>>()
+        private val hookStats =
+            java.util.concurrent
+                .ConcurrentHashMap<Int, java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>>()
 
         private val FIELD_PROBES =
             listOf(

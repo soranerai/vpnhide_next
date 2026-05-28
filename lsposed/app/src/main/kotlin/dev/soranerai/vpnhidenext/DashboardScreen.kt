@@ -2,9 +2,9 @@ package dev.soranerai.vpnhidenext
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -205,10 +205,11 @@ private fun DashboardContent(
             modifier = Modifier.padding(vertical = 8.dp),
         )
 
-        val (javaResult, nativeResult) = when (val p = s.protection) {
-            is ProtectionCheck.Checked -> Pair(p.java, p.native)
-            else -> Pair(null, null)
-        }
+        val (javaResult, nativeResult) =
+            when (val p = s.protection) {
+                is ProtectionCheck.Checked -> Pair(p.java, p.native)
+                else -> Pair(null, null)
+            }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -250,6 +251,7 @@ private fun DashboardContent(
                     contentColor = MaterialTheme.colorScheme.onErrorContainer,
                 )
             }
+
             else -> {}
         }
 
@@ -348,57 +350,80 @@ private fun ModuleCard(
                     null -> null
                 }
 
-            val targetsText = when {
-                brokenSubtitleRes != null -> stringResource(brokenSubtitleRes)
-                active -> stringResource(R.string.dashboard_active_targets, state.targetCount)
-                selfNeedsRestart -> stringResource(R.string.dashboard_installed_restart_app)
-                else -> stringResource(R.string.dashboard_installed_inactive)
-            }
-
-            val protectionText = if (active) {
-                when (nativeResult) {
-                    is NativeResult.Ok -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
-                    is NativeResult.Fail -> {
-                        val failText = if (nativeResult.passed > 0) {
-                            stringResource(R.string.dashboard_protection_partial)
-                        } else {
-                            stringResource(R.string.dashboard_protection_fail)
-                        }
-                        "\n" + stringResource(R.string.dashboard_protection_prefix, failText)
-                    }
-                    is NativeResult.NoModule -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_no_module))
-                    null -> ""
+            val targetsText =
+                when {
+                    brokenSubtitleRes != null -> stringResource(brokenSubtitleRes)
+                    active -> stringResource(R.string.dashboard_active_targets, state.targetCount)
+                    selfNeedsRestart -> stringResource(R.string.dashboard_installed_restart_app)
+                    else -> stringResource(R.string.dashboard_installed_inactive)
                 }
-            } else ""
+
+            val protectionText =
+                if (active) {
+                    when (nativeResult) {
+                        is NativeResult.Ok -> {
+                            "\n" +
+                                stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
+                        }
+
+                        is NativeResult.Fail -> {
+                            val failText =
+                                if (nativeResult.passed > 0) {
+                                    stringResource(R.string.dashboard_protection_partial)
+                                } else {
+                                    stringResource(R.string.dashboard_protection_fail)
+                                }
+                            "\n" + stringResource(R.string.dashboard_protection_prefix, failText)
+                        }
+
+                        is NativeResult.NoModule -> {
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    stringResource(R.string.dashboard_protection_no_module),
+                                )
+                        }
+
+                        null -> {
+                            ""
+                        }
+                    }
+                } else {
+                    ""
+                }
 
             val subtitle = targetsText + protectionText
 
             val isFail = broken != null || (active && nativeResult is NativeResult.Fail)
             val isOk = active && nativeResult is NativeResult.Ok
 
-            val (containerColor, contentColor, dotColor) = when {
-                isFail -> {
-                    if (darkTheme) {
-                        Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
-                    } else {
-                        Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
+            val (containerColor, contentColor, dotColor) =
+                when {
+                    isFail -> {
+                        if (darkTheme) {
+                            Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
+                        } else {
+                            Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
+                        }
+                    }
+
+                    isOk -> {
+                        if (darkTheme) {
+                            Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
+                        } else {
+                            Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
+                        }
+                    }
+
+                    else -> {
+                        val dot =
+                            when {
+                                active -> TelGreen
+                                else -> TelOrange
+                            }
+                        Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, dot)
                     }
                 }
-                isOk -> {
-                    if (darkTheme) {
-                        Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
-                    } else {
-                        Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
-                    }
-                }
-                else -> {
-                    val dot = when {
-                        active -> TelGreen
-                        else -> TelOrange
-                    }
-                    Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, dot)
-                }
-            }
 
             ModuleCardShell(
                 name = name,
@@ -463,37 +488,58 @@ private fun LsposedCard(
 
         is LsposedState.Active -> {
             val targetsText = stringResource(R.string.dashboard_active_targets, state.targetCount)
-            val protectionText = when (javaResult) {
-                is JavaResult.Ok -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
-                is JavaResult.Fail -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_fail))
-                is JavaResult.HooksInactive -> "\n" + stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_hooks_inactive))
-                null -> ""
-            }
+            val protectionText =
+                when (javaResult) {
+                    is JavaResult.Ok -> {
+                        "\n" +
+                            stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
+                    }
+
+                    is JavaResult.Fail -> {
+                        "\n" +
+                            stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_fail))
+                    }
+
+                    is JavaResult.HooksInactive -> {
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                stringResource(R.string.dashboard_protection_hooks_inactive),
+                            )
+                    }
+
+                    null -> {
+                        ""
+                    }
+                }
 
             val subtitle = targetsText + protectionText
 
             val isFail = javaResult is JavaResult.Fail
             val isOk = javaResult is JavaResult.Ok
 
-            val (containerColor, contentColor, dotColor) = when {
-                isFail -> {
-                    if (darkTheme) {
-                        Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
-                    } else {
-                        Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
+            val (containerColor, contentColor, dotColor) =
+                when {
+                    isFail -> {
+                        if (darkTheme) {
+                            Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
+                        } else {
+                            Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
+                        }
+                    }
+
+                    isOk -> {
+                        if (darkTheme) {
+                            Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
+                        } else {
+                            Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
+                        }
+                    }
+
+                    else -> {
+                        Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, TelGreen)
                     }
                 }
-                isOk -> {
-                    if (darkTheme) {
-                        Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
-                    } else {
-                        Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
-                    }
-                }
-                else -> {
-                    Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, TelGreen)
-                }
-            }
 
             ModuleCardShell(
                 name = moduleName,
@@ -672,8 +718,6 @@ private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecomme
     }
 }
 
-
-
 @Composable
 private fun StatusBanner(
     text: String,
@@ -832,7 +876,7 @@ private fun InterceptStatisticsSection(
     var expandedApps by remember { mutableStateOf(setOf<String>()) }
 
     Spacer(Modifier.height(24.dp))
-    
+
     Text(
         text = "Intercept Statistics",
         style = MaterialTheme.typography.titleMedium,
@@ -848,27 +892,28 @@ private fun InterceptStatisticsSection(
     } else if (stats.isEmpty()) {
         Card(
             shape = RoundedCornerShape(16.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-            ),
-            modifier = Modifier.fillMaxWidth()
+            colors =
+                CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                ),
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Column(
                 modifier = Modifier.padding(20.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
                     text = "No Intercepts Recorded",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
                     text = "Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
                 )
             }
         }
@@ -881,23 +926,26 @@ private fun InterceptStatisticsSection(
 
                 ElevatedCard(
                     shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            expandedApps = if (isExpanded) {
-                                expandedApps - appStat.packageName
-                            } else {
-                                expandedApps + appStat.packageName
-                            }
-                        }
+                    colors =
+                        CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                        ),
+                    modifier =
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                expandedApps =
+                                    if (isExpanded) {
+                                        expandedApps - appStat.packageName
+                                    } else {
+                                        expandedApps + appStat.packageName
+                                    }
+                            },
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             // App Icon
                             Box(modifier = Modifier.size(40.dp)) {
@@ -911,17 +959,17 @@ private fun InterceptStatisticsSection(
                                     Surface(
                                         modifier = Modifier.fillMaxSize(),
                                         shape = CircleShape,
-                                        color = MaterialTheme.colorScheme.primaryContainer
+                                        color = MaterialTheme.colorScheme.primaryContainer,
                                     ) {
                                         Box(
                                             contentAlignment = Alignment.Center,
-                                            modifier = Modifier.fillMaxSize()
+                                            modifier = Modifier.fillMaxSize(),
                                         ) {
                                             Text(
                                                 text = appStat.appLabel.take(1).uppercase(),
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
                                             )
                                         }
                                     }
@@ -935,31 +983,31 @@ private fun InterceptStatisticsSection(
                                 Text(
                                     text = appStat.appLabel,
                                     fontWeight = FontWeight.Bold,
-                                    style = MaterialTheme.typography.bodyMedium
+                                    style = MaterialTheme.typography.bodyMedium,
                                 )
                                 Text(
                                     text = appStat.packageName,
                                     style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                             }
 
                             // Badges for totals
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                verticalAlignment = Alignment.CenterVertically
+                                verticalAlignment = Alignment.CenterVertically,
                             ) {
                                 if (appStat.frameworkTotal > 0) {
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
                                     ) {
                                         Text(
                                             text = "F: ${appStat.frameworkTotal}",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                         )
                                     }
                                 }
@@ -967,22 +1015,22 @@ private fun InterceptStatisticsSection(
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = MaterialTheme.colorScheme.tertiaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer
+                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                                     ) {
                                         Text(
                                             text = "N: ${appStat.nativeTotal}",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
                                         )
                                     }
                                 }
-                                
+
                                 Icon(
                                     imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                     contentDescription = null,
                                     tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                                    modifier = Modifier.size(20.dp)
+                                    modifier = Modifier.size(20.dp),
                                 )
                             }
                         }
@@ -992,10 +1040,10 @@ private fun InterceptStatisticsSection(
                             Spacer(Modifier.height(12.dp))
                             HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
                             Spacer(Modifier.height(8.dp))
-                            
+
                             Row(
                                 modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
                             ) {
                                 // Framework Breakdown Column
                                 if (appStat.frameworkTotal > 0) {
@@ -1004,26 +1052,27 @@ private fun InterceptStatisticsSection(
                                             text = "Framework Intercepts",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary
+                                            color = MaterialTheme.colorScheme.primary,
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         for ((hook, count) in appStat.frameworkBreakdown) {
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 2.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
                                             ) {
                                                 Text(
                                                     text = hook,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                                 Text(
                                                     text = count.toString(),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                 )
                                             }
                                         }
@@ -1037,33 +1086,35 @@ private fun InterceptStatisticsSection(
                                             text = "Native Intercepts",
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.tertiary
+                                            color = MaterialTheme.colorScheme.tertiary,
                                         )
                                         Spacer(Modifier.height(4.dp))
                                         for ((vector, count) in appStat.nativeBreakdown) {
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(vertical = 2.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween
+                                                modifier =
+                                                    Modifier
+                                                        .fillMaxWidth()
+                                                        .padding(vertical = 2.dp),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
                                             ) {
-                                                val vectorLabel = when (vector) {
-                                                    "ioctl" -> "ioctl / SIOCGIF"
-                                                    "netlink" -> "netlink RTNETLINK"
-                                                    "connect" -> "Loopback Block"
-                                                    "getname" -> "getsockname Spoof"
-                                                    else -> vector
-                                                }
+                                                val vectorLabel =
+                                                    when (vector) {
+                                                        "ioctl" -> "ioctl / SIOCGIF"
+                                                        "netlink" -> "netlink RTNETLINK"
+                                                        "connect" -> "Loopback Block"
+                                                        "getname" -> "getsockname Spoof"
+                                                        else -> vector
+                                                    }
                                                 Text(
                                                     text = vectorLabel,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                                 )
                                                 Text(
                                                     text = count.toString(),
                                                     style = MaterialTheme.typography.bodySmall,
                                                     fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.onSurface
+                                                    color = MaterialTheme.colorScheme.onSurface,
                                                 )
                                             }
                                         }
@@ -1086,11 +1137,11 @@ private fun SkeletonStatsCard() {
     ) {
         Row(
             modifier = Modifier.padding(14.dp).fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             ShimmerPlaceholder(
                 modifier = Modifier.size(40.dp),
-                shape = CircleShape
+                shape = CircleShape,
             )
             Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {

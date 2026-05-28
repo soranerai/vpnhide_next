@@ -1088,17 +1088,19 @@ internal suspend fun loadDashboardState(
 internal fun loadInterceptStats(context: android.content.Context): List<AppInterceptStats> {
     val pm = context.packageManager
     val uidToAppMap = mutableMapOf<Int, Pair<String, String>>()
+
     fun getAppInfoForUid(uid: Int): Pair<String, String> {
         uidToAppMap[uid]?.let { return it }
         val pkgs = pm.getPackagesForUid(uid)
         if (!pkgs.isNullOrEmpty()) {
             val pkg = pkgs[0]
-            val label = try {
-                val appInfo = pm.getApplicationInfo(pkg, 0)
-                pm.getApplicationLabel(appInfo).toString().trim()
-            } catch (_: Throwable) {
-                pkg
-            }
+            val label =
+                try {
+                    val appInfo = pm.getApplicationInfo(pkg, 0)
+                    pm.getApplicationLabel(appInfo).toString().trim()
+                } catch (_: Throwable) {
+                    pkg
+                }
             val res = Pair(pkg, label)
             uidToAppMap[uid] = res
             return res
@@ -1108,7 +1110,8 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
         return unknown
     }
 
-    val script = """
+    val script =
+        """
         echo 1 > /data/system/vpnhide_hook_stats_req 2>/dev/null
         sleep 1.1
         echo "framework_stats=${'$'}(cat /data/system/vpnhide_hook_stats.txt 2>/dev/null | base64 | tr -d '\n')"
@@ -1116,18 +1119,24 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
         if [ -x $KMOD_CTL ] && [ -c $DEV_NODE ]; then
           echo "native_stats=${'$'}($KMOD_CTL stats 2>/dev/null | base64 | tr -d '\n')"
         fi
-    """.trimIndent()
+        """.trimIndent()
 
     val (_, out) = suExec(script)
-    val props = out.lines().mapNotNull {
-        val parts = it.split("=", limit = 2)
-        if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
-    }.toMap()
+    val props =
+        out
+            .lines()
+            .mapNotNull {
+                val parts = it.split("=", limit = 2)
+                if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+            }.toMap()
 
-    fun decodeBase64(key: String): String = try {
-        val encoded = props[key] ?: ""
-        if (encoded.isBlank()) "" else String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
-    } catch (_: Exception) { "" }
+    fun decodeBase64(key: String): String =
+        try {
+            val encoded = props[key] ?: ""
+            if (encoded.isBlank()) "" else String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
+        } catch (_: Exception) {
+            ""
+        }
 
     val frameworkStatsRaw = decodeBase64("framework_stats")
     val uidFrameworkMap = mutableMapOf<Int, MutableMap<String, Int>>()
@@ -1170,17 +1179,18 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
 
     val selfUid = context.applicationInfo.uid
     val allUids = (uidFrameworkMap.keys + uidNativeMap.keys).filter { it != selfUid }
-    return allUids.map { uid ->
-        val (pkg, label) = getAppInfoForUid(uid)
-        val fBreakdown = uidFrameworkMap[uid] ?: emptyMap()
-        val nBreakdown = uidNativeMap[uid] ?: emptyMap()
-        AppInterceptStats(
-            packageName = pkg,
-            appLabel = label,
-            frameworkTotal = fBreakdown.values.sum(),
-            nativeTotal = nBreakdown.values.sum(),
-            frameworkBreakdown = fBreakdown,
-            nativeBreakdown = nBreakdown
-        )
-    }.sortedByDescending { it.frameworkTotal + it.nativeTotal }
+    return allUids
+        .map { uid ->
+            val (pkg, label) = getAppInfoForUid(uid)
+            val fBreakdown = uidFrameworkMap[uid] ?: emptyMap()
+            val nBreakdown = uidNativeMap[uid] ?: emptyMap()
+            AppInterceptStats(
+                packageName = pkg,
+                appLabel = label,
+                frameworkTotal = fBreakdown.values.sum(),
+                nativeTotal = nBreakdown.values.sum(),
+                frameworkBreakdown = fBreakdown,
+                nativeBreakdown = nBreakdown,
+            )
+        }.sortedByDescending { it.frameworkTotal + it.nativeTotal }
 }

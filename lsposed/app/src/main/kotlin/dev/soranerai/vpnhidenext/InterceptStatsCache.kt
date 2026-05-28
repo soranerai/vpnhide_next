@@ -22,20 +22,27 @@ internal object InterceptStatsCache {
 
     private var inflight: Job? = null
 
-    fun ensureLoaded(scope: CoroutineScope, context: Context) {
+    fun ensureLoaded(
+        scope: CoroutineScope,
+        context: Context,
+    ) {
         if (_stats.value != null || inflight?.isActive == true) return
         inflight = scope.launch { reload(context) }
     }
 
-    fun refresh(scope: CoroutineScope, context: Context) {
+    fun refresh(
+        scope: CoroutineScope,
+        context: Context,
+    ) {
         inflight?.cancel()
         inflight = scope.launch { reload(context) }
     }
 
     private suspend fun reload(context: Context) {
-        val next = withContext(Dispatchers.IO) {
-            loadInterceptStats(context)
-        }
+        val next =
+            withContext(Dispatchers.IO) {
+                loadInterceptStats(context)
+            }
         _stats.value = next
     }
 }
