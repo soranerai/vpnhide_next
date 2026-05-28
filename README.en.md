@@ -26,6 +26,7 @@
 *   **Work Profiles Support**: Full native profile filtering and separation.
 *   **Modern DB Engine**: Driven by Room (SQLite) database with automatic inotify reload.
 *   **ARM64 Only**: Dropped support for legacy architectures and optimized for arm64-v8a.
+*   **Intercept Statistics Monitoring (Native & Framework)**: Real-time, lazy-loaded statistics of all blocked and spoofed calls with details on specific Java framework APIs and native syscall vectors (ioctl, netlink, getsockname, connect).
 
 ### Detailed comparison with the original (in detail)
 
@@ -45,6 +46,7 @@
 | **FileSystem Stealth (ProcFS)** | Creates public `/proc/vpnhide_targets` and `/proc/vpnhide_debug` nodes. | **Absolute ProcFS-stealth via `/dev/vpnhide_ctrl` character device** | Completely removes `/proc` nodes. Root controller communicates via misc character device with `0660` permissions (root/system only), invisible to untrusted apps. |
 | **Rules DB & Boot Performance** | Plaintext configuration files, slow startup parsing. | **SQLite (Room) database with `inotify` FileObservers** | Immediate loading and instantaneous, transaction-based rule synchronization. |
 | **Work Profiles** | Not supported. | **Full Native Support** | Isolates and filters targets in secondary profiles and work profiles with profile separation. |
+| **Intercept Statistics** | Absent. | **Comprehensive Native & Framework Stats** | **Full Visibility**: Real-time stats with lazy-loaded interface and detail views down to specific Java framework hooks and native vectors (ioctl, netlink, getsockname, connect). |
 
 ### Architecture
 *   **`kmod`** — kernel module (recommended), operating outside the application process context. Requirements: GKI + ARM64-v8a.
