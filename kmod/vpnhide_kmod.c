@@ -184,6 +184,55 @@ static bool is_target_uid(void)
 	return found;
 }
 
+static struct vpnhide_uid_stats kmod_stats[MAX_TARGET_UIDS];
+static int kmod_stats_count = 0;
+static DEFINE_SPINLOCK(kmod_stats_lock);
+
+static void record_kmod_intercept(uid_t uid, int type)
+{
+	int i;
+	unsigned long flags;
+
+	if (uid == 0 || uid == 1000)
+		return;
+
+	spin_lock_irqsave(&kmod_stats_lock, flags);
+	for (i = 0; i < kmod_stats_count; i++) {
+		if (kmod_stats[i].uid == uid) {
+			if (type == 1)
+				kmod_stats[i].ioctl_count++;
+			else if (type == 2)
+				kmod_stats[i].netlink_count++;
+			else if (type == 3)
+				kmod_stats[i].connect_count++;
+			else if (type == 4)
+				kmod_stats[i].getname_count++;
+			spin_unlock_irqrestore(&kmod_stats_lock, flags);
+			return;
+		}
+	}
+
+	if (kmod_stats_count < MAX_TARGET_UIDS) {
+		kmod_stats[kmod_stats_count].uid = uid;
+		kmod_stats[kmod_stats_count].ioctl_count = 0;
+		kmod_stats[kmod_stats_count].netlink_count = 0;
+		kmod_stats[kmod_stats_count].connect_count = 0;
+		kmod_stats[kmod_stats_count].getname_count = 0;
+
+		if (type == 1)
+			kmod_stats[kmod_stats_count].ioctl_count = 1;
+		else if (type == 2)
+			kmod_stats[kmod_stats_count].netlink_count = 1;
+		else if (type == 3)
+			kmod_stats[kmod_stats_count].connect_count = 1;
+		else if (type == 4)
+			kmod_stats[kmod_stats_count].getname_count = 1;
+
+		kmod_stats_count++;
+	}
+	spin_unlock_irqrestore(&kmod_stats_lock, flags);
+}
+
 /* ================================================================== */
 /*  Hook 1: dev_ioctl — all per-interface ioctls                      */
 /*  Android source path: net/core/dev_ioctl.c                         */
@@ -248,6 +297,8 @@ static int dev_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 	if (is_vpn_ifname(name)) {
 		vpnhide_dbg("dev_ioctl_ret: hiding iface=%s cmd=0x%x\n", name,
 			    data->cmd);
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      1);
 		regs_set_return_value(regs, -ENODEV);
 	}
 
@@ -395,6 +446,8 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 				ifc.ifc_len);
 			return 0;
 		}
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      1);
 		vpnhide_dbg("ifconf filtered %d -> %d bytes\n", orig_len,
 			    ifc.ifc_len);
 	}
@@ -817,6 +870,7 @@ static int rtnl_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("rtnl_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 2);
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -893,6 +947,7 @@ static int inet6_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("inet6_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 2);
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -961,6 +1016,7 @@ static int inet_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("inet_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 2);
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -1046,6 +1102,8 @@ static int fib_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		if (is_vpn_ifname(ifname)) {
 			vpnhide_dbg("fib_route_ret: hiding route for %s\n",
 				    ifname);
+			record_kmod_intercept(
+				from_kuid(&init_user_ns, current_uid()), 2);
 			src = line_end;
 			continue;
 		}
@@ -1209,6 +1267,8 @@ static int fib_dump_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 0;
 
 	if (regs_return_value(regs) >= 0) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      2);
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
 	}
@@ -1299,6 +1359,8 @@ static int fib_rule_fill_ret(struct kretprobe_instance *ri,
 		return 0;
 
 	if (regs_return_value(regs) >= 0) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      2);
 		/* Trim the Netlink buffer back to remove the serialized rule */
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
@@ -1376,6 +1438,8 @@ static int rt6_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 0;
 
 	if (regs_return_value(regs) >= 0) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      2);
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
 	}
@@ -1467,6 +1531,8 @@ static int ipv6_route_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 			vpnhide_dbg(
 				"ipv6_route_ret: hiding IPv6 route for %s\n",
 				ifname);
+			record_kmod_intercept(
+				from_kuid(&init_user_ns, current_uid()), 2);
 			src = line_end;
 			continue;
 		}
@@ -1566,6 +1632,8 @@ static int rt_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 0;
 
 	if (regs_return_value(regs) >= 0) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      2);
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
 	}
@@ -1795,6 +1863,28 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		ret = 0;
 		break;
 
+	case VH_GET_STATS: {
+		struct vpnhide_kmod_stats_data *sdata;
+		unsigned long flags;
+		sdata = kvzalloc(sizeof(*sdata), GFP_KERNEL);
+		if (!sdata)
+			return -ENOMEM;
+
+		spin_lock_irqsave(&kmod_stats_lock, flags);
+		sdata->count = kmod_stats_count;
+		memcpy(sdata->stats, kmod_stats,
+		       kmod_stats_count * sizeof(struct vpnhide_uid_stats));
+		spin_unlock_irqrestore(&kmod_stats_lock, flags);
+
+		if (copy_to_user((void __user *)arg, sdata, sizeof(*sdata))) {
+			kvfree(sdata);
+			return -EFAULT;
+		}
+		kvfree(sdata);
+		ret = 0;
+		break;
+	}
+
 	default:
 		return -ENOIOCTLCMD;
 	}
@@ -1956,6 +2046,8 @@ static int socket_connect_ret(struct kretprobe_instance *ri,
 	struct socket_connect_data *data = (void *)ri->data;
 
 	if (data->should_block) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      3);
 		regs_set_return_value(regs, -ECONNREFUSED);
 	}
 
@@ -2020,6 +2112,9 @@ static int inet_getname_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 			if (addr != 0 &&
 			    (ntohl(addr) & 0xFF000000) != 0x7F000000) {
 				sin->sin_addr.s_addr = sip.ipv4_addr;
+				record_kmod_intercept(from_kuid(&init_user_ns,
+								current_uid()),
+						      4);
 				vpnhide_dbg(
 					"inet_getname_ret: spoofed IPv4 from %pI4 to %pI4\n",
 					&addr, &sip.ipv4_addr);
@@ -2068,6 +2163,9 @@ static int inet6_getname_ret(struct kretprobe_instance *ri,
 			    !ipv6_addr_loopback(&sin6->sin6_addr)) {
 				struct in6_addr old_addr = sin6->sin6_addr;
 				memcpy(&sin6->sin6_addr, sip.ipv6_addr, 16);
+				record_kmod_intercept(from_kuid(&init_user_ns,
+								current_uid()),
+						      4);
 				vpnhide_dbg(
 					"inet6_getname_ret: spoofed IPv6 from %pI6c to %pI6c\n",
 					&old_addr, sip.ipv6_addr);

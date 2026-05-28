@@ -136,7 +136,8 @@ internal fun IfacePrefixScreen(
                     }
                 }
 
-                Spacer(Modifier.height(120.dp))
+                val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                Spacer(Modifier.height(bottomNavPadding + 100.dp))
             }
         }
 

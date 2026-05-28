@@ -456,7 +456,8 @@ fun DiagnosticsScreen(
             }
         }
 
-        Spacer(Modifier.height(88.dp))
+        val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        Spacer(Modifier.height(bottomNavPadding + 100.dp))
     }
 }
 

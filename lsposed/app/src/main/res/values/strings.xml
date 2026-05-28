@@ -104,9 +104,9 @@
 
     <!-- Dashboard -->
     <string name="dashboard_modules">Modules</string>
-    <string name="dashboard_kmod">Kernel module</string>
+    <string name="dashboard_kmod">Native</string>
 
-    <string name="dashboard_lsposed_module">VPNHide Next LSPosed hook</string>
+    <string name="dashboard_lsposed_module">Framework</string>
     <string name="dashboard_not_installed">Not installed</string>
     <string name="dashboard_installed_inactive">Installed, inactive</string>
     <string name="dashboard_installed_restart_app">Installed, restart VPNHide Next to activate</string>
@@ -118,6 +118,7 @@
     <string name="dashboard_active_targets">Active · %d target(s)</string>
     <string name="dashboard_reboot_needed">Device reboot needed</string>
     <string name="dashboard_protection">Protection status</string>
+    <string name="dashboard_protection_prefix">Protection: %s</string>
     <string name="dashboard_native_protection">Native level</string>
     <string name="dashboard_java_protection">Java API level</string>
     <string name="dashboard_protection_ok">OK</string>

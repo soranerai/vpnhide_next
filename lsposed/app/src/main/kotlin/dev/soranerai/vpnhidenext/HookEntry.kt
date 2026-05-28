@@ -48,7 +48,97 @@ class HookEntry : IXposedHookLoadPackage {
             HookLog.i("VpnHide: system_server detected, installing Binder hooks")
             val brokenFields = installSystemServerHooks()
             writeHookStatusFile(brokenFields)
+            watchStatsRequest()
         }
+    }
+
+    private fun recordIntercept(hookName: String) {
+        val callingUid = Binder.getCallingUid()
+        val targetUid =
+            if (callingUid == 1000) {
+                currentCallbackUid.get() ?: return
+            } else {
+                callingUid
+            }
+        if (!loadTargetUids().contains(targetUid)) return
+        if (targetUid == selfUid) return
+
+        val appStats =
+            hookStats.computeIfAbsent(targetUid) {
+                java.util.concurrent.ConcurrentHashMap()
+            }
+        appStats
+            .computeIfAbsent(hookName) {
+                java.util.concurrent.atomic
+                    .AtomicInteger(0)
+            }.incrementAndGet()
+    }
+
+    /**
+     * Dumps the in-memory hookStats map to STATS_FILE exactly once.
+     * Called only when the manager app signals via STATS_REQ_FILE.
+     * No continuous disk I/O — all stats live in the ConcurrentHashMap.
+     */
+    private fun dumpHookStats() {
+        try {
+            val sb = java.lang.StringBuilder()
+            for ((uid, appStats) in hookStats) {
+                for ((hook, atomicCount) in appStats) {
+                    val count = atomicCount.get()
+                    if (count > 0) {
+                        sb
+                            .append(uid)
+                            .append(';')
+                            .append(hook)
+                            .append(';')
+                            .append(count)
+                            .append('\n')
+                    }
+                }
+            }
+            File(STATS_FILE).writeText(sb.toString())
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to dump hook stats: ${t.message}")
+        }
+    }
+
+    /**
+     * Polls STATS_REQ_FILE every 500 ms from a daemon thread.
+     * When the manager app creates that file, system_server deletes it and
+     * dumps hookStats to STATS_FILE exactly once.
+     *
+     * A dedicated thread is used instead of FileObserver to avoid inotify
+     * edge cases (e.g. 'touch' on an existing file only emits ATTRIB, not
+     * CREATE/CLOSE_WRITE) and SELinux restrictions on cross-UID inotify
+     * events that can silently prevent the callback from firing.
+     */
+    private fun watchStatsRequest() {
+        val thread =
+            Thread({
+                while (true) {
+                    try {
+                        val reqFile = File(STATS_REQ_FILE)
+                        if (reqFile.exists()) {
+                            // Delete first so the manager app can't see a stale request
+                            try {
+                                reqFile.delete()
+                            } catch (_: Throwable) {
+                            }
+                            dumpHookStats()
+                        }
+                    } catch (t: Throwable) {
+                        HookLog.e("VpnHide: stats watcher error: ${t.message}")
+                    }
+                    try {
+                        Thread.sleep(500)
+                    } catch (_: InterruptedException) {
+                        break
+                    }
+                }
+            }, "VpnHideStatsWatcher")
+        thread.isDaemon = true
+        thread.start()
+        HookLog.i("VpnHide: stats request watcher started (polling every 500 ms)")
     }
 
     private inline fun tryHook(
@@ -598,6 +688,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 firstRun = false
                             }
                         }
+                        // Stats live only in-memory; dumped on-demand via watchStatsRequest()
                     } catch (t: Throwable) {
                         HookLog.e("VpnHide: Error in network monitoring loop: ${t::class.java.simpleName}: ${t.message}")
                     }
@@ -757,6 +848,7 @@ class HookEntry : IXposedHookLoadPackage {
                         if (!isTargetCaller()) return
                         val redactions = param.args[1] as? Long ?: return
                         if (redactions == 0L) return // nothing was redacted
+                        recordIntercept("WifiInfo")
 
                         val source = param.args[0] ?: return
                         val result = param.thisObject
@@ -856,6 +948,7 @@ class HookEntry : IXposedHookLoadPackage {
                     }
 
                     if (!needsFix || physIp == null) return
+                    recordIntercept("WifiInfo")
 
                     // Clone WifiInfo — try simple copy-ctor first, then redact-none ctor
                     val copy =
@@ -942,6 +1035,7 @@ class HookEntry : IXposedHookLoadPackage {
                     val nc = param.thisObject as NetworkCapabilities
                     val copy = NetworkCapabilities(nc)
                     if (!sanitizeNetworkCapabilities(copy)) return
+                    recordIntercept("NetworkCapabilities")
 
                     val parcel = param.args[0] as android.os.Parcel
                     val flags = param.args[1] as Int
@@ -970,6 +1064,7 @@ class HookEntry : IXposedHookLoadPackage {
                     if (writingCopy.get() == true || !isTargetCaller()) return
                     val ni = param.thisObject as NetworkInfo
                     if (XposedHelpers.getIntField(ni, "mNetworkType") != TYPE_VPN) return
+                    recordIntercept("NetworkInfo")
 
                     val cs = getConnectivityService()
                     val physicalNet = if (cs != null) getPhysicalNetwork(cs) else null
@@ -1072,6 +1167,7 @@ class HookEntry : IXposedHookLoadPackage {
                         val nc = getNetworkCapabilitiesSafe(cs, net) ?: return
 
                         if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                            recordIntercept("Network")
                             val physicalNet = getPhysicalNetwork(cs)
                             if (physicalNet != null) {
                                 val parcel = param.args[0] as android.os.Parcel
@@ -1101,6 +1197,7 @@ class HookEntry : IXposedHookLoadPackage {
                     val lp = param.thisObject as LinkProperties
                     val isVpn = lp.interfaceName?.let { isVpnInterfaceName(it) } ?: false
                     if (isVpn) {
+                        recordIntercept("LinkProperties")
                         val cs = getConnectivityService()
                         val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
                         if (physicalLp != null) {
@@ -1348,6 +1445,7 @@ class HookEntry : IXposedHookLoadPackage {
 
                                     if (request != null && request.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)) {
                                         HookLog.i("VpnHide: Suppressing VPN callback/intent for target UID $uid")
+                                        recordIntercept("ConnectivityService")
                                         param.result = null
                                         return
                                     }
@@ -1379,7 +1477,10 @@ class HookEntry : IXposedHookLoadPackage {
                                 if (uid != null && loadTargetUids().contains(uid)) {
                                     val nc = param.result as? NetworkCapabilities ?: return
                                     val copy = NetworkCapabilities(nc)
-                                    if (sanitizeNetworkCapabilities(copy)) param.result = copy
+                                    if (sanitizeNetworkCapabilities(copy)) {
+                                        recordIntercept("ConnectivityService")
+                                        param.result = copy
+                                    }
                                 }
                             }
                         },
@@ -1402,6 +1503,7 @@ class HookEntry : IXposedHookLoadPackage {
                             val nc = getNetworkCapabilitiesSafe(cs, activeNet) ?: return
 
                             if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                                recordIntercept("ConnectivityService")
                                 val physicalNet = getPhysicalNetwork(cs)
                                 if (physicalNet != null) {
                                     param.result = physicalNet
@@ -1427,6 +1529,7 @@ class HookEntry : IXposedHookLoadPackage {
                         if (loadTargetUids().contains(callingUid)) {
                             val networks = param.result as? Array<*> ?: return
                             val filteredList = ArrayList<android.net.Network>()
+                            var intercepted = false
                             val token = android.os.Binder.clearCallingIdentity()
                             try {
                                 val cs = param.thisObject
@@ -1436,10 +1539,15 @@ class HookEntry : IXposedHookLoadPackage {
 
                                     if (!nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
                                         filteredList.add(net)
+                                    } else {
+                                        intercepted = true
                                     }
                                 }
                             } finally {
                                 android.os.Binder.restoreCallingIdentity(token)
+                            }
+                            if (intercepted) {
+                                recordIntercept("ConnectivityService")
                             }
 
                             val newArray =
@@ -1497,7 +1605,18 @@ class HookEntry : IXposedHookLoadPackage {
         const val TYPE_VPN = 17
         const val TYPE_WIFI = 1
         const val HOOK_STATUS_FILE = "/data/system/vpnhide_hook_active"
+
+        /** Written on-demand when the manager app creates STATS_REQ_FILE. */
+        const val STATS_FILE = "/data/system/vpnhide_hook_stats.txt"
+
+        /** Manager app creates this file to trigger an on-demand stats dump from system_server. */
+        const val STATS_REQ_FILE = "/data/system/vpnhide_hook_stats_req"
         const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
+
+        /** All intercept stats live only in memory. Written to disk only when the manager requests it. */
+        private val hookStats =
+            java.util.concurrent
+                .ConcurrentHashMap<Int, java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>>()
 
         private val FIELD_PROBES =
             listOf(

@@ -62,4 +62,19 @@ struct vpnhide_spoof_ip {
 #define VH_SET_ACTIVE_HOOKS _IOW(VH_IOCTL_MAGIC, 0x09, unsigned int)
 #define VH_GET_ACTIVE_HOOKS _IOR(VH_IOCTL_MAGIC, 0x0A, unsigned int)
 
+struct vpnhide_uid_stats {
+	uid_t uid;
+	unsigned int ioctl_count;
+	unsigned int netlink_count;
+	unsigned int connect_count;
+	unsigned int getname_count;
+};
+
+struct vpnhide_kmod_stats_data {
+	int count;
+	struct vpnhide_uid_stats stats[MAX_TARGET_UIDS];
+};
+
+#define VH_GET_STATS _IOR(VH_IOCTL_MAGIC, 0x0B, struct vpnhide_kmod_stats_data)
+
 #endif /* _VPNHIDE_H */

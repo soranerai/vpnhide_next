@@ -165,6 +165,15 @@ internal data class Issue(
     val text: String,
 )
 
+internal data class AppInterceptStats(
+    val packageName: String,
+    val appLabel: String,
+    val frameworkTotal: Int,
+    val nativeTotal: Int,
+    val frameworkBreakdown: Map<String, Int>,
+    val nativeBreakdown: Map<String, Int>,
+)
+
 internal data class DashboardState(
     val kmod: ModuleState,
     val lsposed: LsposedState,
@@ -355,6 +364,7 @@ private fun collectDashboardSnapshot(cacheDir: File): RawDashboardSnapshot {
         echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
         echo "load_dmesg=${'$'}(cat $KMOD_LOAD_DMESG_FILE 2>/dev/null | tail -n 50 | base64 | tr -d '\n')"
         [ -c $DEV_NODE ] && echo "lsmod=1" || echo "lsmod=0"
+
         
         # LSPosed framework
         LSP_INSTALLED=0
@@ -1073,4 +1083,114 @@ internal suspend fun loadDashboardState(
         protection = protection,
         issues = issues,
     )
+}
+
+internal fun loadInterceptStats(context: android.content.Context): List<AppInterceptStats> {
+    val pm = context.packageManager
+    val uidToAppMap = mutableMapOf<Int, Pair<String, String>>()
+
+    fun getAppInfoForUid(uid: Int): Pair<String, String> {
+        uidToAppMap[uid]?.let { return it }
+        val pkgs = pm.getPackagesForUid(uid)
+        if (!pkgs.isNullOrEmpty()) {
+            val pkg = pkgs[0]
+            val label =
+                try {
+                    val appInfo = pm.getApplicationInfo(pkg, 0)
+                    pm.getApplicationLabel(appInfo).toString().trim()
+                } catch (_: Throwable) {
+                    pkg
+                }
+            val res = Pair(pkg, label)
+            uidToAppMap[uid] = res
+            return res
+        }
+        val unknown = Pair("uid.$uid", "UID $uid")
+        uidToAppMap[uid] = unknown
+        return unknown
+    }
+
+    val script =
+        """
+        echo 1 > /data/system/vpnhide_hook_stats_req 2>/dev/null
+        sleep 1.1
+        echo "framework_stats=${'$'}(cat /data/system/vpnhide_hook_stats.txt 2>/dev/null | base64 | tr -d '\n')"
+        rm -f /data/system/vpnhide_hook_stats.txt 2>/dev/null
+        if [ -x $KMOD_CTL ] && [ -c $DEV_NODE ]; then
+          echo "native_stats=${'$'}($KMOD_CTL stats 2>/dev/null | base64 | tr -d '\n')"
+        fi
+        """.trimIndent()
+
+    val (_, out) = suExec(script)
+    val props =
+        out
+            .lines()
+            .mapNotNull {
+                val parts = it.split("=", limit = 2)
+                if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+            }.toMap()
+
+    fun decodeBase64(key: String): String =
+        try {
+            val encoded = props[key] ?: ""
+            if (encoded.isBlank()) "" else String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
+        } catch (_: Exception) {
+            ""
+        }
+
+    val frameworkStatsRaw = decodeBase64("framework_stats")
+    val uidFrameworkMap = mutableMapOf<Int, MutableMap<String, Int>>()
+    if (frameworkStatsRaw.isNotBlank()) {
+        frameworkStatsRaw.lines().forEach { line ->
+            val parts = line.split(';')
+            if (parts.size == 3) {
+                val uid = parts[0].toIntOrNull()
+                val hook = parts[1]
+                val count = parts[2].toIntOrNull()
+                if (uid != null && count != null && count > 0) {
+                    val hookMap = uidFrameworkMap.computeIfAbsent(uid) { mutableMapOf() }
+                    hookMap[hook] = (hookMap[hook] ?: 0) + count
+                }
+            }
+        }
+    }
+
+    val nativeStatsRaw = decodeBase64("native_stats")
+    val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
+    if (nativeStatsRaw.isNotBlank()) {
+        nativeStatsRaw.lines().forEach { line ->
+            val parts = line.split(';')
+            if (parts.size == 5) {
+                val uid = parts[0].toIntOrNull()
+                val ioctl = parts[1].toIntOrNull() ?: 0
+                val netlink = parts[2].toIntOrNull() ?: 0
+                val connect = parts[3].toIntOrNull() ?: 0
+                val getname = parts[4].toIntOrNull() ?: 0
+                if (uid != null && (ioctl > 0 || netlink > 0 || connect > 0 || getname > 0)) {
+                    val map = uidNativeMap.computeIfAbsent(uid) { mutableMapOf() }
+                    if (ioctl > 0) map["ioctl"] = ioctl
+                    if (netlink > 0) map["netlink"] = netlink
+                    if (connect > 0) map["connect"] = connect
+                    if (getname > 0) map["getname"] = getname
+                }
+            }
+        }
+    }
+
+    val selfUid = context.applicationInfo.uid
+    val allUids = (uidFrameworkMap.keys + uidNativeMap.keys).filter { it != selfUid }
+    return allUids
+        .map { uid ->
+            val (pkg, label) = getAppInfoForUid(uid)
+            val fBreakdown = uidFrameworkMap[uid] ?: emptyMap()
+            val nBreakdown = uidNativeMap[uid] ?: emptyMap()
+            AppInterceptStats(
+                packageName = pkg,
+                appLabel = label,
+                frameworkTotal = fBreakdown.values.sum(),
+                nativeTotal = nBreakdown.values.sum(),
+                frameworkBreakdown = fBreakdown,
+                nativeBreakdown = nBreakdown,
+            )
+        }.sortedByDescending { it.frameworkTotal + it.nativeTotal }
 }

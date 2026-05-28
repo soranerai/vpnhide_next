@@ -169,6 +169,21 @@ int main(int argc, char **argv)
 				return 1;
 			}
 		}
+	} else if (strcmp(argv[1], "stats") == 0) {
+		struct vpnhide_kmod_stats_data sdata;
+		memset(&sdata, 0, sizeof(sdata));
+		if (ioctl(fd, VH_GET_STATS, &sdata) < 0) {
+			perror("VH_GET_STATS");
+			return 1;
+		}
+		for (int i = 0; i < sdata.count; i++) {
+			printf("%u;%u;%u;%u;%u\n",
+			       sdata.stats[i].uid,
+			       sdata.stats[i].ioctl_count,
+			       sdata.stats[i].netlink_count,
+			       sdata.stats[i].connect_count,
+			       sdata.stats[i].getname_count);
+		}
 	} else {
 		print_usage(argv[0]);
 		return 1;

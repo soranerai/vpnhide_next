@@ -109,7 +109,10 @@ internal fun BulkRulesScreen(
                             },
                         )
                     }
-                    item { Spacer(Modifier.height(100.dp)) }
+                    item {
+                        val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                        Spacer(Modifier.height(bottomNavPadding + 100.dp))
+                    }
                 }
             }
         }
