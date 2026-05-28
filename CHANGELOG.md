@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.7.0
+
+### Added
+- Add getNetworkForType() diagnostics check and AOSP ConnectivityService hook to hide VPN network type
+- Implement native and framework-level real-time call intercept statistics on the Dashboard
+- Add dynamic Java/Framework hook disabling on the fly to Diagnostics isolation screen
+
+### Changed
+- Make Dashboard module and protection status cards more compact and side-by-side
+
+### Fixed
+- Fix first-launch self-registration and prune uninstalled apps from target database
+- Fix RTM_GETROUTE route leaking on Android 12 GKI 5.10
+
 ## v1.6.1
 
 ### Fixed

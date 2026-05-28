@@ -1,3 +1,17 @@
+## v1.7.0
+
+### Added
+- Add getNetworkForType() diagnostics check and AOSP ConnectivityService hook to hide VPN network type
+- Implement native and framework-level real-time call intercept statistics on the Dashboard
+- Add dynamic Java/Framework hook disabling on the fly to Diagnostics isolation screen
+
+### Changed
+- Make Dashboard module and protection status cards more compact and side-by-side
+
+### Fixed
+- Fix first-launch self-registration and prune uninstalled apps from target database
+- Fix RTM_GETROUTE route leaking on Android 12 GKI 5.10
+
 ## v1.6.1
 
 ### Fixed
@@ -43,12 +57,3 @@
 
 ### Fixed
 - rainbow hehe detection fix
-
-## v1.4.0
-
-### Added
-- Added NetworkCallback check to Diagnostics
-
-### Fixed
-- Fix DNS leak of target/VPN interfaces in LinkProperties hooks
-- Fixed NetworkCallback push-model and VpnService.prepare VPN detection leaks

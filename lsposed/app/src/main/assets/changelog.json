@@ -1,6 +1,50 @@
 {
   "history": [
     {
+      "version": "1.7.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add getNetworkForType() diagnostics check and AOSP ConnectivityService hook to hide VPN network type",
+              "ru": "Добавлена диагностика getNetworkForType() и AOSP хук в ConnectivityService для скрытия VPN типа сети"
+            },
+            {
+              "en": "Implement native and framework-level real-time call intercept statistics on the Dashboard",
+              "ru": "Добавлена статистика перехвата вызовов на нативном и framework-уровне в реальном времени на главном экране"
+            },
+            {
+              "en": "Add dynamic Java/Framework hook disabling on the fly to Diagnostics isolation screen",
+              "ru": "Добавлена возможность динамического отключения Java/Framework хуков на лету на экране диагностики"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Make Dashboard module and protection status cards more compact and side-by-side",
+              "ru": "Сделаны более компактными плитки модулей и статусов защиты на главном экране (в одну строку)"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix first-launch self-registration and prune uninstalled apps from target database",
+              "ru": "Исправлена саморегистрация при первом запуске и добавлена очистка удаленных приложений из БД целей"
+            },
+            {
+              "en": "Fix RTM_GETROUTE route leaking on Android 12 GKI 5.10",
+              "ru": "Исправление утечки маршрутов RTM_GETROUTE на Android 12 GKI 5.10"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.6.1",
       "sections": [
         {
