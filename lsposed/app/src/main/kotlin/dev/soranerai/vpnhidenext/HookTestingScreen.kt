@@ -304,8 +304,9 @@ fun HookTestingScreen(
         applyingJavaState = true
         scope.launch(Dispatchers.IO) {
             val path = "/data/system/vpnhide/vpnhide_active_java_hooks"
-            val cmd = "mkdir -p /data/system/vpnhide && echo $newMask > $path && chmod 644 $path" +
-                " && chown system:system $path && chcon u:object_r:system_data_file:s0 $path 2>/dev/null || true"
+            val cmd =
+                "mkdir -p /data/system/vpnhide && echo $newMask > $path && chmod 644 $path" +
+                    " && chown system:system $path && chcon u:object_r:system_data_file:s0 $path 2>/dev/null || true"
             val (exit, _) = suExec(cmd)
             if (exit == 0) {
                 javaMask = newMask

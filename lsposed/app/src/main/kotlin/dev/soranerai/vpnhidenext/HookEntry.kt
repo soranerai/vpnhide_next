@@ -1609,6 +1609,7 @@ class HookEntry : IXposedHookLoadPackage {
                 getNetworkForTypeMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5)) return
                         val callingUid = Binder.getCallingUid()
                         if (loadTargetUids().contains(callingUid)) {
                             val type = param.args[0] as? Int ?: return
