@@ -480,7 +480,8 @@ fun HookTestingScreen(
                 }
             }
 
-            Spacer(Modifier.height(100.dp))
+            val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            Spacer(Modifier.height(bottomNavPadding + 32.dp))
         }
     }
 }

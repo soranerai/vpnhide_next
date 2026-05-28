@@ -111,10 +111,11 @@ internal fun AppPickerScreen(
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
+                    val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = 100.dp),
+                        contentPadding = PaddingValues(bottom = bottomNavPadding + 100.dp),
                     ) {
                         items(displayApps, key = { "${it.packageName}:${it.userId}" }) { app ->
                             AppRow(

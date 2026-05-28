@@ -1168,7 +1168,8 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
         }
     }
 
-    val allUids = uidFrameworkMap.keys + uidNativeMap.keys
+    val selfUid = context.applicationInfo.uid
+    val allUids = (uidFrameworkMap.keys + uidNativeMap.keys).filter { it != selfUid }
     return allUids.map { uid ->
         val (pkg, label) = getAppInfoForUid(uid)
         val fBreakdown = uidFrameworkMap[uid] ?: emptyMap()
