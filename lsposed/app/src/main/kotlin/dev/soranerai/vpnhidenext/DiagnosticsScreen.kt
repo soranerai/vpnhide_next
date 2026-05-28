@@ -1620,18 +1620,13 @@ private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Text(
-                text = if (isRussian) "Изоляция хуков ядра" else "Kernel Hook Isolation",
+                text = stringResource(R.string.diag_hook_isolation_title),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
             )
             Spacer(Modifier.height(4.dp))
             Text(
-                text =
-                    if (isRussian) {
-                        "Тестирование и отключение отдельных хуков на уровне ядра. Полезно для точного выявления конкретного хука, вызывающего перезагрузку или нестабильность системы/приложений."
-                    } else {
-                        "Test and isolate individual kernel-level hooks. Helpful for pinpointing which specific hook is causing system or app instability."
-                    },
+                text = stringResource(R.string.diag_hook_isolation_description),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -1640,7 +1635,7 @@ private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
                 onClick = onOpenHookTesting,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Text(if (isRussian) "Настроить хуки" else "Configure Hooks")
+                Text(stringResource(R.string.diag_hook_isolation_configure_btn))
             }
         }
     }

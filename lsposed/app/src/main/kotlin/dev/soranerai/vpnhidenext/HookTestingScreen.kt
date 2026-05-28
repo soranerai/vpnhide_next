@@ -200,6 +200,26 @@ val ALL_HOOKS =
         ),
     )
 
+val ALL_JAVA_HOOKS =
+    listOf(
+        HookInfo(0, "LinkProperties", "android.net.LinkProperties", ""),
+        HookInfo(1, "NetworkCapabilities", "android.net.NetworkCapabilities", ""),
+        HookInfo(2, "NetworkInfo", "android.net.NetworkInfo", ""),
+        HookInfo(3, "Network", "android.net.Network", ""),
+        HookInfo(4, "WifiInfo", "android.net.wifi.WifiInfo", ""),
+        HookInfo(5, "ConnectivityService", "com.android.server.ConnectivityService", ""),
+    )
+
+val JAVA_HOOK_DESCRIPTIONS =
+    mapOf(
+        0 to R.string.hook_desc_link_properties,
+        1 to R.string.hook_desc_network_capabilities,
+        2 to R.string.hook_desc_network_info,
+        3 to R.string.hook_desc_network,
+        4 to R.string.hook_desc_wifi_info,
+        5 to R.string.hook_desc_connectivity_service,
+    )
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HookTestingScreen(
@@ -207,9 +227,25 @@ fun HookTestingScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
+    var selectedTabIndex by remember { mutableStateOf(0) }
+
+    // Native Hooks State
     var mask by remember { mutableStateOf<UInt?>(null) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var applyingState by remember { mutableStateOf(false) }
+
+    // Java Hooks State
+    var javaMask by remember { mutableStateOf<UInt?>(null) }
+    var javaErrorMessage by remember { mutableStateOf<String?>(null) }
+    var applyingJavaState by remember { mutableStateOf(false) }
+
+    // Localized error resolution inside Composable context
+    val errKernelParse = stringResource(R.string.hook_testing_kernel_err_parse)
+    val errKernelNotActive = stringResource(R.string.hook_testing_kernel_err_not_active)
+    val errKernelSet = stringResource(R.string.hook_testing_kernel_err_set)
+    val errFrameworkParse = stringResource(R.string.hook_testing_framework_err_parse)
+    val errFrameworkAccess = stringResource(R.string.hook_testing_framework_err_access)
+    val errFrameworkSet = stringResource(R.string.hook_testing_framework_err_set)
 
     fun refreshMask() {
         scope.launch(Dispatchers.IO) {
@@ -220,22 +256,34 @@ fun HookTestingScreen(
                     mask = parsed
                     errorMessage = null
                 } else {
-                    errorMessage =
-                        if (isRussian) "Не удалось разобрать маску хуков: '$stdout'" else "Failed to parse active hooks mask: '$stdout'"
+                    errorMessage = errKernelParse.replace("%1\$s", stdout.trim())
                 }
             } else {
-                errorMessage =
-                    if (isRussian) {
-                        "Модуль ядра неактивен или не поддерживает динамические хуки. Убедитесь, что kmod загружен."
-                    } else {
-                        "Kernel module not active or does not support dynamic hooks. Make sure kmod is loaded."
-                    }
+                errorMessage = errKernelNotActive
+            }
+        }
+    }
+
+    fun refreshJavaMask() {
+        scope.launch(Dispatchers.IO) {
+            val (exit, stdout) = suExec("cat /data/system/vpnhide/vpnhide_active_java_hooks 2>/dev/null || echo 63")
+            if (exit == 0) {
+                val parsed = stdout.trim().toUIntOrNull()
+                if (parsed != null) {
+                    javaMask = parsed
+                    javaErrorMessage = null
+                } else {
+                    javaErrorMessage = errFrameworkParse.replace("%1\$s", stdout.trim())
+                }
+            } else {
+                javaErrorMessage = errFrameworkAccess
             }
         }
     }
 
     LaunchedEffect(Unit) {
         refreshMask()
+        refreshJavaMask()
     }
 
     fun applyNewMask(newMask: UInt) {
@@ -246,16 +294,34 @@ fun HookTestingScreen(
                 mask = newMask
                 errorMessage = null
             } else {
-                errorMessage = if (isRussian) "Не удалось установить маску активных хуков" else "Failed to set active hooks mask"
+                errorMessage = errKernelSet
             }
             applyingState = false
+        }
+    }
+
+    fun applyNewJavaMask(newMask: UInt) {
+        applyingJavaState = true
+        scope.launch(Dispatchers.IO) {
+            val path = "/data/system/vpnhide/vpnhide_active_java_hooks"
+            val cmd =
+                "mkdir -p /data/system/vpnhide && echo $newMask > $path && chmod 644 $path" +
+                    " && chown system:system $path && chcon u:object_r:system_data_file:s0 $path 2>/dev/null || true"
+            val (exit, _) = suExec(cmd)
+            if (exit == 0) {
+                javaMask = newMask
+                javaErrorMessage = null
+            } else {
+                javaErrorMessage = errFrameworkSet
+            }
+            applyingJavaState = false
         }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text(if (isRussian) "Тест хуков ядра" else "Testing Kernel Hooks") },
+                title = { Text(stringResource(R.string.hook_testing_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -274,214 +340,428 @@ fun HookTestingScreen(
             modifier =
                 Modifier
                     .padding(innerPadding)
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .fillMaxSize(),
         ) {
-            Spacer(Modifier.height(8.dp))
-
-            // Explanation Card
-            ElevatedCard(
-                shape = RoundedCornerShape(12.dp),
-                colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+            TabRow(
+                selectedTabIndex = selectedTabIndex,
+                containerColor = MaterialTheme.colorScheme.background,
+                contentColor = MaterialTheme.colorScheme.primary,
                 modifier = Modifier.fillMaxWidth(),
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(
-                        text = if (isRussian) "Изоляция причин краша" else "Crash Isolation Tool",
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.primary,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        text =
-                            if (isRussian) {
-                                "Выключайте отдельные хуки ядра на лету, чтобы выяснить, какая функция вызывает перезагрузку или падение приложений. Выключенные хуки будут безопасно пропускать вызовы абсолютно без изменений."
-                            } else {
-                                "Disable individual kernel hooks at runtime to find which function causes system or app crashes. Disabled hooks will safely let calls pass through completely unchanged."
-                            },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+                Tab(
+                    selected = selectedTabIndex == 0,
+                    onClick = { selectedTabIndex = 0 },
+                    text = { Text(stringResource(R.string.hook_testing_tab_kernel), fontWeight = FontWeight.Bold) },
+                )
+                Tab(
+                    selected = selectedTabIndex == 1,
+                    onClick = { selectedTabIndex = 1 },
+                    text = { Text(stringResource(R.string.hook_testing_tab_framework), fontWeight = FontWeight.Bold) },
+                )
             }
 
-            Spacer(Modifier.height(16.dp))
-
-            if (errorMessage != null) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(
-                        text = errorMessage!!,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium,
-                        modifier = Modifier.padding(16.dp),
-                    )
-                }
+            Column(
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 16.dp)
+                        .verticalScroll(rememberScrollState()),
+            ) {
                 Spacer(Modifier.height(16.dp))
-            }
 
-            mask?.let { currentMask ->
-                // Current Mask Display and Master Buttons
-                ElevatedCard(
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Column {
-                                Text(
-                                    text = if (isRussian) "Маска активных хуков" else "Active Hooks Mask",
-                                    style = MaterialTheme.typography.titleSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                                Text(
-                                    text = "0x${currentMask.toString(16).uppercase()} ($currentMask)",
-                                    style = MaterialTheme.typography.headlineSmall,
-                                    fontFamily = FontFamily.Monospace,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MaterialTheme.colorScheme.onSurface,
-                                )
-                            }
-
-                            if (applyingState) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                            }
-                        }
-
-                        Spacer(Modifier.height(12.dp))
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Button(
-                                onClick = { applyNewMask(0xFFFFu) },
-                                enabled = !applyingState && currentMask != 0xFFFFu,
-                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(Icons.Default.ToggleOn, contentDescription = null)
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (isRussian) "Включить все" else "Enable All")
-                            }
-
-                            OutlinedButton(
-                                onClick = { applyNewMask(0x0000u) },
-                                enabled = !applyingState && currentMask != 0x0000u,
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(Icons.Default.ToggleOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                Spacer(Modifier.width(6.dp))
-                                Text(if (isRussian) "Выключить все" else "Disable All")
-                            }
+                if (selectedTabIndex == 0) {
+                    // KERNEL TAB
+                    ElevatedCard(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = stringResource(R.string.hook_testing_kernel_card_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(R.string.hook_testing_kernel_card_desc),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
-                }
 
-                Spacer(Modifier.height(20.dp))
+                    Spacer(Modifier.height(16.dp))
 
-                Text(
-                    text = if (isRussian) "Список хуков ядра" else "Kernel Hooks List",
-                    style = MaterialTheme.typography.titleSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-
-                Spacer(Modifier.height(8.dp))
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    for (hook in ALL_HOOKS) {
-                        val isEnabled = (currentMask and (1u shl hook.index)) != 0u
-                        ElevatedCard(
-                            shape = RoundedCornerShape(8.dp),
-                            colors =
-                                CardDefaults.elevatedCardColors(
-                                    containerColor =
-                                        if (isEnabled) {
-                                            MaterialTheme.colorScheme.surface
-                                        } else {
-                                            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
-                                        },
-                                ),
+                    if (errorMessage != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
-                            Row(
-                                modifier =
-                                    Modifier
-                                        .padding(16.dp)
-                                        .fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                            ) {
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        SuggestionChip(
-                                            onClick = {},
-                                            label = { Text("Idx ${hook.index}") },
-                                            modifier = Modifier.padding(end = 8.dp),
+                            Text(
+                                text = errorMessage!!,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+
+                    mask?.let { currentMask ->
+                        ElevatedCard(
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = stringResource(R.string.hook_testing_kernel_mask_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(
-                                            text = hook.name,
-                                            style = MaterialTheme.typography.titleMedium,
+                                            text = "0x${currentMask.toString(16).uppercase()} ($currentMask)",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            fontFamily = FontFamily.Monospace,
                                             fontWeight = FontWeight.Bold,
-                                            color =
-                                                if (isEnabled) {
-                                                    MaterialTheme.colorScheme.onSurface
-                                                } else {
-                                                    MaterialTheme.colorScheme.onSurface
-                                                        .copy(
-                                                            alpha = 0.5f,
-                                                        )
-                                                },
+                                            color = MaterialTheme.colorScheme.onSurface,
                                         )
                                     }
-                                    Spacer(Modifier.height(4.dp))
-                                    Text(
-                                        text = hook.symbol,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.secondary.copy(alpha = if (isEnabled) 1.0f else 0.5f),
-                                    )
-                                    Spacer(Modifier.height(6.dp))
-                                    Text(
-                                        text = hook.description,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 0.8f else 0.4f),
-                                    )
+
+                                    if (applyingState) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
                                 }
 
-                                Spacer(Modifier.width(12.dp))
+                                Spacer(Modifier.height(12.dp))
 
-                                Switch(
-                                    checked = isEnabled,
-                                    enabled = !applyingState,
-                                    onCheckedChange = { checked ->
-                                        val newMask =
-                                            if (checked) {
-                                                currentMask or (1u shl hook.index)
-                                            } else {
-                                                currentMask and (1u shl hook.index).inv()
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Button(
+                                        onClick = { applyNewMask(0xFFFFu) },
+                                        enabled = !applyingState && currentMask != 0xFFFFu,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(Icons.Default.ToggleOn, contentDescription = null)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.hook_testing_btn_enable_all))
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { applyNewMask(0x0000u) },
+                                        enabled = !applyingState && currentMask != 0x0000u,
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(Icons.Default.ToggleOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.hook_testing_btn_disable_all))
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Text(
+                            text = stringResource(R.string.hook_testing_list_kernel),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (hook in ALL_HOOKS) {
+                                val isEnabled = (currentMask and (1u shl hook.index)) != 0u
+                                ElevatedCard(
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors =
+                                        CardDefaults.elevatedCardColors(
+                                            containerColor =
+                                                if (isEnabled) {
+                                                    MaterialTheme.colorScheme.surface
+                                                } else {
+                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                },
+                                        ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(
+                                        modifier =
+                                            Modifier
+                                                .padding(16.dp)
+                                                .fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                SuggestionChip(
+                                                    onClick = {},
+                                                    label = { Text("Idx ${hook.index}") },
+                                                    modifier = Modifier.padding(end = 8.dp),
+                                                )
+                                                Text(
+                                                    text = hook.name,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color =
+                                                        if (isEnabled) {
+                                                            MaterialTheme.colorScheme.onSurface
+                                                        } else {
+                                                            MaterialTheme.colorScheme.onSurface
+                                                                .copy(
+                                                                    alpha = 0.5f,
+                                                                )
+                                                        },
+                                                )
                                             }
-                                        applyNewMask(newMask)
-                                    },
-                                )
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                text = hook.symbol,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = if (isEnabled) 1.0f else 0.5f),
+                                            )
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                text = hook.description,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 0.8f else 0.4f),
+                                            )
+                                        }
+
+                                        Spacer(Modifier.width(12.dp))
+
+                                        Switch(
+                                            checked = isEnabled,
+                                            enabled = !applyingState,
+                                            onCheckedChange = { checked ->
+                                                val newMask =
+                                                    if (checked) {
+                                                        currentMask or (1u shl hook.index)
+                                                    } else {
+                                                        currentMask and (1u shl hook.index).inv()
+                                                    }
+                                                applyNewMask(newMask)
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    // FRAMEWORK (JAVA) TAB
+                    ElevatedCard(
+                        shape = RoundedCornerShape(12.dp),
+                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text(
+                                text = stringResource(R.string.hook_testing_framework_card_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                text = stringResource(R.string.hook_testing_framework_card_desc),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+
+                    Spacer(Modifier.height(16.dp))
+
+                    if (javaErrorMessage != null) {
+                        Card(
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(
+                                text = javaErrorMessage!!,
+                                color = MaterialTheme.colorScheme.onErrorContainer,
+                                style = MaterialTheme.typography.bodyMedium,
+                                modifier = Modifier.padding(16.dp),
+                            )
+                        }
+                        Spacer(Modifier.height(16.dp))
+                    }
+
+                    javaMask?.let { currentJavaMask ->
+                        ElevatedCard(
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = stringResource(R.string.hook_testing_framework_mask_title),
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        Text(
+                                            text = "0x${currentJavaMask.toString(16).uppercase()} ($currentJavaMask)",
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        )
+                                    }
+
+                                    if (applyingJavaState) {
+                                        CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                    }
+                                }
+
+                                Spacer(Modifier.height(12.dp))
+
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    Button(
+                                        onClick = { applyNewJavaMask(0x3Fu) },
+                                        enabled = !applyingJavaState && currentJavaMask != 0x3Fu,
+                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(Icons.Default.ToggleOn, contentDescription = null)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.hook_testing_btn_enable_all))
+                                    }
+
+                                    OutlinedButton(
+                                        onClick = { applyNewJavaMask(0x00u) },
+                                        enabled = !applyingJavaState && currentJavaMask != 0x00u,
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                        modifier = Modifier.weight(1f),
+                                    ) {
+                                        Icon(Icons.Default.ToggleOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                        Spacer(Modifier.width(6.dp))
+                                        Text(stringResource(R.string.hook_testing_btn_disable_all))
+                                    }
+                                }
+                            }
+                        }
+
+                        Spacer(Modifier.height(20.dp))
+
+                        Text(
+                            text = stringResource(R.string.hook_testing_list_java),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+
+                        Spacer(Modifier.height(8.dp))
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            for (hook in ALL_JAVA_HOOKS) {
+                                val isEnabled = (currentJavaMask and (1u shl hook.index)) != 0u
+                                ElevatedCard(
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors =
+                                        CardDefaults.elevatedCardColors(
+                                            containerColor =
+                                                if (isEnabled) {
+                                                    MaterialTheme.colorScheme.surface
+                                                } else {
+                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                },
+                                        ),
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) {
+                                    Row(
+                                        modifier =
+                                            Modifier
+                                                .padding(16.dp)
+                                                .fillMaxWidth(),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                SuggestionChip(
+                                                    onClick = {},
+                                                    label = { Text("Idx ${hook.index}") },
+                                                    modifier = Modifier.padding(end = 8.dp),
+                                                )
+                                                Text(
+                                                    text = hook.name,
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color =
+                                                        if (isEnabled) {
+                                                            MaterialTheme.colorScheme.onSurface
+                                                        } else {
+                                                            MaterialTheme.colorScheme.onSurface
+                                                                .copy(
+                                                                    alpha = 0.5f,
+                                                                )
+                                                        },
+                                                )
+                                            }
+                                            Spacer(Modifier.height(4.dp))
+                                            Text(
+                                                text = hook.symbol,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = if (isEnabled) 1.0f else 0.5f),
+                                            )
+                                            Spacer(Modifier.height(6.dp))
+                                            Text(
+                                                text = stringResource(JAVA_HOOK_DESCRIPTIONS[hook.index] ?: R.string.app_name),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 0.8f else 0.4f),
+                                            )
+                                        }
+
+                                        Spacer(Modifier.width(12.dp))
+
+                                        Switch(
+                                            checked = isEnabled,
+                                            enabled = !applyingJavaState,
+                                            onCheckedChange = { checked ->
+                                                val newMask =
+                                                    if (checked) {
+                                                        currentJavaMask or (1u shl hook.index)
+                                                    } else {
+                                                        currentJavaMask and (1u shl hook.index).inv()
+                                                    }
+                                                applyNewJavaMask(newMask)
+                                            },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            Spacer(Modifier.height(bottomNavPadding + 32.dp))
+                val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                Spacer(Modifier.height(bottomNavPadding + 32.dp))
+            }
         }
     }
 }

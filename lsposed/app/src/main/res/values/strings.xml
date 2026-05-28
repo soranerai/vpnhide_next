@@ -215,4 +215,41 @@
     <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
     <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
+
+    <!-- Hook Isolation Diagnostics -->
+    <string name="diag_hook_isolation_title">Hook Isolation</string>
+    <string name="diag_hook_isolation_description">Test and isolate individual kernel-level and framework-level hooks. Helpful for pinpointing which specific hook is causing system or app instability.</string>
+    <string name="diag_hook_isolation_configure_btn">Configure Hooks</string>
+
+    <!-- Hook Testing Screen -->
+    <string name="hook_testing_title">Hook Isolation</string>
+    <string name="hook_testing_tab_kernel">Kernel Hooks</string>
+    <string name="hook_testing_tab_framework">Framework Hooks</string>
+    
+    <string name="hook_testing_kernel_card_title">Crash Isolation Tool (Kernel)</string>
+    <string name="hook_testing_kernel_card_desc">Disable individual kernel hooks at runtime to find which function causes system or app crashes. Disabled hooks will safely let calls pass through completely unchanged.</string>
+    <string name="hook_testing_kernel_err_parse">Failed to parse active hooks mask: \'%1$s\'</string>
+    <string name="hook_testing_kernel_err_not_active">Kernel module not active or does not support dynamic hooks. Make sure kmod is loaded.</string>
+    <string name="hook_testing_kernel_err_set">Failed to set active hooks mask</string>
+    <string name="hook_testing_kernel_mask_title">Active Kernel Hooks Mask</string>
+    
+    <string name="hook_testing_framework_card_title">Crash Isolation Tool (Java)</string>
+    <string name="hook_testing_framework_card_desc">Disable individual Java framework hooks in system_server on the fly. Changes are applied instantly without rebooting the system!</string>
+    <string name="hook_testing_framework_err_parse">Failed to parse Java hooks mask: \'%1$s\'</string>
+    <string name="hook_testing_framework_err_access">Failed to access Java hooks mask file.</string>
+    <string name="hook_testing_framework_err_set">Failed to write Java hooks mask</string>
+    <string name="hook_testing_framework_mask_title">Active Java Hooks Mask</string>
+
+    <string name="hook_testing_btn_enable_all">Enable All</string>
+    <string name="hook_testing_btn_disable_all">Disable All</string>
+    <string name="hook_testing_list_kernel">Kernel Hooks List</string>
+    <string name="hook_testing_list_java">Java Hooks List</string>
+
+    <!-- Java Hook Descriptions -->
+    <string name="hook_desc_link_properties">Filters LinkProperties serialization to remove VPN interfaces, routes, and DNS servers.</string>
+    <string name="hook_desc_network_capabilities">Filters VPN transport out of NetworkCapabilities, cloaking it as Wi-Fi or cellular connections.</string>
+    <string name="hook_desc_network_info">Morphs VPN connection status into standard mobile network status (DISCONNECTED or MOBILE) to hide active VPNs.</string>
+    <string name="hook_desc_network">Redirects active network requests from the VPN network instance to the best available physical network.</string>
+    <string name="hook_desc_wifi_info">Restores real IP, SSID, and BSSID redacted by default Android 12+ privacy controls for location-less apps.</string>
+    <string name="hook_desc_connectivity_service">Filters VPN network out of global network lists and blocks leakage of active VPN callbacks.</string>
 </resources>
