@@ -343,7 +343,7 @@
             },
             {
               "en": "Kernel-level bind bypass: Ability to route packets directly, bypassing any application binds at the kernel level",
-              "ru": "Ядерный обход биндов: Возможность разворачивать пакеты напрямую в обход любых биндов приложений на уровне ядра"
+              "ru": "Обход биндов на уровне ядра: Возможность разворачивать пакеты напрямую в обход любых биндов приложений"
             },
             {
               "en": "Maximum stealth: Complete removal of /proc/ files accessible to all applications, eliminating module detection via the file system",

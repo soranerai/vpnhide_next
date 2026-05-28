@@ -23,7 +23,7 @@
 
 **Основные отличия от оригинала (вкратце):**
 *   **Отказ от Zygisk**: Модуль полностью сфокусирован на скрытности без инъекций в процессы (только kmod + LSPosed).
-*   **Ядерная блокировка портов**: Блокировка loopback-соединений перенесена из iptables в хук ядра `security_socket_connect`.
+*   **Блокировка портов на уровне ядра**: Блокировка loopback-соединений перенесена из iptables в хук ядра `security_socket_connect`.
 *   **Хирургическая мимикрия в LSPosed**: Подмена VPN на свойства физ. сети в `system_server` вместо подозрительного стирания данных.
 *   **Новые нативные векторы**: Скрытие `getsockname`, MTU/MSS clamping, setsockopt биндов и правил RPDB.
 *   **Максимальный stealth**: Полный отказ от ProcFS (файлов в `/proc/`) в пользу защищенного misc-устройства `/dev/vpnhide_ctrl`.
@@ -71,3 +71,5 @@
 | <img src="assets/screenshots/Dashboard.jpg" width="200"> | <img src="assets/screenshots/AppSelector.jpg" width="200"> | <img src="assets/screenshots/SortMenu.jpg" width="200"> | <img src="assets/screenshots/Diagnostics.jpg" width="200"> |
 | **Массовые правила портов** | **Локальные правила портов** | **Валидация правил портов** | **FAQ** |
 | <img src="assets/screenshots/Bulk%20edit%20rules.jpg" width="200"> | <img src="assets/screenshots/Local%20ports%20edit.jpg" width="200"> | <img src="assets/screenshots/Duplicate%20and%20redutant%20protection.jpg" width="200"> | <img src="assets/screenshots/FAQ.jpg" width="200"> |
+| **Кастомные префиксы Tun** | **Изоляция хуков** | | |
+| <img src="assets/screenshots/Custom%20tun%20interfaces.jpg" width="200"> | <img src="assets/screenshots/Hook%20isolation.jpg" width="200"> | | |
