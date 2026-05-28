@@ -1603,6 +1603,28 @@ class HookEntry : IXposedHookLoadPackage {
             HookLog.e("VpnHide: failed to hook getAllNetworks: ${t.message}")
         }
 
+        try {
+            val getNetworkForTypeMethod = XposedHelpers.findMethodExact(csClass, "getNetworkForType", Integer.TYPE)
+            XposedBridge.hookMethod(
+                getNetworkForTypeMethod,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val callingUid = Binder.getCallingUid()
+                        if (loadTargetUids().contains(callingUid)) {
+                            val type = param.args[0] as? Int ?: return
+                            if (type == TYPE_VPN) {
+                                HookLog.i("VpnHide: Suppressing getNetworkForType(TYPE_VPN) for target UID $callingUid")
+                                param.result = null
+                            }
+                        }
+                    }
+                },
+            )
+            HookLog.i("VpnHide: getNetworkForType hook installed")
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getNetworkForType: ${t.message}")
+        }
+
         HookLog.e("VpnHide: Successfully applied Nekohasekai/VpnHide symbiosis architecture hooks.")
     }
 
