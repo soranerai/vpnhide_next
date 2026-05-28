@@ -172,4 +172,41 @@
     <string name="banner_network_blocked">Доступ к сети отключён для этого приложения. Проверки ioctl (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) не могут быть выполнены. Включите в Настройки → Приложения → VPNHide Next → Мобильный интернет и Wi-Fi.</string>
     <string name="section_native">Нативный уровень (kmod)</string>
     <string name="section_java">Java API уровень (LSPosed)</string>
+
+    <!-- Hook Isolation Diagnostics -->
+    <string name="diag_hook_isolation_title">Изоляция хуков</string>
+    <string name="diag_hook_isolation_description">Тестирование и отключение отдельных хуков на уровне ядра и фреймворка. Полезно для точного выявления конкретного хука, вызывающего перезагрузку или нестабильность системы/приложений.</string>
+    <string name="diag_hook_isolation_configure_btn">Настроить хуки</string>
+
+    <!-- Hook Testing Screen -->
+    <string name="hook_testing_title">Изоляция хуков</string>
+    <string name="hook_testing_tab_kernel">Хуки ядра</string>
+    <string name="hook_testing_tab_framework">Хуки фреймворка</string>
+    
+    <string name="hook_testing_kernel_card_title">Изоляция причин краша (Ядро)</string>
+    <string name="hook_testing_kernel_card_desc">Выключайте отдельные хуки ядра на лету, чтобы выяснить, какая функция вызывает перезагрузку или падение приложений. Выключенные хуки будут безопасно пропускать вызовы абсолютно без изменений.</string>
+    <string name="hook_testing_kernel_err_parse">Не удалось разобрать маску хуков: \'%1$s\'</string>
+    <string name="hook_testing_kernel_err_not_active">Модуль ядра неактивен или не поддерживает динамические хуки. Убедитесь, что kmod загружен.</string>
+    <string name="hook_testing_kernel_err_set">Не удалось установить маску активных хуков</string>
+    <string name="hook_testing_kernel_mask_title">Маска активных хуков ядра</string>
+    
+    <string name="hook_testing_framework_card_title">Изоляция причин краша (Java)</string>
+    <string name="hook_testing_framework_card_desc">Отключайте отдельные Java-хуки фреймворка в system_server на лету. Изменения применяются мгновенно абсолютно без перезагрузки системы!</string>
+    <string name="hook_testing_framework_err_parse">Не удалось разобрать маску Java-хуков: \'%1$s\'</string>
+    <string name="hook_testing_framework_err_access">Не удалось получить доступ к файлу маски Java-хуков.</string>
+    <string name="hook_testing_framework_err_set">Не удалось записать маску Java-хуков</string>
+    <string name="hook_testing_framework_mask_title">Маска активных Java-хуков</string>
+
+    <string name="hook_testing_btn_enable_all">Включить все</string>
+    <string name="hook_testing_btn_disable_all">Выключить все</string>
+    <string name="hook_testing_list_kernel">Список хуков ядра</string>
+    <string name="hook_testing_list_java">Список Java-хуков</string>
+
+    <!-- Java Hook Descriptions -->
+    <string name="hook_desc_link_properties">Фильтрует сериализацию LinkProperties для удаления VPN-интерфейсов, маршрутов и DNS-серверов.</string>
+    <string name="hook_desc_network_capabilities">Фильтрует транспорт VPN из NetworkCapabilities, маскируя его под Wi-Fi или сотовую связь.</string>
+    <string name="hook_desc_network_info">Маскирует VPN-соединение под обычный тип мобильной сети (DISCONNECTED или MOBILE) для целевых приложений.</string>
+    <string name="hook_desc_network">Перенаправляет запросы к VPN-сети на лучшую доступную физическую сеть для целевых приложений.</string>
+    <string name="hook_desc_wifi_info">Восстанавливает реальные IP, SSID и BSSID, скрытые стандартными механизмами приватности Android 12+.</string>
+    <string name="hook_desc_connectivity_service">Скрывает VPN-сеть из общих списков сетей и блокирует утечку обратных вызовов (callbacks) о VPN.</string>
 </resources>

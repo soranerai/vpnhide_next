@@ -35,6 +35,8 @@ class HookEntry : IXposedHookLoadPackage {
     // ThreadLocal context to track the target UID during system_server push callbacks
     private val currentCallbackUid = ThreadLocal<Int>()
 
+    @Volatile private var cachedJavaHooksMask: UInt? = null
+
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
         val inSystemServer =
             hookInstalled.get() ||
@@ -587,6 +589,25 @@ class HookEntry : IXposedHookLoadPackage {
         return loadTargetUids().contains(callingUid)
     }
 
+    private fun isJavaHookActive(bitIndex: Int): Boolean {
+        var mask = cachedJavaHooksMask
+        if (mask == null) {
+            mask =
+                try {
+                    val file = File(JAVA_HOOKS_FILE)
+                    if (file.exists()) {
+                        file.readText().trim().toUIntOrNull() ?: 0x3Fu
+                    } else {
+                        0x3Fu
+                    }
+                } catch (t: Throwable) {
+                    0x3Fu
+                }
+            cachedJavaHooksMask = mask
+        }
+        return (mask and (1u shl bitIndex)) != 0u
+    }
+
     @Volatile private var systemServerIfacePrefixes: List<String>? = null
 
     private fun loadIfacePrefixes(): List<String> {
@@ -796,8 +817,12 @@ class HookEntry : IXposedHookLoadPackage {
                     event: Int,
                     path: String?,
                 ) {
-                    if (path != null && (path == dbFile.name || path.startsWith("${dbFile.name}-"))) {
-                        invalidateTargetUids()
+                    if (path != null) {
+                        if (path == dbFile.name || path.startsWith("${dbFile.name}-")) {
+                            invalidateTargetUids()
+                        } else if (path == "vpnhide_active_java_hooks") {
+                            cachedJavaHooksMask = null
+                        }
                     }
                 }
             }
@@ -845,6 +870,7 @@ class HookEntry : IXposedHookLoadPackage {
                 ctor,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(4)) return
                         if (!isTargetCaller()) return
                         val redactions = param.args[1] as? Long ?: return
                         if (redactions == 0L) return // nothing was redacted
@@ -914,6 +940,7 @@ class HookEntry : IXposedHookLoadPackage {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (!isJavaHookActive(4)) return
                     if (writingFixed.get() == true || !isTargetCaller()) return
                     val wifiInfo = param.thisObject ?: return
 
@@ -1031,6 +1058,7 @@ class HookEntry : IXposedHookLoadPackage {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (!isJavaHookActive(1)) return
                     if (writingCopy.get() == true || !isTargetCaller()) return
                     val nc = param.thisObject as NetworkCapabilities
                     val copy = NetworkCapabilities(nc)
@@ -1061,6 +1089,7 @@ class HookEntry : IXposedHookLoadPackage {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (!isJavaHookActive(2)) return
                     if (writingCopy.get() == true || !isTargetCaller()) return
                     val ni = param.thisObject as NetworkInfo
                     if (XposedHelpers.getIntField(ni, "mNetworkType") != TYPE_VPN) return
@@ -1156,6 +1185,7 @@ class HookEntry : IXposedHookLoadPackage {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (!isJavaHookActive(3)) return
                     if (writingNetCopy.get() == true) return
                     val target = isTargetCaller()
                     if (!target) return
@@ -1193,6 +1223,7 @@ class HookEntry : IXposedHookLoadPackage {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
+                    if (!isJavaHookActive(0)) return
                     if (writingCopy.get() == true || !isTargetCaller()) return
                     val lp = param.thisObject as LinkProperties
                     val isVpn = lp.interfaceName?.let { isVpnInterfaceName(it) } ?: false
@@ -1409,6 +1440,7 @@ class HookEntry : IXposedHookLoadPackage {
                         method,
                         object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
+                                if (!isJavaHookActive(5)) return
                                 val nri = param.args.firstOrNull() ?: return
                                 val uid =
                                     try {
@@ -1468,6 +1500,7 @@ class HookEntry : IXposedHookLoadPackage {
                         method,
                         object : XC_MethodHook() {
                             override fun afterHookedMethod(param: MethodHookParam) {
+                                if (!isJavaHookActive(5)) return
                                 val uid =
                                     if (method.name.startsWith("copy")) {
                                         param.args.getOrNull(2) as? Int
@@ -1496,6 +1529,7 @@ class HookEntry : IXposedHookLoadPackage {
                 getActiveNetworkMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5)) return
                         val callingUid = Binder.getCallingUid()
                         if (loadTargetUids().contains(callingUid)) {
                             val activeNet = param.result as? android.net.Network ?: return
@@ -1525,6 +1559,7 @@ class HookEntry : IXposedHookLoadPackage {
                 getAllNetworksMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5)) return
                         val callingUid = Binder.getCallingUid()
                         if (loadTargetUids().contains(callingUid)) {
                             val networks = param.result as? Array<*> ?: return
@@ -1590,6 +1625,7 @@ class HookEntry : IXposedHookLoadPackage {
         /** Manager app creates this file to trigger an on-demand stats dump from system_server. */
         const val STATS_REQ_FILE = "/data/system/vpnhide_hook_stats_req"
         const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
+        const val JAVA_HOOKS_FILE = "/data/system/vpnhide/vpnhide_active_java_hooks"
 
         /** All intercept stats live only in memory. Written to disk only when the manager requests it. */
         private val hookStats =
