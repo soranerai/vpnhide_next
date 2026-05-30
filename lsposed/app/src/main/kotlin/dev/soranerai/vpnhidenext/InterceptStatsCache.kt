@@ -38,6 +38,14 @@ internal object InterceptStatsCache {
         inflight = scope.launch { reload(context) }
     }
 
+    fun invalidate() {
+        _stats.value = null
+    }
+
+    fun clearStats() {
+        _stats.value = emptyList()
+    }
+
     private suspend fun reload(context: Context) {
         val next =
             withContext(Dispatchers.IO) {

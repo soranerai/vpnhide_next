@@ -60,7 +60,7 @@
     <string name="sort_name_desc">По названию (Я-А)</string>
     <string name="sort_selected_first">Сначала выбранные</string>
     <string name="apps_help_title">Как это работает</string>
-    <string name="apps_hint_toggles">Используйте галочки для включения отдельных уровней: <b>LSPosed</b> и <b>Kernel</b>. Нажатие на строку приложения переключает оба уровня одновременно.</string>
+    <string name="apps_hint_toggles">Используйте галочки для включения отдельных уровней: <b>Framework</b> и <b>Native</b>. Нажатие на строку приложения переключает оба уровня одновременно.</string>
 
     <!-- Root status -->
     <string name="root_error_title">Требуется root-доступ</string>
@@ -161,6 +161,7 @@
     <string name="logcat_btn_share_last">Последний (%1$s)</string>
     <string name="logcat_recording_status">● Запись · %1$s · %2$s</string>
     <string name="logcat_last_recording">Последняя запись · %1$s · %2$s</string>
+    <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
     <string name="summary_format">%1$d/%2$d пройдено</string>
     <string name="badge_pass">ОК</string>
     <string name="badge_fail">ПРОВАЛ</string>
@@ -209,4 +210,16 @@
     <string name="hook_desc_network">Перенаправляет запросы к VPN-сети на лучшую доступную физическую сеть для целевых приложений.</string>
     <string name="hook_desc_wifi_info">Восстанавливает реальные IP, SSID и BSSID, скрытые стандартными механизмами приватности Android 12+.</string>
     <string name="hook_desc_connectivity_service">Скрывает VPN-сеть из общих списков сетей и блокирует утечку обратных вызовов (callbacks) о VPN.</string>
+    <!-- Backup & Restore -->
+    <string name="backup_restore_title">Резервное копирование</string>
+    <string name="backup_restore_description">Экспортируйте список защищаемых приложений, префиксы туннелей и правила скрытия портов в файл JSON или восстановите их из существующей резервной копии.</string>
+    <string name="btn_export">Экспорт</string>
+    <string name="btn_import">Импорт</string>
+    <string name="export_success">Настройки успешно экспортированы</string>
+    <string name="export_failed">Ошибка экспорта: %1$s</string>
+    <string name="import_success">Настройки успешно импортированы и применены</string>
+    <string name="import_failed">Ошибка импорта: %1$s</string>
+    <string name="dashboard_intercept_statistics">Статистика перехватов</string>
+    <string name="dashboard_stats_lifetime_hint">Показывается скользящая статистика за последние 30 минут</string>
+    <string name="btn_clear">Сбросить</string>
 </resources>

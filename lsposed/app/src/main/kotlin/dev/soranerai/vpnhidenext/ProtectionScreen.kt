@@ -46,7 +46,6 @@ internal fun ProtectionScreen(
 
     val cachedApps by AppListCache.apps.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
-    val loading by TargetsCache.loading.collectAsState()
 
     // Unified states for each tab
     var vpnApps by remember { mutableStateOf<List<AppEntry>>(emptyList()) }
@@ -326,9 +325,7 @@ internal fun ProtectionScreen(
         if (saving) {
             LaunchedEffect(Unit) {
                 try {
-                    val header = context.getString(R.string.save_header_comment)
                     val selfPkg = context.packageName
-                    val parts = mutableListOf<String>()
 
                     val db = AppDatabase.getInstance(context)
                     db.withTransaction {
@@ -421,35 +418,20 @@ internal fun ProtectionScreen(
                         }
                     }
 
-                    if (isVpnDirty) {
-                        val selfUid = context.applicationInfo.uid
-                        val k = (vpnApps.filter { it.kmod }.map { it.uid } + selfUid).distinct().sorted()
-                        parts += buildVpnSaveCommand(header, k)
-                    }
-                    if (isIfaceDirty) {
-                        parts += buildIfaceSaveCommand(header, pendingIfacePrefixes ?: targets?.ifacePrefixes ?: emptyList())
-                    }
-                    if (isPortDirty || isMassDirty) {
-                        parts += buildPortSaveCommand(header, portApps, pendingMassRules ?: targets?.massPortRules ?: emptyList())
-                    }
-
-                    if (parts.isNotEmpty()) {
-                        // Always apply LSPosed permissions/trigger when saving any DB-backed settings
-                        parts += buildLsposedApplyCommand(context)
-
-                        val (exitCode, _) = suExecAsync(parts.joinToString(" ; "))
-                        if (exitCode == 0) {
-                            DashboardCache.invalidate()
-                            DiagnosticsCache.reset()
-                            TargetsCache.refresh(scope, context)
-                            originalVpn = vpnApps
-                            originalPort = portApps
-                            // Re-sort after save to reflect new selection state (jump once, but after save is done)
-                            resetOrder()
-                            onSaved()
-                        } else {
-                            snackMessage = context.getString(R.string.save_failed_exit, exitCode)
-                        }
+                    val success =
+                        dev.soranerai.vpnhidenext.db.DatabaseSync
+                            .sync(context)
+                    if (success) {
+                        DashboardCache.invalidate()
+                        DiagnosticsCache.reset()
+                        TargetsCache.refresh(scope, context)
+                        originalVpn = vpnApps
+                        originalPort = portApps
+                        // Re-sort after save to reflect new selection state (jump once, but after save is done)
+                        resetOrder()
+                        onSaved()
+                    } else {
+                        snackMessage = context.getString(R.string.save_failed_exit, -1)
                     }
                 } catch (e: Exception) {
                     snackMessage = e.message
@@ -532,78 +514,4 @@ private fun ProtectionModeSwitcher(
             }
         }
     }
-}
-
-// Helpers for command building (need to be accessible or moved to a central place)
-private fun buildVpnSaveCommand(
-    header: String,
-    kmod: List<Int>,
-): String {
-    val parts = mutableListOf<String>()
-    parts += buildWriteTargetsCommand(KMOD_TARGETS, header, kmod)
-    // LSPOSED_TARGETS is no longer needed as LSPosed reads directly from DB
-    parts += buildKmodApplyCommand(kmod, targetType = "targets")
-    return parts.joinToString(" ; ")
-}
-
-private fun buildPortSaveCommand(
-    header: String,
-    apps: List<AppEntry>,
-    massRules: List<PortRule>,
-): String {
-    val parts = mutableListOf<String>()
-
-    // Observers file
-    // Observers file
-    val observersBody = StringBuilder(header).append("\n")
-    apps.filter { it.portHiding }.forEach { app ->
-        val entry = if (app.userId == 0) app.packageName else "${app.packageName}:${app.userId}"
-        observersBody.append(entry).append("\n")
-    }
-    val b64Observers = Base64.encodeToString(observersBody.toString().toByteArray(), Base64.NO_WRAP)
-    val observersDir = PORTS_OBSERVERS_FILE.substringBeforeLast('/')
-    parts += "mkdir -p $observersDir ; echo '$b64Observers' | base64 -d > $PORTS_OBSERVERS_FILE && chmod 644 $PORTS_OBSERVERS_FILE"
-
-    val ruleMap =
-        apps.filter { it.portHiding }.associate { app ->
-            app.uid to (app.portRules + massRules.filter { r -> r.enabled })
-        }
-
-    // Build rule persistence file body
-    val rulesBody = StringBuilder(header).append("\n")
-    ruleMap.forEach { (uid, rules) ->
-        if (rules.isNotEmpty()) {
-            rulesBody.append(uid)
-            rules.forEach { rule ->
-                val proto =
-                    when (rule.protocol) {
-                        PortProtocol.TCP -> 0
-                        PortProtocol.UDP -> 1
-                        PortProtocol.BOTH -> 2
-                    }
-                rulesBody.append(" ${rule.startPort}-${rule.endPort}:$proto")
-            }
-            rulesBody.append("\n")
-        }
-    }
-
-    val b64Rules = Base64.encodeToString(rulesBody.toString().toByteArray(), Base64.NO_WRAP)
-    val rulesDir = PORTS_RULES_FILE.substringBeforeLast('/')
-    parts += "mkdir -p $rulesDir ; echo '$b64Rules' | base64 -d > $PORTS_RULES_FILE && chmod 644 $PORTS_RULES_FILE"
-
-    parts += buildKmodPortRulesApplyCommand(ruleMap)
-
-    return parts.joinToString(" ; ")
-}
-
-private fun buildIfaceSaveCommand(
-    header: String,
-    prefixes: List<String>,
-): String {
-    val body = "$header\n" + prefixes.joinToString("\n") + if (prefixes.isNotEmpty()) "\n" else ""
-    val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
-    val dir = IFACE_PREFIXES_FILE.substringBeforeLast('/')
-    val writeCmd = "mkdir -p $dir ; echo '$b64' | base64 -d > $IFACE_PREFIXES_FILE && chmod 644 $IFACE_PREFIXES_FILE"
-    val applyCmd = if (prefixes.isEmpty()) "$KMOD_CTL iface_prefixes" else "$KMOD_CTL iface_prefixes ${prefixes.joinToString(" ")}"
-    return "$writeCmd ; $applyCmd"
 }

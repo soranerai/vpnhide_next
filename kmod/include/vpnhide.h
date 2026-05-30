@@ -76,5 +76,6 @@ struct vpnhide_kmod_stats_data {
 };
 
 #define VH_GET_STATS _IOR(VH_IOCTL_MAGIC, 0x0B, struct vpnhide_kmod_stats_data)
+#define VH_CLEAR_STATS _IO(VH_IOCTL_MAGIC, 0x0C)
 
 #endif /* _VPNHIDE_H */

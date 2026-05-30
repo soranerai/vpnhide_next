@@ -14,8 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
@@ -30,8 +29,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import dev.soranerai.vpnhidenext.ShimmerPlaceholder
-import dev.soranerai.vpnhidenext.shimmer
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -120,7 +117,8 @@ fun DashboardScreen(
                 )
             }
 
-            val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            val bottomNavPadding =
+                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             Spacer(Modifier.height(bottomNavPadding + 100.dp))
         }
     }
@@ -139,12 +137,8 @@ private fun SkeletonDashboard() {
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Box(modifier = Modifier.weight(1f)) {
-                SkeletonModuleCard()
-            }
-            Box(modifier = Modifier.weight(1f)) {
-                SkeletonModuleCard()
-            }
+            Box(modifier = Modifier.weight(1f)) { SkeletonModuleCard() }
+            Box(modifier = Modifier.weight(1f)) { SkeletonModuleCard() }
         }
     }
 }
@@ -342,20 +336,48 @@ private fun ModuleCard(
             val broken = state.brokenReason
             val brokenSubtitleRes =
                 when (broken) {
-                    KmodBrokenReason.WrongVariant -> R.string.dashboard_kmod_broken_wrong_variant
-                    KmodBrokenReason.UnsupportedKernel -> R.string.dashboard_kmod_broken_unsupported_kernel
-                    KmodBrokenReason.MissingKprobes -> R.string.dashboard_kmod_broken_no_kprobes
-                    KmodBrokenReason.UnknownVariantInactive -> R.string.dashboard_kmod_broken_unknown_variant
-                    KmodBrokenReason.AmbiguousLoadFailed -> R.string.dashboard_kmod_broken_ambiguous
-                    null -> null
+                    KmodBrokenReason.WrongVariant -> {
+                        R.string.dashboard_kmod_broken_wrong_variant
+                    }
+
+                    KmodBrokenReason.UnsupportedKernel -> {
+                        R.string.dashboard_kmod_broken_unsupported_kernel
+                    }
+
+                    KmodBrokenReason.MissingKprobes -> {
+                        R.string.dashboard_kmod_broken_no_kprobes
+                    }
+
+                    KmodBrokenReason.UnknownVariantInactive -> {
+                        R.string.dashboard_kmod_broken_unknown_variant
+                    }
+
+                    KmodBrokenReason.AmbiguousLoadFailed -> {
+                        R.string.dashboard_kmod_broken_ambiguous
+                    }
+
+                    null -> {
+                        null
+                    }
                 }
 
             val targetsText =
                 when {
-                    brokenSubtitleRes != null -> stringResource(brokenSubtitleRes)
-                    active -> stringResource(R.string.dashboard_active_targets, state.targetCount)
-                    selfNeedsRestart -> stringResource(R.string.dashboard_installed_restart_app)
-                    else -> stringResource(R.string.dashboard_installed_inactive)
+                    brokenSubtitleRes != null -> {
+                        stringResource(brokenSubtitleRes)
+                    }
+
+                    active -> {
+                        stringResource(R.string.dashboard_active_targets, state.targetCount)
+                    }
+
+                    selfNeedsRestart -> {
+                        stringResource(R.string.dashboard_installed_restart_app)
+                    }
+
+                    else -> {
+                        stringResource(R.string.dashboard_installed_inactive)
+                    }
                 }
 
             val protectionText =
@@ -363,7 +385,10 @@ private fun ModuleCard(
                     when (nativeResult) {
                         is NativeResult.Ok -> {
                             "\n" +
-                                stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    stringResource(R.string.dashboard_protection_ok),
+                                )
                         }
 
                         is NativeResult.Fail -> {
@@ -373,14 +398,20 @@ private fun ModuleCard(
                                 } else {
                                     stringResource(R.string.dashboard_protection_fail)
                                 }
-                            "\n" + stringResource(R.string.dashboard_protection_prefix, failText)
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    failText,
+                                )
                         }
 
                         is NativeResult.NoModule -> {
                             "\n" +
                                 stringResource(
                                     R.string.dashboard_protection_prefix,
-                                    stringResource(R.string.dashboard_protection_no_module),
+                                    stringResource(
+                                        R.string.dashboard_protection_no_module,
+                                    ),
                                 )
                         }
 
@@ -421,7 +452,11 @@ private fun ModuleCard(
                                 active -> TelGreen
                                 else -> TelOrange
                             }
-                        Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, dot)
+                        Triple(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.onSurface,
+                            dot,
+                        )
                     }
                 }
 
@@ -492,19 +527,27 @@ private fun LsposedCard(
                 when (javaResult) {
                     is JavaResult.Ok -> {
                         "\n" +
-                            stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_ok))
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                stringResource(R.string.dashboard_protection_ok),
+                            )
                     }
 
                     is JavaResult.Fail -> {
                         "\n" +
-                            stringResource(R.string.dashboard_protection_prefix, stringResource(R.string.dashboard_protection_fail))
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                stringResource(R.string.dashboard_protection_fail),
+                            )
                     }
 
                     is JavaResult.HooksInactive -> {
                         "\n" +
                             stringResource(
                                 R.string.dashboard_protection_prefix,
-                                stringResource(R.string.dashboard_protection_hooks_inactive),
+                                stringResource(
+                                    R.string.dashboard_protection_hooks_inactive,
+                                ),
                             )
                     }
 
@@ -537,7 +580,11 @@ private fun LsposedCard(
                     }
 
                     else -> {
-                        Triple(MaterialTheme.colorScheme.surfaceVariant, MaterialTheme.colorScheme.onSurface, TelGreen)
+                        Triple(
+                            MaterialTheme.colorScheme.surfaceVariant,
+                            MaterialTheme.colorScheme.onSurface,
+                            TelGreen,
+                        )
                     }
                 }
 
@@ -568,10 +615,7 @@ private fun ModuleCardShell(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(
-            modifier =
-                Modifier
-                    .padding(14.dp)
-                    .fillMaxWidth(),
+            modifier = Modifier.padding(14.dp).fillMaxWidth(),
         ) {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -691,14 +735,16 @@ private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecomme
                     when {
                         !recommendation.preferKmod -> {
                             stringResource(
-                                R.string.dashboard_install_recommendation_kmod_unsupported,
+                                R.string
+                                    .dashboard_install_recommendation_kmod_unsupported,
                                 recommendation.recommendedArtifact,
                             )
                         }
 
                         recommendation.variantAmbiguous && alternative != null -> {
                             stringResource(
-                                R.string.dashboard_install_recommendation_kmod_ambiguous,
+                                R.string
+                                    .dashboard_install_recommendation_kmod_ambiguous,
                                 recommendation.recommendedArtifact,
                                 alternative,
                             )
@@ -748,7 +794,12 @@ private fun UpdateAvailableCard(info: UpdateInfo) {
         shape = RoundedCornerShape(12.dp),
         colors =
             CardDefaults.cardColors(
-                containerColor = if (darkTheme) Color(0xFF0D47A1).copy(alpha = 0.28f) else Color(0xFFE3F2FD),
+                containerColor =
+                    if (darkTheme) {
+                        Color(0xFF0D47A1).copy(alpha = 0.28f)
+                    } else {
+                        Color(0xFFE3F2FD)
+                    },
             ),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -764,7 +815,11 @@ private fun UpdateAvailableCard(info: UpdateInfo) {
                     fontWeight = FontWeight.Bold,
                 )
                 Text(
-                    text = stringResource(R.string.update_available_subtitle, info.latestVersion),
+                    text =
+                        stringResource(
+                            R.string.update_available_subtitle,
+                            info.latestVersion,
+                        ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                 )
@@ -776,9 +831,7 @@ private fun UpdateAvailableCard(info: UpdateInfo) {
                         Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)),
                     )
                 },
-            ) {
-                Text(stringResource(R.string.update_download))
-            }
+            ) { Text(stringResource(R.string.update_download)) }
         }
     }
 }
@@ -860,11 +913,7 @@ private fun ChangelogDialog(
                 }
             }
         },
-        confirmButton = {
-            TextButton(onClick = onDismiss) {
-                Text("OK")
-            }
-        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
     )
 }
 
@@ -877,12 +926,60 @@ private fun InterceptStatisticsSection(
 
     Spacer(Modifier.height(24.dp))
 
-    Text(
-        text = "Intercept Statistics",
-        style = MaterialTheme.typography.titleMedium,
-        fontWeight = FontWeight.Bold,
-        modifier = Modifier.padding(vertical = 8.dp),
-    )
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(modifier = Modifier.weight(1f)) {
+            Text(
+                text = stringResource(R.string.dashboard_intercept_statistics),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Spacer(Modifier.height(2.dp))
+            Text(
+                text = stringResource(R.string.dashboard_stats_lifetime_hint),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            )
+        }
+
+        if (stats != null && stats.isNotEmpty()) {
+            TextButton(
+                onClick = {
+                    scope.launch {
+                        // 1. Instantly clear the UI stats cache
+                        InterceptStatsCache.clearStats()
+                        // 2. Perform the actual backend reset
+                        withContext(Dispatchers.IO) { resetInterceptStats(context) }
+                        // 3. Silently refresh to ensure absolute sync
+                        InterceptStatsCache.refresh(scope, context)
+                    }
+                },
+                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                modifier = Modifier.height(32.dp),
+                colors =
+                    ButtonDefaults.textButtonColors(
+                        contentColor = MaterialTheme.colorScheme.error,
+                    ),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Delete,
+                    contentDescription = null,
+                    modifier = Modifier.size(16.dp),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text(
+                    text = stringResource(R.string.btn_clear),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+            }
+        }
+    }
 
     if (stats == null) {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -894,7 +991,8 @@ private fun InterceptStatisticsSection(
             shape = RoundedCornerShape(16.dp),
             colors =
                 CardDefaults.cardColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                    containerColor =
+                        MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
                 ),
             modifier = Modifier.fillMaxWidth(),
         ) {
@@ -910,7 +1008,8 @@ private fun InterceptStatisticsSection(
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text = "Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.",
+                    text =
+                        "Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center,
@@ -931,16 +1030,14 @@ private fun InterceptStatisticsSection(
                             containerColor = MaterialTheme.colorScheme.surface,
                         ),
                     modifier =
-                        Modifier
-                            .fillMaxWidth()
-                            .clickable {
-                                expandedApps =
-                                    if (isExpanded) {
-                                        expandedApps - appStat.packageName
-                                    } else {
-                                        expandedApps + appStat.packageName
-                                    }
-                            },
+                        Modifier.fillMaxWidth().clickable {
+                            expandedApps =
+                                if (isExpanded) {
+                                    expandedApps - appStat.packageName
+                                } else {
+                                    expandedApps + appStat.packageName
+                                }
+                        },
                 ) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(
@@ -969,7 +1066,9 @@ private fun InterceptStatisticsSection(
                                                 text = appStat.appLabel.take(1).uppercase(),
                                                 style = MaterialTheme.typography.titleSmall,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                color =
+                                                    MaterialTheme.colorScheme
+                                                        .onPrimaryContainer,
                                             )
                                         }
                                     }
@@ -1001,13 +1100,18 @@ private fun InterceptStatisticsSection(
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = MaterialTheme.colorScheme.primaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        contentColor =
+                                            MaterialTheme.colorScheme.onPrimaryContainer,
                                     ) {
                                         Text(
                                             text = "F: ${appStat.frameworkTotal}",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                            modifier =
+                                                Modifier.padding(
+                                                    horizontal = 6.dp,
+                                                    vertical = 3.dp,
+                                                ),
                                         )
                                     }
                                 }
@@ -1015,21 +1119,34 @@ private fun InterceptStatisticsSection(
                                     Surface(
                                         shape = RoundedCornerShape(8.dp),
                                         color = MaterialTheme.colorScheme.tertiaryContainer,
-                                        contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
+                                        contentColor =
+                                            MaterialTheme.colorScheme.onTertiaryContainer,
                                     ) {
                                         Text(
                                             text = "N: ${appStat.nativeTotal}",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontWeight = FontWeight.Bold,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                            modifier =
+                                                Modifier.padding(
+                                                    horizontal = 6.dp,
+                                                    vertical = 3.dp,
+                                                ),
                                         )
                                     }
                                 }
 
                                 Icon(
-                                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                    imageVector =
+                                        if (isExpanded) {
+                                            Icons.Default.KeyboardArrowUp
+                                        } else {
+                                            Icons.Default.KeyboardArrowDown
+                                        },
                                     contentDescription = null,
-                                    tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                    tint =
+                                        MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                            alpha = 0.7f,
+                                        ),
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
@@ -1038,7 +1155,9 @@ private fun InterceptStatisticsSection(
                         // Expandable breakdowns
                         if (isExpanded) {
                             Spacer(Modifier.height(12.dp))
-                            HorizontalDivider(color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f))
+                            HorizontalDivider(
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                            )
                             Spacer(Modifier.height(8.dp))
 
                             Row(
@@ -1061,12 +1180,15 @@ private fun InterceptStatisticsSection(
                                                     Modifier
                                                         .fillMaxWidth()
                                                         .padding(vertical = 2.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                horizontalArrangement =
+                                                    Arrangement.SpaceBetween,
                                             ) {
                                                 Text(
                                                     text = hook,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    color =
+                                                        MaterialTheme.colorScheme
+                                                            .onSurfaceVariant,
                                                 )
                                                 Text(
                                                     text = count.toString(),
@@ -1095,7 +1217,8 @@ private fun InterceptStatisticsSection(
                                                     Modifier
                                                         .fillMaxWidth()
                                                         .padding(vertical = 2.dp),
-                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                horizontalArrangement =
+                                                    Arrangement.SpaceBetween,
                                             ) {
                                                 val vectorLabel =
                                                     when (vector) {
@@ -1108,7 +1231,9 @@ private fun InterceptStatisticsSection(
                                                 Text(
                                                     text = vectorLabel,
                                                     style = MaterialTheme.typography.bodySmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    color =
+                                                        MaterialTheme.colorScheme
+                                                            .onSurfaceVariant,
                                                 )
                                                 Text(
                                                     text = count.toString(),

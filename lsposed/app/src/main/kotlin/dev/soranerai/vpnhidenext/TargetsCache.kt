@@ -99,7 +99,7 @@ internal object TargetsCache {
         echo "$END"
         """.trimIndent()
 
-    private suspend fun reload(appContext: Context) {
+    internal suspend fun reload(appContext: Context) {
         _loading.value = true
         try {
             val db = AppDatabase.getInstance(appContext)

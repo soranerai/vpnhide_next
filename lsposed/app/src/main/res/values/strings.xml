@@ -62,7 +62,7 @@
     <string name="sort_name_desc">Name (Z-A)</string>
     <string name="sort_selected_first">Selected first</string>
     <string name="apps_help_title">How it works</string>
-    <string name="apps_hint_toggles">Use the checkboxes to toggle individual layers: <b>LSPosed</b> and <b>Kernel</b>. Tapping the app row will toggle both layers at once.</string>
+    <string name="apps_hint_toggles">Use the checkboxes to toggle individual layers: <b>Framework</b> and <b>Native</b>. Tapping the app row will toggle both layers at once.</string>
 
 
     <!-- Root status -->
@@ -252,4 +252,16 @@
     <string name="hook_desc_network">Redirects active network requests from the VPN network instance to the best available physical network.</string>
     <string name="hook_desc_wifi_info">Restores real IP, SSID, and BSSID redacted by default Android 12+ privacy controls for location-less apps.</string>
     <string name="hook_desc_connectivity_service">Filters VPN network out of global network lists and blocks leakage of active VPN callbacks.</string>
+    <!-- Backup & Restore -->
+    <string name="backup_restore_title">Backup &amp; Restore</string>
+    <string name="backup_restore_description">Export your protected apps, tunnel interface prefixes, and port hiding rules to a JSON file, or restore them from an existing backup.</string>
+    <string name="btn_export">Export</string>
+    <string name="btn_import">Import</string>
+    <string name="export_success">Settings exported successfully</string>
+    <string name="export_failed">Export failed: %1$s</string>
+    <string name="import_success">Settings imported and applied successfully</string>
+    <string name="import_failed">Import failed: %1$s</string>
+    <string name="dashboard_intercept_statistics">Intercept Statistics</string>
+    <string name="dashboard_stats_lifetime_hint">Showing rolling telemetry for the last 30 minutes</string>
+    <string name="btn_clear">Clear</string>
 </resources>
