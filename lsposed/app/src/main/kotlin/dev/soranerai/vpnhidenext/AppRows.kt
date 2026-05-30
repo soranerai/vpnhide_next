@@ -24,7 +24,7 @@ import androidx.core.graphics.drawable.toBitmap
 @Composable
 internal fun AppRow(
     app: AppEntry,
-    userNames: Map<Int, String>,
+    @Suppress("UNUSED_PARAMETER") userNames: Map<Int, String>,
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
@@ -82,10 +82,10 @@ internal fun AppRow(
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (installed.kmod) {
-                    ProtectionChip("Kernel", app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
+                    ProtectionChip("Native", app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
                 }
 
-                ProtectionChip("LSPosed", app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
+                ProtectionChip("Framework", app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
             }
         }
     }

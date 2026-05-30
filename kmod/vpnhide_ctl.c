@@ -13,7 +13,7 @@
 void print_usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|set_spoof_ip|debug|active_hooks> [args...]\n",
+		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|set_spoof_ip|debug|active_hooks|stats> [args...]\n",
 		prog);
 	fprintf(stderr,
 		"  port_rules format: <uid> <rule_count> <start> <end> <proto> ...\n");
@@ -170,19 +170,26 @@ int main(int argc, char **argv)
 			}
 		}
 	} else if (strcmp(argv[1], "stats") == 0) {
-		struct vpnhide_kmod_stats_data sdata;
-		memset(&sdata, 0, sizeof(sdata));
-		if (ioctl(fd, VH_GET_STATS, &sdata) < 0) {
-			perror("VH_GET_STATS");
-			return 1;
-		}
-		for (int i = 0; i < sdata.count; i++) {
-			printf("%u;%u;%u;%u;%u\n",
-			       sdata.stats[i].uid,
-			       sdata.stats[i].ioctl_count,
-			       sdata.stats[i].netlink_count,
-			       sdata.stats[i].connect_count,
-			       sdata.stats[i].getname_count);
+		if (argc > 2 && strcmp(argv[2], "clear") == 0) {
+			if (ioctl(fd, VH_CLEAR_STATS) < 0) {
+				perror("VH_CLEAR_STATS");
+				return 1;
+			}
+		} else {
+			struct vpnhide_kmod_stats_data sdata;
+			memset(&sdata, 0, sizeof(sdata));
+			if (ioctl(fd, VH_GET_STATS, &sdata) < 0) {
+				perror("VH_GET_STATS");
+				return 1;
+			}
+			for (int i = 0; i < sdata.count; i++) {
+				printf("%u;%u;%u;%u;%u\n",
+				       sdata.stats[i].uid,
+				       sdata.stats[i].ioctl_count,
+				       sdata.stats[i].netlink_count,
+				       sdata.stats[i].connect_count,
+				       sdata.stats[i].getname_count);
+			}
 		}
 	} else {
 		print_usage(argv[0]);

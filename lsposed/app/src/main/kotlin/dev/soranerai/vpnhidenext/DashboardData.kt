@@ -3,29 +3,7 @@ package dev.soranerai.vpnhidenext
 import android.content.pm.PackageManager
 import android.database.sqlite.SQLiteDatabase
 import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.os.Build
-import android.util.Log
-import dev.soranerai.vpnhidenext.checks.CheckOutput
-import dev.soranerai.vpnhidenext.checks.CheckStatus
-import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
-import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
-import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
-import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
-import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
-import dev.soranerai.vpnhidenext.checks.checkNetlinkGetlink
-import dev.soranerai.vpnhidenext.checks.checkNetlinkGetroute
-import dev.soranerai.vpnhidenext.checks.checkProcNetDev
-import dev.soranerai.vpnhidenext.checks.checkProcNetFibTrie
-import dev.soranerai.vpnhidenext.checks.checkProcNetIfInet6
-import dev.soranerai.vpnhidenext.checks.checkProcNetIpv6Route
-import dev.soranerai.vpnhidenext.checks.checkProcNetRoute
-import dev.soranerai.vpnhidenext.checks.checkProcNetTcp
-import dev.soranerai.vpnhidenext.checks.checkProcNetTcp6
-import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
-import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
-import dev.soranerai.vpnhidenext.checks.checkSysClassNet
-import dev.soranerai.vpnhidenext.generated.IfaceLists
 import java.io.File
 
 // ── Domain types — invalid states are unrepresentable ────────────────────
@@ -104,7 +82,9 @@ sealed interface JavaResult {
     data object HooksInactive : JavaResult
 }
 
-internal enum class NativeModuleKind { Kmod }
+internal enum class NativeModuleKind {
+    Kmod,
+}
 
 internal data class ModuleMismatch(
     val kind: NativeModuleKind,
@@ -158,7 +138,10 @@ private sealed interface LsposedConfig {
     ) : LsposedConfig
 }
 
-internal enum class IssueSeverity { ERROR, WARNING }
+internal enum class IssueSeverity {
+    ERROR,
+    WARNING,
+}
 
 internal data class Issue(
     val severity: IssueSeverity,
@@ -172,6 +155,7 @@ internal data class AppInterceptStats(
     val nativeTotal: Int,
     val frameworkBreakdown: Map<String, Int>,
     val nativeBreakdown: Map<String, Int>,
+    val userId: Int = 0,
 )
 
 internal data class DashboardState(
@@ -233,35 +217,39 @@ internal fun parseKernelAndroidBranch(raw: String): String? =
         ?.let { "Android $it" }
 
 /**
- * Pick the right native-module artifact for the device based on its
- * kernel version (from `uname -r`) and Android OS label (from
- * `Build.VERSION.RELEASE`). Pulled out as a pure top-level function
- * so it can be unit-tested without a real device — the `uname -r`
- * read and `Build.VERSION` probe happen in the caller.
+ * Pick the right native-module artifact for the device based on its kernel version (from `uname
+ * -r`) and Android OS label (from `Build.VERSION.RELEASE`). Pulled out as a pure top-level function
+ * so it can be unit-tested without a real device — the `uname -r` read and `Build.VERSION` probe
+ * happen in the caller.
  *
  * Strategy, in order:
- *  1. Exact `(GKI KMI × kernel series)` match from the supported
+ * 1. Exact `(GKI KMI × kernel series)` match from the supported
+ * ```
  *     shipping matrix → specific kmod zip, preferKmod=true.
- *  2. KMI tag missing from `uname -r` (custom kernel stripped it)
+ * ```
+ * 2. KMI tag missing from `uname -r` (custom kernel stripped it)
+ * ```
  *     but the kernel series is GKI-shipping:
  *       - 6.1 / 6.6 / 6.12 have a single shipping variant each →
  *         deterministic kmod recommendation, preferKmod=true.
  *       - 5.10 / 5.15 have two shipping variants each → return the
  *         primary plus an alternative via `variantAmbiguous=true`;
  *         the UI shows "try primary, if it doesn't load try alt".
- *  3. Pre-GKI series (<5.10) or unparseable kernel version → no recommendation.
+ * ```
+ * 3. Pre-GKI series (<5.10) or unparseable kernel version → no recommendation.
  *
- * Returns `null` only if [kernelRaw] is blank (no uname output).
- * `deviceAndroidLabel` is only reflected back in the returned
- * `androidVersion` for display — it's never used for KMI matching
- * (those spaces are independent: an Android 15 ROM routinely runs
- * an android12 KMI kernel).
+ * Returns `null` only if [kernelRaw] is blank (no uname output). `deviceAndroidLabel` is only
+ * reflected back in the returned `androidVersion` for display — it's never used for KMI matching
+ * (those spaces are independent: an Android 15 ROM routinely runs an android12 KMI kernel).
  */
 internal fun buildNativeInstallRecommendation(
     kernelRaw: String,
     deviceAndroidLabel: String,
 ): NativeInstallRecommendation? {
-    val kernelVersion = kernelRaw.trim().ifBlank { return null }
+    val kernelVersion =
+        kernelRaw.trim().ifBlank {
+            return null
+        }
     val kernelSeries = parseKernelSeries(kernelVersion)
     val kernelBranch = parseKernelAndroidBranch(kernelVersion) // GKI KMI
 
@@ -272,14 +260,37 @@ internal fun buildNativeInstallRecommendation(
 
     val exact: KmiMatch? =
         when (kernelBranch to kernelSeries) {
-            "Android 12" to "5.10" -> KmiMatch("android12-5.10", "vpnhide-kmod-android12-5.10.zip")
-            "Android 13" to "5.10" -> KmiMatch("android13-5.10", "vpnhide-kmod-android13-5.10.zip")
-            "Android 13" to "5.15" -> KmiMatch("android13-5.15", "vpnhide-kmod-android13-5.15.zip")
-            "Android 14" to "5.15" -> KmiMatch("android14-5.15", "vpnhide-kmod-android14-5.15.zip")
-            "Android 14" to "6.1" -> KmiMatch("android14-6.1", "vpnhide-kmod-android14-6.1.zip")
-            "Android 15" to "6.6" -> KmiMatch("android15-6.6", "vpnhide-kmod-android15-6.6.zip")
-            "Android 16" to "6.12" -> KmiMatch("android16-6.12", "vpnhide-kmod-android16-6.12.zip")
-            else -> null
+            "Android 12" to "5.10" -> {
+                KmiMatch("android12-5.10", "vpnhide-kmod-android12-5.10.zip")
+            }
+
+            "Android 13" to "5.10" -> {
+                KmiMatch("android13-5.10", "vpnhide-kmod-android13-5.10.zip")
+            }
+
+            "Android 13" to "5.15" -> {
+                KmiMatch("android13-5.15", "vpnhide-kmod-android13-5.15.zip")
+            }
+
+            "Android 14" to "5.15" -> {
+                KmiMatch("android14-5.15", "vpnhide-kmod-android14-5.15.zip")
+            }
+
+            "Android 14" to "6.1" -> {
+                KmiMatch("android14-6.1", "vpnhide-kmod-android14-6.1.zip")
+            }
+
+            "Android 15" to "6.6" -> {
+                KmiMatch("android15-6.6", "vpnhide-kmod-android15-6.6.zip")
+            }
+
+            "Android 16" to "6.12" -> {
+                KmiMatch("android16-6.12", "vpnhide-kmod-android16-6.12.zip")
+            }
+
+            else -> {
+                null
+            }
         }
     if (exact != null) {
         return NativeInstallRecommendation(
@@ -346,7 +357,11 @@ private data class RawDashboardSnapshot(
     fun decodeBase64(key: String): String =
         try {
             val encoded = get(key)
-            if (encoded.isBlank()) "" else String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
+            if (encoded.isBlank()) {
+                ""
+            } else {
+                String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
+            }
         } catch (_: Exception) {
             ""
         }
@@ -357,8 +372,6 @@ private fun collectDashboardSnapshot(cacheDir: File): RawDashboardSnapshot {
     val script =
         """
         echo "kmod_prop=${'$'}(cat $KMOD_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
-        echo "kmod_targets=${'$'}(cat $KMOD_TARGETS 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
-        echo "ports_targets=${'$'}(cat $PORTS_OBSERVERS_FILE 2>/dev/null | grep -v '^#' | grep -v '^${'$'}' | wc -l)"
         echo "uname=${'$'}(uname -r)"
         echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id)"
         echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
@@ -423,6 +436,10 @@ internal suspend fun loadDashboardState(
     VpnHideLog.i(TAG, "=== Loading dashboard state ===")
     val snapshot = collectDashboardSnapshot(context.cacheDir)
     val currentBootId = snapshot.get("boot_id")
+    val db =
+        dev.soranerai.vpnhidenext.db.AppDatabase
+            .getInstance(context)
+    val appsSync = db.appDao().getAllAppProtectionSync()
 
     // ── Module detection ──
     // Strip the `v` prefix from module.prop versions at parse time so
@@ -579,54 +596,62 @@ internal suspend fun loadDashboardState(
         }
 
         return try {
-            SQLiteDatabase.openDatabase(dbCopy.absolutePath, null, SQLiteDatabase.OPEN_READONLY).use { db ->
-                db
-                    .rawQuery(
-                        "SELECT mid, enabled FROM modules WHERE module_pkg_name = ?",
-                        arrayOf(selfPkg),
-                    ).use { moduleCursor ->
-                        if (!moduleCursor.moveToFirst()) {
-                            return LsposedConfig.ModuleNotConfigured
-                        }
-
-                        val mid = moduleCursor.getLong(0)
-                        val enabled = moduleCursor.getInt(1) != 0
-                        if (!enabled) {
-                            return LsposedConfig.Disabled
-                        }
-
-                        val scopeEntries = mutableListOf<Pair<String, Int>>()
-                        db
-                            .rawQuery(
-                                "SELECT app_pkg_name, user_id FROM scope WHERE mid = ? ORDER BY user_id, app_pkg_name",
-                                arrayOf(mid.toString()),
-                            ).use { scopeCursor ->
-                                while (scopeCursor.moveToNext()) {
-                                    scopeEntries += scopeCursor.getString(0) to scopeCursor.getInt(1)
-                                }
+            SQLiteDatabase
+                .openDatabase(dbCopy.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
+                .use { db ->
+                    db
+                        .rawQuery(
+                            "SELECT mid, enabled FROM modules WHERE module_pkg_name = ?",
+                            arrayOf(selfPkg),
+                        ).use { moduleCursor ->
+                            if (!moduleCursor.moveToFirst()) {
+                                return LsposedConfig.ModuleNotConfigured
                             }
-                        val hasSystemFramework = scopeEntries.any { (pkg, userId) -> pkg == "system" && userId == 0 }
-                        val renderedEntries =
-                            scopeEntries.map { (pkg, userId) ->
-                                if (pkg == "system" && userId == 0) {
-                                    "system"
-                                } else {
-                                    "$pkg/$userId"
-                                }
-                            }
-                        val extraEntries =
-                            scopeEntries
-                                .filterNot { (pkg, userId) ->
-                                    (pkg == "system" && userId == 0) || pkg == selfPkg
-                                }.map { (pkg, userId) -> "$pkg/$userId" }
 
-                        LsposedConfig.Enabled(
-                            entries = renderedEntries,
-                            hasSystemFramework = hasSystemFramework,
-                            extraEntries = extraEntries,
-                        )
-                    }
-            }
+                            val mid = moduleCursor.getLong(0)
+                            val enabled = moduleCursor.getInt(1) != 0
+                            if (!enabled) {
+                                return LsposedConfig.Disabled
+                            }
+
+                            val scopeEntries = mutableListOf<Pair<String, Int>>()
+                            db
+                                .rawQuery(
+                                    "SELECT app_pkg_name, user_id FROM scope WHERE mid = ? ORDER BY user_id, app_pkg_name",
+                                    arrayOf(mid.toString()),
+                                ).use { scopeCursor ->
+                                    while (scopeCursor.moveToNext()) {
+                                        scopeEntries +=
+                                            scopeCursor.getString(0) to
+                                            scopeCursor.getInt(1)
+                                    }
+                                }
+                            val hasSystemFramework =
+                                scopeEntries.any { (pkg, userId) ->
+                                    pkg == "system" && userId == 0
+                                }
+                            val renderedEntries =
+                                scopeEntries.map { (pkg, userId) ->
+                                    if (pkg == "system" && userId == 0) {
+                                        "system"
+                                    } else {
+                                        "$pkg/$userId"
+                                    }
+                                }
+                            val extraEntries =
+                                scopeEntries
+                                    .filterNot { (pkg, userId) ->
+                                        (pkg == "system" && userId == 0) ||
+                                            pkg == selfPkg
+                                    }.map { (pkg, userId) -> "$pkg/$userId" }
+
+                            LsposedConfig.Enabled(
+                                entries = renderedEntries,
+                                hasSystemFramework = hasSystemFramework,
+                                extraEntries = extraEntries,
+                            )
+                        }
+                }
         } catch (e: Exception) {
             VpnHideLog.w(TAG, "failed to inspect LSPosed config db: ${e.message}")
             null
@@ -651,7 +676,12 @@ internal suspend fun loadDashboardState(
     // kmod
     val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))
     val kmodActive = kmodProp.installed && snapshot.get("lsmod") == "1"
-    val kmodTargetCount = if (kmodProp.installed) countTargets(snapshot.get("kmod_targets")) else 0
+    val kmodTargetCount =
+        if (kmodProp.installed) {
+            appsSync.count { it.kmod && it.packageName != selfPkg }
+        } else {
+            0
+        }
     // Built without brokenReason — populated below after kernelRecommendation
     // and kmodLoadStatus are ready.
     val kmodRaw: ModuleState =
@@ -667,12 +697,12 @@ internal suspend fun loadDashboardState(
         }
     VpnHideLog.i(TAG, "kmodRaw: $kmodRaw")
 
-    val portsObserverCount = countTargets(snapshot.get("ports_targets"))
+    val portsObserverCount = if (kmodProp.installed) appsSync.count { it.portHiding } else 0
     // Recommendation based purely on the kernel
 
-    // Recommendation based purely on the kernel
     val kernelRaw = snapshot.get("uname")
-    val kernelRecommendation = buildNativeInstallRecommendation(kernelRaw, androidMajorVersionLabel())
+    val kernelRecommendation =
+        buildNativeInstallRecommendation(kernelRaw, androidMajorVersionLabel())
     val kmodLoadStatus = readKmodLoadStatus(currentBootId.trim())
     VpnHideLog.i(TAG, "kmodLoadStatus=$kmodLoadStatus")
 
@@ -761,9 +791,7 @@ internal suspend fun loadDashboardState(
     // already emit a red error below with the same CTA — showing both
     // duplicates the instruction.
     val nativeInstallRecommendation =
-        kernelRecommendation?.takeIf {
-            kmod is ModuleState.NotInstalled
-        }
+        kernelRecommendation?.takeIf { kmod is ModuleState.NotInstalled }
     VpnHideLog.i(
         TAG,
         "nativeInstallRecommendation=$nativeInstallRecommendation " +
@@ -777,10 +805,7 @@ internal suspend fun loadDashboardState(
     val hookVersion = hookProps["version"]
     val hookBootId = hookProps["boot_id"]
     val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
-    val db =
-        dev.soranerai.vpnhidenext.db.AppDatabase
-            .getInstance(context)
-    val lsposedTargetCount = db.appDao().getAllAppProtectionSync().count { it.lsposed }
+    val lsposedTargetCount = appsSync.count { it.lsposed }
     val lsposedFramework = detectLsposedFramework()
     val lsposedConfig =
         when (lsposedFramework) {
@@ -817,8 +842,13 @@ internal suspend fun loadDashboardState(
 
                     LsposedConfig.ModuleNotConfigured -> {
                         when (lsposedFramework) {
-                            LsposedFramework.NotInstalled -> LsposedState.NotInstalled
-                            is LsposedFramework.Installed -> LsposedState.InstalledInactive(null)
+                            LsposedFramework.NotInstalled -> {
+                                LsposedState.NotInstalled
+                            }
+
+                            is LsposedFramework.Installed -> {
+                                LsposedState.InstalledInactive(null)
+                            }
                         }
                     }
 
@@ -879,7 +909,10 @@ internal suspend fun loadDashboardState(
                     warn(
                         res.getString(
                             R.string.dashboard_issue_lsposed_extra_scope,
-                            lsposedConfig.extraEntries.map(::resolveScopeEntryLabel).joinToString(", "),
+                            lsposedConfig
+                                .extraEntries
+                                .map(::resolveScopeEntryLabel)
+                                .joinToString(", "),
                         ),
                     )
                 }
@@ -921,7 +954,13 @@ internal suspend fun loadDashboardState(
         val runningVersion = lsposed.version
         if (versionsMismatch(runningVersion, appVersion)) {
             VpnHideLog.w(TAG, "version mismatch: running=$runningVersion app=$appVersion")
-            warn(res.getString(R.string.dashboard_issue_version_mismatch, runningVersion, appVersion))
+            warn(
+                res.getString(
+                    R.string.dashboard_issue_version_mismatch,
+                    runningVersion,
+                    appVersion,
+                ),
+            )
         }
     }
 
@@ -931,7 +970,8 @@ internal suspend fun loadDashboardState(
     // to logcat that a forensic reader with root can see. The flag file is
     // written by the Diagnostics → Debug logging toggle; absent file ⇒
     // default off ⇒ no warning.
-    val (debugEnabledExit, debugEnabledRaw) = suExec("cat /data/system/vpnhide_debug_logging 2>/dev/null")
+    val (debugEnabledExit, debugEnabledRaw) =
+        suExec("cat /data/system/vpnhide_debug_logging 2>/dev/null")
     if (debugEnabledExit == 0 && debugEnabledRaw.trim() == "1") {
         warn(res.getString(R.string.dashboard_issue_debug_logging_on))
     }
@@ -955,8 +995,7 @@ internal suspend fun loadDashboardState(
     val recommendedArtifact = kernelRecommendation?.recommendedArtifact
     if (kmod is ModuleState.Installed) {
         when {
-            kmodLoadStatus?.freshForCurrentBoot == true &&
-                kmodLoadStatus.kretprobes == "n" -> {
+            kmodLoadStatus?.freshForCurrentBoot == true && kmodLoadStatus.kretprobes == "n" -> {
                 err(res.getString(R.string.dashboard_issue_kprobes_missing))
             }
 
@@ -994,7 +1033,7 @@ internal suspend fun loadDashboardState(
                 val installed = (kmod as ModuleState.Installed).gkiVariant
                 val tryArtifact =
                     if (installed == kernelRecommendation?.recommendedGkiVariant) {
-                        kernelRecommendation.alternativeArtifact
+                        kernelRecommendation?.alternativeArtifact
                     } else {
                         kernelRecommendation?.recommendedArtifact
                     }
@@ -1060,7 +1099,11 @@ internal suspend fun loadDashboardState(
                             JavaResult.Fail(1)
                         } else {
                             val failedCount = diagResults.java.count { it.passed == false }
-                            if (failedCount == 0) JavaResult.Ok else JavaResult.Fail(failedCount)
+                            if (failedCount == 0) {
+                                JavaResult.Ok
+                            } else {
+                                JavaResult.Fail(failedCount)
+                            }
                         }
                     } else {
                         JavaResult.HooksInactive
@@ -1073,7 +1116,10 @@ internal suspend fun loadDashboardState(
     VpnHideLog.i(TAG, "protection=$protection issues=$issues")
     VpnHideLog.i(TAG, "=== Dashboard state loaded ===")
 
-    VpnHideLog.i(TAG, "=== Dashboard state loaded in ${System.currentTimeMillis() - startTime}ms ===")
+    VpnHideLog.i(
+        TAG,
+        "=== Dashboard state loaded in ${System.currentTimeMillis() - startTime}ms ===",
+    )
 
     return DashboardState(
         kmod = kmod,
@@ -1090,8 +1136,25 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
     val uidToAppMap = mutableMapOf<Int, Pair<String, String>>()
 
     fun getAppInfoForUid(uid: Int): Pair<String, String> {
-        uidToAppMap[uid]?.let { return it }
-        val pkgs = pm.getPackagesForUid(uid)
+        uidToAppMap[uid]?.let {
+            return it
+        }
+        val pkgs =
+            try {
+                pm.getPackagesForUid(uid)
+            } catch (_: SecurityException) {
+                val (_, stdout) = suExec("pm list packages --uid $uid 2>/dev/null")
+                val pkgLine = stdout.lines().firstOrNull { it.startsWith("package:") }
+                if (pkgLine != null) {
+                    val pkgName = pkgLine.substringAfter("package:").substringBefore(" ").trim()
+                    if (pkgName.isNotEmpty()) arrayOf(pkgName) else null
+                } else {
+                    null
+                }
+            } catch (_: Throwable) {
+                null
+            }
+
         if (!pkgs.isNullOrEmpty()) {
             val pkg = pkgs[0]
             val label =
@@ -1133,7 +1196,11 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
     fun decodeBase64(key: String): String =
         try {
             val encoded = props[key] ?: ""
-            if (encoded.isBlank()) "" else String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
+            if (encoded.isBlank()) {
+                ""
+            } else {
+                String(android.util.Base64.decode(encoded, android.util.Base64.DEFAULT))
+            }
         } catch (_: Exception) {
             ""
         }
@@ -1156,7 +1223,7 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
     }
 
     val nativeStatsRaw = decodeBase64("native_stats")
-    val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
+    val currentRawNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
     if (nativeStatsRaw.isNotBlank()) {
         nativeStatsRaw.lines().forEach { line ->
             val parts = line.split(';')
@@ -1167,13 +1234,38 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
                 val connect = parts[3].toIntOrNull() ?: 0
                 val getname = parts[4].toIntOrNull() ?: 0
                 if (uid != null && (ioctl > 0 || netlink > 0 || connect > 0 || getname > 0)) {
-                    val map = uidNativeMap.computeIfAbsent(uid) { mutableMapOf() }
+                    val map = currentRawNativeMap.computeIfAbsent(uid) { mutableMapOf() }
                     if (ioctl > 0) map["ioctl"] = ioctl
                     if (netlink > 0) map["netlink"] = netlink
                     if (connect > 0) map["connect"] = connect
                     if (getname > 0) map["getname"] = getname
                 }
             }
+        }
+    }
+
+    // 30-Minute Auto Expiration check
+    val prefs = context.getSharedPreferences("vpnhide_stats_prefs", android.content.Context.MODE_PRIVATE)
+    val currentTime = System.currentTimeMillis()
+    val lastResetTime = prefs.getLong("last_reset_time", 0L)
+    val lifetimeMs = 30 * 60 * 1000L // 30 minutes
+    val needAutoReset = lastResetTime == 0L || (currentTime - lastResetTime) > lifetimeMs
+
+    if (needAutoReset) {
+        resetInterceptStats(context)
+        return emptyList()
+    }
+
+    val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
+    currentRawNativeMap.forEach { (uid, map) ->
+        val activeMap = mutableMapOf<String, Int>()
+        map.forEach { (type, count) ->
+            if (count > 0) {
+                activeMap[type] = count
+            }
+        }
+        if (activeMap.isNotEmpty()) {
+            uidNativeMap[uid] = activeMap
         }
     }
 
@@ -1191,6 +1283,23 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
                 nativeTotal = nBreakdown.values.sum(),
                 frameworkBreakdown = fBreakdown,
                 nativeBreakdown = nBreakdown,
+                userId = uid / 100000,
             )
-        }.sortedByDescending { it.frameworkTotal + it.nativeTotal }
+        }.filter { it.frameworkTotal > 0 || it.nativeTotal > 0 }
+        .sortedByDescending { it.frameworkTotal + it.nativeTotal }
+}
+
+internal fun resetInterceptStats(context: android.content.Context) {
+    // 1. Clear framework hook stats
+    suExec("echo 'clear' > /data/system/vpnhide_hook_stats_req 2>/dev/null")
+
+    // 2. Clear native kmod stats
+    suExec("$KMOD_CTL stats clear 2>/dev/null")
+
+    // 3. Save last reset time
+    val prefs = context.getSharedPreferences("vpnhide_stats_prefs", android.content.Context.MODE_PRIVATE)
+    prefs
+        .edit()
+        .putLong("last_reset_time", System.currentTimeMillis())
+        .apply()
 }

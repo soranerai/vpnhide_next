@@ -5,18 +5,17 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Build
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.FiberManualRecord
-import androidx.compose.material.icons.filled.Save
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -55,6 +54,7 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
 import dev.soranerai.vpnhidenext.db.AppDatabase
+import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -157,6 +157,10 @@ fun DiagnosticsScreen(
                 .verticalScroll(rememberScrollState()),
     ) {
         Spacer(Modifier.height(8.dp))
+
+        BackupRestoreCard()
+
+        Spacer(Modifier.height(16.dp))
 
         crashInfo?.let { info ->
             var resetting by remember { mutableStateOf(false) }
@@ -346,20 +350,52 @@ fun DiagnosticsScreen(
                     Spacer(Modifier.height(16.dp))
 
                     SectionHeader(stringResource(R.string.section_native))
-                    Spacer(Modifier.height(6.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (check in r.native) {
-                            CheckCard(check)
+                    Spacer(Modifier.height(8.dp))
+                    ElevatedCard(
+                        shape = RoundedCornerShape(12.dp),
+                        colors =
+                            CardDefaults.elevatedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column {
+                            r.native.forEachIndexed { index, check ->
+                                CheckRow(check)
+                                if (index < r.native.lastIndex) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier.padding(horizontal = 14.dp),
+                                    )
+                                }
+                            }
                         }
                     }
 
                     Spacer(Modifier.height(16.dp))
 
                     SectionHeader(stringResource(R.string.section_java))
-                    Spacer(Modifier.height(6.dp))
-                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for (check in r.java) {
-                            CheckCard(check)
+                    Spacer(Modifier.height(8.dp))
+                    ElevatedCard(
+                        shape = RoundedCornerShape(12.dp),
+                        colors =
+                            CardDefaults.elevatedCardColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            ),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Column {
+                            r.java.forEachIndexed { index, check ->
+                                CheckRow(check)
+                                if (index < r.java.lastIndex) {
+                                    HorizontalDivider(
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
+                                        thickness = 1.dp,
+                                        modifier = Modifier.padding(horizontal = 14.dp),
+                                    )
+                                }
+                            }
                         }
                     }
                 }
@@ -708,19 +744,20 @@ private fun SectionHeader(title: String) {
 }
 
 @Composable
-private fun CheckCard(r: CheckResult) {
-    val badgeColor =
+private fun CheckRow(r: CheckResult) {
+    var expanded by remember { mutableStateOf(false) }
+
+    val statusIcon =
+        when (r.passed) {
+            true -> Icons.Default.CheckCircle
+            false -> Icons.Default.Cancel
+            null -> Icons.Default.Info
+        }
+    val statusColor =
         when (r.passed) {
             true -> TelGreen
             false -> TelRed
             null -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-
-    val containerColor =
-        when (r.passed) {
-            true -> TelGreen.copy(alpha = 0.15f)
-            false -> TelRed.copy(alpha = 0.15f)
-            null -> MaterialTheme.colorScheme.surfaceVariant
         }
 
     val badgeText =
@@ -732,37 +769,65 @@ private fun CheckCard(r: CheckResult) {
             },
         )
 
-    ElevatedCard(
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        modifier = Modifier.fillMaxWidth(),
+    Column(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(enabled = r.detail.isNotBlank()) { expanded = !expanded }
+                .padding(vertical = 10.dp, horizontal = 14.dp),
     ) {
-        Column(modifier = Modifier.padding(20.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Icon(
+                imageVector = statusIcon,
+                contentDescription = null,
+                tint = statusColor,
+                modifier = Modifier.size(20.dp),
+            )
+            Text(
+                text = r.name,
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
             Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
-                Text(
-                    text = r.name,
-                    style = MaterialTheme.typography.bodyLarge,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.weight(1f),
-                )
                 Text(
                     text = badgeText,
                     fontWeight = FontWeight.Bold,
-                    fontSize = 13.sp,
-                    color = badgeColor,
+                    fontSize = 12.sp,
+                    color = statusColor,
+                )
+                if (r.detail.isNotBlank()) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
+                        modifier = Modifier.size(16.dp),
+                    )
+                }
+            }
+        }
+        if (expanded && r.detail.isNotBlank()) {
+            Spacer(Modifier.height(8.dp))
+            Surface(
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                shape = RoundedCornerShape(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Text(
+                    text = r.detail,
+                    style = MaterialTheme.typography.bodySmall,
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
+                    modifier = Modifier.padding(10.dp),
                 )
             }
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text = r.detail,
-                style = MaterialTheme.typography.bodySmall,
-                fontFamily = FontFamily.Monospace,
-                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.8f),
-            )
         }
     }
 }
@@ -1499,16 +1564,24 @@ private suspend fun exportDebugZip(
 
             // Target UIDs
             val (_, procTargets) = suExec("cat /proc/vpnhide_targets 2>/dev/null")
-            val (_, kmodTargets) = suExec("cat $KMOD_TARGETS 2>/dev/null")
             val db = AppDatabase.getInstance(context)
-            val lsposedTargets = db.appDao().getAllAppProtectionSync().filter { it.lsposed }
+            val protections = db.appDao().getAllAppProtectionSync()
+            val kmodTargets = protections.filter { it.kmod }
+            val lsposedTargets = protections.filter { it.lsposed }
             val targetsText =
                 buildString {
                     appendLine("=== /proc/vpnhide_targets (live UIDs) ===")
                     appendLine(procTargets.ifEmpty { "(empty)" })
                     appendLine()
-                    appendLine("=== kmod targets (KMOD_TARGETS) ===")
-                    appendLine(kmodTargets.ifEmpty { "(empty)" })
+                    appendLine("=== kmod targets (DB) ===")
+                    if (kmodTargets.isEmpty()) {
+                        appendLine("(empty)")
+                    } else {
+                        kmodTargets.forEach { app ->
+                            val entry = if (app.userId == 0) app.packageName else "${app.packageName}:${app.userId}"
+                            appendLine("$entry (uid: ${app.uid})")
+                        }
+                    }
                     appendLine()
                     appendLine("=== lsposed targets (DB) ===")
                     if (lsposedTargets.isEmpty()) {
@@ -1636,6 +1709,146 @@ private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(stringResource(R.string.diag_hook_isolation_configure_btn))
+            }
+        }
+    }
+}
+
+@Composable
+private fun BackupRestoreCard() {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var importing by remember { mutableStateOf(false) }
+    var exporting by remember { mutableStateOf(false) }
+
+    val exportLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.CreateDocument("application/json"),
+        ) { uri: Uri? ->
+            if (uri != null) {
+                exporting = true
+                scope.launch {
+                    try {
+                        val jsonStr = SettingsBackupHelper.exportToString(context)
+                        context.contentResolver.openOutputStream(uri)?.use { out ->
+                            out.write(jsonStr.toByteArray())
+                        }
+                        Toast.makeText(context, context.getString(R.string.export_success), Toast.LENGTH_SHORT).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(context, context.getString(R.string.export_failed, e.message), Toast.LENGTH_LONG).show()
+                    } finally {
+                        exporting = false
+                    }
+                }
+            }
+        }
+
+    val importLauncher =
+        rememberLauncherForActivityResult(
+            ActivityResultContracts.OpenDocument(),
+        ) { uri: Uri? ->
+            if (uri != null) {
+                importing = true
+                scope.launch {
+                    try {
+                        val jsonStr =
+                            context.contentResolver.openInputStream(uri)?.use { input ->
+                                input.bufferedReader().readText()
+                            } ?: throw Exception("Failed to read input stream")
+
+                        val result = SettingsBackupHelper.importFromString(context, jsonStr)
+                        if (result.isSuccess) {
+                            Toast.makeText(context, context.getString(R.string.import_success), Toast.LENGTH_SHORT).show()
+                        } else {
+                            val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
+                            Toast.makeText(context, context.getString(R.string.import_failed, errMsg), Toast.LENGTH_LONG).show()
+                        }
+                    } catch (e: Exception) {
+                        Toast.makeText(context, context.getString(R.string.import_failed, e.message), Toast.LENGTH_LONG).show()
+                    } finally {
+                        importing = false
+                    }
+                }
+            }
+        }
+
+    ElevatedCard(
+        shape = RoundedCornerShape(8.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text = stringResource(R.string.backup_restore_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.width(8.dp))
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                OutlinedButton(
+                    onClick = {
+                        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                        exportLauncher.launch("vpnhide_backup_$timestamp.json")
+                    },
+                    enabled = !exporting && !importing,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    if (exporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.primary,
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Save,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.btn_export),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = {
+                        importLauncher.launch(arrayOf("application/json", "application/octet-stream"))
+                    },
+                    enabled = !exporting && !importing,
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    modifier = Modifier.height(36.dp),
+                ) {
+                    if (importing) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(16.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                    } else {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = stringResource(R.string.btn_import),
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
+                }
             }
         }
     }

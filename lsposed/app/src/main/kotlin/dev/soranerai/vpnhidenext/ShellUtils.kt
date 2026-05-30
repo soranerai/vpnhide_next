@@ -89,33 +89,14 @@ internal data class StartupResult(
  * Batched startup check: root access, target sync, UID resolution and boot ID.
  * Replaces checkRootAccess and ensureSelfInTargets.
  */
-internal fun performStartupOptimized(selfPkg: String): StartupResult {
+internal fun performStartupOptimized(): StartupResult {
     val script =
         """
         # Check root
         id | grep -q "uid=0" || { echo "root=0"; exit 0; }
         echo "root=1"
         
-        # Resolve UIDs
-        ALL_PKGS=${'$'}(pm list packages -U --user all 2>/dev/null)
-        SELF_UIDS=${'$'}(echo "${'$'}ALL_PKGS" | awk -v p="package:$selfPkg" '${'$'}1 == p { sub(/uid:/, "", ${'$'}2); print ${'$'}2; exit }' | tr ',' '\n')
-        
-        # Add self to module targets
-        ADDED=0
-        for path in ${'$'}KMOD_TARGETS; do
-          dir=${'$'}(dirname "${'$'}path")
-          if [ -d "${'$'}dir" ]; then
-            for U in ${'$'}SELF_UIDS; do
-              if ! grep -q "^${'$'}U${'$'}" "${'$'}path" 2>/dev/null; then
-                 echo "${'$'}U" >> "${'$'}path"
-                 chmod 644 "${'$'}path"
-                 ADDED=1
-              fi
-            done
-          fi
-        done
-        
-        echo "added=${'$'}ADDED"
+        echo "added=0"
         echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
         """.trimIndent()
 
@@ -238,20 +219,6 @@ internal fun buildLsposedApplyCommand(context: Context): String {
         append(" ; chown system:system $publicDb*")
         append(" ; chcon u:object_r:system_data_file:s0 $publicDb* 2>/dev/null || true")
     }
-}
-
-internal fun applyKmodTargets(context: Context) {
-    val uids = readTargetList(KMOD_TARGETS)
-    suExec(buildKmodApplyCommand(uids, targetType = "targets"))
-}
-
-internal fun readTargetList(path: String): List<Int> {
-    val (_, raw) = suExec("cat $path 2>/dev/null || true")
-    return raw
-        .lines()
-        .map { it.trim() }
-        .filter { it.isNotEmpty() && !it.startsWith("#") }
-        .mapNotNull { it.toIntOrNull() }
 }
 
 internal data class CrashInfo(

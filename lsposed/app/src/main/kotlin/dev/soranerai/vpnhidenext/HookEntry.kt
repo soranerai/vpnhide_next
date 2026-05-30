@@ -71,9 +71,8 @@ class HookEntry : IXposedHookLoadPackage {
             }
         appStats
             .computeIfAbsent(hookName) {
-                java.util.concurrent.atomic
-                    .AtomicInteger(0)
-            }.incrementAndGet()
+                RollingCounter()
+            }.increment()
     }
 
     /**
@@ -85,8 +84,8 @@ class HookEntry : IXposedHookLoadPackage {
         try {
             val sb = java.lang.StringBuilder()
             for ((uid, appStats) in hookStats) {
-                for ((hook, atomicCount) in appStats) {
-                    val count = atomicCount.get()
+                for ((hook, rollingCounter) in appStats) {
+                    val count = rollingCounter.getSum()
                     if (count > 0) {
                         sb
                             .append(uid)
@@ -121,12 +120,17 @@ class HookEntry : IXposedHookLoadPackage {
                     try {
                         val reqFile = File(STATS_REQ_FILE)
                         if (reqFile.exists()) {
-                            // Delete first so the manager app can't see a stale request
+                            val content = runCatching { reqFile.readText().trim() }.getOrDefault("")
                             try {
                                 reqFile.delete()
                             } catch (_: Throwable) {
                             }
-                            dumpHookStats()
+                            if (content == "clear" || content == "reset") {
+                                hookStats.clear()
+                                HookLog.i("VpnHide: cleared in-memory hook stats")
+                            } else {
+                                dumpHookStats()
+                            }
                         }
                     } catch (t: Throwable) {
                         HookLog.e("VpnHide: stats watcher error: ${t.message}")
@@ -1650,10 +1654,48 @@ class HookEntry : IXposedHookLoadPackage {
         const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
         const val JAVA_HOOKS_FILE = "/data/system/vpnhide/vpnhide_active_java_hooks"
 
+        internal class RollingCounter(
+            private val windowMinutes: Int = 30,
+        ) {
+            private val bucketCounts = IntArray(windowMinutes)
+            private val bucketTimes = LongArray(windowMinutes)
+
+            @Synchronized
+            fun increment() {
+                val nowMs = System.currentTimeMillis()
+                val nowMin = nowMs / 60000L
+                val idx = (nowMin % windowMinutes).toInt()
+                if (bucketTimes[idx] != nowMin) {
+                    bucketCounts[idx] = 1
+                    bucketTimes[idx] = nowMin
+                } else {
+                    bucketCounts[idx]++
+                }
+            }
+
+            @Synchronized
+            fun getSum(): Int {
+                val nowMs = System.currentTimeMillis()
+                val nowMin = nowMs / 60000L
+                var sum = 0
+                for (i in 0 until windowMinutes) {
+                    if (nowMin - bucketTimes[i] < windowMinutes) {
+                        sum += bucketCounts[i]
+                    }
+                }
+                return sum
+            }
+
+            @Synchronized
+            fun clear() {
+                bucketCounts.fill(0)
+                bucketTimes.fill(0)
+            }
+        }
+
         /** All intercept stats live only in memory. Written to disk only when the manager requests it. */
         private val hookStats =
-            java.util.concurrent
-                .ConcurrentHashMap<Int, java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>>()
+            java.util.concurrent.ConcurrentHashMap<Int, java.util.concurrent.ConcurrentHashMap<String, RollingCounter>>()
 
         private val FIELD_PROBES =
             listOf(

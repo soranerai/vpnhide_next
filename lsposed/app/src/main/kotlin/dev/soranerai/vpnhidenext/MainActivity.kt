@@ -80,13 +80,11 @@ private sealed class RootState {
 @Composable
 fun VpnHideApp(onReady: () -> Unit = {}) {
     VpnHideTheme {
-        val context = LocalContext.current
         var rootState by remember { mutableStateOf<RootState?>(null) }
         LaunchedEffect(Unit) {
-            val appCtx = context.applicationContext
             val res =
                 withContext(Dispatchers.IO) {
-                    performStartupOptimized(appCtx.packageName)
+                    performStartupOptimized()
                 }
             rootState = if (res.rootGranted) RootState.Granted(res) else RootState.Denied
         }
@@ -150,14 +148,6 @@ private fun MainScreen(
     val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
     val searchFocusRequester = remember { FocusRequester() }
-
-    LaunchedEffect(Unit) {
-        if (startup.addedToTargets) {
-            withContext(Dispatchers.IO) {
-                applyKmodTargets(context)
-            }
-        }
-    }
 
     // Kick off both Protection caches lazily — only when the user
     // navigates to Protection. Moved out of here to reduce startup jank.

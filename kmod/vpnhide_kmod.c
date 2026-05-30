@@ -184,7 +184,18 @@ static bool is_target_uid(void)
 	return found;
 }
 
-static struct vpnhide_uid_stats kmod_stats[MAX_TARGET_UIDS];
+#define BUCKETS_COUNT 30
+
+struct kmod_uid_rolling_stats {
+	uid_t uid;
+	u32 ioctl_counts[BUCKETS_COUNT];
+	u32 netlink_counts[BUCKETS_COUNT];
+	u32 connect_counts[BUCKETS_COUNT];
+	u32 getname_counts[BUCKETS_COUNT];
+	u64 bucket_times[BUCKETS_COUNT];
+};
+
+static struct kmod_uid_rolling_stats kmod_stats[MAX_TARGET_UIDS];
 static int kmod_stats_count = 0;
 static DEFINE_SPINLOCK(kmod_stats_lock);
 
@@ -192,6 +203,8 @@ static void record_kmod_intercept(uid_t uid, int type)
 {
 	int i;
 	unsigned long flags;
+	u64 now_min = ktime_get_real_seconds() / 60;
+	int idx = (int)(now_min % BUCKETS_COUNT);
 
 	if (uid == 0 || uid == 1000)
 		return;
@@ -199,14 +212,21 @@ static void record_kmod_intercept(uid_t uid, int type)
 	spin_lock_irqsave(&kmod_stats_lock, flags);
 	for (i = 0; i < kmod_stats_count; i++) {
 		if (kmod_stats[i].uid == uid) {
+			if (kmod_stats[i].bucket_times[idx] != now_min) {
+				kmod_stats[i].ioctl_counts[idx] = 0;
+				kmod_stats[i].netlink_counts[idx] = 0;
+				kmod_stats[i].connect_counts[idx] = 0;
+				kmod_stats[i].getname_counts[idx] = 0;
+				kmod_stats[i].bucket_times[idx] = now_min;
+			}
 			if (type == 1)
-				kmod_stats[i].ioctl_count++;
+				kmod_stats[i].ioctl_counts[idx]++;
 			else if (type == 2)
-				kmod_stats[i].netlink_count++;
+				kmod_stats[i].netlink_counts[idx]++;
 			else if (type == 3)
-				kmod_stats[i].connect_count++;
+				kmod_stats[i].connect_counts[idx]++;
 			else if (type == 4)
-				kmod_stats[i].getname_count++;
+				kmod_stats[i].getname_counts[idx]++;
 			spin_unlock_irqrestore(&kmod_stats_lock, flags);
 			return;
 		}
@@ -214,19 +234,26 @@ static void record_kmod_intercept(uid_t uid, int type)
 
 	if (kmod_stats_count < MAX_TARGET_UIDS) {
 		kmod_stats[kmod_stats_count].uid = uid;
-		kmod_stats[kmod_stats_count].ioctl_count = 0;
-		kmod_stats[kmod_stats_count].netlink_count = 0;
-		kmod_stats[kmod_stats_count].connect_count = 0;
-		kmod_stats[kmod_stats_count].getname_count = 0;
+		memset(kmod_stats[kmod_stats_count].ioctl_counts, 0,
+		       sizeof(kmod_stats[kmod_stats_count].ioctl_counts));
+		memset(kmod_stats[kmod_stats_count].netlink_counts, 0,
+		       sizeof(kmod_stats[kmod_stats_count].netlink_counts));
+		memset(kmod_stats[kmod_stats_count].connect_counts, 0,
+		       sizeof(kmod_stats[kmod_stats_count].connect_counts));
+		memset(kmod_stats[kmod_stats_count].getname_counts, 0,
+		       sizeof(kmod_stats[kmod_stats_count].getname_counts));
+		memset(kmod_stats[kmod_stats_count].bucket_times, 0,
+		       sizeof(kmod_stats[kmod_stats_count].bucket_times));
 
+		kmod_stats[kmod_stats_count].bucket_times[idx] = now_min;
 		if (type == 1)
-			kmod_stats[kmod_stats_count].ioctl_count = 1;
+			kmod_stats[kmod_stats_count].ioctl_counts[idx] = 1;
 		else if (type == 2)
-			kmod_stats[kmod_stats_count].netlink_count = 1;
+			kmod_stats[kmod_stats_count].netlink_counts[idx] = 1;
 		else if (type == 3)
-			kmod_stats[kmod_stats_count].connect_count = 1;
+			kmod_stats[kmod_stats_count].connect_counts[idx] = 1;
 		else if (type == 4)
-			kmod_stats[kmod_stats_count].getname_count = 1;
+			kmod_stats[kmod_stats_count].getname_counts[idx] = 1;
 
 		kmod_stats_count++;
 	}
@@ -1866,14 +1893,46 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 	case VH_GET_STATS: {
 		struct vpnhide_kmod_stats_data *sdata;
 		unsigned long flags;
+		u64 now_min = ktime_get_real_seconds() / 60;
+		int i, b, active_count = 0;
+
 		sdata = kvzalloc(sizeof(*sdata), GFP_KERNEL);
 		if (!sdata)
 			return -ENOMEM;
 
 		spin_lock_irqsave(&kmod_stats_lock, flags);
-		sdata->count = kmod_stats_count;
-		memcpy(sdata->stats, kmod_stats,
-		       kmod_stats_count * sizeof(struct vpnhide_uid_stats));
+		for (i = 0; i < kmod_stats_count; i++) {
+			u32 ioctl_sum = 0, netlink_sum = 0, connect_sum = 0,
+			    getname_sum = 0;
+			for (b = 0; b < BUCKETS_COUNT; b++) {
+				if (now_min - kmod_stats[i].bucket_times[b] <
+				    BUCKETS_COUNT) {
+					ioctl_sum +=
+						kmod_stats[i].ioctl_counts[b];
+					netlink_sum +=
+						kmod_stats[i].netlink_counts[b];
+					connect_sum +=
+						kmod_stats[i].connect_counts[b];
+					getname_sum +=
+						kmod_stats[i].getname_counts[b];
+				}
+			}
+			if (ioctl_sum > 0 || netlink_sum > 0 ||
+			    connect_sum > 0 || getname_sum > 0) {
+				sdata->stats[active_count].uid =
+					kmod_stats[i].uid;
+				sdata->stats[active_count].ioctl_count =
+					ioctl_sum;
+				sdata->stats[active_count].netlink_count =
+					netlink_sum;
+				sdata->stats[active_count].connect_count =
+					connect_sum;
+				sdata->stats[active_count].getname_count =
+					getname_sum;
+				active_count++;
+			}
+		}
+		sdata->count = active_count;
 		spin_unlock_irqrestore(&kmod_stats_lock, flags);
 
 		if (copy_to_user((void __user *)arg, sdata, sizeof(*sdata))) {
@@ -1881,6 +1940,15 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 			return -EFAULT;
 		}
 		kvfree(sdata);
+		ret = 0;
+		break;
+	}
+	case VH_CLEAR_STATS: {
+		unsigned long flags;
+		spin_lock_irqsave(&kmod_stats_lock, flags);
+		kmod_stats_count = 0;
+		memset(kmod_stats, 0, sizeof(kmod_stats));
+		spin_unlock_irqrestore(&kmod_stats_lock, flags);
 		ret = 0;
 		break;
 	}
