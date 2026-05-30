@@ -1,3 +1,16 @@
+## v1.7.5
+
+### Added
+- Implement app settings backup and restore (.json) in diagnostics
+- Implement manual statistics reset and automatic 30-minute stats expiration on the dashboard
+
+### Changed
+- Completely transition to SQLite-only configuration, eliminating legacy text files
+- Exclude self package from dashboard Native targets count, and rename screen row toggles from Kernel/LSPosed to Native/Framework
+
+### Fixed
+- Fix cross-profile SecurityException during dashboard stats package resolution
+
 ## v1.7.0
 
 ### Added
@@ -52,8 +65,3 @@
 - Fix Java-level VPN interface detection leak by dynamically redirecting to physical network properties
 - Fix false-positive VPN detection in some apps (e.g. MTS)
 - Fix loopback port bypass via 0.0.0.0, loopback subnets, IPv6 wildcard, and IPv4-mapped IPv6 loopback addresses
-
-## v1.4.1
-
-### Fixed
-- rainbow hehe detection fix

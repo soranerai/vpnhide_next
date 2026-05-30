@@ -1,6 +1,46 @@
 {
   "history": [
     {
+      "version": "1.7.5",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Implement app settings backup and restore (.json) in diagnostics",
+              "ru": "Добавлен импорт/экспорт настроек (выбранных приложений) в формате .json на экран диагностики"
+            },
+            {
+              "en": "Implement manual statistics reset and automatic 30-minute stats expiration on the dashboard",
+              "ru": "Добавлена возможность ручного сброса статистики перехватов и автоматический сброс через 30 минут на дашборде"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Completely transition to SQLite-only configuration, eliminating legacy text files",
+              "ru": "Полный переход на хранение конфигурации исключительно в БД SQLite и удаление устаревших текстовых файлов"
+            },
+            {
+              "en": "Exclude self package from dashboard Native targets count, and rename screen row toggles from Kernel/LSPosed to Native/Framework",
+              "ru": "Исключено само приложение из подсчета Native целей на дашборде, и переименованы переключатели на экране защиты с Kernel/LSPosed на Native/Framework"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix cross-profile SecurityException during dashboard stats package resolution",
+              "ru": "Исправлен вылет SecurityException при получении имени пакета для статистики в мультипрофильной среде (Shelter)"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.7.0",
       "sections": [
         {

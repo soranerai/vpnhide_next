@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.7.5
+
+### Added
+- Implement app settings backup and restore (.json) in diagnostics
+- Implement manual statistics reset and automatic 30-minute stats expiration on the dashboard
+
+### Changed
+- Completely transition to SQLite-only configuration, eliminating legacy text files
+- Exclude self package from dashboard Native targets count, and rename screen row toggles from Kernel/LSPosed to Native/Framework
+
+### Fixed
+- Fix cross-profile SecurityException during dashboard stats package resolution
+
 ## v1.7.0
 
 ### Added
