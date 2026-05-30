@@ -155,6 +155,7 @@ internal data class AppInterceptStats(
     val nativeTotal: Int,
     val frameworkBreakdown: Map<String, Int>,
     val nativeBreakdown: Map<String, Int>,
+    val userId: Int = 0,
 )
 
 internal data class DashboardState(
@@ -1282,6 +1283,7 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
                 nativeTotal = nBreakdown.values.sum(),
                 frameworkBreakdown = fBreakdown,
                 nativeBreakdown = nBreakdown,
+                userId = uid / 100000,
             )
         }.filter { it.frameworkTotal > 0 || it.nativeTotal > 0 }
         .sortedByDescending { it.frameworkTotal + it.nativeTotal }

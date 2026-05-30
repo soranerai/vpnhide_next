@@ -1073,6 +1073,22 @@ private fun InterceptStatisticsSection(
                                         }
                                     }
                                 }
+
+                                if (appStat.userId != 0) {
+                                    Surface(
+                                        modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp),
+                                        shape = CircleShape,
+                                        color = Color(0xFF2196F3),
+                                        tonalElevation = 4.dp,
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Work,
+                                            contentDescription = null,
+                                            modifier = Modifier.padding(3.dp).size(12.dp),
+                                            tint = Color.White,
+                                        )
+                                    }
+                                }
                             }
 
                             Spacer(Modifier.width(12.dp))
@@ -1083,6 +1099,7 @@ private fun InterceptStatisticsSection(
                                     text = appStat.appLabel,
                                     fontWeight = FontWeight.Bold,
                                     style = MaterialTheme.typography.bodyMedium,
+                                    color = if (appStat.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
                                 )
                                 Text(
                                     text = appStat.packageName,
