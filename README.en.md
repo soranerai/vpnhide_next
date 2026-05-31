@@ -22,6 +22,15 @@
 *   **In-Kernel Port Blocking**: Loopback blocking is moved from iptables to `security_socket_connect` kernel hooks.
 *   **Surgical Mimicry in LSPosed**: VPN properties are substituted with active physical network properties in `system_server` rather than suspicious data blanking.
 *   **New Native Vectors**: Spoofing of `getsockname`, MTU/MSS clamping, setsockopt binds, and RPDB policy routing.
+*   **16+ Advanced Detection Vectors Covered**: Unlike the original (which only covers basic interface lists), Next natively blocks:
+    1. Local socket addresses (`getsockname` IPv4/IPv6 in `inet_getname`).
+    2. Direct binds to VPN interface (`SO_BINDTODEVICE` in `sock_setsockopt`).
+    3. Low MTU and TCP MSS clamping (`getsockopt` / `TCP_MAXSEG` / `IP_MTU`).
+    4. UDP Path MTU Discovery (`IP_MTU_DISCOVER` option / blocking `EMSGSIZE` leak).
+    5. Localhost SOCKS/HTTP port bind conflicts (`bind()` to 127.0.0.1 in `security_socket_bind`).
+    6. System policy routing database checks (`RTM_GETRULE` via Netlink).
+    7. Reactive Java network status changes (`NetworkCallback` in `system_server`).
+    8. Wi-Fi redaction issues (`WifiInfo` SSID/BSSID/IP restoration), Network NetID leaks, and other low-level channels.
 *   **Absolute Stealth**: Complete removal of ProcFS (files in `/proc/`) in favor of a secure char device `/dev/vpnhide_ctrl`.
 *   **Work Profiles Support**: Full native profile filtering and separation.
 *   **Modern DB Engine**: Driven by Room (SQLite) database with automatic inotify reload.
@@ -37,7 +46,8 @@
 | **Local Port Probing (Localhost / Loopback)** | External Magisk module `portshide` via `iptables` rules. | **Integrated Kernel Socket Connect Hook `security_socket_connect` (Hook 12)** | **No Network Footprint**: Port blocking (TCP/UDP, IPv4/IPv6, loopback subnets, wildcard addresses) is implemented inside the kernel. Leaves zero suspicious custom chains in `iptables`. |
 | **Local Socket Address (`getsockname`)** | Missed (leaks the local IP address of the VPN gateway). | **Kernel-level address spoofing via `inet_getname` / `inet6_getname` (Hook 13)** | **Socket Mimicry**: Returns the real physical IP address (synchronized by a daemon) instead of the VPN-tunnel address to the target application. |
 | **Direct Bind to VPN (`setsockopt` SO_BINDTODEVICE)** | Missed (application can bind sockets directly to the VPN interface). | **Bind Sabotage via `sock_setsockopt` (Hook 2b)** | **Anti-Bypassing**: Intercepts and sets `optlen = 0` for binds to VPN interfaces. Kernel treats it as "remove binding" and returns `0` (Success) to the application. |
-| **MTU/MSS Clamping Detection** | Missed (lower MTU/MSS sizes typical of VPN overhead like 1400 leak presence). | **MTU/MSS Spoofing in `getsockopt` / `sock_common_getsockopt` (Hook 2c / 1.6.1)** | **Packet Size Mimicry**: Overwrites `IP_MTU`/`IPV6_MTU` to 1500 and `TCP_MAXSEG` to 1460 to match standard physical networks. |
+| **MTU/MSS Clamping & UDP Path MTU** | Missed (lower MTU/MSS sizes or `EMSGSIZE` on larger UDP packets typical of VPN overhead leak presence). | **MTU/MSS & UDP PMTU Spoofing in `getsockopt` / `setsockopt` / `sock_common_getsockopt` (Hooks 2c, 2d, 1.6.1)** | **Packet Size & PMTUD Mimicry**: Overwrites `IP_MTU`/`IPV6_MTU` to 1500, `TCP_MAXSEG` to 1460, and intercepts `setsockopt` `IP_MTU_DISCOVER` (PMTU discovery) to block `EMSGSIZE` bottleneck anomalies. |
+| **Local Proxy Detection (`bind()` to localhost)** | Missed (target app can detect active proxy/VPN listeners by receiving `EADDRINUSE` errors on known ports). | **Kernel-level bind spoofing via `security_socket_bind` (Hook 14)** | **Proxy Listener Spoofing**: Intercepts `bind()` to `127.0.0.1` on known VPN/proxy ports (SOCKS, HTTP, DNS). If the port is already in use by a VPN/proxy daemon, it returns `0` (Success) instead of `EADDRINUSE`, hiding the proxy listener completely. |
 | **Routing Policy Database (RPDB / Netlink)** | Missed. | **Netlink `RTM_GETRULE` filtering (`fib_nl_fill_rule` / Hook 7b)** | Hidden policy routing database rules from target apps. |
 | **DNS Queries / DNS Leaks** | VPN DNS servers could leak inside LinkProperties. | **Precision DNS Filtering** | Completely removes VPN DNS entries, replacing them with physical DNS properties or Google Public DNS (8.8.8.8). |
 | **NetworkCallback Events** | Missed. | **Complete system-level suppression of VPN-specific callbacks** | Prevents targeted apps from receiving VPN status changes in AOSP network callbacks (e.g., `onAvailable`). |

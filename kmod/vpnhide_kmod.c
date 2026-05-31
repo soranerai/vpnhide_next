@@ -57,7 +57,30 @@
 #include "include/vpnhide.h"
 
 #ifndef CONFIG_ARM64
-#error "vpnhide_kmod currently supports only arm64 (handlers read regs->regs[N] directly)"
+#endif
+
+#ifndef IP_MTU_DISCOVER
+#define IP_MTU_DISCOVER 10
+#endif
+
+#ifndef IP_PMTUDISC_DONT
+#define IP_PMTUDISC_DONT 0
+#endif
+
+#ifndef IP_PMTUDISC_DO
+#define IP_PMTUDISC_DO 2
+#endif
+
+#ifndef IPV6_MTU_DISCOVER
+#define IPV6_MTU_DISCOVER 23
+#endif
+
+#ifndef IPV6_PMTUDISC_DONT
+#define IPV6_PMTUDISC_DONT 0
+#endif
+
+#ifndef IPV6_PMTUDISC_DO
+#define IPV6_PMTUDISC_DO 2
 #endif
 
 #define MODNAME "vpnhide"
@@ -81,7 +104,7 @@
 /* ------------------------------------------------------------------ */
 
 static bool debug_enabled;
-static unsigned int active_hooks_mask = 0xFFFF;
+static unsigned int active_hooks_mask = 0xFFFFFFFF;
 
 static inline bool is_hook_active(int index)
 {
@@ -542,71 +565,114 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 	if (!is_target_uid())
 		return 0;
 
-	if (level != SOL_SOCKET)
-		return 0;
-
 	if (is_kernel)
 		return 0;
 
-	if (optname == SO_BINDTODEVICE) {
-		if (optlen <= 0)
-			return 0;
-		if (optlen > IFNAMSIZ)
-			optlen = IFNAMSIZ;
+	if (level == SOL_SOCKET) {
+		if (optname == SO_BINDTODEVICE) {
+			if (optlen <= 0)
+				return 0;
+			if (optlen > IFNAMSIZ)
+				optlen = IFNAMSIZ;
 
-		if (copy_from_user(name, optval_ptr, optlen))
-			return 0;
-		name[optlen - 1] = '\0';
+			if (copy_from_user(name, optval_ptr, optlen))
+				return 0;
+			name[optlen - 1] = '\0';
 
-		if (is_vpn_ifname(name)) {
-			vpnhide_dbg(
-				"sock_setsockopt: spoofing SO_BINDTODEVICE to %s\n",
-				name);
-			regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
-		}
-	} else if (optname == SO_BINDTOIFINDEX) {
-		int ifindex;
-		struct net_device *dev;
-		struct net *net;
-		struct socket *sock;
-
-		if (optlen != sizeof(int))
-			return 0;
-		if (copy_from_user(&ifindex, optval_ptr, sizeof(int)))
-			return 0;
-
-		if (ifindex <= 0)
-			return 0;
-		sock = (struct socket *)regs->regs[0];
-		net = sock && sock->sk ?
-			      sock_net(sock->sk) :
-			      (current->nsproxy ? current->nsproxy->net_ns :
-						  &init_net);
-		rcu_read_lock();
-		dev = dev_get_by_index_rcu(net, ifindex);
-		if (dev && is_vpn_ifname(dev->name)) {
-			vpnhide_dbg(
-				"sock_setsockopt: spoofing SO_BINDTOIFINDEX %d (%s)\n",
-				ifindex, dev->name);
-			regs->regs[2] = SO_BINDTODEVICE;
-			regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
-		}
-		rcu_read_unlock();
-	} else if (optname == SO_MARK) {
-		int mark;
-		if (optlen != sizeof(int))
-			return 0;
-		if (copy_from_user(&mark, optval_ptr, sizeof(int)))
-			return 0;
-
-		if (mark != 0) {
-			int zero_mark = 0;
-			vpnhide_dbg(
-				"sock_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
-				mark);
-			if (copy_to_user(optval_ptr, &zero_mark, sizeof(int))) {
+			if (is_vpn_ifname(name)) {
 				vpnhide_dbg(
-					"sock_setsockopt: failed to overwrite SO_MARK with 0\n");
+					"sock_setsockopt: spoofing SO_BINDTODEVICE to %s\n",
+					name);
+				regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
+			}
+		} else if (optname == SO_BINDTOIFINDEX) {
+			int ifindex;
+			struct net_device *dev;
+			struct net *net;
+			struct socket *sock;
+
+			if (optlen != sizeof(int))
+				return 0;
+			if (copy_from_user(&ifindex, optval_ptr, sizeof(int)))
+				return 0;
+
+			if (ifindex <= 0)
+				return 0;
+			sock = (struct socket *)regs->regs[0];
+			net = sock && sock->sk ?
+				      sock_net(sock->sk) :
+				      (current->nsproxy ?
+					       current->nsproxy->net_ns :
+					       &init_net);
+			rcu_read_lock();
+			dev = dev_get_by_index_rcu(net, ifindex);
+			if (dev && is_vpn_ifname(dev->name)) {
+				vpnhide_dbg(
+					"sock_setsockopt: spoofing SO_BINDTOIFINDEX %d (%s)\n",
+					ifindex, dev->name);
+				regs->regs[2] = SO_BINDTODEVICE;
+				regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
+			}
+			rcu_read_unlock();
+		} else if (optname == SO_MARK) {
+			int mark;
+			if (optlen != sizeof(int))
+				return 0;
+			if (copy_from_user(&mark, optval_ptr, sizeof(int)))
+				return 0;
+
+			if (mark != 0) {
+				int zero_mark = 0;
+				vpnhide_dbg(
+					"sock_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
+					mark);
+				if (copy_to_user(optval_ptr, &zero_mark,
+						 sizeof(int))) {
+					vpnhide_dbg(
+						"sock_setsockopt: failed to overwrite SO_MARK with 0\n");
+				}
+			}
+		}
+	} else if (level == IPPROTO_IP) {
+		if (optname == IP_MTU_DISCOVER) {
+			int discover;
+			if (optlen == sizeof(int)) {
+				if (copy_from_user(&discover, optval_ptr,
+						   sizeof(int)) == 0) {
+					if (discover != IP_PMTUDISC_DONT) {
+						int fake_disc =
+							IP_PMTUDISC_DONT;
+						if (copy_to_user(optval_ptr,
+								 &fake_disc,
+								 sizeof(int)) ==
+						    0) {
+							vpnhide_dbg(
+								"sock_setsockopt: spoofed IP_MTU_DISCOVER from %d to IP_PMTUDISC_DONT\n",
+								discover);
+						}
+					}
+				}
+			}
+		}
+	} else if (level == IPPROTO_IPV6) {
+		if (optname == IPV6_MTU_DISCOVER) {
+			int discover;
+			if (optlen == sizeof(int)) {
+				if (copy_from_user(&discover, optval_ptr,
+						   sizeof(int)) == 0) {
+					if (discover != IPV6_PMTUDISC_DONT) {
+						int fake_disc =
+							IPV6_PMTUDISC_DONT;
+						if (copy_to_user(optval_ptr,
+								 &fake_disc,
+								 sizeof(int)) ==
+						    0) {
+							vpnhide_dbg(
+								"sock_setsockopt: spoofed IPV6_MTU_DISCOVER from %d to IPV6_PMTUDISC_DONT\n",
+								discover);
+						}
+					}
+				}
 			}
 		}
 	}
@@ -630,6 +696,14 @@ static struct kretprobe sock_setsockopt_krp = {
 	.data_size = sizeof(struct sock_setsockopt_data),
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
 	.kp.symbol_name = "sock_setsockopt",
+};
+
+static struct kretprobe sock_common_setsockopt_krp = {
+	.handler = sock_setsockopt_ret,
+	.entry_handler = sock_setsockopt_entry,
+	.data_size = sizeof(struct sock_setsockopt_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "sock_common_setsockopt",
 };
 
 /* ================================================================== */
@@ -721,6 +795,46 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 						vpnhide_dbg(
 							"sock_getsockopt_ret: spoofed IPV6_MTU from %d to 1500\n",
 							mtu);
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
+	if (data->level == IPPROTO_IP && data->optname == IP_MTU_DISCOVER) {
+		int discover = 0;
+		int len = 0;
+		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
+			if (copy_from_user(&discover, data->optval,
+					   sizeof(int)) == 0) {
+				if (discover == IP_PMTUDISC_DONT) {
+					int fake_disc = IP_PMTUDISC_DO;
+					if (copy_to_user(data->optval,
+							 &fake_disc,
+							 sizeof(int)) == 0) {
+						vpnhide_dbg(
+							"sock_getsockopt_ret: spoofed IP_MTU_DISCOVER to IP_PMTUDISC_DO\n");
+					}
+				}
+			}
+		}
+		return 0;
+	}
+
+	if (data->level == IPPROTO_IPV6 && data->optname == IPV6_MTU_DISCOVER) {
+		int discover = 0;
+		int len = 0;
+		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
+			if (copy_from_user(&discover, data->optval,
+					   sizeof(int)) == 0) {
+				if (discover == IPV6_PMTUDISC_DONT) {
+					int fake_disc = IPV6_PMTUDISC_DO;
+					if (copy_to_user(data->optval,
+							 &fake_disc,
+							 sizeof(int)) == 0) {
+						vpnhide_dbg(
+							"sock_getsockopt_ret: spoofed IPV6_MTU_DISCOVER to IPV6_PMTUDISC_DO\n");
 					}
 				}
 			}
@@ -2131,6 +2245,129 @@ static struct kretprobe socket_connect_krp = {
 };
 
 /* ================================================================== */
+/*  Hook 12b: security_socket_bind — Loopback Port Bind Spoofing      */
+/*  Android source path: security/security.c                          */
+/*                                                                    */
+/*  security_socket_bind(struct socket *sock,                         */
+/*                       struct sockaddr *address, int addrlen)       */
+/*  arm64: x1=address                                                 */
+/*                                                                    */
+/*  If a target app tries to bind to 127.0.0.1 or ::1 on a protected  */
+/*  port, we silently rewrite the port to 0 (ephemeral). The kernel   */
+/*  will choose a free random port, bind succeeds, and return 0.       */
+/* ================================================================== */
+
+static int socket_bind_entry(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
+{
+	struct socket *sock = (struct socket *)regs->regs[0];
+	struct sockaddr *addr = (struct sockaddr *)regs->regs[1];
+	uid_t uid = from_kuid(&init_user_ns, current_uid());
+	struct vpnhide_port_targets *t;
+	struct vpnhide_uid_port_rules *urules = NULL;
+	int i;
+
+	if (!is_hook_active(16))
+		return 1;
+
+	rcu_read_lock();
+	t = rcu_dereference(global_port_targets);
+	if (t) {
+		for (i = 0; i < t->count; i++) {
+			if (t->targets[i].uid == uid) {
+				urules = &t->targets[i];
+				break;
+			}
+		}
+	}
+
+	if (!urules || !addr || !sock || !sock->sk) {
+		rcu_read_unlock();
+		return 0;
+	}
+
+	if (addr->sa_family == AF_INET) {
+		struct sockaddr_in *sin = (struct sockaddr_in *)addr;
+		if (ipv4_is_loopback(sin->sin_addr.s_addr) ||
+		    sin->sin_addr.s_addr == htonl(INADDR_ANY)) {
+			unsigned short port = ntohs(sin->sin_port);
+			unsigned char proto =
+				(sock->sk->sk_type == SOCK_STREAM) ?
+					VH_PROTO_TCP :
+					VH_PROTO_UDP;
+
+			for (i = 0; i < urules->rule_count; i++) {
+				struct vpnhide_port_rule *r = &urules->rules[i];
+				if (port >= r->start_port &&
+				    port <= r->end_port) {
+					if (r->protocol == VH_PROTO_BOTH ||
+					    r->protocol == proto) {
+						sin->sin_port = 0;
+						vpnhide_dbg(
+							"socket_bind: redirected IPv4 port %u to 0 for uid=%u\n",
+							port, uid);
+						break;
+					}
+				}
+			}
+		}
+	} else if (addr->sa_family == AF_INET6) {
+		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)addr;
+		bool is_loopback = false;
+
+		if (ipv6_addr_loopback(&sin6->sin6_addr) ||
+		    ipv6_addr_any(&sin6->sin6_addr)) {
+			is_loopback = true;
+		} else if (ipv6_addr_v4mapped(&sin6->sin6_addr)) {
+			__be32 v4addr = sin6->sin6_addr.s6_addr32[3];
+			if (ipv4_is_loopback(v4addr) ||
+			    v4addr == htonl(INADDR_ANY)) {
+				is_loopback = true;
+			}
+		}
+
+		if (is_loopback) {
+			unsigned short port = ntohs(sin6->sin6_port);
+			unsigned char proto =
+				(sock->sk->sk_type == SOCK_STREAM) ?
+					VH_PROTO_TCP :
+					VH_PROTO_UDP;
+
+			for (i = 0; i < urules->rule_count; i++) {
+				struct vpnhide_port_rule *r = &urules->rules[i];
+				if (port >= r->start_port &&
+				    port <= r->end_port) {
+					if (r->protocol == VH_PROTO_BOTH ||
+					    r->protocol == proto) {
+						sin6->sin6_port = 0;
+						vpnhide_dbg(
+							"socket_bind: redirected IPv6 port %u to 0 for uid=%u\n",
+							port, uid);
+						break;
+					}
+				}
+			}
+		}
+	}
+	rcu_read_unlock();
+
+	return 0;
+}
+
+static int socket_bind_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	return 0;
+}
+
+static struct kretprobe socket_bind_krp = {
+	.handler = socket_bind_ret,
+	.entry_handler = socket_bind_entry,
+	.data_size = 0,
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "security_socket_bind",
+};
+
+/* ================================================================== */
 /*  Hook 13: inet_getname & inet6_getname — getsockname Spoofing      */
 /*  Android source path:                                              */
 /*    - inet_getname: net/ipv4/af_inet.c                              */
@@ -2317,9 +2554,11 @@ static struct kretprobe_reg probes[] = {
 	{ &rt6_fill_krp, "rt6_fill_node", false },
 	{ &rt_fill_krp, "rt_fill_info", false },
 	{ &sock_setsockopt_krp, "sock_setsockopt", false },
+	{ &sock_common_setsockopt_krp, "sock_common_setsockopt", false },
 	{ &sock_getsockopt_krp, "sock_getsockopt", false },
 	{ &sock_common_getsockopt_krp, "sock_common_getsockopt", false },
 	{ &socket_connect_krp, "security_socket_connect", false },
+	{ &socket_bind_krp, "security_socket_bind", false },
 	{ &inet_getname_krp, "inet_getname", false },
 	{ &inet6_getname_krp, "inet6_getname", false },
 };

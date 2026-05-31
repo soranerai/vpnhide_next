@@ -60,12 +60,13 @@ detect_previous_crash() {
                     elif echo "$crash_traces" | grep -q "socket_connect"; then hook_index=13
                     elif echo "$crash_traces" | grep -q "inet_getname"; then hook_index=14
                     elif echo "$crash_traces" | grep -q "inet6_getname"; then hook_index=15
+                    elif echo "$crash_traces" | grep -q "socket_bind"; then hook_index=16
                     fi
                     
                     if [ "$hook_index" -ge 0 ]; then
                         echo "crashed_hook=$hook_index" >> "$CRASH_FILE"
                         
-                        local current_mask=65535
+                        local current_mask=4294967295
                         if [ -f "$AUTODISABLE_FILE" ]; then
                             current_mask=$(cat "$AUTODISABLE_FILE")
                         fi

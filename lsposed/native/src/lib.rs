@@ -1218,6 +1218,76 @@ pub fn check_tcp_mss() -> CheckOutput {
 }
 
 #[uniffi::export]
+pub fn check_udp_pmtu() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create UDP socket: {}", last_os_error()));
+        }
+
+        // Set IP_MTU_DISCOVER to IP_PMTUDISC_DO (2) to force PMTU discovery (DF flag set)
+        let val: libc::c_int = 2; // IP_PMTUDISC_DO
+        let opt_ret = libc::setsockopt(
+            fd,
+            libc::IPPROTO_IP,
+            10, // IP_MTU_DISCOVER
+            std::ptr::from_ref(&val).cast(),
+            std::mem::size_of_val(&val) as libc::socklen_t,
+        );
+        if opt_ret < 0 {
+            let err_str = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("cannot set IP_MTU_DISCOVER: {err_str}"));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        let connect_ret = libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        );
+        if connect_ret < 0 {
+            let err_str = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("cannot connect UDP socket: {err_str}"));
+        }
+
+        // Send a 1472-byte payload. Combined with 20-byte IP header and 8-byte UDP header,
+        // it makes a 1500-byte IP packet.
+        let payload = vec![0u8; 1472];
+        let send_ret = libc::send(fd, payload.as_ptr().cast(), payload.len(), 0);
+
+        let err_no = if send_ret < 0 { last_os_errno() } else { 0 };
+        let err_str = if send_ret < 0 {
+            last_os_error()
+        } else {
+            String::new()
+        };
+
+        libc::close(fd);
+
+        if send_ret < 0 {
+            if err_no == libc::EMSGSIZE {
+                CheckOutput::fail(
+                    "UDP send 1500 bytes failed with EMSGSIZE — VPN tunnel MTU bottleneck detected"
+                        .to_string(),
+                )
+            } else {
+                CheckOutput::fail(format!("UDP send 1500 bytes failed with error: {err_str}"))
+            }
+        } else {
+            CheckOutput::pass(
+                "UDP send 1500 bytes succeeded — no PMTU bottleneck (physical interface spoofed/allowed)".to_string()
+            )
+        }
+    }
+}
+
+#[uniffi::export]
 pub fn check_netlink_getneigh() -> CheckOutput {
     let fd = match open_netlink() {
         Ok(fd) => fd,
@@ -1359,6 +1429,44 @@ pub fn check_netlink_getneigh() -> CheckOutput {
             ))
         } else {
             CheckOutput::pass(format!("neighbor table: {details}"))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_loopback_bind_conflict() -> CheckOutput {
+    unsafe {
+        let ports = [1080, 10808, 1082, 2080, 8080, 2081, 53];
+        let mut conflicts = Vec::new();
+        for &port in &ports {
+            let fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
+            if fd >= 0 {
+                let mut addr: libc::sockaddr_in = std::mem::zeroed();
+                addr.sin_family = libc::AF_INET as libc::sa_family_t;
+                addr.sin_port = (port as u16).to_be();
+                addr.sin_addr.s_addr = 0x0100007f; // 127.0.0.1
+
+                let ret = libc::bind(
+                    fd,
+                    std::ptr::from_ref(&addr).cast(),
+                    std::mem::size_of_val(&addr) as libc::socklen_t,
+                );
+                let err = last_os_errno();
+                libc::close(fd);
+
+                if ret < 0 && err == libc::EADDRINUSE {
+                    conflicts.push(port.to_string());
+                }
+            }
+        }
+
+        if conflicts.is_empty() {
+            CheckOutput::pass("no loopback port bind conflicts (checked SOCKS/HTTP/DNS ports)")
+        } else {
+            CheckOutput::fail(format!(
+                "loopback port bind conflict detected on ports [{}] (EADDRINUSE) — active proxy/VPN listener detected!",
+                conflicts.join(", ")
+            ))
         }
     }
 }

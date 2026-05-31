@@ -9,7 +9,6 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -53,6 +52,7 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
+import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
 import dev.soranerai.vpnhidenext.generated.IfaceLists
@@ -82,7 +82,8 @@ internal data class CheckResults(
     val native: List<CheckResult>,
     val java: List<CheckResult>,
 ) {
-    val all get() = native + java
+    val all
+        get() = native + java
 }
 
 internal suspend fun isVpnActive(): Boolean = withContext(Dispatchers.IO) { isVpnActiveBlocking() }
@@ -179,7 +180,12 @@ fun DiagnosticsScreen(
                 Column(modifier = Modifier.padding(16.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = if (isRussian) "⚠️ ОБНАРУЖЕН СБОЙ ЯДРА" else "⚠️ KERNEL CRASH DETECTED",
+                            text =
+                                if (isRussian) {
+                                    "⚠️ ОБНАРУЖЕН СБОЙ ЯДРА"
+                                } else {
+                                    "⚠️ KERNEL CRASH DETECTED"
+                                },
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onErrorContainer,
@@ -190,12 +196,14 @@ fun DiagnosticsScreen(
                     val hookName =
                         info.crashedHookIndex?.let { idx ->
                             ALL_HOOKS.getOrNull(idx)?.name ?: "Unknown"
-                        } ?: "Unknown"
+                        }
+                            ?: "Unknown"
 
                     val hookSymbol =
                         info.crashedHookIndex?.let { idx ->
                             ALL_HOOKS.getOrNull(idx)?.symbol ?: ""
-                        } ?: ""
+                        }
+                            ?: ""
 
                     Text(
                         text =
@@ -218,12 +226,11 @@ fun DiagnosticsScreen(
                             onClick = { showTraceDialog = true },
                             colors =
                                 ButtonDefaults.outlinedButtonColors(
-                                    contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                                    contentColor =
+                                        MaterialTheme.colorScheme.onErrorContainer,
                                 ),
                             modifier = Modifier.weight(1f),
-                        ) {
-                            Text(if (isRussian) "Подробнее" else "Details")
-                        }
+                        ) { Text(if (isRussian) "Подробнее" else "Details") }
 
                         Button(
                             onClick = {
@@ -282,9 +289,7 @@ fun DiagnosticsScreen(
                     }
                 },
                 confirmButton = {
-                    TextButton(onClick = { showTraceDialog = false }) {
-                        Text("OK")
-                    }
+                    TextButton(onClick = { showTraceDialog = false }) { Text("OK") }
                 },
             )
         }
@@ -316,9 +321,7 @@ fun DiagnosticsScreen(
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                     contentAlignment = Alignment.Center,
-                ) {
-                    CircularProgressIndicator()
-                }
+                ) { CircularProgressIndicator() }
             }
 
             diagState is DiagnosticsCache.State.Ready -> {
@@ -355,7 +358,10 @@ fun DiagnosticsScreen(
                         shape = RoundedCornerShape(12.dp),
                         colors =
                             CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                containerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                                        alpha = 0.5f,
+                                    ),
                             ),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -364,7 +370,10 @@ fun DiagnosticsScreen(
                                 CheckRow(check)
                                 if (index < r.native.lastIndex) {
                                     HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
+                                        color =
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.1f,
+                                            ),
                                         thickness = 1.dp,
                                         modifier = Modifier.padding(horizontal = 14.dp),
                                     )
@@ -381,7 +390,10 @@ fun DiagnosticsScreen(
                         shape = RoundedCornerShape(12.dp),
                         colors =
                             CardDefaults.elevatedCardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                containerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant.copy(
+                                        alpha = 0.5f,
+                                    ),
                             ),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -390,7 +402,10 @@ fun DiagnosticsScreen(
                                 CheckRow(check)
                                 if (index < r.java.lastIndex) {
                                     HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
+                                        color =
+                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                alpha = 0.1f,
+                                            ),
                                         thickness = 1.dp,
                                         modifier = Modifier.padding(horizontal = 14.dp),
                                     )
@@ -492,7 +507,8 @@ fun DiagnosticsScreen(
             }
         }
 
-        val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        val bottomNavPadding =
+            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
         Spacer(Modifier.height(bottomNavPadding + 100.dp))
     }
 }
@@ -505,7 +521,10 @@ private fun DebugLoggingCard() {
 
     ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -530,9 +549,7 @@ private fun DebugLoggingCard() {
                 checked = enabled,
                 onCheckedChange = { newValue ->
                     enabled = newValue
-                    scope.launch(Dispatchers.IO) {
-                        setDebugLoggingEnabled(context, newValue)
-                    }
+                    scope.launch(Dispatchers.IO) { setDebugLoggingEnabled(context, newValue) }
                 },
             )
         }
@@ -561,7 +578,9 @@ private fun LogcatRecordCard() {
         rememberLauncherForActivityResult(
             ActivityResultContracts.CreateDocument("text/plain"),
         ) { uri: Uri? ->
-            val src = (state as? LogcatRecorder.State.Stopped)?.lastFile ?: return@rememberLauncherForActivityResult
+            val src =
+                (state as? LogcatRecorder.State.Stopped)?.lastFile
+                    ?: return@rememberLauncherForActivityResult
             if (uri != null) {
                 context.contentResolver.openOutputStream(uri)?.use { out ->
                     src.inputStream().use { it.copyTo(out) }
@@ -571,7 +590,10 @@ private fun LogcatRecordCard() {
 
     ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -604,9 +626,7 @@ private fun LogcatRecordCard() {
                     )
                     Spacer(Modifier.height(12.dp))
                     Button(
-                        onClick = {
-                            scope.launch { LogcatRecorder.stop(context) }
-                        },
+                        onClick = { scope.launch { LogcatRecorder.stop(context) } },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(
@@ -680,9 +700,7 @@ private fun LogcatRecordCard() {
                         Spacer(Modifier.height(12.dp))
                     }
                     Button(
-                        onClick = {
-                            scope.launch { LogcatRecorder.start(context) }
-                        },
+                        onClick = { scope.launch { LogcatRecorder.start(context) } },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Icon(
@@ -805,7 +823,12 @@ private fun CheckRow(r: CheckResult) {
                 )
                 if (r.detail.isNotBlank()) {
                     Icon(
-                        imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                        imageVector =
+                            if (expanded) {
+                                Icons.Default.KeyboardArrowUp
+                            } else {
+                                Icons.Default.KeyboardArrowDown
+                            },
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
                         modifier = Modifier.size(16.dp),
@@ -848,45 +871,80 @@ internal fun runAllChecks(
 
     val native =
         listOf(
-            nativeCheck(res.getString(R.string.check_ioctl_flags)) { checkIoctlSiocgifflags() },
+            nativeCheck(res.getString(R.string.check_ioctl_flags)) {
+                checkIoctlSiocgifflags()
+            },
             nativeCheck(res.getString(R.string.check_ioctl_mtu)) { checkIoctlSiocgifmtu() },
-            nativeCheck(res.getString(R.string.check_ioctl_conf)) { checkIoctlSiocgifconf() },
+            nativeCheck(res.getString(R.string.check_ioctl_conf)) {
+                checkIoctlSiocgifconf()
+            },
             nativeCheck(res.getString(R.string.check_getifaddrs)) { checkGetifaddrs() },
-            nativeCheck(res.getString(R.string.check_netlink_getlink)) { checkNetlinkGetlink() },
-            nativeCheck(res.getString(R.string.check_netlink_getroute)) { checkNetlinkGetroute() },
-            nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) { checkNetlinkAnonymousRoute() },
+            nativeCheck(res.getString(R.string.check_netlink_getlink)) {
+                checkNetlinkGetlink()
+            },
+            nativeCheck(res.getString(R.string.check_netlink_getroute)) {
+                checkNetlinkGetroute()
+            },
+            nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) {
+                checkNetlinkAnonymousRoute()
+            },
             nativeCheck(res.getString(R.string.check_proc_route)) { checkProcNetRoute() },
-            nativeCheck(res.getString(R.string.check_proc_ipv6_route)) { checkProcNetIpv6Route() },
-            nativeCheck(res.getString(R.string.check_proc_if_inet6)) { checkProcNetIfInet6() },
+            nativeCheck(res.getString(R.string.check_proc_ipv6_route)) {
+                checkProcNetIpv6Route()
+            },
+            nativeCheck(res.getString(R.string.check_proc_if_inet6)) {
+                checkProcNetIfInet6()
+            },
             nativeCheck(res.getString(R.string.check_proc_tcp)) { checkProcNetTcp() },
             nativeCheck(res.getString(R.string.check_proc_tcp6)) { checkProcNetTcp6() },
             nativeCheck(res.getString(R.string.check_proc_udp)) { checkProcNetUdp() },
             nativeCheck(res.getString(R.string.check_proc_udp6)) { checkProcNetUdp6() },
             nativeCheck(res.getString(R.string.check_proc_dev)) { checkProcNetDev() },
-            nativeCheck(res.getString(R.string.check_proc_fib_trie)) { checkProcNetFibTrie() },
+            nativeCheck(res.getString(R.string.check_proc_fib_trie)) {
+                checkProcNetFibTrie()
+            },
             nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() },
             checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)),
             checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)),
-            nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() },
+            nativeCheck(res.getString(R.string.check_getsockopt_bind)) {
+                checkGetsockoptBind()
+            },
             nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() },
-            nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() },
-            nativeCheck(res.getString(R.string.check_netlink_getrule)) { checkNetlinkGetrule() },
+            nativeCheck(res.getString(R.string.check_getsockname_spoof)) {
+                checkGetsocknameSpoof()
+            },
+            nativeCheck(res.getString(R.string.check_netlink_getrule)) {
+                checkNetlinkGetrule()
+            },
             nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() },
-            nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() },
+            nativeCheck(res.getString(R.string.check_udp_pmtu)) { checkUdpPmtu() },
+            nativeCheck(res.getString(R.string.check_netlink_getneigh)) {
+                checkNetlinkGetneigh()
+            },
         )
 
     val java =
         listOf(
-            checkActiveNetworkCapabilities(cm, res.getString(R.string.check_active_capabilities)),
+            checkActiveNetworkCapabilities(
+                cm,
+                res.getString(R.string.check_active_capabilities),
+            ),
             checkActiveLinkProperties(cm, res.getString(R.string.check_active_properties)),
             checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)),
             checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)),
             checkProxyHost(res.getString(R.string.check_proxy_host)),
             checkNetworkCallback(cm, res.getString(R.string.check_network_callback)),
             checkUnderlyingNetworks(cm, res.getString(R.string.check_underlying_networks)),
-            checkVpnCallbackSuppression(cm, res.getString(R.string.check_vpn_callback_suppression)),
+            checkVpnCallbackSuppression(
+                cm,
+                res.getString(R.string.check_vpn_callback_suppression),
+            ),
             checkWifiInfoSpoof(context, res.getString(R.string.check_wifi_info_spoof)),
             checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)),
+            checkTrafficStatsDiscrepancy(
+                context,
+                res.getString(R.string.check_traffic_stats),
+            ),
         )
 
     val all = native + java
@@ -938,9 +996,15 @@ private fun checkActiveNetworkCapabilities(
     // Physical transports presence
     val physicalTransports = mutableListOf<String>()
     if (caps.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) physicalTransports.add("WIFI")
-    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) physicalTransports.add("CELLULAR")
-    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) physicalTransports.add("ETHERNET")
-    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) physicalTransports.add("BLUETOOTH")
+    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
+        physicalTransports.add("CELLULAR")
+    }
+    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
+        physicalTransports.add("ETHERNET")
+    }
+    if (caps.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)) {
+        physicalTransports.add("BLUETOOTH")
+    }
 
     // Signal strength
     val ss = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) caps.signalStrength else -1
@@ -955,7 +1019,12 @@ private fun checkActiveNetworkCapabilities(
     val suspiciousZeroBandwidth = !hasVpn && (down == 0 || up == 0)
 
     val passed =
-        !hasVpn && notVpn && !hasVpnTransportInfo && physicalTransports.isNotEmpty() && !suspiciousSignal && !suspiciousHighBandwidth &&
+        !hasVpn &&
+            notVpn &&
+            !hasVpnTransportInfo &&
+            physicalTransports.isNotEmpty() &&
+            !suspiciousSignal &&
+            !suspiciousHighBandwidth &&
             !suspiciousZeroBandwidth
 
     val detail =
@@ -974,15 +1043,17 @@ private fun checkActiveNetworkCapabilities(
                 if (hasVpnTransportInfo) issues.add("has VpnTransportInfo")
                 if (physicalTransports.isEmpty()) issues.add("no physical transports")
                 if (suspiciousSignal) issues.add("suspicious unspecified signal")
-                if (suspiciousHighBandwidth || suspiciousZeroBandwidth) issues.add("suspicious bandwidth values")
+                if (suspiciousHighBandwidth || suspiciousZeroBandwidth) {
+                    issues.add("suspicious bandwidth values")
+                }
                 append(" (issues: ${issues.joinToString(", ")})")
             }
         }
     return CheckResult(name, passed, detail)
 }
 
-private fun checkNetworkInterfaceEnum(name: String): CheckResult =
-    try {
+private fun checkNetworkInterfaceEnum(name: String): CheckResult {
+    return try {
         val ifaces =
             NetworkInterface.getNetworkInterfaces()
                 ?: return CheckResult(name, true, "returned null")
@@ -1002,6 +1073,7 @@ private fun checkNetworkInterfaceEnum(name: String): CheckResult =
     } catch (e: Exception) {
         CheckResult(name, false, "${e.message}")
     }
+}
 
 @Suppress("DEPRECATION")
 private fun checkAllNetworksVpn(
@@ -1012,7 +1084,8 @@ private fun checkAllNetworksVpn(
     if (networks.isEmpty()) return CheckResult(name, true, "no networks")
     val vpnNetworks =
         networks.filter { net ->
-            cm.getNetworkCapabilities(net)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) == true
+            cm.getNetworkCapabilities(net)?.hasTransport(NetworkCapabilities.TRANSPORT_VPN) ==
+                true
         }
     val detail =
         if (vpnNetworks.isEmpty()) {
@@ -1043,7 +1116,12 @@ private fun checkActiveLinkProperties(
     val dnsCount = lp.dnsServers.size
     val hasDefaultRoute = routes.any { route -> route.destination?.prefixLength == 0 }
 
-    val passed = !isVpnIface && vpnRoutes.isEmpty() && lp.interfaceName != null && dnsCount > 0 && hasDefaultRoute
+    val passed =
+        !isVpnIface &&
+            vpnRoutes.isEmpty() &&
+            lp.interfaceName != null &&
+            dnsCount > 0 &&
+            hasDefaultRoute
 
     val detail =
         buildString {
@@ -1271,7 +1349,7 @@ private fun checkUnderlyingNetworks(
         if (passed) {
             "underlyingNetworks is null or empty ($methodUsed)"
         } else {
-            "leaked underlyingNetworks=[${list.joinToString()}], method=$methodUsed"
+            "leaked underlyingNetworks=[${list?.joinToString()}], method=$methodUsed"
         }
     return CheckResult(name, passed, detail)
 }
@@ -1322,7 +1400,8 @@ private fun checkWifiInfoSpoof(
     name: String,
 ): CheckResult {
     val wm =
-        context.getSystemService(android.content.Context.WIFI_SERVICE) as? android.net.wifi.WifiManager
+        context.getSystemService(android.content.Context.WIFI_SERVICE) as?
+            android.net.wifi.WifiManager
             ?: return CheckResult(name, true, "WifiManager not available")
     val wifiInfo =
         try {
@@ -1378,7 +1457,11 @@ private fun checkGetNetworkForType(
 ): CheckResult {
     try {
         // ConnectivityManager.TYPE_VPN is 17
-        val method = ConnectivityManager::class.java.getMethod("getNetworkForType", java.lang.Integer.TYPE)
+        val method =
+            ConnectivityManager::class.java.getMethod(
+                "getNetworkForType",
+                java.lang.Integer.TYPE,
+            )
         val net = method.invoke(cm, 17) as? android.net.Network
 
         val passed = net == null
@@ -1391,6 +1474,68 @@ private fun checkGetNetworkForType(
         return CheckResult(name, passed, detail)
     } catch (e: Exception) {
         return CheckResult(name, true, "not supported or error: ${e.message}")
+    }
+}
+
+private fun checkTrafficStatsDiscrepancy(
+    context: android.content.Context,
+    name: String,
+): CheckResult {
+    try {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) {
+            return CheckResult(name, true, "TrafficStats per-interface queries require Android 12+ (API 31+)")
+        }
+        val systemTx = android.net.TrafficStats.getTotalTxBytes()
+        val systemRx = android.net.TrafficStats.getTotalRxBytes()
+        if (systemTx <= 0 || systemRx <= 0) {
+            return CheckResult(name, true, "system traffic stats are zero or unavailable")
+        }
+
+        var visibleTx = 0L
+        var visibleRx = 0L
+        val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
+        val names = mutableListOf<String>()
+        if (ifaces != null) {
+            for (iface in ifaces) {
+                val t = android.net.TrafficStats.getTxBytes(iface.name)
+                val r = android.net.TrafficStats.getRxBytes(iface.name)
+                if (t > 0) visibleTx += t
+                if (r > 0) visibleRx += r
+                names.add("${iface.name}(tx=${t / 1024}K)")
+            }
+        }
+
+        val txDiff = systemTx - visibleTx
+        val rxDiff = systemRx - visibleRx
+
+        val threshold = 5 * 1024 * 1024L // 5 MB
+        val txSuspicious =
+            txDiff > threshold &&
+                (systemTx.toDouble() / visibleTx.coerceAtLeast(1L).toDouble() > 1.5)
+        val rxSuspicious =
+            rxDiff > threshold &&
+                (systemRx.toDouble() / visibleRx.coerceAtLeast(1L).toDouble() > 1.5)
+
+        val detail =
+            buildString {
+                append("System: TX=${systemTx / 1024}K, RX=${systemRx / 1024}K. ")
+                append("Visible sum: TX=${visibleTx / 1024}K, RX=${visibleRx / 1024}K. ")
+                append("Diff: TX=${txDiff / 1024}K, RX=${rxDiff / 1024}K. ")
+                append("Visible ifaces: [${names.joinToString()}]")
+            }
+
+        val passed = !txSuspicious && !rxSuspicious
+        return CheckResult(
+            name,
+            passed,
+            if (passed) {
+                "$detail (clean)"
+            } else {
+                "$detail (discrepancy detected: hidden interface routing traffic!)"
+            },
+        )
+    } catch (e: Exception) {
+        return CheckResult(name, false, "error checking traffic stats: ${e.message}")
     }
 }
 
@@ -1500,7 +1645,10 @@ private suspend fun exportDebugZip(
                     if (exitKsuNext == 0 && ksuNextVer.isNotBlank()) {
                         appendLine("KernelSU-Next: ${ksuNextVer.trim()}")
                     }
-                    if (magiskVer.isBlank() && ksuVer.isBlank() && (exitKsuNext != 0 || ksuNextVer.isBlank())) {
+                    if (magiskVer.isBlank() &&
+                        ksuVer.isBlank() &&
+                        (exitKsuNext != 0 || ksuNextVer.isBlank())
+                    ) {
                         appendLine("(unknown root manager)")
                     }
                 }
@@ -1510,12 +1658,17 @@ private suspend fun exportDebugZip(
             val moduleInfo =
                 buildString {
                     appendLine("=== Kernel module (kmod) ===")
-                    val (_, kmodProp) = suExec("cat /data/adb/modules/vpnhide_kmod/module.prop 2>/dev/null")
+                    val (_, kmodProp) =
+                        suExec("cat /data/adb/modules/vpnhide_kmod/module.prop 2>/dev/null")
                     appendLine(kmodProp.ifEmpty { "Not installed" })
                     appendLine()
                     appendLine("=== kmod load_status (boot-time diagnostics) ===")
                     val (_, loadStatus) = suExec("cat $KMOD_LOAD_STATUS_FILE 2>/dev/null")
-                    appendLine(loadStatus.ifEmpty { "(not available — module never ran post-fs-data.sh this boot)" })
+                    appendLine(
+                        loadStatus.ifEmpty {
+                            "(not available — module never ran post-fs-data.sh this boot)"
+                        },
+                    )
                     appendLine()
                     appendLine("=== Current boot_id ===")
                     val (_, curBootId) = suExec("cat /proc/sys/kernel/random/boot_id 2>/dev/null")
@@ -1526,7 +1679,8 @@ private suspend fun exportDebugZip(
                     appendLine(loadDmesg.ifEmpty { "(not captured)" })
                     appendLine()
                     appendLine("=== Registered kretprobes ===")
-                    val (_, kprobes) = suExec("cat /sys/kernel/debug/kprobes/list 2>/dev/null | grep vpnhide")
+                    val (_, kprobes) =
+                        suExec("cat /sys/kernel/debug/kprobes/list 2>/dev/null | grep vpnhide")
                     appendLine(kprobes.ifEmpty { "(not available or no vpnhide probes)" })
                     appendLine()
                     appendLine("=== Kernel symbols (hooked functions) ===")
@@ -1540,7 +1694,8 @@ private suspend fun exportDebugZip(
                             "fib_route_seq_show",
                         )
                     for (sym in symbols) {
-                        val (_, line) = suExec("cat /proc/kallsyms 2>/dev/null | grep -w $sym | head -3")
+                        val (_, line) =
+                            suExec("cat /proc/kallsyms 2>/dev/null | grep -w $sym | head -3")
                         appendLine("$sym: ${line.trim().ifEmpty { "(not found)" }}")
                     }
                     appendLine()
@@ -1578,7 +1733,12 @@ private suspend fun exportDebugZip(
                         appendLine("(empty)")
                     } else {
                         kmodTargets.forEach { app ->
-                            val entry = if (app.userId == 0) app.packageName else "${app.packageName}:${app.userId}"
+                            val entry =
+                                if (app.userId == 0) {
+                                    app.packageName
+                                } else {
+                                    "${app.packageName}:${app.userId}"
+                                }
                             appendLine("$entry (uid: ${app.uid})")
                         }
                     }
@@ -1588,7 +1748,12 @@ private suspend fun exportDebugZip(
                         appendLine("(empty)")
                     } else {
                         lsposedTargets.forEach { app ->
-                            val entry = if (app.userId == 0) app.packageName else "${app.packageName}:${app.userId}"
+                            val entry =
+                                if (app.userId == 0) {
+                                    app.packageName
+                                } else {
+                                    "${app.packageName}:${app.userId}"
+                                }
                             appendLine("$entry (uid: ${app.uid})")
                         }
                     }
@@ -1622,7 +1787,17 @@ private suspend fun exportDebugZip(
             files["interfaces.txt"] = ifacesText
 
             // /proc/net files
-            val procFiles = listOf("route", "ipv6_route", "if_inet6", "tcp", "tcp6", "udp", "udp6", "dev")
+            val procFiles =
+                listOf(
+                    "route",
+                    "ipv6_route",
+                    "if_inet6",
+                    "tcp",
+                    "tcp6",
+                    "udp",
+                    "udp6",
+                    "dev",
+                )
             val procNet =
                 buildString {
                     for (pf in procFiles) {
@@ -1639,16 +1814,18 @@ private suspend fun exportDebugZip(
             val logcat =
                 try {
                     val proc =
-                        Runtime.getRuntime().exec(
-                            arrayOf(
-                                "logcat",
-                                "-d",
-                                "-s",
-                                "VPNHideTest:*",
-                                "VpnHide:*",
-                                "VpnHide-Dashboard:*",
-                            ),
-                        )
+                        Runtime
+                            .getRuntime()
+                            .exec(
+                                arrayOf(
+                                    "logcat",
+                                    "-d",
+                                    "-s",
+                                    "VPNHideTest:*",
+                                    "VpnHide:*",
+                                    "VpnHide-Dashboard:*",
+                                ),
+                            )
                     val output = proc.inputStream.bufferedReader().readText()
                     proc.waitFor()
                     proc.destroy()
@@ -1688,7 +1865,10 @@ private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
             .language == "ru"
     ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
@@ -1707,9 +1887,7 @@ private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
             Button(
                 onClick = onOpenHookTesting,
                 modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(stringResource(R.string.diag_hook_isolation_configure_btn))
-            }
+            ) { Text(stringResource(R.string.diag_hook_isolation_configure_btn)) }
         }
     }
 }
@@ -1733,9 +1911,19 @@ private fun BackupRestoreCard() {
                         context.contentResolver.openOutputStream(uri)?.use { out ->
                             out.write(jsonStr.toByteArray())
                         }
-                        Toast.makeText(context, context.getString(R.string.export_success), Toast.LENGTH_SHORT).show()
+                        Toast
+                            .makeText(
+                                context,
+                                context.getString(R.string.export_success),
+                                Toast.LENGTH_SHORT,
+                            ).show()
                     } catch (e: Exception) {
-                        Toast.makeText(context, context.getString(R.string.export_failed, e.message), Toast.LENGTH_LONG).show()
+                        Toast
+                            .makeText(
+                                context,
+                                context.getString(R.string.export_failed, e.message),
+                                Toast.LENGTH_LONG,
+                            ).show()
                     } finally {
                         exporting = false
                     }
@@ -1754,17 +1942,33 @@ private fun BackupRestoreCard() {
                         val jsonStr =
                             context.contentResolver.openInputStream(uri)?.use { input ->
                                 input.bufferedReader().readText()
-                            } ?: throw Exception("Failed to read input stream")
+                            }
+                                ?: throw Exception("Failed to read input stream")
 
                         val result = SettingsBackupHelper.importFromString(context, jsonStr)
                         if (result.isSuccess) {
-                            Toast.makeText(context, context.getString(R.string.import_success), Toast.LENGTH_SHORT).show()
+                            Toast
+                                .makeText(
+                                    context,
+                                    context.getString(R.string.import_success),
+                                    Toast.LENGTH_SHORT,
+                                ).show()
                         } else {
                             val errMsg = result.exceptionOrNull()?.message ?: "Unknown error"
-                            Toast.makeText(context, context.getString(R.string.import_failed, errMsg), Toast.LENGTH_LONG).show()
+                            Toast
+                                .makeText(
+                                    context,
+                                    context.getString(R.string.import_failed, errMsg),
+                                    Toast.LENGTH_LONG,
+                                ).show()
                         }
                     } catch (e: Exception) {
-                        Toast.makeText(context, context.getString(R.string.import_failed, e.message), Toast.LENGTH_LONG).show()
+                        Toast
+                            .makeText(
+                                context,
+                                context.getString(R.string.import_failed, e.message),
+                                Toast.LENGTH_LONG,
+                            ).show()
                     } finally {
                         importing = false
                     }
@@ -1774,7 +1978,10 @@ private fun BackupRestoreCard() {
 
     ElevatedCard(
         shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+        colors =
+            CardDefaults.elevatedCardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            ),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
@@ -1795,7 +2002,12 @@ private fun BackupRestoreCard() {
             ) {
                 OutlinedButton(
                     onClick = {
-                        val timestamp = java.text.SimpleDateFormat("yyyyMMdd_HHmmss", java.util.Locale.US).format(java.util.Date())
+                        val timestamp =
+                            java.text
+                                .SimpleDateFormat(
+                                    "yyyyMMdd_HHmmss",
+                                    java.util.Locale.US,
+                                ).format(java.util.Date())
                         exportLauncher.launch("vpnhide_backup_$timestamp.json")
                     },
                     enabled = !exporting && !importing,
@@ -1824,7 +2036,9 @@ private fun BackupRestoreCard() {
 
                 Button(
                     onClick = {
-                        importLauncher.launch(arrayOf("application/json", "application/octet-stream"))
+                        importLauncher.launch(
+                            arrayOf("application/json", "application/octet-stream"),
+                        )
                     },
                     enabled = !exporting && !importing,
                     contentPadding = PaddingValues(horizontal = 12.dp),

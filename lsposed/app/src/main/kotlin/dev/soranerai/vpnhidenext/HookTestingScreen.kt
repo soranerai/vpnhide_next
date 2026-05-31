@@ -198,6 +198,16 @@ val ALL_HOOKS =
                 "Spoofs getsockname/getpeername for IPv6 sockets to hide loopback addresses of VPN observers."
             },
         ),
+        HookInfo(
+            16,
+            "security_socket_bind",
+            "security_socket_bind",
+            if (isRussian) {
+                "Перехватывает bind() на loopback: перенаправляет порты на случайные свободные порты (0) для обхода проверок занятости."
+            } else {
+                "Intercepts loopback bind() calls: redirects protected ports to random free ephemeral ports (0) to bypass conflict checks."
+            },
+        ),
     )
 
 val ALL_JAVA_HOOKS =
@@ -266,7 +276,7 @@ fun HookTestingScreen(
 
     fun refreshJavaMask() {
         scope.launch(Dispatchers.IO) {
-            val (exit, stdout) = suExec("cat /data/system/vpnhide/vpnhide_active_java_hooks 2>/dev/null || echo 63")
+            val (exit, stdout) = suExec("cat /data/system/vpnhide/vpnhide_active_java_hooks 2>/dev/null || echo 4294967295")
             if (exit == 0) {
                 val parsed = stdout.trim().toUIntOrNull()
                 if (parsed != null) {
@@ -447,8 +457,8 @@ fun HookTestingScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Button(
-                                        onClick = { applyNewMask(0xFFFFu) },
-                                        enabled = !applyingState && currentMask != 0xFFFFu,
+                                        onClick = { applyNewMask(0xFFFFFFFFu) },
+                                        enabled = !applyingState && currentMask != 0xFFFFFFFFu,
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         modifier = Modifier.weight(1f),
                                     ) {
@@ -641,8 +651,8 @@ fun HookTestingScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Button(
-                                        onClick = { applyNewJavaMask(0x3Fu) },
-                                        enabled = !applyingJavaState && currentJavaMask != 0x3Fu,
+                                        onClick = { applyNewJavaMask(0xFFFFFFFFu) },
+                                        enabled = !applyingJavaState && currentJavaMask != 0xFFFFFFFFu,
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         modifier = Modifier.weight(1f),
                                     ) {
