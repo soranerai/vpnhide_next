@@ -19,14 +19,20 @@ import java.util.concurrent.atomic.AtomicBoolean
 /**
  * VpnHide — hide VPN presence from apps via system_server Binder hooks.
  *
- * This implementation is a symbiosis of the original VpnHide writeToParcel hooks
- * and ConnectivityService hooks:
+ * This implementation is a symbiosis of the original VpnHide writeToParcel hooks and
+ * ConnectivityService hooks:
  * 1. ThreadLocal Context: Tracks the target UID during system_server push callbacks
+ * ```
  *    (callCallbackForRequest) so writeToParcel hooks can sanitize data dispatched asynchronously.
+ * ```
  * 2. Request Poisoning: Strips NOT_VPN and TRANSPORT_VPN from requests so they match
+ * ```
  *    the VPN network, avoiding timeouts when the physical network is blocked/unreachable.
+ * ```
  * 3. writeToParcel hooks: Synchronously strips VPN properties and adds NOT_VPN, ensuring
+ * ```
  *    the app receives clean network data for both synchronous and asynchronous calls.
+ * ```
  */
 class HookEntry : IXposedHookLoadPackage {
     private val hookInstalled = AtomicBoolean(false)
@@ -66,19 +72,14 @@ class HookEntry : IXposedHookLoadPackage {
         if (targetUid == selfUid) return
 
         val appStats =
-            hookStats.computeIfAbsent(targetUid) {
-                java.util.concurrent.ConcurrentHashMap()
-            }
-        appStats
-            .computeIfAbsent(hookName) {
-                RollingCounter()
-            }.increment()
+            hookStats.computeIfAbsent(targetUid) { java.util.concurrent.ConcurrentHashMap() }
+        appStats.computeIfAbsent(hookName) { RollingCounter() }.increment()
     }
 
     /**
-     * Dumps the in-memory hookStats map to STATS_FILE exactly once.
-     * Called only when the manager app signals via STATS_REQ_FILE.
-     * No continuous disk I/O — all stats live in the ConcurrentHashMap.
+     * Dumps the in-memory hookStats map to STATS_FILE exactly once. Called only when the manager
+     * app signals via STATS_REQ_FILE. No continuous disk I/O — all stats live in the
+     * ConcurrentHashMap.
      */
     private fun dumpHookStats() {
         try {
@@ -104,44 +105,47 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     /**
-     * Polls STATS_REQ_FILE every 500 ms from a daemon thread.
-     * When the manager app creates that file, system_server deletes it and
-     * dumps hookStats to STATS_FILE exactly once.
+     * Polls STATS_REQ_FILE every 500 ms from a daemon thread. When the manager app creates that
+     * file, system_server deletes it and dumps hookStats to STATS_FILE exactly once.
      *
-     * A dedicated thread is used instead of FileObserver to avoid inotify
-     * edge cases (e.g. 'touch' on an existing file only emits ATTRIB, not
-     * CREATE/CLOSE_WRITE) and SELinux restrictions on cross-UID inotify
-     * events that can silently prevent the callback from firing.
+     * A dedicated thread is used instead of FileObserver to avoid inotify edge cases (e.g. 'touch'
+     * on an existing file only emits ATTRIB, not CREATE/CLOSE_WRITE) and SELinux restrictions on
+     * cross-UID inotify events that can silently prevent the callback from firing.
      */
     private fun watchStatsRequest() {
         val thread =
-            Thread({
-                while (true) {
-                    try {
-                        val reqFile = File(STATS_REQ_FILE)
-                        if (reqFile.exists()) {
-                            val content = runCatching { reqFile.readText().trim() }.getOrDefault("")
-                            try {
-                                reqFile.delete()
-                            } catch (_: Throwable) {
+            Thread(
+                {
+                    while (true) {
+                        try {
+                            val reqFile = File(STATS_REQ_FILE)
+                            if (reqFile.exists()) {
+                                val content =
+                                    runCatching { reqFile.readText().trim() }
+                                        .getOrDefault("")
+                                try {
+                                    reqFile.delete()
+                                } catch (_: Throwable) {
+                                }
+                                if (content == "clear" || content == "reset") {
+                                    hookStats.clear()
+                                    HookLog.i("VpnHide: cleared in-memory hook stats")
+                                } else {
+                                    dumpHookStats()
+                                }
                             }
-                            if (content == "clear" || content == "reset") {
-                                hookStats.clear()
-                                HookLog.i("VpnHide: cleared in-memory hook stats")
-                            } else {
-                                dumpHookStats()
-                            }
+                        } catch (t: Throwable) {
+                            HookLog.e("VpnHide: stats watcher error: ${t.message}")
                         }
-                    } catch (t: Throwable) {
-                        HookLog.e("VpnHide: stats watcher error: ${t.message}")
+                        try {
+                            Thread.sleep(500)
+                        } catch (_: InterruptedException) {
+                            break
+                        }
                     }
-                    try {
-                        Thread.sleep(500)
-                    } catch (_: InterruptedException) {
-                        break
-                    }
-                }
-            }, "VpnHideStatsWatcher")
+                },
+                "VpnHideStatsWatcher",
+            )
         thread.isDaemon = true
         thread.start()
         HookLog.i("VpnHide: stats request watcher started (polling every 500 ms)")
@@ -183,7 +187,8 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             @Suppress("UNCHECKED_CAST")
-            val routesField = XposedHelpers.getObjectField(copy, "mRoutes") as? MutableList<RouteInfo>
+            val routesField =
+                XposedHelpers.getObjectField(copy, "mRoutes") as? MutableList<RouteInfo>
             if (routesField != null) {
                 val newRoutes = ArrayList<RouteInfo>()
                 for (route in routesField) {
@@ -217,13 +222,15 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             @Suppress("UNCHECKED_CAST")
-            val linkAddresses = XposedHelpers.getObjectField(copy, "mLinkAddresses") as? MutableList<Any>
+            val linkAddresses =
+                XposedHelpers.getObjectField(copy, "mLinkAddresses") as? MutableList<Any>
             if (linkAddresses != null) {
                 val cs = getConnectivityService()
                 val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
                 if (physicalLp != null) {
                     @Suppress("UNCHECKED_CAST")
-                    val physicalAddresses = XposedHelpers.getObjectField(physicalLp, "mLinkAddresses") as? List<Any>
+                    val physicalAddresses =
+                        XposedHelpers.getObjectField(physicalLp, "mLinkAddresses") as? List<Any>
                     if (physicalAddresses != null) {
                         linkAddresses.clear()
                         linkAddresses.addAll(physicalAddresses)
@@ -240,20 +247,26 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             @Suppress("UNCHECKED_CAST")
-            val stacked = XposedHelpers.getObjectField(copy, "mStackedLinks") as? MutableMap<String, LinkProperties>
+            val stacked =
+                XposedHelpers.getObjectField(copy, "mStackedLinks") as?
+                    MutableMap<String, LinkProperties>
             if (stacked != null && stacked.isNotEmpty()) {
                 val filtered = LinkedHashMap<String, LinkProperties>()
                 for ((key, value) in stacked) {
                     val stackedCopy =
                         try {
-                            val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
+                            val ctor =
+                                LinkProperties::class.java.getDeclaredConstructor(
+                                    LinkProperties::class.java,
+                                )
                             ctor.isAccessible = true
                             ctor.newInstance(value) as LinkProperties
                         } catch (_: Throwable) {
                             value
                         }
                     val stackedModified = sanitizeLinkProperties(stackedCopy)
-                    val stackedIface = XposedHelpers.getObjectField(stackedCopy, "mIfaceName") as? String
+                    val stackedIface =
+                        XposedHelpers.getObjectField(stackedCopy, "mIfaceName") as? String
                     if (stackedIface == null && stackedCopy.routes.isEmpty()) {
                         if (stackedModified || isVpnInterfaceName(key)) {
                             modified = true
@@ -283,7 +296,8 @@ class HookEntry : IXposedHookLoadPackage {
                 val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
                 if (physicalLp != null) {
                     @Suppress("UNCHECKED_CAST")
-                    val physicalDnses = XposedHelpers.getObjectField(physicalLp, "mDnses") as? Collection<Any>
+                    val physicalDnses =
+                        XposedHelpers.getObjectField(physicalLp, "mDnses") as? Collection<Any>
                     if (physicalDnses != null) {
                         dnsField.clear()
                         dnsField.addAll(physicalDnses)
@@ -307,7 +321,12 @@ class HookEntry : IXposedHookLoadPackage {
             if (!domains.isNullOrEmpty()) {
                 val cs = getConnectivityService()
                 val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
-                val physicalDomains = if (physicalLp != null) XposedHelpers.getObjectField(physicalLp, "mDomains") as? String else null
+                val physicalDomains =
+                    if (physicalLp != null) {
+                        XposedHelpers.getObjectField(physicalLp, "mDomains") as? String
+                    } else {
+                        null
+                    }
                 XposedHelpers.setObjectField(copy, "mDomains", physicalDomains ?: "")
                 modified = true
             }
@@ -319,7 +338,8 @@ class HookEntry : IXposedHookLoadPackage {
         try {
             val cs = getConnectivityService()
             val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
-            val targetMtu = if (physicalLp != null) XposedHelpers.getIntField(physicalLp, "mMtu") else 1500
+            val targetMtu =
+                if (physicalLp != null) XposedHelpers.getIntField(physicalLp, "mMtu") else 1500
             val currentMtu = XposedHelpers.getIntField(copy, "mMtu")
             if (currentMtu < targetMtu) {
                 XposedHelpers.setIntField(copy, "mMtu", targetMtu)
@@ -339,7 +359,8 @@ class HookEntry : IXposedHookLoadPackage {
         val token = android.os.Binder.clearCallingIdentity()
         try {
             return try {
-                XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as? NetworkCapabilities
+                XposedHelpers.callMethod(cs, "getNetworkCapabilities", net, "android", null) as?
+                    NetworkCapabilities
             } catch (_: Throwable) {
                 XposedHelpers.callMethod(cs, "getNetworkCapabilities", net) as? NetworkCapabilities
             }
@@ -419,7 +440,9 @@ class HookEntry : IXposedHookLoadPackage {
         try {
             val bestNet = getBestPhysicalNetwork(cs)
             if (bestNet != null) {
-                val lp = XposedHelpers.callMethod(cs, "getLinkProperties", bestNet) as? LinkProperties
+                val lp =
+                    XposedHelpers.callMethod(cs, "getLinkProperties", bestNet) as?
+                        LinkProperties
                 if (lp != null) return lp
             }
         } catch (t: Throwable) {
@@ -459,7 +482,9 @@ class HookEntry : IXposedHookLoadPackage {
         if (cached != null) return cached
         try {
             val smClass = XposedHelpers.findClass("android.os.ServiceManager", null)
-            val binder = XposedHelpers.callStaticMethod(smClass, "getService", "connectivity") ?: return null
+            val binder =
+                XposedHelpers.callStaticMethod(smClass, "getService", "connectivity")
+                    ?: return null
             val className = binder.javaClass.name
             if (className.contains("ConnectivityService")) {
                 if (className.endsWith("ConnectivityService")) {
@@ -525,9 +550,25 @@ class HookEntry : IXposedHookLoadPackage {
         }
 
     private fun loadTargetUids(): Set<Int> {
-        systemServerTargetUids?.let { return it }
+        val pm = getIPackageManager()
+        if (selfUid == -1 && pm != null) {
+            synchronized(uidLock) {
+                if (selfUid == -1) {
+                    selfUid = getPackageUid(pm, "dev.soranerai.vpnhidenext", 0)
+                    if (selfUid != -1) {
+                        systemServerTargetUids = null
+                    }
+                }
+            }
+        }
+
+        systemServerTargetUids?.let {
+            return it
+        }
         synchronized(uidLock) {
-            systemServerTargetUids?.let { return it }
+            systemServerTargetUids?.let {
+                return it
+            }
             val uids = mutableSetOf<Int>()
             try {
                 val dbFile = File(DB_PATH)
@@ -536,32 +577,56 @@ class HookEntry : IXposedHookLoadPackage {
                         .openDatabase(
                             dbFile.absolutePath,
                             null,
-                            SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                            SQLiteDatabase.OPEN_READONLY or
+                                SQLiteDatabase.NO_LOCALIZED_COLLATORS,
                         ).use { db ->
-                            db.rawQuery("SELECT packageName, userId, uid FROM app_protection WHERE lsposed = 1", null).use { cursor ->
-                                val uidIdx = cursor.getColumnIndex("uid")
-                                val pkgIdx = cursor.getColumnIndex("packageName")
-                                val userIdIdx = cursor.getColumnIndex("userId")
-                                val pm = getIPackageManager()
-                                while (cursor.moveToNext()) {
-                                    val pkg = if (pkgIdx != -1) cursor.getString(pkgIdx) else ""
-                                    val userId = if (userIdIdx != -1) cursor.getInt(userIdIdx) else 0
-                                    val dbUid = if (uidIdx != -1) cursor.getInt(uidIdx) else 0
-
-                                    if (pkg.isNotEmpty()) {
-                                        val resolvedUid =
-                                            if (pm != null) {
-                                                val realUid = getPackageUid(pm, pkg, userId)
-                                                if (realUid > 0) realUid else dbUid
+                            db
+                                .rawQuery(
+                                    "SELECT packageName, userId, uid FROM app_protection WHERE lsposed = 1",
+                                    null,
+                                ).use { cursor ->
+                                    val uidIdx = cursor.getColumnIndex("uid")
+                                    val pkgIdx = cursor.getColumnIndex("packageName")
+                                    val userIdIdx = cursor.getColumnIndex("userId")
+                                    while (cursor.moveToNext()) {
+                                        val pkg =
+                                            if (pkgIdx != -1) {
+                                                cursor.getString(pkgIdx)
                                             } else {
-                                                dbUid
+                                                ""
                                             }
-                                        if (resolvedUid > 0) {
-                                            uids.add(resolvedUid)
+                                        val userId =
+                                            if (userIdIdx != -1) {
+                                                cursor.getInt(userIdIdx)
+                                            } else {
+                                                0
+                                            }
+                                        val dbUid =
+                                            if (uidIdx != -1) {
+                                                cursor.getInt(uidIdx)
+                                            } else {
+                                                0
+                                            }
+
+                                        if (pkg.isNotEmpty()) {
+                                            val resolvedUid =
+                                                if (pm != null) {
+                                                    val realUid =
+                                                        getPackageUid(
+                                                            pm,
+                                                            pkg,
+                                                            userId,
+                                                        )
+                                                    if (realUid > 0) realUid else dbUid
+                                                } else {
+                                                    dbUid
+                                                }
+                                            if (resolvedUid > 0) {
+                                                uids.add(resolvedUid)
+                                            }
                                         }
                                     }
                                 }
-                            }
                         }
                 }
             } catch (t: Throwable) {
@@ -569,7 +634,6 @@ class HookEntry : IXposedHookLoadPackage {
             }
 
             if (selfUid == -1) {
-                val pm = getIPackageManager()
                 if (pm != null) {
                     selfUid = getPackageUid(pm, "dev.soranerai.vpnhidenext", 0)
                 }
@@ -598,18 +662,37 @@ class HookEntry : IXposedHookLoadPackage {
         if (mask == null) {
             mask =
                 try {
-                    val file = File(JAVA_HOOKS_FILE)
-                    if (file.exists()) {
-                        file.readText().trim().toUIntOrNull() ?: 0x3Fu
+                    val dbFile = File(DB_PATH)
+                    if (dbFile.exists()) {
+                        SQLiteDatabase
+                            .openDatabase(
+                                dbFile.absolutePath,
+                                null,
+                                SQLiteDatabase.OPEN_READONLY or
+                                    SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                            ).use { db ->
+                                db
+                                    .rawQuery(
+                                        "SELECT javaHookMask FROM global_config LIMIT 1",
+                                        null,
+                                    ).use { cursor ->
+                                        if (cursor.moveToFirst()) {
+                                            cursor.getLong(0).toUInt()
+                                        } else {
+                                            0xFFFFFFFFu
+                                        }
+                                    }
+                            }
                     } else {
-                        0x3Fu
+                        0xFFFFFFFFu
                     }
                 } catch (t: Throwable) {
-                    0x3Fu
+                    0xFFFFFFFFu
                 }
             cachedJavaHooksMask = mask
         }
-        return (mask and (1u shl bitIndex)) != 0u
+        val activeMask = mask ?: 0xFFFFFFFFu
+        return (activeMask and (1u shl bitIndex)) != 0u
     }
 
     @Volatile private var systemServerIfacePrefixes: List<String>? = null
@@ -628,7 +711,8 @@ class HookEntry : IXposedHookLoadPackage {
                         .openDatabase(
                             dbFile.absolutePath,
                             null,
-                            SQLiteDatabase.OPEN_READONLY or SQLiteDatabase.NO_LOCALIZED_COLLATORS,
+                            SQLiteDatabase.OPEN_READONLY or
+                                SQLiteDatabase.NO_LOCALIZED_COLLATORS,
                         ).use { db ->
                             db.rawQuery("SELECT prefix FROM iface_prefixes", null)?.use { cursor ->
                                 val idx = cursor.getColumnIndex("prefix")
@@ -677,55 +761,65 @@ class HookEntry : IXposedHookLoadPackage {
     private fun startNetworkMonitoring() {
         if (!monitoringStarted.compareAndSet(false, true)) return
         val thread =
-            Thread({
-                HookLog.i("VpnHide: Network monitoring daemon thread started")
-                var lastIpv4: String? = null
-                var lastIpv6: String? = null
-                var firstRun = true
+            Thread(
+                {
+                    HookLog.i("VpnHide: Network monitoring daemon thread started")
+                    var lastIpv4: String? = null
+                    var lastIpv6: String? = null
+                    var firstRun = true
 
-                while (true) {
-                    try {
-                        val cs = getConnectivityService()
-                        if (cs != null) {
-                            val lp = getPhysicalLinkProperties(cs)
-                            var ipv4: String? = null
-                            var ipv6: String? = null
+                    while (true) {
+                        try {
+                            val cs = getConnectivityService()
+                            if (cs != null) {
+                                val lp = getPhysicalLinkProperties(cs)
+                                var ipv4: String? = null
+                                var ipv6: String? = null
 
-                            if (lp != null) {
-                                for (linkAddr in lp.linkAddresses) {
-                                    val inetAddr = linkAddr.address
-                                    val hostAddress = inetAddr.hostAddress
-                                    if (hostAddress != null) {
-                                        if (inetAddr is java.net.Inet4Address) {
-                                            ipv4 = hostAddress
-                                        } else if (inetAddr is java.net.Inet6Address) {
-                                            ipv6 = hostAddress.substringBefore('%')
+                                if (lp != null) {
+                                    for (linkAddr in lp.linkAddresses) {
+                                        val inetAddr = linkAddr.address
+                                        val hostAddress = inetAddr.hostAddress
+                                        if (hostAddress != null) {
+                                            if (inetAddr is java.net.Inet4Address) {
+                                                ipv4 = hostAddress
+                                            } else if (inetAddr is java.net.Inet6Address) {
+                                                ipv6 = hostAddress.substringBefore('%')
+                                            }
                                         }
                                     }
                                 }
-                            }
 
-                            if (firstRun || ipv4 != lastIpv4 || ipv6 != lastIpv6) {
-                                HookLog.i("VpnHide: Physical IP changed or initial sync: IPv4=$ipv4, IPv6=$ipv6")
-                                sendSpoofIpToKernel(ipv4, ipv6)
-                                lastIpv4 = ipv4
-                                lastIpv6 = ipv6
-                                firstRun = false
+                                if (firstRun || ipv4 != lastIpv4 || ipv6 != lastIpv6) {
+                                    HookLog.i(
+                                        "VpnHide: Physical IP changed or initial sync: IPv4=$ipv4, IPv6=$ipv6",
+                                    )
+                                    sendSpoofIpToKernel(ipv4, ipv6)
+                                    lastIpv4 = ipv4
+                                    lastIpv6 = ipv6
+                                    firstRun = false
+                                }
                             }
+                            // Stats live only in-memory; dumped on-demand via
+                            // watchStatsRequest()
+                        } catch (t: Throwable) {
+                            HookLog.e(
+                                "VpnHide: Error in network monitoring loop: ${t::class.java.simpleName}: ${t.message}",
+                            )
                         }
-                        // Stats live only in-memory; dumped on-demand via watchStatsRequest()
-                    } catch (t: Throwable) {
-                        HookLog.e("VpnHide: Error in network monitoring loop: ${t::class.java.simpleName}: ${t.message}")
-                    }
 
-                    try {
-                        Thread.sleep(3000)
-                    } catch (e: InterruptedException) {
-                        HookLog.i("VpnHide: Network monitoring daemon thread interrupted")
-                        break
+                        try {
+                            Thread.sleep(3000)
+                        } catch (e: InterruptedException) {
+                            HookLog.i(
+                                "VpnHide: Network monitoring daemon thread interrupted",
+                            )
+                            break
+                        }
                     }
-                }
-            }, "VpnHideNetworkMonitor")
+                },
+                "VpnHideNetworkMonitor",
+            )
         thread.isDaemon = true
         thread.start()
     }
@@ -739,9 +833,13 @@ class HookEntry : IXposedHookLoadPackage {
             val v4 = if (ipv4.isNullOrEmpty() || ipv4 == "none") "none" else ipv4
             val v6 = if (ipv6.isNullOrEmpty() || ipv6 == "none") "none" else ipv6
             file.writeText("$v4 $v6\n")
-            HookLog.i("VpnHide: Successfully wrote spoof IP to /data/system/vpnhide_physical_ip: IPv4=$v4, IPv6=$v6")
+            HookLog.i(
+                "VpnHide: Successfully wrote spoof IP to /data/system/vpnhide_physical_ip: IPv4=$v4, IPv6=$v6",
+            )
         } catch (t: Throwable) {
-            HookLog.e("VpnHide: failed to write spoof IP to file: ${t::class.java.simpleName}: ${t.message}")
+            HookLog.e(
+                "VpnHide: failed to write spoof IP to file: ${t::class.java.simpleName}: ${t.message}",
+            )
         }
     }
 
@@ -824,7 +922,6 @@ class HookEntry : IXposedHookLoadPackage {
                     if (path != null) {
                         if (path == dbFile.name || path.startsWith("${dbFile.name}-")) {
                             invalidateTargetUids()
-                        } else if (path == "vpnhide_active_java_hooks") {
                             cachedJavaHooksMask = null
                         }
                     }
@@ -859,12 +956,10 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     /**
-     * Android 12+ redacts sensitive WifiInfo fields when creating a copy for
-     * an app that lacks ACCESS_FINE_LOCATION:
-     *   WifiInfo(WifiInfo source, long redactions)
-     * Specifically sets mIpAddress=null, mSSID="<unknown ssid>",
-     * mBSSID="02:00:00:00:00:00".  We restore them from the source object
-     * for target callers so the app sees the real WiFi state.
+     * Android 12+ redacts sensitive WifiInfo fields when creating a copy for an app that lacks
+     * ACCESS_FINE_LOCATION: WifiInfo(WifiInfo source, long redactions) Specifically sets
+     * mIpAddress=null, mSSID="<unknown ssid>", mBSSID="02:00:00:00:00:00". We restore them from the
+     * source object for target callers so the app sees the real WiFi state.
      */
     private fun hookWifiInfoRedactingCtor(wifiInfoClass: Class<*>) {
         try {
@@ -896,10 +991,13 @@ class HookEntry : IXposedHookLoadPackage {
 
                         // Restore SSID if it was replaced with UNKNOWN_SSID
                         try {
-                            val srcSSID = XposedHelpers.getObjectField(source, "mSSID") as? String
-                            val dstSSID = XposedHelpers.getObjectField(result, "mSSID") as? String
+                            val srcSSID =
+                                XposedHelpers.getObjectField(source, "mSSID") as? String
+                            val dstSSID =
+                                XposedHelpers.getObjectField(result, "mSSID") as? String
                             if (dstSSID == "<unknown ssid>" &&
-                                srcSSID != null && srcSSID != "<unknown ssid>"
+                                srcSSID != null &&
+                                srcSSID != "<unknown ssid>"
                             ) {
                                 XposedHelpers.setObjectField(result, "mSSID", srcSSID)
                                 HookLog.i("VpnHide: WifiInfo ctor – restored SSID")
@@ -909,10 +1007,13 @@ class HookEntry : IXposedHookLoadPackage {
 
                         // Restore BSSID if replaced with default anonymised MAC
                         try {
-                            val srcBSSID = XposedHelpers.getObjectField(source, "mBSSID") as? String
-                            val dstBSSID = XposedHelpers.getObjectField(result, "mBSSID") as? String
+                            val srcBSSID =
+                                XposedHelpers.getObjectField(source, "mBSSID") as? String
+                            val dstBSSID =
+                                XposedHelpers.getObjectField(result, "mBSSID") as? String
                             if (dstBSSID == "02:00:00:00:00:00" &&
-                                srcBSSID != null && srcBSSID != "02:00:00:00:00:00"
+                                srcBSSID != null &&
+                                srcBSSID != "02:00:00:00:00:00"
                             ) {
                                 XposedHelpers.setObjectField(result, "mBSSID", srcBSSID)
                                 HookLog.i("VpnHide: WifiInfo ctor – restored BSSID")
@@ -930,10 +1031,9 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     /**
-     * Belt-and-suspenders fallback: intercept WifiInfo.writeToParcel for
-     * target callers and fix any remaining IP=null/0 by pulling the real
-     * IPv4 address from the physical network's LinkProperties.
-     * Handles both old (int mIpAddress) and new (InetAddress mIpAddress) layouts.
+     * Belt-and-suspenders fallback: intercept WifiInfo.writeToParcel for target callers and fix any
+     * remaining IP=null/0 by pulling the real IPv4 address from the physical network's
+     * LinkProperties. Handles both old (int mIpAddress) and new (InetAddress mIpAddress) layouts.
      */
     private fun hookWifiInfoWriteToParcel(wifiInfoClass: Class<*>) {
         val writingFixed = ThreadLocal<Boolean>()
@@ -951,7 +1051,9 @@ class HookEntry : IXposedHookLoadPackage {
                     // Determine whether mIpAddress is an int or InetAddress field
                     val ipField =
                         try {
-                            wifiInfoClass.getDeclaredField("mIpAddress").also { it.isAccessible = true }
+                            wifiInfoClass.getDeclaredField("mIpAddress").also {
+                                it.isAccessible = true
+                            }
                         } catch (_: Throwable) {
                             return
                         }
@@ -989,7 +1091,11 @@ class HookEntry : IXposedHookLoadPackage {
                             c.newInstance(wifiInfo)
                         } catch (_: Throwable) {
                             try {
-                                val c = wifiInfoClass.getDeclaredConstructor(wifiInfoClass, java.lang.Long.TYPE)
+                                val c =
+                                    wifiInfoClass.getDeclaredConstructor(
+                                        wifiInfoClass,
+                                        java.lang.Long.TYPE,
+                                    )
                                 c.isAccessible = true
                                 c.newInstance(wifiInfo, 0L) // 0 = REDACT_NONE
                             } catch (_: Throwable) {
@@ -1031,7 +1137,9 @@ class HookEntry : IXposedHookLoadPackage {
                         writingFixed.set(false)
                     }
                     param.result = null
-                    HookLog.i("VpnHide: WifiInfo.writeToParcel – fixed IP to ${physIp.hostAddress}")
+                    HookLog.i(
+                        "VpnHide: WifiInfo.writeToParcel – fixed IP to ${physIp.hostAddress}",
+                    )
                 }
             },
         )
@@ -1039,19 +1147,21 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     /**
-     * Get the IPv4 address of the best physical network (WiFi/Cell/Ethernet)
-     * by reading LinkProperties from ConnectivityService.
+     * Get the IPv4 address of the best physical network (WiFi/Cell/Ethernet) by reading
+     * LinkProperties from ConnectivityService.
      */
-    private fun getPhysicalIpv4Address(): java.net.Inet4Address? =
-        try {
+    private fun getPhysicalIpv4Address(): java.net.Inet4Address? {
+        return try {
             val cs = getConnectivityService() ?: return null
             getPhysicalLinkProperties(cs)
                 ?.linkAddresses
                 ?.firstOrNull { it.address is java.net.Inet4Address }
-                ?.address as? java.net.Inet4Address
+                ?.address as?
+                java.net.Inet4Address
         } catch (_: Throwable) {
             null
         }
+    }
 
     private fun hookNCWriteToParcel() {
         val writingCopy = ThreadLocal<Boolean>()
@@ -1104,7 +1214,12 @@ class HookEntry : IXposedHookLoadPackage {
                     val physicalNi =
                         if (cs != null && physicalNet != null) {
                             try {
-                                XposedHelpers.callMethod(cs, "getNetworkInfo", physicalNet) as? NetworkInfo
+                                XposedHelpers.callMethod(
+                                    cs,
+                                    "getNetworkInfo",
+                                    physicalNet,
+                                ) as?
+                                    NetworkInfo
                             } catch (_: Throwable) {
                                 null
                             }
@@ -1116,11 +1231,15 @@ class HookEntry : IXposedHookLoadPackage {
                     if (physicalNi != null) {
                         copy =
                             try {
-                                val copyCtor = NetworkInfo::class.java.getDeclaredConstructor(NetworkInfo::class.java)
+                                val copyCtor =
+                                    NetworkInfo::class.java.getDeclaredConstructor(
+                                        NetworkInfo::class.java,
+                                    )
                                 copyCtor.isAccessible = true
                                 copyCtor.newInstance(physicalNi) as NetworkInfo
                             } catch (_: Throwable) {
-                                // Fallback to manual creation if copy constructor is not accessible or fails
+                                // Fallback to manual creation if copy constructor is not
+                                // accessible or fails
                                 val ctor =
                                     NetworkInfo::class.java.getDeclaredConstructor(
                                         Integer.TYPE,
@@ -1129,25 +1248,61 @@ class HookEntry : IXposedHookLoadPackage {
                                         String::class.java,
                                     )
                                 ctor.isAccessible = true
-                                val type = XposedHelpers.getIntField(physicalNi, "mNetworkType")
-                                val subtype = XposedHelpers.getIntField(physicalNi, "mSubtype")
-                                val typeName = XposedHelpers.getObjectField(physicalNi, "mTypeName") as? String ?: "MOBILE"
-                                val subtypeName = XposedHelpers.getObjectField(physicalNi, "mSubtypeName") as? String ?: ""
-                                val dummy = ctor.newInstance(type, subtype, typeName, subtypeName) as NetworkInfo
-                                XposedHelpers.setObjectField(dummy, "mState", XposedHelpers.getObjectField(physicalNi, "mState"))
+                                val type =
+                                    XposedHelpers.getIntField(
+                                        physicalNi,
+                                        "mNetworkType",
+                                    )
+                                val subtype =
+                                    XposedHelpers.getIntField(physicalNi, "mSubtype")
+                                val typeName =
+                                    XposedHelpers.getObjectField(
+                                        physicalNi,
+                                        "mTypeName",
+                                    ) as?
+                                        String
+                                        ?: "MOBILE"
+                                val subtypeName =
+                                    XposedHelpers.getObjectField(
+                                        physicalNi,
+                                        "mSubtypeName",
+                                    ) as?
+                                        String
+                                        ?: ""
+                                val dummy =
+                                    ctor.newInstance(
+                                        type,
+                                        subtype,
+                                        typeName,
+                                        subtypeName,
+                                    ) as
+                                        NetworkInfo
+                                XposedHelpers.setObjectField(
+                                    dummy,
+                                    "mState",
+                                    XposedHelpers.getObjectField(physicalNi, "mState"),
+                                )
                                 XposedHelpers.setObjectField(
                                     dummy,
                                     "mDetailedState",
-                                    XposedHelpers.getObjectField(physicalNi, "mDetailedState"),
+                                    XposedHelpers.getObjectField(
+                                        physicalNi,
+                                        "mDetailedState",
+                                    ),
                                 )
                                 XposedHelpers.setBooleanField(
                                     dummy,
                                     "mIsAvailable",
-                                    XposedHelpers.getBooleanField(physicalNi, "mIsAvailable"),
+                                    XposedHelpers.getBooleanField(
+                                        physicalNi,
+                                        "mIsAvailable",
+                                    ),
                                 )
                                 dummy
                             }
-                        HookLog.i("VpnHide: NetworkInfo.writeToParcel – morphed VPN info into physical network info")
+                        HookLog.i(
+                            "VpnHide: NetworkInfo.writeToParcel – morphed VPN info into physical network info",
+                        )
                     } else {
                         val ctor =
                             NetworkInfo::class.java.getDeclaredConstructor(
@@ -1158,8 +1313,16 @@ class HookEntry : IXposedHookLoadPackage {
                             )
                         ctor.isAccessible = true
                         copy = ctor.newInstance(0, 0, "MOBILE", "") as NetworkInfo
-                        XposedHelpers.setObjectField(copy, "mState", NetworkInfo.State.DISCONNECTED)
-                        XposedHelpers.setObjectField(copy, "mDetailedState", NetworkInfo.DetailedState.DISCONNECTED)
+                        XposedHelpers.setObjectField(
+                            copy,
+                            "mState",
+                            NetworkInfo.State.DISCONNECTED,
+                        )
+                        XposedHelpers.setObjectField(
+                            copy,
+                            "mDetailedState",
+                            NetworkInfo.DetailedState.DISCONNECTED,
+                        )
                         XposedHelpers.setBooleanField(copy, "mIsAvailable", false)
                         HookLog.i(
                             "VpnHide: NetworkInfo.writeToParcel – morphed VPN info into disconnected MOBILE info (no physical network)",
@@ -1247,7 +1410,10 @@ class HookEntry : IXposedHookLoadPackage {
                             param.result = null
                             return
                         } else {
-                            val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
+                            val ctor =
+                                LinkProperties::class.java.getDeclaredConstructor(
+                                    LinkProperties::class.java,
+                                )
                             ctor.isAccessible = true
                             val copy = ctor.newInstance(lp) as LinkProperties
                             if (sanitizeLinkProperties(copy)) {
@@ -1275,7 +1441,11 @@ class HookEntry : IXposedHookLoadPackage {
 
         XposedHelpers.setLongField(copy, "mTransportTypes", transportTypes and vpnBit.inv())
         val caps = XposedHelpers.getLongField(copy, "mNetworkCapabilities")
-        XposedHelpers.setLongField(copy, "mNetworkCapabilities", caps or (1L shl NET_CAPABILITY_NOT_VPN))
+        XposedHelpers.setLongField(
+            copy,
+            "mNetworkCapabilities",
+            caps or (1L shl NET_CAPABILITY_NOT_VPN),
+        )
         try {
             val ti = XposedHelpers.getObjectField(copy, "mTransportInfo")
             if (ti != null && ti.javaClass.name == "android.net.VpnTransportInfo") {
@@ -1300,12 +1470,21 @@ class HookEntry : IXposedHookLoadPackage {
 
         val cs = getConnectivityService()
         val physicalNet = if (cs != null) getPhysicalNetwork(cs) else null
-        val physicalNc = if (cs != null && physicalNet != null) getNetworkCapabilitiesSafe(cs, physicalNet) else null
+        val physicalNc =
+            if (cs != null && physicalNet != null) {
+                getNetworkCapabilitiesSafe(cs, physicalNet)
+            } else {
+                null
+            }
 
         if (!hasPhysical) {
             if (physicalNc != null) {
                 val realTransports = XposedHelpers.getLongField(physicalNc, "mTransportTypes")
-                XposedHelpers.setLongField(copy, "mTransportTypes", newTransports or (realTransports and vpnBit.inv()))
+                XposedHelpers.setLongField(
+                    copy,
+                    "mTransportTypes",
+                    newTransports or (realTransports and vpnBit.inv()),
+                )
             } else {
                 XposedHelpers.setLongField(copy, "mTransportTypes", newTransports or wifiBit)
             }
@@ -1357,10 +1536,13 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     // ------------------------------------------------------------------
-    //  APEX / Asynchronous Hooks (Nekohasekai / Sing-box Architecture)
+    //  Asynchronous Hooks (grats to nekohasekai)
     // ------------------------------------------------------------------
 
-    private val hookedServices = java.util.Collections.newSetFromMap(java.util.concurrent.ConcurrentHashMap<String, Boolean>())
+    private val hookedServices =
+        java.util.Collections.newSetFromMap(
+            java.util.concurrent.ConcurrentHashMap<String, Boolean>(),
+        )
 
     private fun hookApexServices() {
         val smClass = XposedHelpers.findClass("android.os.ServiceManager", null)
@@ -1379,6 +1561,7 @@ class HookEntry : IXposedHookLoadPackage {
         )
 
         checkAndHookExistingService("connectivity", smClass)
+        checkAndHookExistingService("netstats", smClass)
     }
 
     private fun checkAndHookExistingService(
@@ -1386,7 +1569,9 @@ class HookEntry : IXposedHookLoadPackage {
         smClass: Class<*>,
     ) {
         try {
-            val binder = XposedHelpers.callStaticMethod(smClass, "getService", name) as? android.os.IBinder
+            val binder =
+                XposedHelpers.callStaticMethod(smClass, "getService", name) as?
+                    android.os.IBinder
             val classLoader = binder?.javaClass?.classLoader
             if (classLoader != null) handleServiceHook(name, classLoader, "getService")
         } catch (t: Throwable) {
@@ -1406,18 +1591,134 @@ class HookEntry : IXposedHookLoadPackage {
                 HookLog.i("VpnHide: Installing APEX Connectivity hooks...")
                 tryHook("ConnectivityService.networkLogic") { hookConnectivityService(classLoader) }
             }
+
+            "netstats" -> {
+                HookLog.i("VpnHide: Installing APEX Netstats hooks...")
+                tryHook("NetworkStatsService.statsLogic") { hookNetworkStatsService(classLoader) }
+            }
+        }
+    }
+
+    private fun hookNetworkStatsService(classLoader: ClassLoader) {
+        val nssClass =
+            try {
+                XposedHelpers.findClass(
+                    "com.android.server.net.NetworkStatsService",
+                    classLoader,
+                )
+            } catch (t: Throwable) {
+                HookLog.e("VpnHide: failed to load NetworkStatsService: ${t.message}")
+                return
+            }
+
+        // 1. Hook getIfaceStats(String iface, int type)
+        try {
+            val getIfaceStatsMethod =
+                XposedHelpers.findMethodExact(
+                    nssClass,
+                    "getIfaceStats",
+                    String::class.java,
+                    Integer.TYPE,
+                )
+            XposedBridge.hookMethod(
+                getIfaceStatsMethod,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val callingUid = Binder.getCallingUid()
+                        if (loadTargetUids().contains(callingUid)) {
+                            val iface = param.args[0] as? String ?: return
+                            if (isVpnInterfaceName(iface)) {
+                                HookLog.i(
+                                    "VpnHide: getIfaceStats('$iface') blocked for target UID $callingUid",
+                                )
+                                param.result = 0L
+                            }
+                        }
+                    }
+                },
+            )
+            HookLog.i("VpnHide: NetworkStatsService.getIfaceStats hook installed")
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getIfaceStats: ${t.message}")
+        }
+
+        // 2. Hook getTotalStats(int type)
+        try {
+            val getTotalStatsMethod =
+                XposedHelpers.findMethodExact(
+                    nssClass,
+                    "getTotalStats",
+                    Integer.TYPE,
+                )
+            XposedBridge.hookMethod(
+                getTotalStatsMethod,
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val callingUid = Binder.getCallingUid()
+                        if (loadTargetUids().contains(callingUid)) {
+                            val type = param.args[0] as Int
+                            val nssInstance = param.thisObject
+
+                            val token = Binder.clearCallingIdentity()
+                            try {
+                                var totalSum = 0L
+                                val interfacesList =
+                                    java.net.NetworkInterface.getNetworkInterfaces()
+                                if (interfacesList != null) {
+                                    while (interfacesList.hasMoreElements()) {
+                                        val iface = interfacesList.nextElement()
+                                        val ifaceName = iface.name
+                                        if (!isVpnInterfaceName(ifaceName)) {
+                                            val stats =
+                                                XposedHelpers.callMethod(
+                                                    nssInstance,
+                                                    "getIfaceStats",
+                                                    ifaceName,
+                                                    type,
+                                                ) as
+                                                    Long
+                                            if (stats > 0L) {
+                                                totalSum += stats
+                                            }
+                                        }
+                                    }
+                                }
+                                param.result = totalSum
+                                HookLog.i(
+                                    "VpnHide: getTotalStats(type=$type) spoofed to sum of all visible physical ifaces: $totalSum bytes",
+                                )
+                            } catch (e: Exception) {
+                                param.result = 0L
+                            } finally {
+                                Binder.restoreCallingIdentity(token)
+                            }
+                        }
+                    }
+                },
+            )
+            HookLog.i("VpnHide: NetworkStatsService.getTotalStats hook installed")
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getTotalStats: ${t.message}")
         }
     }
 
     private fun hookConnectivityService(classLoader: ClassLoader) {
         val csClass =
             try {
-                XposedHelpers.findClass("android.net.connectivity.com.android.server.ConnectivityService", classLoader)
+                XposedHelpers.findClass(
+                    "android.net.connectivity.com.android.server.ConnectivityService",
+                    classLoader,
+                )
             } catch (t: Throwable) {
                 try {
-                    XposedHelpers.findClass("com.android.server.ConnectivityService", classLoader)
+                    XposedHelpers.findClass(
+                        "com.android.server.ConnectivityService",
+                        classLoader,
+                    )
                 } catch (t2: Throwable) {
-                    HookLog.e("VpnHide: failed to load ConnectivityService from both repackaged and original classes: ${t2.message}")
+                    HookLog.e(
+                        "VpnHide: failed to load ConnectivityService from both repackaged and original classes: ${t2.message}",
+                    )
                     return
                 }
             }
@@ -1438,7 +1739,9 @@ class HookEntry : IXposedHookLoadPackage {
 
         for (method in csClass.declaredMethods) {
             // 1. ThreadLocal Context Injection (Fixed UID fields for modern Android)
-            if (method.name == "callCallbackForRequest" || method.name == "sendPendingIntentForRequest") {
+            if (method.name == "callCallbackForRequest" ||
+                method.name == "sendPendingIntentForRequest"
+            ) {
                 try {
                     XposedBridge.hookMethod(
                         method,
@@ -1466,10 +1769,15 @@ class HookEntry : IXposedHookLoadPackage {
                                     var clazz: Class<*>? = nri.javaClass
                                     while (clazz != null && clazz != Any::class.java) {
                                         for (field in clazz.declaredFields) {
-                                            if (field.type == android.net.NetworkRequest::class.java) {
+                                            if (field.type ==
+                                                android.net.NetworkRequest::class
+                                                    .java
+                                            ) {
                                                 try {
                                                     field.isAccessible = true
-                                                    request = field.get(nri) as? android.net.NetworkRequest
+                                                    request =
+                                                        field.get(nri) as?
+                                                            android.net.NetworkRequest
                                                     if (request != null) break
                                                 } catch (_: Throwable) {
                                                 }
@@ -1479,14 +1787,23 @@ class HookEntry : IXposedHookLoadPackage {
                                         clazz = clazz.superclass
                                     }
 
-                                    if (request != null && request.hasTransport(android.net.NetworkCapabilities.TRANSPORT_VPN)) {
-                                        HookLog.i("VpnHide: Suppressing VPN callback/intent for target UID $uid")
+                                    if (request != null &&
+                                        request.hasTransport(
+                                            android.net.NetworkCapabilities
+                                                .TRANSPORT_VPN,
+                                        )
+                                    ) {
+                                        HookLog.i(
+                                            "VpnHide: Suppressing VPN callback/intent for target UID $uid",
+                                        )
                                         recordIntercept("ConnectivityService")
                                         param.result = null
                                         return
                                     }
 
-                                    currentCallbackUid.set(uid) // WriteToParcel hooks will now see this!
+                                    currentCallbackUid.set(
+                                        uid,
+                                    ) // WriteToParcel hooks will now see this!
                                 }
                             }
 
@@ -1528,7 +1845,12 @@ class HookEntry : IXposedHookLoadPackage {
         }
 
         try {
-            val getActiveNetworkMethod = XposedHelpers.findMethodExact(csClass, "getActiveNetwork", *emptyArray<Class<*>>())
+            val getActiveNetworkMethod =
+                XposedHelpers.findMethodExact(
+                    csClass,
+                    "getActiveNetwork",
+                    *emptyArray<Class<*>>(),
+                )
             XposedBridge.hookMethod(
                 getActiveNetworkMethod,
                 object : XC_MethodHook() {
@@ -1558,7 +1880,12 @@ class HookEntry : IXposedHookLoadPackage {
         }
 
         try {
-            val getAllNetworksMethod = XposedHelpers.findMethodExact(csClass, "getAllNetworks", *emptyArray<Class<*>>())
+            val getAllNetworksMethod =
+                XposedHelpers.findMethodExact(
+                    csClass,
+                    "getAllNetworks",
+                    *emptyArray<Class<*>>(),
+                )
             XposedBridge.hookMethod(
                 getAllNetworksMethod,
                 object : XC_MethodHook() {
@@ -1593,7 +1920,8 @@ class HookEntry : IXposedHookLoadPackage {
                                 java.lang.reflect.Array.newInstance(
                                     android.net.Network::class.java,
                                     filteredList.size,
-                                ) as Array<*>
+                                ) as
+                                    Array<*>
                             for (i in filteredList.indices) {
                                 java.lang.reflect.Array
                                     .set(newArray, i, filteredList[i])
@@ -1608,7 +1936,8 @@ class HookEntry : IXposedHookLoadPackage {
         }
 
         try {
-            val getNetworkForTypeMethod = XposedHelpers.findMethodExact(csClass, "getNetworkForType", Integer.TYPE)
+            val getNetworkForTypeMethod =
+                XposedHelpers.findMethodExact(csClass, "getNetworkForType", Integer.TYPE)
             XposedBridge.hookMethod(
                 getNetworkForTypeMethod,
                 object : XC_MethodHook() {
@@ -1618,7 +1947,9 @@ class HookEntry : IXposedHookLoadPackage {
                         if (loadTargetUids().contains(callingUid)) {
                             val type = param.args[0] as? Int ?: return
                             if (type == TYPE_VPN) {
-                                HookLog.i("VpnHide: Suppressing getNetworkForType(TYPE_VPN) for target UID $callingUid")
+                                HookLog.i(
+                                    "VpnHide: Suppressing getNetworkForType(TYPE_VPN) for target UID $callingUid",
+                                )
                                 param.result = null
                             }
                         }
@@ -1630,7 +1961,65 @@ class HookEntry : IXposedHookLoadPackage {
             HookLog.e("VpnHide: failed to hook getNetworkForType: ${t.message}")
         }
 
-        HookLog.e("VpnHide: Successfully applied Nekohasekai/VpnHide symbiosis architecture hooks.")
+        try {
+            val getDefaultProxyMethod =
+                XposedHelpers.findMethodExact(
+                    csClass,
+                    "getDefaultProxy",
+                    *emptyArray<Class<*>>(),
+                )
+            XposedBridge.hookMethod(
+                getDefaultProxyMethod,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5)) return
+                        val callingUid = Binder.getCallingUid()
+                        if (loadTargetUids().contains(callingUid)) {
+                            if (param.result != null) {
+                                HookLog.i(
+                                    "VpnHide: Suppressing getDefaultProxy() for target UID $callingUid",
+                                )
+                                param.result = null
+                            }
+                        }
+                    }
+                },
+            )
+            HookLog.i("VpnHide: getDefaultProxy hook installed")
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getDefaultProxy: ${t.message}")
+        }
+
+        try {
+            val getProxyForNetworkMethod =
+                XposedHelpers.findMethodExact(
+                    csClass,
+                    "getProxyForNetwork",
+                    android.net.Network::class.java,
+                )
+            XposedBridge.hookMethod(
+                getProxyForNetworkMethod,
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5)) return
+                        val callingUid = Binder.getCallingUid()
+                        if (loadTargetUids().contains(callingUid)) {
+                            if (param.result != null) {
+                                HookLog.i(
+                                    "VpnHide: Suppressing getProxyForNetwork() for target UID $callingUid",
+                                )
+                                param.result = null
+                            }
+                        }
+                    }
+                },
+            )
+            HookLog.i("VpnHide: getProxyForNetwork hook installed")
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getProxyForNetwork: ${t.message}")
+        }
+
+        HookLog.e("VpnHide: Successfully applied all hooks.")
     }
 
     companion object {
@@ -1652,7 +2041,6 @@ class HookEntry : IXposedHookLoadPackage {
         /** Manager app creates this file to trigger an on-demand stats dump from system_server. */
         const val STATS_REQ_FILE = "/data/system/vpnhide_hook_stats_req"
         const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
-        const val JAVA_HOOKS_FILE = "/data/system/vpnhide/vpnhide_active_java_hooks"
 
         internal class RollingCounter(
             private val windowMinutes: Int = 30,
@@ -1693,13 +2081,23 @@ class HookEntry : IXposedHookLoadPackage {
             }
         }
 
-        /** All intercept stats live only in memory. Written to disk only when the manager requests it. */
+        /**
+         * All intercept stats live only in memory. Written to disk only when the manager requests
+         * it.
+         */
         private val hookStats =
-            java.util.concurrent.ConcurrentHashMap<Int, java.util.concurrent.ConcurrentHashMap<String, RollingCounter>>()
+            java.util.concurrent.ConcurrentHashMap<
+                Int,
+                java.util.concurrent.ConcurrentHashMap<String, RollingCounter>,
+            >()
 
         private val FIELD_PROBES =
             listOf(
-                FieldProbe("LinkProperties.mIfaceName", LinkProperties::class.java, "mIfaceName") { it == String::class.java },
+                FieldProbe(
+                    "LinkProperties.mIfaceName",
+                    LinkProperties::class.java,
+                    "mIfaceName",
+                ) { it == String::class.java },
                 FieldProbe(
                     "LinkProperties.mRoutes",
                     LinkProperties::class.java,
@@ -1715,45 +2113,80 @@ class HookEntry : IXposedHookLoadPackage {
                     LinkProperties::class.java,
                     "mDnses",
                 ) { java.util.Collection::class.java.isAssignableFrom(it) },
-                FieldProbe("LinkProperties.mDomains", LinkProperties::class.java, "mDomains") { it == String::class.java },
-                FieldProbe("LinkProperties.mMtu", LinkProperties::class.java, "mMtu") { it == java.lang.Integer.TYPE },
-                FieldProbe("NetworkCapabilities.mTransportTypes", NetworkCapabilities::class.java, "mTransportTypes") {
-                    it ==
-                        java.lang.Long.TYPE
+                FieldProbe(
+                    "LinkProperties.mDomains",
+                    LinkProperties::class.java,
+                    "mDomains",
+                ) { it == String::class.java },
+                FieldProbe("LinkProperties.mMtu", LinkProperties::class.java, "mMtu") {
+                    it == java.lang.Integer.TYPE
                 },
-                FieldProbe("NetworkCapabilities.mNetworkCapabilities", NetworkCapabilities::class.java, "mNetworkCapabilities") {
-                    it ==
-                        java.lang.Long.TYPE
-                },
+                FieldProbe(
+                    "NetworkCapabilities.mTransportTypes",
+                    NetworkCapabilities::class.java,
+                    "mTransportTypes",
+                ) { it == java.lang.Long.TYPE },
+                FieldProbe(
+                    "NetworkCapabilities.mNetworkCapabilities",
+                    NetworkCapabilities::class.java,
+                    "mNetworkCapabilities",
+                ) { it == java.lang.Long.TYPE },
                 FieldProbe(
                     "NetworkCapabilities.mTransportInfo",
                     NetworkCapabilities::class.java,
                     "mTransportInfo",
                     minSdk = Build.VERSION_CODES.Q,
                 ) { fieldType ->
-                    runCatching { Class.forName("android.net.TransportInfo") }.map { it.isAssignableFrom(fieldType) }.getOrDefault(false)
+                    runCatching { Class.forName("android.net.TransportInfo") }
+                        .map { it.isAssignableFrom(fieldType) }
+                        .getOrDefault(false)
                 },
-                FieldProbe("NetworkInfo.mNetworkType", NetworkInfo::class.java, "mNetworkType") { it == Integer.TYPE },
-                FieldProbe("NetworkInfo.mState", NetworkInfo::class.java, "mState") { it == NetworkInfo.State::class.java },
-                FieldProbe("NetworkInfo.mDetailedState", NetworkInfo::class.java, "mDetailedState") {
-                    it ==
-                        NetworkInfo.DetailedState::class.java
+                FieldProbe(
+                    "NetworkInfo.mNetworkType",
+                    NetworkInfo::class.java,
+                    "mNetworkType",
+                ) { it == Integer.TYPE },
+                FieldProbe("NetworkInfo.mState", NetworkInfo::class.java, "mState") {
+                    it == NetworkInfo.State::class.java
                 },
-                FieldProbe("NetworkInfo.mIsAvailable", NetworkInfo::class.java, "mIsAvailable") { it == java.lang.Boolean.TYPE },
+                FieldProbe(
+                    "NetworkInfo.mDetailedState",
+                    NetworkInfo::class.java,
+                    "mDetailedState",
+                ) { it == NetworkInfo.DetailedState::class.java },
+                FieldProbe(
+                    "NetworkInfo.mIsAvailable",
+                    NetworkInfo::class.java,
+                    "mIsAvailable",
+                ) { it == java.lang.Boolean.TYPE },
             )
 
         private val CTOR_PROBES =
             listOf(
-                CtorProbe("LinkProperties.<init>(LinkProperties)", LinkProperties::class.java, arrayOf(LinkProperties::class.java)),
+                CtorProbe(
+                    "LinkProperties.<init>(LinkProperties)",
+                    LinkProperties::class.java,
+                    arrayOf(LinkProperties::class.java),
+                ),
                 CtorProbe(
                     "NetworkInfo.<init>(int,int,String,String)",
                     NetworkInfo::class.java,
-                    arrayOf(Integer.TYPE, Integer.TYPE, String::class.java, String::class.java),
+                    arrayOf(
+                        Integer.TYPE,
+                        Integer.TYPE,
+                        String::class.java,
+                        String::class.java,
+                    ),
                 ),
             )
 
-        private val LP_CRITICAL_KEYS = setOf("LinkProperties.mIfaceName", "LinkProperties.<init>(LinkProperties)")
-        private val NC_CRITICAL_KEYS = setOf("NetworkCapabilities.mTransportTypes", "NetworkCapabilities.mNetworkCapabilities")
+        private val LP_CRITICAL_KEYS =
+            setOf("LinkProperties.mIfaceName", "LinkProperties.<init>(LinkProperties)")
+        private val NC_CRITICAL_KEYS =
+            setOf(
+                "NetworkCapabilities.mTransportTypes",
+                "NetworkCapabilities.mNetworkCapabilities",
+            )
         private val NI_CRITICAL_KEYS =
             setOf(
                 "NetworkInfo.mNetworkType",

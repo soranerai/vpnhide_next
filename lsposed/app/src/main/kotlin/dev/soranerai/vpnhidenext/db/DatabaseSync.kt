@@ -18,13 +18,18 @@ internal object DatabaseSync {
             val massRules = massPortRuleDao.getMassRulesSync()
             val ifacePrefixes = ifacePrefixDao.getAllPrefixesSync()
 
-            val selfPkg = context.packageName
+            val globalConfigDao = db.globalConfigDao()
+            val config = globalConfigDao.getConfig() ?: DbGlobalConfig()
+
             val selfUid = context.applicationInfo.uid
 
             val parts = mutableListOf<String>()
 
             // 1. Copy SQLite database file to system location first (absolute source of truth)
             parts += buildLsposedApplyCommand(context)
+
+            // Sync active hooks masks from database
+            parts += "$KMOD_CTL active_hooks ${config.kernelHookMask}"
 
             // 2. Build and apply VPN targets directly to the kernel module
             val kmodUids = (apps.filter { it.kmod }.map { it.uid } + selfUid).distinct().sorted()

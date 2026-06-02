@@ -194,9 +194,13 @@
     <string name="check_proc_udp6" translatable="false">/proc/net/udp6</string>
     <string name="check_proc_dev" translatable="false">/proc/net/dev</string>
     <string name="check_proc_fib_trie" translatable="false">/proc/net/fib_trie</string>
+    <string name="check_bpf_iface_map" translatable="false">BPF map netd_iface_index_name_map</string>
     <string name="check_sys_class_net" translatable="false">/sys/class/net</string>
     <string name="check_net_iface_enum" translatable="false">NetworkInterface enum</string>
     <string name="check_proc_route_java" translatable="false">/proc/net/route (Java)</string>
+    <string name="check_loopback_bind_conflict" translatable="false">bind() loopback conflict</string>
+    <string name="check_abstract_unix_sockets" translatable="false">Abstract UNIX socket probe</string>
+    <string name="check_traffic_stats" translatable="false">TrafficStats volume anomaly</string>
 
     <!-- Java/LSPosed check names (technical, not translatable) -->
     <string name="check_active_capabilities" translatable="false">Active Network Capabilities</string>
@@ -212,6 +216,7 @@
     <string name="check_netlink_getrule" translatable="false">netlink RTM_GETRULE</string>
     <string name="check_tcp_mss" translatable="false">getsockopt TCP_MAXSEG</string>
     <string name="check_netlink_getneigh" translatable="false">netlink RTM_GETNEIGH</string>
+    <string name="check_udp_pmtu" translatable="false">UDP Path MTU Discovery</string>
     <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
     <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>

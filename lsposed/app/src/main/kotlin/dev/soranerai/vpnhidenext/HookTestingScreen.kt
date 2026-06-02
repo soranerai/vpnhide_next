@@ -198,6 +198,16 @@ val ALL_HOOKS =
                 "Spoofs getsockname/getpeername for IPv6 sockets to hide loopback addresses of VPN observers."
             },
         ),
+        HookInfo(
+            16,
+            "security_socket_bind",
+            "security_socket_bind",
+            if (isRussian) {
+                "Перехватывает bind() на loopback: перенаправляет порты на случайные свободные порты (0) для обхода проверок занятости."
+            } else {
+                "Intercepts loopback bind() calls: redirects protected ports to random free ephemeral ports (0) to bypass conflict checks."
+            },
+        ),
     )
 
 val ALL_JAVA_HOOKS =
@@ -226,8 +236,12 @@ fun HookTestingScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     var selectedTabIndex by remember { mutableStateOf(0) }
+
+    var nativeWriteJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
+    var javaWriteJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
 
     // Native Hooks State
     var mask by remember { mutableStateOf<UInt?>(null) }
@@ -240,82 +254,90 @@ fun HookTestingScreen(
     var applyingJavaState by remember { mutableStateOf(false) }
 
     // Localized error resolution inside Composable context
-    val errKernelParse = stringResource(R.string.hook_testing_kernel_err_parse)
-    val errKernelNotActive = stringResource(R.string.hook_testing_kernel_err_not_active)
     val errKernelSet = stringResource(R.string.hook_testing_kernel_err_set)
-    val errFrameworkParse = stringResource(R.string.hook_testing_framework_err_parse)
-    val errFrameworkAccess = stringResource(R.string.hook_testing_framework_err_access)
     val errFrameworkSet = stringResource(R.string.hook_testing_framework_err_set)
 
-    fun refreshMask() {
+    fun refreshMasksFromDb() {
         scope.launch(Dispatchers.IO) {
-            val (exit, stdout) = suExec("$KMOD_CTL active_hooks")
-            if (exit == 0) {
-                val parsed = stdout.trim().toUIntOrNull()
-                if (parsed != null) {
-                    mask = parsed
-                    errorMessage = null
-                } else {
-                    errorMessage = errKernelParse.replace("%1\$s", stdout.trim())
-                }
-            } else {
-                errorMessage = errKernelNotActive
-            }
-        }
-    }
-
-    fun refreshJavaMask() {
-        scope.launch(Dispatchers.IO) {
-            val (exit, stdout) = suExec("cat /data/system/vpnhide/vpnhide_active_java_hooks 2>/dev/null || echo 63")
-            if (exit == 0) {
-                val parsed = stdout.trim().toUIntOrNull()
-                if (parsed != null) {
-                    javaMask = parsed
-                    javaErrorMessage = null
-                } else {
-                    javaErrorMessage = errFrameworkParse.replace("%1\$s", stdout.trim())
-                }
-            } else {
-                javaErrorMessage = errFrameworkAccess
+            val db =
+                dev.soranerai.vpnhidenext.db.AppDatabase
+                    .getInstance(context)
+            val config =
+                db.globalConfigDao().getConfig() ?: dev.soranerai.vpnhidenext.db
+                    .DbGlobalConfig()
+            withContext(Dispatchers.Main) {
+                mask = config.kernelHookMask.toUInt()
+                javaMask = config.javaHookMask.toUInt()
+                errorMessage = null
+                javaErrorMessage = null
             }
         }
     }
 
     LaunchedEffect(Unit) {
-        refreshMask()
-        refreshJavaMask()
+        refreshMasksFromDb()
     }
 
     fun applyNewMask(newMask: UInt) {
+        val oldMask = mask
+        mask = newMask
+        errorMessage = null
         applyingState = true
-        scope.launch(Dispatchers.IO) {
-            val (exit, _) = suExec("$KMOD_CTL active_hooks $newMask")
-            if (exit == 0) {
-                mask = newMask
-                errorMessage = null
-            } else {
-                errorMessage = errKernelSet
+        nativeWriteJob?.cancel()
+        nativeWriteJob =
+            scope.launch(Dispatchers.IO) {
+                val db =
+                    dev.soranerai.vpnhidenext.db.AppDatabase
+                        .getInstance(context)
+                val dao = db.globalConfigDao()
+                val currentConfig =
+                    dao.getConfig() ?: dev.soranerai.vpnhidenext.db
+                        .DbGlobalConfig()
+                dao.insertConfig(currentConfig.copy(kernelHookMask = newMask.toLong()))
+                val success =
+                    dev.soranerai.vpnhidenext.db.DatabaseSync
+                        .sync(context)
+                withContext(Dispatchers.Main) {
+                    if (!success) {
+                        if (mask == newMask) {
+                            mask = oldMask
+                            errorMessage = errKernelSet
+                        }
+                    }
+                    applyingState = false
+                }
             }
-            applyingState = false
-        }
     }
 
     fun applyNewJavaMask(newMask: UInt) {
+        val oldJavaMask = javaMask
+        javaMask = newMask
+        javaErrorMessage = null
         applyingJavaState = true
-        scope.launch(Dispatchers.IO) {
-            val path = "/data/system/vpnhide/vpnhide_active_java_hooks"
-            val cmd =
-                "mkdir -p /data/system/vpnhide && echo $newMask > $path && chmod 644 $path" +
-                    " && chown system:system $path && chcon u:object_r:system_data_file:s0 $path 2>/dev/null || true"
-            val (exit, _) = suExec(cmd)
-            if (exit == 0) {
-                javaMask = newMask
-                javaErrorMessage = null
-            } else {
-                javaErrorMessage = errFrameworkSet
+        javaWriteJob?.cancel()
+        javaWriteJob =
+            scope.launch(Dispatchers.IO) {
+                val db =
+                    dev.soranerai.vpnhidenext.db.AppDatabase
+                        .getInstance(context)
+                val dao = db.globalConfigDao()
+                val currentConfig =
+                    dao.getConfig() ?: dev.soranerai.vpnhidenext.db
+                        .DbGlobalConfig()
+                dao.insertConfig(currentConfig.copy(javaHookMask = newMask.toLong()))
+                val success =
+                    dev.soranerai.vpnhidenext.db.DatabaseSync
+                        .sync(context)
+                withContext(Dispatchers.Main) {
+                    if (!success) {
+                        if (javaMask == newMask) {
+                            javaMask = oldJavaMask
+                            javaErrorMessage = errFrameworkSet
+                        }
+                    }
+                    applyingJavaState = false
+                }
             }
-            applyingJavaState = false
-        }
     }
 
     Scaffold(
@@ -447,8 +469,8 @@ fun HookTestingScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Button(
-                                        onClick = { applyNewMask(0xFFFFu) },
-                                        enabled = !applyingState && currentMask != 0xFFFFu,
+                                        onClick = { applyNewMask(0xFFFFFFFFu) },
+                                        enabled = !applyingState && currentMask != 0xFFFFFFFFu,
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         modifier = Modifier.weight(1f),
                                     ) {
@@ -547,7 +569,7 @@ fun HookTestingScreen(
 
                                         Switch(
                                             checked = isEnabled,
-                                            enabled = !applyingState,
+                                            enabled = true,
                                             onCheckedChange = { checked ->
                                                 val newMask =
                                                     if (checked) {
@@ -641,8 +663,8 @@ fun HookTestingScreen(
                                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 ) {
                                     Button(
-                                        onClick = { applyNewJavaMask(0x3Fu) },
-                                        enabled = !applyingJavaState && currentJavaMask != 0x3Fu,
+                                        onClick = { applyNewJavaMask(0xFFFFFFFFu) },
+                                        enabled = !applyingJavaState && currentJavaMask != 0xFFFFFFFFu,
                                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                                         modifier = Modifier.weight(1f),
                                     ) {
@@ -741,7 +763,7 @@ fun HookTestingScreen(
 
                                         Switch(
                                             checked = isEnabled,
-                                            enabled = !applyingJavaState,
+                                            enabled = true,
                                             onCheckedChange = { checked ->
                                                 val newMask =
                                                     if (checked) {

@@ -8,7 +8,6 @@ plugins {
     alias(libs.plugins.compose.compiler)
     alias(libs.plugins.gobley.cargo)
     alias(libs.plugins.gobley.uniffi)
-    alias(libs.plugins.ksp)
 }
 
 cargo {
@@ -133,10 +132,6 @@ android {
     }
 }
 
-ksp {
-    arg("room.schemaLocation", "${projectDir}/schemas")
-}
-
 dependencies {
     // Xposed API — compileOnly so it's not bundled into the APK.
     compileOnly("de.robv.android.xposed:api:82")
@@ -156,11 +151,6 @@ dependencies {
     implementation("io.github.oikvpqya.compose.fastscroller:fastscroller-indicator:0.3.2")
     implementation(libs.compose.ui.tooling.preview)
     debugImplementation(libs.compose.ui.tooling)
-
-    // Room
-    implementation(libs.room.runtime)
-    implementation(libs.room.ktx)
-    ksp(libs.room.compiler)
 
     testImplementation("junit:junit:4.13.2")
 }

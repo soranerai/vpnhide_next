@@ -128,7 +128,9 @@ internal fun isVpnActiveBlocking(customPrefixes: List<String> = emptyList()): Bo
     val (exitCode, output) = suExec("ls /sys/class/net/ 2>/dev/null")
     if (exitCode != 0) return false
     val vpnIfaces =
-        output.lines().map { it.trim() }.filter { name -> IfaceLists.isVpnIface(name, customPrefixes) }
+        output.lines().map { it.trim() }.filter { name ->
+            IfaceLists.isVpnIface(name) || customPrefixes.any { name.lowercase().startsWith(it.lowercase()) }
+        }
     if (vpnIfaces.isEmpty()) {
         VpnHideLog.d(TAG, "isVpnActive: no VPN interfaces found")
         return false
@@ -270,6 +272,6 @@ internal fun clearCrashInfo(): Boolean {
     val crashFilePath = "/data/adb/vpnhide_kmod/last_crash.txt"
     val autodisablePath = "/data/adb/vpnhide_kmod/autodisable_mask.txt"
     val (exit1, _) = suExec("rm -f $crashFilePath && rm -f $autodisablePath")
-    val (exit2, _) = suExec("$KMOD_CTL active_hooks 65535")
+    val (exit2, _) = suExec("$KMOD_CTL active_hooks 0xFFFFFFFF")
     return exit1 == 0 && exit2 == 0
 }

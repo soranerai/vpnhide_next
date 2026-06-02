@@ -62,21 +62,38 @@ sealed interface ProtectionCheck {
 }
 
 sealed interface NativeResult {
-    data object Ok : NativeResult
+    data class Ok(
+        val passed: Int,
+        val total: Int,
+    ) : NativeResult
+
+    data class Partial(
+        val passed: Int,
+        val total: Int,
+    ) : NativeResult
 
     data class Fail(
         val passed: Int,
-        val failed: Int,
+        val total: Int,
     ) : NativeResult
 
     data object NoModule : NativeResult
 }
 
 sealed interface JavaResult {
-    data object Ok : JavaResult
+    data class Ok(
+        val passed: Int,
+        val total: Int,
+    ) : JavaResult
+
+    data class Partial(
+        val passed: Int,
+        val total: Int,
+    ) : JavaResult
 
     data class Fail(
-        val failedChecks: Int,
+        val passed: Int,
+        val total: Int,
     ) : JavaResult
 
     data object HooksInactive : JavaResult
@@ -1083,10 +1100,11 @@ internal suspend fun loadDashboardState(
                         } else {
                             val passed = diagResults.native.count { it.passed == true }
                             val failed = diagResults.native.count { it.passed == false }
+                            val total = passed + failed
                             when {
-                                passed == 0 && failed == 0 -> NativeResult.Ok
-                                failed == 0 -> NativeResult.Ok
-                                else -> NativeResult.Fail(passed, failed)
+                                failed == 0 -> NativeResult.Ok(passed, total)
+                                passed > 0 -> NativeResult.Partial(passed, total)
+                                else -> NativeResult.Fail(0, total)
                             }
                         }
                     } else {
@@ -1096,13 +1114,15 @@ internal suspend fun loadDashboardState(
                 val java =
                     if (lsposed is LsposedState.Active) {
                         if (diagResults == null) {
-                            JavaResult.Fail(1)
+                            JavaResult.Fail(0, 1)
                         } else {
-                            val failedCount = diagResults.java.count { it.passed == false }
-                            if (failedCount == 0) {
-                                JavaResult.Ok
-                            } else {
-                                JavaResult.Fail(failedCount)
+                            val passed = diagResults.java.count { it.passed == true }
+                            val failed = diagResults.java.count { it.passed == false }
+                            val total = passed + failed
+                            when {
+                                failed == 0 -> JavaResult.Ok(passed, total)
+                                passed > 0 -> JavaResult.Partial(passed, total)
+                                else -> JavaResult.Fail(0, total)
                             }
                         }
                     } else {
@@ -1223,7 +1243,7 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
     }
 
     val nativeStatsRaw = decodeBase64("native_stats")
-    val currentRawNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
+    val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
     if (nativeStatsRaw.isNotBlank()) {
         nativeStatsRaw.lines().forEach { line ->
             val parts = line.split(';')
@@ -1234,38 +1254,13 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
                 val connect = parts[3].toIntOrNull() ?: 0
                 val getname = parts[4].toIntOrNull() ?: 0
                 if (uid != null && (ioctl > 0 || netlink > 0 || connect > 0 || getname > 0)) {
-                    val map = currentRawNativeMap.computeIfAbsent(uid) { mutableMapOf() }
-                    if (ioctl > 0) map["ioctl"] = ioctl
-                    if (netlink > 0) map["netlink"] = netlink
-                    if (connect > 0) map["connect"] = connect
-                    if (getname > 0) map["getname"] = getname
+                    val hookMap = uidNativeMap.computeIfAbsent(uid) { mutableMapOf() }
+                    if (ioctl > 0) hookMap["ioctl"] = ioctl
+                    if (netlink > 0) hookMap["netlink"] = netlink
+                    if (connect > 0) hookMap["connect"] = connect
+                    if (getname > 0) hookMap["getname"] = getname
                 }
             }
-        }
-    }
-
-    // 30-Minute Auto Expiration check
-    val prefs = context.getSharedPreferences("vpnhide_stats_prefs", android.content.Context.MODE_PRIVATE)
-    val currentTime = System.currentTimeMillis()
-    val lastResetTime = prefs.getLong("last_reset_time", 0L)
-    val lifetimeMs = 30 * 60 * 1000L // 30 minutes
-    val needAutoReset = lastResetTime == 0L || (currentTime - lastResetTime) > lifetimeMs
-
-    if (needAutoReset) {
-        resetInterceptStats(context)
-        return emptyList()
-    }
-
-    val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
-    currentRawNativeMap.forEach { (uid, map) ->
-        val activeMap = mutableMapOf<String, Int>()
-        map.forEach { (type, count) ->
-            if (count > 0) {
-                activeMap[type] = count
-            }
-        }
-        if (activeMap.isNotEmpty()) {
-            uidNativeMap[uid] = activeMap
         }
     }
 
@@ -1289,17 +1284,12 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
         .sortedByDescending { it.frameworkTotal + it.nativeTotal }
 }
 
-internal fun resetInterceptStats(context: android.content.Context) {
+internal fun resetInterceptStats(
+    @Suppress("UNUSED_PARAMETER") context: android.content.Context,
+) {
     // 1. Clear framework hook stats
     suExec("echo 'clear' > /data/system/vpnhide_hook_stats_req 2>/dev/null")
 
     // 2. Clear native kmod stats
     suExec("$KMOD_CTL stats clear 2>/dev/null")
-
-    // 3. Save last reset time
-    val prefs = context.getSharedPreferences("vpnhide_stats_prefs", android.content.Context.MODE_PRIVATE)
-    prefs
-        .edit()
-        .putLong("last_reset_time", System.currentTimeMillis())
-        .apply()
 }

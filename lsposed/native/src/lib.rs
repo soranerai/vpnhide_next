@@ -1218,6 +1218,76 @@ pub fn check_tcp_mss() -> CheckOutput {
 }
 
 #[uniffi::export]
+pub fn check_udp_pmtu() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create UDP socket: {}", last_os_error()));
+        }
+
+        // Set IP_MTU_DISCOVER to IP_PMTUDISC_DO (2) to force PMTU discovery (DF flag set)
+        let val: libc::c_int = 2; // IP_PMTUDISC_DO
+        let opt_ret = libc::setsockopt(
+            fd,
+            libc::IPPROTO_IP,
+            10, // IP_MTU_DISCOVER
+            std::ptr::from_ref(&val).cast(),
+            std::mem::size_of_val(&val) as libc::socklen_t,
+        );
+        if opt_ret < 0 {
+            let err_str = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("cannot set IP_MTU_DISCOVER: {err_str}"));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        let connect_ret = libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        );
+        if connect_ret < 0 {
+            let err_str = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("cannot connect UDP socket: {err_str}"));
+        }
+
+        // Send a 1472-byte payload. Combined with 20-byte IP header and 8-byte UDP header,
+        // it makes a 1500-byte IP packet.
+        let payload = vec![0u8; 1472];
+        let send_ret = libc::send(fd, payload.as_ptr().cast(), payload.len(), 0);
+
+        let err_no = if send_ret < 0 { last_os_errno() } else { 0 };
+        let err_str = if send_ret < 0 {
+            last_os_error()
+        } else {
+            String::new()
+        };
+
+        libc::close(fd);
+
+        if send_ret < 0 {
+            if err_no == libc::EMSGSIZE {
+                CheckOutput::fail(
+                    "UDP send 1500 bytes failed with EMSGSIZE — VPN tunnel MTU bottleneck detected"
+                        .to_string(),
+                )
+            } else {
+                CheckOutput::fail(format!("UDP send 1500 bytes failed with error: {err_str}"))
+            }
+        } else {
+            CheckOutput::pass(
+                "UDP send 1500 bytes succeeded — no PMTU bottleneck (physical interface spoofed/allowed)".to_string()
+            )
+        }
+    }
+}
+
+#[uniffi::export]
 pub fn check_netlink_getneigh() -> CheckOutput {
     let fd = match open_netlink() {
         Ok(fd) => fd,
@@ -1359,6 +1429,154 @@ pub fn check_netlink_getneigh() -> CheckOutput {
             ))
         } else {
             CheckOutput::pass(format!("neighbor table: {details}"))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_loopback_bind_conflict() -> CheckOutput {
+    unsafe {
+        let ports = [1080, 10808, 1082, 2080, 8080, 2081, 53];
+        let mut conflicts = Vec::new();
+        for &port in &ports {
+            let fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
+            if fd >= 0 {
+                let mut addr: libc::sockaddr_in = std::mem::zeroed();
+                addr.sin_family = libc::AF_INET as libc::sa_family_t;
+                addr.sin_port = (port as u16).to_be();
+                addr.sin_addr.s_addr = 0x0100007f; // 127.0.0.1
+
+                let ret = libc::bind(
+                    fd,
+                    std::ptr::from_ref(&addr).cast(),
+                    std::mem::size_of_val(&addr) as libc::socklen_t,
+                );
+                let err = last_os_errno();
+                libc::close(fd);
+
+                if ret < 0 && err == libc::EADDRINUSE {
+                    conflicts.push(port.to_string());
+                }
+            }
+        }
+
+        if conflicts.is_empty() {
+            CheckOutput::pass("no loopback port bind conflicts (checked SOCKS/HTTP/DNS ports)")
+        } else {
+            CheckOutput::fail(format!(
+                "loopback port bind conflict detected on ports [{}] (EADDRINUSE) — active proxy/VPN listener detected!",
+                conflicts.join(", ")
+            ))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_bpf_iface_map() -> CheckOutput {
+    unsafe {
+        let paths = [
+            "/sys/fs/bpf/netd_shared/map_netd_iface_index_name_map\0",
+            "/sys/fs/bpf/map_netd_iface_index_name_map\0",
+        ];
+
+        let mut fd = -1;
+        let mut last_err = std::io::Error::from_raw_os_error(0);
+
+        for path in &paths {
+            let c_path = std::ffi::CStr::from_bytes_with_nul(path.as_bytes()).unwrap();
+            let mut attr = [0u8; 128];
+            let path_ptr = c_path.as_ptr() as u64;
+            std::ptr::copy_nonoverlapping(&path_ptr, attr.as_mut_ptr().cast(), 1);
+
+            let ret = libc::syscall(libc::SYS_bpf, 7, attr.as_ptr(), attr.len()); // 7 is BPF_OBJ_GET
+            if ret >= 0 {
+                fd = ret as i32;
+                break;
+            } else {
+                last_err = std::io::Error::last_os_error();
+            }
+        }
+
+        if fd < 0 {
+            if is_selinux_denial(&last_err) {
+                return CheckOutput::pass(format!(
+                    "bpf(BPF_OBJ_GET) map_netd_iface_index_name_map denied by SELinux ({last_err}) — secure"
+                ));
+            } else {
+                return CheckOutput::pass(format!(
+                    "bpf(BPF_OBJ_GET) map_netd_iface_index_name_map failed with: {last_err} — secure"
+                ));
+            }
+        }
+
+        // Map opened successfully! Now let's iterate over keys and values.
+        let mut key = 0u32;
+        let mut next_key = 0u32;
+        let mut all_ifaces = Vec::new();
+        let mut vpn_ifaces = Vec::new();
+        let mut first = true;
+
+        loop {
+            let mut attr = [0u8; 128];
+            // map_fd is u32 at offset 0
+            std::ptr::copy_nonoverlapping(&(fd as u32), attr.as_mut_ptr().cast(), 1);
+
+            // key is u64 at offset 8
+            let key_ptr = if first {
+                0u64
+            } else {
+                std::ptr::from_ref(&key) as u64
+            };
+            std::ptr::copy_nonoverlapping(&key_ptr, attr.as_mut_ptr().add(8).cast(), 1);
+
+            // next_key is u64 at offset 16
+            let next_key_ptr = std::ptr::from_mut(&mut next_key) as u64;
+            std::ptr::copy_nonoverlapping(&next_key_ptr, attr.as_mut_ptr().add(16).cast(), 1);
+
+            let ret = libc::syscall(libc::SYS_bpf, 4, attr.as_ptr(), attr.len()); // 4 is BPF_MAP_GET_NEXT_KEY
+            if ret < 0 {
+                break; // End of map or error
+            }
+
+            key = next_key;
+            first = false;
+
+            // Lookup the value (interface name) for the found key
+            let mut val_attr = [0u8; 128];
+            std::ptr::copy_nonoverlapping(&(fd as u32), val_attr.as_mut_ptr().cast(), 1);
+
+            let lookup_key_ptr = std::ptr::from_ref(&key) as u64;
+            std::ptr::copy_nonoverlapping(&lookup_key_ptr, val_attr.as_mut_ptr().add(8).cast(), 1);
+
+            let mut ifname_bytes = [0u8; 16]; // IFNAMSIZ
+            let val_ptr = ifname_bytes.as_mut_ptr() as u64;
+            std::ptr::copy_nonoverlapping(&val_ptr, val_attr.as_mut_ptr().add(16).cast(), 1);
+
+            let lookup_ret = libc::syscall(libc::SYS_bpf, 1, val_attr.as_ptr(), val_attr.len()); // 1 is BPF_MAP_LOOKUP_ELEM
+            if lookup_ret == 0 {
+                let name = cstr_to_str(ifname_bytes.as_ptr().cast());
+                if !name.is_empty() {
+                    if is_vpn_iface(&name) {
+                        vpn_ifaces.push(name.clone());
+                    }
+                    all_ifaces.push(name);
+                }
+            }
+        }
+
+        libc::close(fd);
+
+        if vpn_ifaces.is_empty() {
+            CheckOutput::pass(format!(
+                "BPF map read successfully, no VPN interfaces detected (interfaces: [{}])",
+                all_ifaces.join(", ")
+            ))
+        } else {
+            CheckOutput::fail(format!(
+                "leaked VPN interfaces via direct BPF map read: [{}] inside [{}]!",
+                vpn_ifaces.join(", "),
+                all_ifaces.join(", ")
+            ))
         }
     }
 }
