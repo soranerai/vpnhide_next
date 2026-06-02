@@ -1,6 +1,65 @@
 {
   "history": [
     {
+      "version": "1.8.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Added diagnostic checks for loopback bind conflict and TrafficStats volume anomaly. Added NetworkStatsService system_server hooks to spoof TrafficStats and bypass detection.",
+              "ru": "Добавлены диагностические проверки для конфликта bind() на loopback и аномалии трафика TrafficStats. Добавлены хуки на NetworkStatsService в system_server для подмены TrafficStats и обхода детекта."
+            },
+            {
+              "en": "Added security_socket_bind kernel hook to silently redirect blocked loopback port binds to port 0, making bind conflict scanning succeed transparently.",
+              "ru": "Добавлен хук ядра security_socket_bind для незаметного перенаправления заблокированных привязок портов на loopback на порт 0, благодаря чему сканирование портов через bind() успешно завершается."
+            },
+            {
+              "en": "Added UDP Path MTU (PMTU) discovery active check and kernel-level socket spoofing hooks to hide PMTU bottlenecks",
+              "ru": "Добавлена активная проверка UDP Path MTU (PMTU) и нативные хуки ядра для скрытия ограничений PMTU"
+            },
+            {
+              "en": "Add ConnectivityDiagnostics as an isolated Java hook with its own toggle and localized description in the isolation settings",
+              "ru": "Добавлен хук ConnectivityDiagnostics в качестве изолированного Java-хука с собственным переключателем и локализованным описанием в настройках изоляции"
+            },
+            {
+              "en": "Display passed checks counts ratio and partial status with premium blue theme on dashboard cards",
+              "ru": "Отображение количества работающих хуков, статуса Partial и синего оформления для частично скрытых векторов"
+            },
+            {
+              "en": "Implement registerConnectivityDiagnosticsCallback suppression hook in ConnectivityService to prevent target apps from receiving VPN reports",
+              "ru": "Реализован хук подавления registerConnectivityDiagnosticsCallback в ConnectivityService для предотвращения получения VPN-отчетов целевыми приложениями"
+            },
+            {
+              "en": "Added automatic SQLite target migration from original app",
+              "ru": "Добавлена автоматическая миграция целей в SQLite из оригинального приложения"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Expanded kernel and Java active hooks mask to 32 bits for future-proof hook management",
+              "ru": "Расширены маски активных Kernel и Java хуков до 32 бит для поддержки будущих хуков"
+            },
+            {
+              "en": "Optimize Hook Isolation",
+              "ru": "Оптимизация экрана изоляции хуков"
+            },
+            {
+              "en": "Replace Room ORM with raw SQLite",
+              "ru": "Переход с Room ORM на сырой SQLite"
+            },
+            {
+              "en": "Refined diagnostics screen styling with smooth rounded cards and status-aware detail tints",
+              "ru": "Улучшено оформление экрана диагностики с мягким скруглением карточек и цветным выделением деталей"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.7.5",
       "sections": [
         {

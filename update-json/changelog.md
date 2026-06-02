@@ -1,3 +1,20 @@
+## v1.8.0
+
+### Added
+- Added diagnostic checks for loopback bind conflict and TrafficStats volume anomaly. Added NetworkStatsService system_server hooks to spoof TrafficStats and bypass detection.
+- Added security_socket_bind kernel hook to silently redirect blocked loopback port binds to port 0, making bind conflict scanning succeed transparently.
+- Added UDP Path MTU (PMTU) discovery active check and kernel-level socket spoofing hooks to hide PMTU bottlenecks
+- Add ConnectivityDiagnostics as an isolated Java hook with its own toggle and localized description in the isolation settings
+- Display passed checks counts ratio and partial status with premium blue theme on dashboard cards
+- Implement registerConnectivityDiagnosticsCallback suppression hook in ConnectivityService to prevent target apps from receiving VPN reports
+- Added automatic SQLite target migration from original app
+
+### Changed
+- Expanded kernel and Java active hooks mask to 32 bits for future-proof hook management
+- Optimize Hook Isolation
+- Replace Room ORM with raw SQLite
+- Refined diagnostics screen styling with smooth rounded cards and status-aware detail tints
+
 ## v1.7.5
 
 ### Added
@@ -48,20 +65,3 @@
 - Fix register mapping in rt_fill_info hook to prevent kernel panics on ARM64
 - Fix setsockopt registers mapping for ARM64 kernels >= 6.4 (including 6.6 and 6.12)
 - Hid routing policy database rules from target apps
-
-## v1.5.0
-
-### Added
-- Add NetworkCapabilities signal strength and bandwidth checks to diagnostics with stealth masking
-- Added getsockopt SO_BINDTODEVICE and inet_diag socket diagnostics to native checks screen
-- Implement dynamic Network netId replacement with physical network to prevent cross-id leakage
-
-### Changed
-- Consolidated diagnostic checks on the screen
-- Implement dynamic physical network properties propagation and add Wi-Fi state/WifiInfo diagnostic checks
-- Moved all Xposed logs under the debug flag
-
-### Fixed
-- Fix Java-level VPN interface detection leak by dynamically redirecting to physical network properties
-- Fix false-positive VPN detection in some apps (e.g. MTS)
-- Fix loopback port bypass via 0.0.0.0, loopback subnets, IPv6 wildcard, and IPv4-mapped IPv6 loopback addresses

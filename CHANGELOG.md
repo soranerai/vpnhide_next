@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.8.0
+
+### Added
+- Added diagnostic checks for loopback bind conflict and TrafficStats volume anomaly. Added NetworkStatsService system_server hooks to spoof TrafficStats and bypass detection.
+- Added security_socket_bind kernel hook to silently redirect blocked loopback port binds to port 0, making bind conflict scanning succeed transparently.
+- Added UDP Path MTU (PMTU) discovery active check and kernel-level socket spoofing hooks to hide PMTU bottlenecks
+- Add ConnectivityDiagnostics as an isolated Java hook with its own toggle and localized description in the isolation settings
+- Display passed checks counts ratio and partial status with premium blue theme on dashboard cards
+- Implement registerConnectivityDiagnosticsCallback suppression hook in ConnectivityService to prevent target apps from receiving VPN reports
+- Added automatic SQLite target migration from original app
+
+### Changed
+- Expanded kernel and Java active hooks mask to 32 bits for future-proof hook management
+- Optimize Hook Isolation
+- Replace Room ORM with raw SQLite
+- Refined diagnostics screen styling with smooth rounded cards and status-aware detail tints
+
 ## v1.7.5
 
 ### Added
