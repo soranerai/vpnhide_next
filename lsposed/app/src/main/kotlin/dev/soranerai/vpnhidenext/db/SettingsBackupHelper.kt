@@ -1,7 +1,6 @@
 package dev.soranerai.vpnhidenext.db
 
 import android.content.Context
-import androidx.room.withTransaction
 import dev.soranerai.vpnhidenext.PortProtocol
 import dev.soranerai.vpnhidenext.TargetsCache
 import kotlinx.coroutines.Dispatchers
@@ -87,6 +86,13 @@ internal object SettingsBackupHelper {
             }
             json.put("iface_prefixes", prefixesArray)
 
+            // 4. Export global settings
+            val config = db.globalConfigDao().getConfig() ?: DbGlobalConfig()
+            val globalObj = JSONObject()
+            globalObj.put("kernelHookMask", config.kernelHookMask)
+            globalObj.put("javaHookMask", config.javaHookMask)
+            json.put("global_config", globalObj)
+
             json.toString(4) // Format with 4 spaces indent
         }
 
@@ -106,6 +112,21 @@ internal object SettingsBackupHelper {
                 db.withTransaction {
                     // Clear all tables atomically
                     db.clearAllTables()
+
+                    // Import global config if present
+                    val globalObj = json.optJSONObject("global_config")
+                    if (globalObj != null) {
+                        val kernelMask = globalObj.optLong("kernelHookMask", 0xFFFFFFFFL)
+                        val javaMask = globalObj.optLong("javaHookMask", 0xFFFFFFFFL)
+                        db.globalConfigDao().insertConfig(
+                            DbGlobalConfig(
+                                kernelHookMask = kernelMask,
+                                javaHookMask = javaMask,
+                            ),
+                        )
+                    } else {
+                        db.globalConfigDao().insertConfig(DbGlobalConfig())
+                    }
 
                     // 1. Import app protections & nested port rules
                     val appsArray = json.optJSONArray("app_protection")

@@ -384,24 +384,29 @@ private fun ModuleCard(
                 if (active) {
                     when (nativeResult) {
                         is NativeResult.Ok -> {
+                            val statusText = stringResource(R.string.dashboard_protection_ok)
                             "\n" +
                                 stringResource(
                                     R.string.dashboard_protection_prefix,
-                                    stringResource(R.string.dashboard_protection_ok),
+                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
+                                )
+                        }
+
+                        is NativeResult.Partial -> {
+                            val statusText = stringResource(R.string.dashboard_protection_partial)
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
                                 )
                         }
 
                         is NativeResult.Fail -> {
-                            val failText =
-                                if (nativeResult.passed > 0) {
-                                    stringResource(R.string.dashboard_protection_partial)
-                                } else {
-                                    stringResource(R.string.dashboard_protection_fail)
-                                }
+                            val statusText = stringResource(R.string.dashboard_protection_fail)
                             "\n" +
                                 stringResource(
                                     R.string.dashboard_protection_prefix,
-                                    failText,
+                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
                                 )
                         }
 
@@ -426,6 +431,7 @@ private fun ModuleCard(
             val subtitle = targetsText + protectionText
 
             val isFail = broken != null || (active && nativeResult is NativeResult.Fail)
+            val isPartial = active && nativeResult is NativeResult.Partial
             val isOk = active && nativeResult is NativeResult.Ok
 
             val (containerColor, contentColor, dotColor) =
@@ -435,6 +441,14 @@ private fun ModuleCard(
                             Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
                         } else {
                             Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
+                        }
+                    }
+
+                    isPartial -> {
+                        if (darkTheme) {
+                            Triple(Color(0xFF0D243A), Color(0xFF90CAF9), TelBlue)
+                        } else {
+                            Triple(Color(0xFFE3F2FD), Color(0xFF1565C0), TelBlue)
                         }
                     }
 
@@ -526,18 +540,29 @@ private fun LsposedCard(
             val protectionText =
                 when (javaResult) {
                     is JavaResult.Ok -> {
+                        val statusText = stringResource(R.string.dashboard_protection_ok)
                         "\n" +
                             stringResource(
                                 R.string.dashboard_protection_prefix,
-                                stringResource(R.string.dashboard_protection_ok),
+                                "$statusText (${javaResult.passed}/${javaResult.total})",
+                            )
+                    }
+
+                    is JavaResult.Partial -> {
+                        val statusText = stringResource(R.string.dashboard_protection_partial)
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                "$statusText (${javaResult.passed}/${javaResult.total})",
                             )
                     }
 
                     is JavaResult.Fail -> {
+                        val statusText = stringResource(R.string.dashboard_protection_fail)
                         "\n" +
                             stringResource(
                                 R.string.dashboard_protection_prefix,
-                                stringResource(R.string.dashboard_protection_fail),
+                                "$statusText (${javaResult.passed}/${javaResult.total})",
                             )
                     }
 
@@ -559,6 +584,7 @@ private fun LsposedCard(
             val subtitle = targetsText + protectionText
 
             val isFail = javaResult is JavaResult.Fail
+            val isPartial = javaResult is JavaResult.Partial
             val isOk = javaResult is JavaResult.Ok
 
             val (containerColor, contentColor, dotColor) =
@@ -568,6 +594,14 @@ private fun LsposedCard(
                             Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
                         } else {
                             Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
+                        }
+                    }
+
+                    isPartial -> {
+                        if (darkTheme) {
+                            Triple(Color(0xFF0D243A), Color(0xFF90CAF9), TelBlue)
+                        } else {
+                            Triple(Color(0xFFE3F2FD), Color(0xFF1565C0), TelBlue)
                         }
                     }
 

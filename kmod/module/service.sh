@@ -48,6 +48,34 @@ apply_all_rules_from_db() {
     if [ -f "$DB" ] && [ -x "$SQLITE" ]; then
         log -t vpnhide "applying rules from DB..."
         
+        # Resolve and populate missing UIDs in the database at boot
+        local pm_list
+        pm_list="$(pm list packages -U --user all 2>/dev/null)"
+        if [ -n "$pm_list" ]; then
+            local apps
+            apps="$($SQLITE "$DB" "SELECT packageName, userId FROM app_protection" 2>/dev/null)"
+            for app_row in $apps; do
+                local pkg
+                local user
+                pkg="$(echo "$app_row" | cut -d'|' -f1)"
+                user="$(echo "$app_row" | cut -d'|' -f2)"
+                [ -n "$pkg" ] || continue
+                
+                local resolved_uid
+                resolved_uid="$(echo "$pm_list" | grep "^package:$pkg " | awk '{print $2}' | sed 's/uid://' | tr ',' '\n' | while read -r u; do
+                    local u_id=$((u / 100000))
+                    if [ "$u_id" -eq "$user" ]; then
+                        echo "$u"
+                        break
+                    fi
+                done)"
+                
+                if [ -n "$resolved_uid" ] && [ "$resolved_uid" -gt 0 ]; then
+                    $SQLITE "$DB" "UPDATE app_protection SET uid = $resolved_uid WHERE packageName = '$pkg' AND userId = $user"
+                fi
+            done
+        fi
+        
         # 1. VPN targets
         local kmod_uids
         kmod_uids="$($SQLITE "$DB" "SELECT uid FROM app_protection WHERE kmod = 1 AND uid != 0" | xargs)"
@@ -121,6 +149,14 @@ apply_all_rules_from_db() {
         if [ -f "$ss_debug_logging" ]; then
             # shellcheck disable=SC2046
             "$CTL" debug $(cat "$ss_debug_logging")
+        fi
+
+        # 5. Hook masks
+        local kernel_mask
+        kernel_mask="$($SQLITE "$DB" "SELECT kernelHookMask FROM global_config WHERE id = 'default'" | xargs)"
+        if [ -n "$kernel_mask" ]; then
+            log -t vpnhide "boot: applying active hooks mask from DB: $kernel_mask"
+            "$CTL" active_hooks "$kernel_mask"
         fi
     fi
 }

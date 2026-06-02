@@ -8,6 +8,8 @@ import android.os.Build
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -19,6 +21,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
@@ -29,6 +32,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
 import dev.soranerai.vpnhidenext.checks.CheckStatus
+import dev.soranerai.vpnhidenext.checks.checkBpfIfaceMap
 import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkGetsocknameSpoof
 import dev.soranerai.vpnhidenext.checks.checkGetsockoptBind
@@ -171,6 +175,7 @@ fun DiagnosticsScreen(
                     .language == "ru"
 
             Card(
+                shape = RoundedCornerShape(16.dp),
                 colors =
                     CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -354,14 +359,16 @@ fun DiagnosticsScreen(
 
                     SectionHeader(stringResource(R.string.section_native))
                     Spacer(Modifier.height(8.dp))
-                    ElevatedCard(
-                        shape = RoundedCornerShape(12.dp),
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
                         colors =
-                            CardDefaults.elevatedCardColors(
-                                containerColor =
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = 0.5f,
-                                    ),
+                            CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                            ),
+                        border =
+                            BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
                             ),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -372,7 +379,7 @@ fun DiagnosticsScreen(
                                     HorizontalDivider(
                                         color =
                                             MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.1f,
+                                                alpha = 0.06f,
                                             ),
                                         thickness = 1.dp,
                                         modifier = Modifier.padding(horizontal = 14.dp),
@@ -386,14 +393,16 @@ fun DiagnosticsScreen(
 
                     SectionHeader(stringResource(R.string.section_java))
                     Spacer(Modifier.height(8.dp))
-                    ElevatedCard(
-                        shape = RoundedCornerShape(12.dp),
+                    Card(
+                        shape = RoundedCornerShape(16.dp),
                         colors =
-                            CardDefaults.elevatedCardColors(
-                                containerColor =
-                                    MaterialTheme.colorScheme.surfaceVariant.copy(
-                                        alpha = 0.5f,
-                                    ),
+                            CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.surface,
+                            ),
+                        border =
+                            BorderStroke(
+                                1.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
                             ),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -404,7 +413,7 @@ fun DiagnosticsScreen(
                                     HorizontalDivider(
                                         color =
                                             MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.1f,
+                                                alpha = 0.06f,
                                             ),
                                         thickness = 1.dp,
                                         modifier = Modifier.padding(horizontal = 14.dp),
@@ -519,11 +528,16 @@ private fun DebugLoggingCard() {
     val scope = rememberCoroutineScope()
     var enabled by remember { mutableStateOf(VpnHideLog.enabled) }
 
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
+    Card(
+        shape = RoundedCornerShape(16.dp),
         colors =
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+        border =
+            BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
             ),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -588,11 +602,16 @@ private fun LogcatRecordCard() {
             }
         }
 
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
+    Card(
+        shape = RoundedCornerShape(16.dp),
         colors =
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+        border =
+            BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
             ),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -737,9 +756,9 @@ private fun StatusBanner(
     containerColor: Color,
     contentColor: Color,
 ) {
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = containerColor),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Text(
@@ -787,10 +806,19 @@ private fun CheckRow(r: CheckResult) {
             },
         )
 
+    val rowBgColor =
+        if (expanded) {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
+        } else {
+            Color.Transparent
+        }
+
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(rowBgColor)
                 .clickable(enabled = r.detail.isNotBlank()) { expanded = !expanded }
                 .padding(vertical = 10.dp, horizontal = 14.dp),
     ) {
@@ -838,17 +866,29 @@ private fun CheckRow(r: CheckResult) {
         }
         if (expanded && r.detail.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
+            val detailBgColor =
+                when (r.passed) {
+                    true -> TelGreen.copy(alpha = 0.08f)
+                    false -> TelRed.copy(alpha = 0.08f)
+                    null -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                }
+            val detailTextColor =
+                when (r.passed) {
+                    true -> TelGreen
+                    false -> TelRed
+                    null -> MaterialTheme.colorScheme.onSurface
+                }
             Surface(
-                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                shape = RoundedCornerShape(8.dp),
+                color = detailBgColor,
+                shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Text(
                     text = r.detail,
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.85f),
-                    modifier = Modifier.padding(10.dp),
+                    color = detailTextColor.copy(alpha = 0.9f),
+                    modifier = Modifier.padding(12.dp),
                 )
             }
         }
@@ -903,6 +943,9 @@ internal fun runAllChecks(
             nativeCheck(res.getString(R.string.check_proc_fib_trie)) {
                 checkProcNetFibTrie()
             },
+            nativeCheck(res.getString(R.string.check_bpf_iface_map)) {
+                checkBpfIfaceMap()
+            },
             nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() },
             checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)),
             checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)),
@@ -942,6 +985,7 @@ internal fun runAllChecks(
             checkWifiInfoSpoof(context, res.getString(R.string.check_wifi_info_spoof)),
             checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)),
             checkTrafficStatsDiscrepancy(
+                cm,
                 context,
                 res.getString(R.string.check_traffic_stats),
             ),
@@ -1478,6 +1522,7 @@ private fun checkGetNetworkForType(
 }
 
 private fun checkTrafficStatsDiscrepancy(
+    cm: ConnectivityManager,
     context: android.content.Context,
     name: String,
 ): CheckResult {
@@ -1485,6 +1530,12 @@ private fun checkTrafficStatsDiscrepancy(
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) {
             return CheckResult(name, true, "TrafficStats per-interface queries require Android 12+ (API 31+)")
         }
+
+        val activeNet = cm.activeNetwork
+        val caps = if (activeNet != null) cm.getNetworkCapabilities(activeNet) else null
+        val isCellular = caps?.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) == true
+        val hasWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+
         val systemTx = android.net.TrafficStats.getTotalTxBytes()
         val systemRx = android.net.TrafficStats.getTotalRxBytes()
         if (systemTx <= 0 || systemRx <= 0) {
@@ -1495,8 +1546,17 @@ private fun checkTrafficStatsDiscrepancy(
         var visibleRx = 0L
         val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
         val names = mutableListOf<String>()
+        var mobileIfaceDetected = false
         if (ifaces != null) {
             for (iface in ifaces) {
+                val nameLower = iface.name.lowercase()
+                if (nameLower.startsWith("ccmni") || nameLower.startsWith("rmnet") || nameLower.startsWith("ppp") ||
+                    nameLower.startsWith("pdp") ||
+                    nameLower.startsWith("ipa") ||
+                    nameLower.startsWith("epdg")
+                ) {
+                    mobileIfaceDetected = true
+                }
                 val t = android.net.TrafficStats.getTxBytes(iface.name)
                 val r = android.net.TrafficStats.getRxBytes(iface.name)
                 if (t > 0) visibleTx += t
@@ -1524,12 +1584,23 @@ private fun checkTrafficStatsDiscrepancy(
                 append("Visible ifaces: [${names.joinToString()}]")
             }
 
-        val passed = !txSuspicious && !rxSuspicious
+        // Under cellular networks, hardware offload bypasses standard Linux interface byte/packet counters,
+        // making standard per-interface TrafficStats queries highly inaccurate and leading to false-positive anomalies.
+        // We exempt the volume discrepancy check when mobile/cellular data is the active/only network connection
+        // or a mobile interface is present and Wi-Fi is absent.
+        val shouldRelax = (isCellular && !hasWifi) || (mobileIfaceDetected && !hasWifi)
+
+        val passed = if (shouldRelax) true else (!txSuspicious && !rxSuspicious)
+
         return CheckResult(
             name,
             passed,
             if (passed) {
-                "$detail (clean)"
+                if (shouldRelax) {
+                    "$detail (clean: cellular offload bypassed)"
+                } else {
+                    "$detail (clean)"
+                }
             } else {
                 "$detail (discrepancy detected: hidden interface routing traffic!)"
             },
@@ -1863,11 +1934,16 @@ private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
         java.util.Locale
             .getDefault()
             .language == "ru"
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
+    Card(
+        shape = RoundedCornerShape(16.dp),
         colors =
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+        border =
+            BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
             ),
         modifier = Modifier.fillMaxWidth(),
     ) {
@@ -1976,11 +2052,16 @@ private fun BackupRestoreCard() {
             }
         }
 
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
+    Card(
+        shape = RoundedCornerShape(16.dp),
         colors =
-            CardDefaults.elevatedCardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant,
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+        border =
+            BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
             ),
         modifier = Modifier.fillMaxWidth(),
     ) {
