@@ -123,11 +123,6 @@ internal object DiagnosticsCache {
     private suspend fun doRun(appContext: Context) {
         _state.value = State.Running
         try {
-            val vpnActive = withContext(Dispatchers.IO) { isVpnActive() }
-            if (!vpnActive) {
-                _state.value = State.VpnOff
-                return
-            }
             val results =
                 withContext(Dispatchers.IO) {
                     val cm = appContext.getSystemService(ConnectivityManager::class.java)
