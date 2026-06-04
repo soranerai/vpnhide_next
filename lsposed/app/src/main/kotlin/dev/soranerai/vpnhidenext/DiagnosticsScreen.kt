@@ -943,9 +943,7 @@ internal fun runAllChecks(
             nativeCheck(res.getString(R.string.check_proc_fib_trie)) {
                 checkProcNetFibTrie()
             },
-            nativeCheck(res.getString(R.string.check_bpf_iface_map)) {
-                checkBpfIfaceMap()
-            },
+            nativeCheck(res.getString(R.string.check_bpf_iface_map)) { checkBpfIfaceMap() },
             nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() },
             checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)),
             checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)),
@@ -1528,7 +1526,11 @@ private fun checkTrafficStatsDiscrepancy(
 ): CheckResult {
     try {
         if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) {
-            return CheckResult(name, true, "TrafficStats per-interface queries require Android 12+ (API 31+)")
+            return CheckResult(
+                name,
+                true,
+                "TrafficStats per-interface queries require Android 12+ (API 31+)",
+            )
         }
 
         val activeNet = cm.activeNetwork
@@ -1550,7 +1552,9 @@ private fun checkTrafficStatsDiscrepancy(
         if (ifaces != null) {
             for (iface in ifaces) {
                 val nameLower = iface.name.lowercase()
-                if (nameLower.startsWith("ccmni") || nameLower.startsWith("rmnet") || nameLower.startsWith("ppp") ||
+                if (nameLower.startsWith("ccmni") ||
+                    nameLower.startsWith("rmnet") ||
+                    nameLower.startsWith("ppp") ||
                     nameLower.startsWith("pdp") ||
                     nameLower.startsWith("ipa") ||
                     nameLower.startsWith("epdg")
@@ -1576,28 +1580,26 @@ private fun checkTrafficStatsDiscrepancy(
             rxDiff > threshold &&
                 (systemRx.toDouble() / visibleRx.coerceAtLeast(1L).toDouble() > 1.5)
 
+        val isSkipped = isCellular || !hasWifi
         val detail =
             buildString {
                 append("System: TX=${systemTx / 1024}K, RX=${systemRx / 1024}K. ")
                 append("Visible sum: TX=${visibleTx / 1024}K, RX=${visibleRx / 1024}K. ")
                 append("Diff: TX=${txDiff / 1024}K, RX=${rxDiff / 1024}K. ")
-                append("Visible ifaces: [${names.joinToString()}]")
+                append("Visible ifaces: [${names.joinToString()}]. ")
+                if (isSkipped) {
+                    append("Skipped discrepancy check on cellular/non-wifi.")
+                }
             }
 
-        // Under cellular networks, hardware offload bypasses standard Linux interface byte/packet counters,
-        // making standard per-interface TrafficStats queries highly inaccurate and leading to false-positive anomalies.
-        // We exempt the volume discrepancy check when mobile/cellular data is the active/only network connection
-        // or a mobile interface is present and Wi-Fi is absent.
-        val shouldRelax = (isCellular && !hasWifi) || (mobileIfaceDetected && !hasWifi)
-
-        val passed = if (shouldRelax) true else (!txSuspicious && !rxSuspicious)
+        val passed = isSkipped || (!txSuspicious && !rxSuspicious)
 
         return CheckResult(
             name,
             passed,
             if (passed) {
-                if (shouldRelax) {
-                    "$detail (clean: cellular offload bypassed)"
+                if (isSkipped) {
+                    detail
                 } else {
                     "$detail (clean)"
                 }

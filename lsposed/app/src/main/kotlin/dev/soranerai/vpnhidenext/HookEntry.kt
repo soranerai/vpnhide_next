@@ -1555,13 +1555,12 @@ class HookEntry : IXposedHookLoadPackage {
                     val name = param.args[0] as? String ?: return
                     val binder = param.args[1] as? android.os.IBinder ?: return
                     val classLoader = binder.javaClass.classLoader ?: return
-                    handleServiceHook(name, classLoader, "addService")
+                    handleServiceHook(name, classLoader)
                 }
             },
         )
 
         checkAndHookExistingService("connectivity", smClass)
-        checkAndHookExistingService("netstats", smClass)
     }
 
     private fun checkAndHookExistingService(
@@ -1573,7 +1572,7 @@ class HookEntry : IXposedHookLoadPackage {
                 XposedHelpers.callStaticMethod(smClass, "getService", name) as?
                     android.os.IBinder
             val classLoader = binder?.javaClass?.classLoader
-            if (classLoader != null) handleServiceHook(name, classLoader, "getService")
+            if (classLoader != null) handleServiceHook(name, classLoader)
         } catch (t: Throwable) {
         }
     }
@@ -1581,7 +1580,6 @@ class HookEntry : IXposedHookLoadPackage {
     private fun handleServiceHook(
         name: String,
         classLoader: ClassLoader,
-        source: String,
     ) {
         val hookKey = "$name@${System.identityHashCode(classLoader)}"
         if (!hookedServices.add(hookKey)) return
@@ -1591,114 +1589,6 @@ class HookEntry : IXposedHookLoadPackage {
                 HookLog.i("VpnHide: Installing APEX Connectivity hooks...")
                 tryHook("ConnectivityService.networkLogic") { hookConnectivityService(classLoader) }
             }
-
-            "netstats" -> {
-                HookLog.i("VpnHide: Installing APEX Netstats hooks...")
-                tryHook("NetworkStatsService.statsLogic") { hookNetworkStatsService(classLoader) }
-            }
-        }
-    }
-
-    private fun hookNetworkStatsService(classLoader: ClassLoader) {
-        val nssClass =
-            try {
-                XposedHelpers.findClass(
-                    "com.android.server.net.NetworkStatsService",
-                    classLoader,
-                )
-            } catch (t: Throwable) {
-                HookLog.e("VpnHide: failed to load NetworkStatsService: ${t.message}")
-                return
-            }
-
-        // 1. Hook getIfaceStats(String iface, int type)
-        try {
-            val getIfaceStatsMethod =
-                XposedHelpers.findMethodExact(
-                    nssClass,
-                    "getIfaceStats",
-                    String::class.java,
-                    Integer.TYPE,
-                )
-            XposedBridge.hookMethod(
-                getIfaceStatsMethod,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val callingUid = Binder.getCallingUid()
-                        if (loadTargetUids().contains(callingUid)) {
-                            val iface = param.args[0] as? String ?: return
-                            if (isVpnInterfaceName(iface)) {
-                                HookLog.i(
-                                    "VpnHide: getIfaceStats('$iface') blocked for target UID $callingUid",
-                                )
-                                param.result = 0L
-                            }
-                        }
-                    }
-                },
-            )
-            HookLog.i("VpnHide: NetworkStatsService.getIfaceStats hook installed")
-        } catch (t: Throwable) {
-            HookLog.e("VpnHide: failed to hook getIfaceStats: ${t.message}")
-        }
-
-        // 2. Hook getTotalStats(int type)
-        try {
-            val getTotalStatsMethod =
-                XposedHelpers.findMethodExact(
-                    nssClass,
-                    "getTotalStats",
-                    Integer.TYPE,
-                )
-            XposedBridge.hookMethod(
-                getTotalStatsMethod,
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        val callingUid = Binder.getCallingUid()
-                        if (loadTargetUids().contains(callingUid)) {
-                            val type = param.args[0] as Int
-                            val nssInstance = param.thisObject
-
-                            val token = Binder.clearCallingIdentity()
-                            try {
-                                var totalSum = 0L
-                                val interfacesList =
-                                    java.net.NetworkInterface.getNetworkInterfaces()
-                                if (interfacesList != null) {
-                                    while (interfacesList.hasMoreElements()) {
-                                        val iface = interfacesList.nextElement()
-                                        val ifaceName = iface.name
-                                        if (!isVpnInterfaceName(ifaceName)) {
-                                            val stats =
-                                                XposedHelpers.callMethod(
-                                                    nssInstance,
-                                                    "getIfaceStats",
-                                                    ifaceName,
-                                                    type,
-                                                ) as
-                                                    Long
-                                            if (stats > 0L) {
-                                                totalSum += stats
-                                            }
-                                        }
-                                    }
-                                }
-                                param.result = totalSum
-                                HookLog.i(
-                                    "VpnHide: getTotalStats(type=$type) spoofed to sum of all visible physical ifaces: $totalSum bytes",
-                                )
-                            } catch (e: Exception) {
-                                param.result = 0L
-                            } finally {
-                                Binder.restoreCallingIdentity(token)
-                            }
-                        }
-                    }
-                },
-            )
-            HookLog.i("VpnHide: NetworkStatsService.getTotalStats hook installed")
-        } catch (t: Throwable) {
-            HookLog.e("VpnHide: failed to hook getTotalStats: ${t.message}")
         }
     }
 

@@ -208,6 +208,16 @@ val ALL_HOOKS =
                 "Intercepts loopback bind() calls: redirects protected ports to random free ephemeral ports (0) to bypass conflict checks."
             },
         ),
+        HookInfo(
+            17,
+            "bpf_stats_spoof",
+            "bpf_stats_spoof (eBPF)",
+            if (isRussian) {
+                "Периодически очищает счетчики eBPF-карт TrafficStats для целевых приложений и VPN-интерфейса."
+            } else {
+                "Periodically zeroes out TrafficStats eBPF map counters for targeted apps and the VPN interface."
+            },
+        ),
     )
 
 val ALL_JAVA_HOOKS =
