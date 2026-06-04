@@ -249,12 +249,14 @@ static void vpnhide_resolve_bpf_maps(void)
 
 	rcu_read_lock();
 	while (true) {
-		struct bpf_map *map = vpnhide_bpf_map_get_curr_or_next(&id);
+		struct bpf_map *map;
+		bool matched = false;
+
+		map = vpnhide_bpf_map_get_curr_or_next(&id);
 		if (IS_ERR_OR_NULL(map)) {
 			break;
 		}
 
-		bool matched = false;
 		vpnhide_dbg("BPF map id=%u name=%s key_size=%u val_size=%u\n",
 			    id, map->name, map->key_size, map->value_size);
 
