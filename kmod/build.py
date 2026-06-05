@@ -143,6 +143,17 @@ def build_ctl_host(repo_root: Path, kmod_dir: Path) -> Path:
     if strip_bin.exists():
         subprocess.run([str(strip_bin), str(out_bin)], check=True)
 
+    # Build daemon binary as well
+    out_daemon = kmod_dir / "vpnhide-daemon-host"
+    cmd_daemon = [clang, "-O2", "-Wall", str(kmod_dir / "vpnhide_daemon.c"), "-o", str(out_daemon)]
+    try:
+        subprocess.run(cmd_daemon + ["-static"], check=True, capture_output=True)
+    except subprocess.CalledProcessError:
+        subprocess.run(cmd_daemon, check=True)
+
+    if strip_bin.exists():
+        subprocess.run([str(strip_bin), str(out_daemon)], check=True)
+
     return out_bin
 
 
@@ -175,6 +186,14 @@ def native_build_one(
         os.chmod(staging / "vpnhide-ctl", 0o755)
     else:
         print(f"[{kmi}] warning: vpnhide-ctl-host not found, module will be missing the ctl tool")
+
+    # Copy the host-built daemon binary
+    daemon_src = kmod_dir / "vpnhide-daemon-host"
+    if daemon_src.exists():
+        shutil.copy(daemon_src, staging / "vpnhide-daemon")
+        os.chmod(staging / "vpnhide-daemon", 0o755)
+    else:
+        print(f"[{kmi}] warning: vpnhide-daemon-host not found, module will be missing the daemon tool")
 
     build_version = get_build_version(kmod_dir.parent)
 

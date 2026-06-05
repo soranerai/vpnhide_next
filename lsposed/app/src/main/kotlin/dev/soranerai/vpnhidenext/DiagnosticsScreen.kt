@@ -1580,7 +1580,8 @@ private fun checkTrafficStatsDiscrepancy(
             rxDiff > threshold &&
                 (systemRx.toDouble() / visibleRx.coerceAtLeast(1L).toDouble() > 1.5)
 
-        val isSkipped = isCellular || !hasWifi
+        // val isSkipped = isCellular || !hasWifi
+        val isSkipped = false
         val detail =
             buildString {
                 append("System: TX=${systemTx / 1024}K, RX=${systemRx / 1024}K. ")
