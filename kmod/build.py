@@ -193,7 +193,9 @@ def native_build_one(
         shutil.copy(daemon_src, staging / "vpnhide-daemon")
         os.chmod(staging / "vpnhide-daemon", 0o755)
     else:
-        print(f"[{kmi}] warning: vpnhide-daemon-host not found, module will be missing the daemon tool")
+        print(
+            f"[{kmi}] warning: vpnhide-daemon-host not found, module will be missing the daemon tool"
+        )
 
     build_version = get_build_version(kmod_dir.parent)
 
