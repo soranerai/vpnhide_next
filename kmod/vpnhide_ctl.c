@@ -119,22 +119,27 @@ int main(int argc, char **argv)
 		memset(&spoof, 0, sizeof(spoof));
 
 		if (argc < 4) {
-			fprintf(stderr, "Error: set_spoof_ip requires <ipv4|none> <ipv6|none>\n");
+			fprintf(stderr,
+				"Error: set_spoof_ip requires <ipv4|none> <ipv6|none>\n");
 			print_usage(argv[0]);
 			return 1;
 		}
 
 		if (strcmp(argv[2], "none") != 0) {
-			if (inet_pton(AF_INET, argv[2], &spoof.ipv4_addr) != 1) {
-				fprintf(stderr, "Invalid IPv4 address: %s\n", argv[2]);
+			if (inet_pton(AF_INET, argv[2], &spoof.ipv4_addr) !=
+			    1) {
+				fprintf(stderr, "Invalid IPv4 address: %s\n",
+					argv[2]);
 				return 1;
 			}
 			spoof.has_ipv4 = 1;
 		}
 
 		if (strcmp(argv[3], "none") != 0) {
-			if (inet_pton(AF_INET6, argv[3], spoof.ipv6_addr) != 1) {
-				fprintf(stderr, "Invalid IPv6 address: %s\n", argv[3]);
+			if (inet_pton(AF_INET6, argv[3], spoof.ipv6_addr) !=
+			    1) {
+				fprintf(stderr, "Invalid IPv6 address: %s\n",
+					argv[3]);
 				return 1;
 			}
 			spoof.has_ipv6 = 1;
@@ -163,7 +168,8 @@ int main(int argc, char **argv)
 			}
 			printf("%u\n", mask);
 		} else {
-			unsigned int mask = (unsigned int)strtoul(argv[2], NULL, 0);
+			unsigned int mask =
+				(unsigned int)strtoul(argv[2], NULL, 0);
 			if (ioctl(fd, VH_SET_ACTIVE_HOOKS, &mask) < 0) {
 				perror("VH_SET_ACTIVE_HOOKS");
 				return 1;
@@ -183,8 +189,7 @@ int main(int argc, char **argv)
 				return 1;
 			}
 			for (int i = 0; i < sdata.count; i++) {
-				printf("%u;%u;%u;%u;%u\n",
-				       sdata.stats[i].uid,
+				printf("%u;%u;%u;%u;%u\n", sdata.stats[i].uid,
 				       sdata.stats[i].ioctl_count,
 				       sdata.stats[i].netlink_count,
 				       sdata.stats[i].connect_count,

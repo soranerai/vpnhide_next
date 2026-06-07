@@ -754,7 +754,6 @@ class HookEntry : IXposedHookLoadPackage {
 
         tryHook("APEX_Services") { hookApexServices() }
         tryHook("FileObserver") { watchDatabaseFile() }
-        tryHook("NetworkMonitoring") { startNetworkMonitoring() }
         return brokenFields
     }
 

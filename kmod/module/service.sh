@@ -178,39 +178,8 @@ if [ -f "$AUTODISABLE_FILE" ] && [ -x "$CTL" ]; then
     fi
 fi
 
-log -t vpnhide "service.sh background monitoring daemon starting in foreground"
+DAEMON="$MODDIR/vpnhide-daemon"
+chmod +x "$DAEMON"
 
-IP_FILE="/data/system/vpnhide_physical_ip"
-
-# Initialize physical IP file for system_server write access
-if [ ! -f "$IP_FILE" ]; then
-    echo "none none" > "$IP_FILE"
-fi
-chown system:system "$IP_FILE"
-chmod 666 "$IP_FILE"
-chcon u:object_r:system_data_file:s0 "$IP_FILE" 2>/dev/null
-
-last_ips=""
-while true; do
-    if [ -f "$IP_FILE" ]; then
-        current_ips="$(cat "$IP_FILE" 2>/dev/null)"
-        if [ "$current_ips" != "$last_ips" ] && [ -n "$current_ips" ]; then
-            ipv4="$(echo "$current_ips" | awk '{print $1}')"
-            ipv6="$(echo "$current_ips" | awk '{print $2}')"
-            
-            # Default empty/invalid to none
-            [ -n "$ipv4" ] || ipv4="none"
-            [ -n "$ipv6" ] || ipv6="none"
-            
-            if "$CTL" set_spoof_ip "$ipv4" "$ipv6" 2>/dev/null; then
-                log -t vpnhide "daemon: applied physical IP from file: IPv4=$ipv4, IPv6=$ipv6"
-                last_ips="$current_ips"
-            else
-                log -t vpnhide "daemon: failed to apply physical IP to kernel"
-                sleep 1
-                continue
-            fi
-        fi
-    fi
-    sleep 2
-done
+# Start the event-driven C daemon in the background
+"$DAEMON" >/data/adb/vpnhide_kmod/daemon.log 2>&1 &

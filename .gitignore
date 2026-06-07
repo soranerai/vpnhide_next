@@ -33,6 +33,7 @@ kmod/.env
 kmod/*.lds
 kmod/test_iface_lists
 kmod/vpnhide-ctl-host
+kmod/vpnhide-daemon-host
 kmod/*.log
 kmod/*log.txt
 

@@ -125,17 +125,21 @@ jobs:
       - name: Android lint + Kotlin unit tests
         run: cd lsposed && ./gradlew :app:lintDebug :app:testDebugUnitTest
 
-      # Build vpnhide-ctl (CLI tool for kmod control via ioctl)
-      - name: Build vpnhide-ctl
+      # Build vpnhide-ctl and vpnhide-daemon
+      - name: Build vpnhide-ctl and vpnhide-daemon
         run: |
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang -O2 -Wall -static kmod/vpnhide_ctl.c -o vpnhide-ctl
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip vpnhide-ctl
+          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang -O2 -Wall -static kmod/vpnhide_daemon.c -o vpnhide-daemon
+          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip vpnhide-daemon
 
-      - name: Upload vpnhide-ctl
+      - name: Upload host binaries
         uses: actions/upload-artifact@v7
         with:
-          name: vpnhide-ctl
-          path: vpnhide-ctl
+          name: vpnhide-binaries
+          path: |
+            vpnhide-ctl
+            vpnhide-daemon
 
   kmod:
     needs: [setup, lint]
@@ -162,14 +166,16 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Download vpnhide-ctl
+      - name: Download host binaries
         uses: actions/download-artifact@v7
         with:
-          name: vpnhide-ctl
+          name: vpnhide-binaries
           path: kmod/
 
-      - name: Rename ctl for build.py
-        run: mv kmod/vpnhide-ctl kmod/vpnhide-ctl-host
+      - name: Rename binaries for build.py
+        run: |
+          mv kmod/vpnhide-ctl kmod/vpnhide-ctl-host
+          mv kmod/vpnhide-daemon kmod/vpnhide-daemon-host
 
       - name: Mark workspace safe
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"

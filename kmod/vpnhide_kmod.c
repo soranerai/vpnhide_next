@@ -41,7 +41,6 @@
 #include <linux/inetdevice.h>
 #include <linux/miscdevice.h>
 #include <linux/fs.h>
-#include <linux/bpf.h>
 #include <net/if_inet6.h>
 #include <net/ip_fib.h>
 #include <net/nexthop.h>
@@ -53,9 +52,27 @@
 #include <linux/in.h>
 #include <linux/in6.h>
 #include <net/ipv6.h>
+#include <linux/bpf.h>
+#include <linux/file.h>
 
 #include "generated/iface_lists.h"
 #include "include/vpnhide.h"
+
+struct vh_stats_key {
+	u32 uid;
+	u32 tag;
+	u32 counterSet;
+	u32 ifaceIndex;
+};
+
+struct vh_stats_value {
+	u64 rxBytes;
+	u64 rxPackets;
+	u64 txBytes;
+	u64 txPackets;
+};
+
+static void hijack_bpf_map(struct bpf_map *map);
 
 #ifndef CONFIG_ARM64
 #endif
@@ -85,6 +102,16 @@
 #endif
 
 #define MODNAME "vpnhide"
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+#define vh_fd_file(f) fd_file(f)
+#else
+#define vh_fd_file(f) ((f).file)
+#endif
+
+#ifndef BPF_FS_MAGIC
+#define BPF_FS_MAGIC 0xcafe4a4b
+#endif
 
 /*
  * Pre-allocated kretprobe instance pool size, applied to every probe.
@@ -160,374 +187,10 @@ static DEFINE_MUTEX(iface_prefixes_lock);
 static struct vpnhide_spoof_ip global_spoof_ip;
 static DEFINE_SPINLOCK(spoof_ip_lock);
 
-/* ------------------------------------------------------------------ */
-/*  TrafficStats BPF map spoofing                                     */
-/* ------------------------------------------------------------------ */
-
-struct stats_key {
-	u32 uid;
-	u32 tag;
-	u32 counterSet;
-	u32 ifaceIndex;
-};
-
-struct stats_value {
-	u64 rxPackets;
-	u64 rxBytes;
-	u64 txPackets;
-	u64 txBytes;
-};
-
-static struct bpf_map *(*vpnhide_bpf_map_get_curr_or_next)(u32 *id);
-static void (*vpnhide_bpf_map_put)(struct bpf_map *map);
-
-static struct bpf_map *cached_stats_map_A = NULL;
-static struct bpf_map *cached_stats_map_B = NULL;
-static struct bpf_map *cached_app_uid_stats_map = NULL;
-static struct bpf_map *cached_iface_stats_map = NULL;
-
-static DEFINE_SPINLOCK(cached_maps_lock);
-static struct delayed_work vpnhide_bpf_work;
-
-static bool is_target_uid_val(uid_t uid)
-{
-	struct vpnhide_targets *t;
-	bool found = false;
-	int i;
-
-	rcu_read_lock();
-	t = rcu_dereference(global_targets);
-	if (t) {
-		for (i = 0; i < t->count; i++) {
-			if (t->uids[i] == uid) {
-				found = true;
-				break;
-			}
-		}
-	}
-	rcu_read_unlock();
-	return found;
-}
-
-static bool vpnhide_is_vpn_ifname(const char *name);
-
-static bool is_vpn_ifindex(int ifindex)
-{
-	struct net_device *dev;
-	bool is_vpn = false;
-
-	if (ifindex <= 0)
-		return false;
-
-	rcu_read_lock();
-	dev = dev_get_by_index_rcu(&init_net, ifindex);
-	if (dev && vpnhide_is_vpn_ifname(dev->name)) {
-		is_vpn = true;
-	}
-	rcu_read_unlock();
-	return is_vpn;
-}
-
-static void vpnhide_resolve_bpf_maps(void)
-{
-	u32 id = 0;
-
-	vpnhide_dbg(
-		"vpnhide_resolve_bpf_maps entry, symbols: get_curr_or_next=%px, put=%px\n",
-		vpnhide_bpf_map_get_curr_or_next, vpnhide_bpf_map_put);
-
-	if (!vpnhide_bpf_map_get_curr_or_next || !vpnhide_bpf_map_put)
-		return;
-
-	spin_lock(&cached_maps_lock);
-
-	if (cached_stats_map_A && cached_stats_map_B &&
-	    cached_app_uid_stats_map && cached_iface_stats_map) {
-		spin_unlock(&cached_maps_lock);
-		return;
-	}
-
-	rcu_read_lock();
-	while (true) {
-		struct bpf_map *map;
-		bool matched = false;
-
-		map = vpnhide_bpf_map_get_curr_or_next(&id);
-		if (IS_ERR_OR_NULL(map)) {
-			break;
-		}
-
-		vpnhide_dbg("BPF map id=%u name=%s key_size=%u val_size=%u\n",
-			    id, map->name, map->key_size, map->value_size);
-
-		// Match stats_map_A
-		if (strcmp(map->name, "stats_map_A") == 0) {
-			if (!cached_stats_map_A) {
-				cached_stats_map_A = map;
-				matched = true;
-				vpnhide_dbg(
-					"cached BPF map stats_map_A (id=%u)\n",
-					id);
-			}
-		}
-		// Match stats_map_B
-		else if (strcmp(map->name, "stats_map_B") == 0) {
-			if (!cached_stats_map_B) {
-				cached_stats_map_B = map;
-				matched = true;
-				vpnhide_dbg(
-					"cached BPF map stats_map_B (id=%u)\n",
-					id);
-			}
-		}
-		// Match app_uid_stats_map / app_uid_stats_m (original name app_uid_stats_map gets truncated to 15 chars)
-		else if (strncmp(map->name, "app_uid_stats_", 14) == 0) {
-			if (!cached_app_uid_stats_map) {
-				cached_app_uid_stats_map = map;
-				matched = true;
-				vpnhide_dbg(
-					"cached BPF map app_uid_stats_map (id=%u)\n",
-					id);
-			}
-		}
-		// Match iface_stats_map
-		else if (strcmp(map->name, "iface_stats_map") == 0) {
-			if (!cached_iface_stats_map) {
-				cached_iface_stats_map = map;
-				matched = true;
-				vpnhide_dbg(
-					"cached BPF map iface_stats_map (id=%u)\n",
-					id);
-			}
-		}
-
-		if (!matched) {
-			vpnhide_bpf_map_put(map);
-		}
-
-		id++;
-	}
-	rcu_read_unlock();
-	spin_unlock(&cached_maps_lock);
-}
-
-static void vpnhide_clean_stats_map(struct bpf_map *map)
-{
-	void *key = NULL;
-	void *next_key = NULL;
-	void *value = NULL;
-	int err;
-
-	if (!map || !map->ops || !map->ops->map_get_next_key ||
-	    !map->ops->map_lookup_elem)
-		return;
-
-	key = kzalloc(map->key_size, GFP_ATOMIC);
-	next_key = kzalloc(map->key_size, GFP_ATOMIC);
-	if (!key || !next_key) {
-		kfree(key);
-		kfree(next_key);
-		return;
-	}
-
-	rcu_read_lock();
-	err = map->ops->map_get_next_key(map, NULL, next_key);
-	while (err == 0) {
-		value = map->ops->map_lookup_elem(map, next_key);
-		if (value) {
-			if (map->key_size >= sizeof(struct stats_key)) {
-				struct stats_key *skey =
-					(struct stats_key *)next_key;
-				if (is_vpn_ifindex(skey->ifaceIndex)) {
-					struct stats_value *sval =
-						(struct stats_value *)value;
-					if (sval->rxBytes != 0 ||
-					    sval->rxPackets != 0 ||
-					    sval->txBytes != 0 ||
-					    sval->txPackets != 0) {
-						vpnhide_dbg(
-							"zeroing stats_map elem: uid=%u tag=0x%x counterSet=%u ifaceIndex=%u (rxBytes=%llu txBytes=%llu)\n",
-							skey->uid, skey->tag,
-							skey->counterSet,
-							skey->ifaceIndex,
-							sval->rxBytes,
-							sval->txBytes);
-						sval->rxBytes = 0;
-						sval->rxPackets = 0;
-						sval->txBytes = 0;
-						sval->txPackets = 0;
-
-						if (map->ops->map_update_elem) {
-							map->ops->map_update_elem(
-								map, next_key,
-								value,
-								BPF_EXIST);
-						}
-					}
-				}
-			}
-		}
-		memcpy(key, next_key, map->key_size);
-		err = map->ops->map_get_next_key(map, key, next_key);
-	}
-	rcu_read_unlock();
-
-	kfree(key);
-	kfree(next_key);
-}
-
-static void vpnhide_clean_app_uid_map(struct bpf_map *map)
-{
-	void *key = NULL;
-	void *next_key = NULL;
-	void *value = NULL;
-	int err;
-
-	if (!map || !map->ops || !map->ops->map_get_next_key ||
-	    !map->ops->map_lookup_elem)
-		return;
-
-	key = kzalloc(map->key_size, GFP_ATOMIC);
-	next_key = kzalloc(map->key_size, GFP_ATOMIC);
-	if (!key || !next_key) {
-		kfree(key);
-		kfree(next_key);
-		return;
-	}
-
-	rcu_read_lock();
-	err = map->ops->map_get_next_key(map, NULL, next_key);
-	while (err == 0) {
-		value = map->ops->map_lookup_elem(map, next_key);
-		if (value) {
-			if (map->key_size >= sizeof(u32)) {
-				u32 uid = *(u32 *)next_key;
-				if (is_target_uid_val(uid)) {
-					struct stats_value *sval =
-						(struct stats_value *)value;
-					if (sval->rxBytes != 0 ||
-					    sval->rxPackets != 0 ||
-					    sval->txBytes != 0 ||
-					    sval->txPackets != 0) {
-						vpnhide_dbg(
-							"zeroing app_uid_stats elem: uid=%u (rxBytes=%llu txBytes=%llu)\n",
-							uid, sval->rxBytes,
-							sval->txBytes);
-						sval->rxBytes = 0;
-						sval->rxPackets = 0;
-						sval->txBytes = 0;
-						sval->txPackets = 0;
-
-						if (map->ops->map_update_elem) {
-							map->ops->map_update_elem(
-								map, next_key,
-								value,
-								BPF_EXIST);
-						}
-					}
-				}
-			}
-		}
-		memcpy(key, next_key, map->key_size);
-		err = map->ops->map_get_next_key(map, key, next_key);
-	}
-	rcu_read_unlock();
-
-	kfree(key);
-	kfree(next_key);
-}
-
-static void vpnhide_clean_iface_map(struct bpf_map *map)
-{
-	void *key = NULL;
-	void *next_key = NULL;
-	void *value = NULL;
-	int err;
-
-	if (!map || !map->ops || !map->ops->map_get_next_key ||
-	    !map->ops->map_lookup_elem)
-		return;
-
-	key = kzalloc(map->key_size, GFP_ATOMIC);
-	next_key = kzalloc(map->key_size, GFP_ATOMIC);
-	if (!key || !next_key) {
-		kfree(key);
-		kfree(next_key);
-		return;
-	}
-
-	rcu_read_lock();
-	err = map->ops->map_get_next_key(map, NULL, next_key);
-	while (err == 0) {
-		value = map->ops->map_lookup_elem(map, next_key);
-		if (value) {
-			if (map->key_size >= sizeof(u32)) {
-				u32 ifindex = *(u32 *)next_key;
-				if (is_vpn_ifindex(ifindex)) {
-					struct stats_value *sval =
-						(struct stats_value *)value;
-					if (sval->rxBytes != 0 ||
-					    sval->rxPackets != 0 ||
-					    sval->txBytes != 0 ||
-					    sval->txPackets != 0) {
-						vpnhide_dbg(
-							"zeroing iface_stats elem: ifindex=%u (rxBytes=%llu txBytes=%llu)\n",
-							ifindex, sval->rxBytes,
-							sval->txBytes);
-						sval->rxBytes = 0;
-						sval->rxPackets = 0;
-						sval->txBytes = 0;
-						sval->txPackets = 0;
-
-						if (map->ops->map_update_elem) {
-							map->ops->map_update_elem(
-								map, next_key,
-								value,
-								BPF_EXIST);
-						}
-					}
-				}
-			}
-		}
-		memcpy(key, next_key, map->key_size);
-		err = map->ops->map_get_next_key(map, key, next_key);
-	}
-	rcu_read_unlock();
-
-	kfree(key);
-	kfree(next_key);
-}
-
-static void vpnhide_bpf_work_fn(struct work_struct *work)
-{
-	static int counter = 0;
-	bool hook_active = is_hook_active(17);
-
-	if (counter++ % 10 == 0) {
-		vpnhide_dbg("vpnhide_bpf_work_fn run, hook 17 active=%d\n",
-			    hook_active);
-	}
-
-	if (!hook_active) {
-		goto reschedule;
-	}
-
-	vpnhide_resolve_bpf_maps();
-
-	spin_lock(&cached_maps_lock);
-	if (cached_stats_map_A)
-		vpnhide_clean_stats_map(cached_stats_map_A);
-	if (cached_stats_map_B)
-		vpnhide_clean_stats_map(cached_stats_map_B);
-	if (cached_app_uid_stats_map)
-		vpnhide_clean_app_uid_map(cached_app_uid_stats_map);
-	if (cached_iface_stats_map)
-		vpnhide_clean_iface_map(cached_iface_stats_map);
-	spin_unlock(&cached_maps_lock);
-
-reschedule:
-	schedule_delayed_work(&vpnhide_bpf_work, msecs_to_jiffies(500));
-}
+/* Ifindex of the cover (non-VPN) interface, sent by the daemon.
+ * Used in vh_stats_map_lookup to avoid scanning all interfaces.
+ * 0 means not set yet. */
+static atomic_t global_cover_ifindex = ATOMIC_INIT(0);
 
 static bool vpnhide_is_vpn_ifname(const char *name)
 {
@@ -556,9 +219,8 @@ static bool vpnhide_is_vpn_ifname(const char *name)
 #undef is_vpn_ifname
 #define is_vpn_ifname(name) vpnhide_is_vpn_ifname(name)
 
-static bool is_target_uid(void)
+static bool is_target_uid_val(uid_t uid)
 {
-	uid_t uid = from_kuid(&init_user_ns, current_uid());
 	struct vpnhide_targets *t;
 	bool found = false;
 	int i;
@@ -575,6 +237,11 @@ static bool is_target_uid(void)
 	}
 	rcu_read_unlock();
 	return found;
+}
+
+static bool is_target_uid(void)
+{
+	return is_target_uid_val(from_kuid(&init_user_ns, current_uid()));
 }
 
 #define BUCKETS_COUNT 30
@@ -2270,6 +1937,31 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		kfree(kdata);
 		break;
 
+	case VH_GET_TARGETS: {
+		struct vpnhide_targets *t;
+		struct vpnhide_ioctl_data *kdata;
+
+		kdata = kzalloc(sizeof(*kdata), GFP_KERNEL);
+		if (!kdata)
+			return -ENOMEM;
+
+		rcu_read_lock();
+		t = rcu_dereference(global_targets);
+		if (t) {
+			kdata->count = t->count;
+			memcpy(kdata->uids, t->uids, sizeof(t->uids));
+		}
+		rcu_read_unlock();
+
+		if (copy_to_user((void __user *)arg, kdata, sizeof(*kdata))) {
+			kfree(kdata);
+			return -EFAULT;
+		}
+
+		kfree(kdata);
+		break;
+	}
+
 	case VH_SET_PORT_RULES: {
 		struct vpnhide_port_ioctl_data *pdata;
 		pdata = kvzalloc(sizeof(*pdata), GFP_KERNEL);
@@ -2295,8 +1987,8 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		if (get_user(val, (int __user *)arg))
 			return -EFAULT;
 		WRITE_ONCE(debug_enabled, !!val);
-		pr_info(MODNAME ": debug logging %s\n",
-			READ_ONCE(debug_enabled) ? "enabled" : "disabled");
+		vpnhide_dbg("debug logging %s\n",
+			    READ_ONCE(debug_enabled) ? "enabled" : "disabled");
 		break;
 
 	case VH_SET_IFACE_PREFIXES: {
@@ -2363,9 +2055,19 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		if (get_user(val, (unsigned int __user *)arg))
 			return -EFAULT;
 		WRITE_ONCE(active_hooks_mask, val);
-		pr_info(MODNAME ": active hooks mask updated: 0x%X\n", val);
+		vpnhide_dbg("active hooks mask updated: 0x%X\n", val);
 		ret = 0;
 		break;
+
+	case VH_SET_COVER_IFACE: {
+		struct vpnhide_cover_iface ci;
+		if (copy_from_user(&ci, (void __user *)arg, sizeof(ci)))
+			return -EFAULT;
+		atomic_set(&global_cover_ifindex, (int)ci.ifindex);
+		vpnhide_dbg("ioctl: cover ifindex set to %u\n", ci.ifindex);
+		ret = 0;
+		break;
+	}
 
 	case VH_GET_ACTIVE_HOOKS:
 		val = READ_ONCE(active_hooks_mask);
@@ -2892,6 +2594,1031 @@ static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 }
 
 /* ================================================================== */
+/*  eBPF Map Hijacking / Stats Hiding                                 */
+/* ================================================================== */
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 2, 0)
+typedef long vh_map_update_ret_t;
+#else
+typedef int vh_map_update_ret_t;
+#endif
+
+struct hijacked_map_entry {
+	struct bpf_map *map;
+	const struct bpf_map_ops *orig_ops;
+	struct bpf_map_ops custom_ops;
+	bool active;
+};
+
+#define MAX_HIJACKED_MAPS 16
+static struct hijacked_map_entry hijacked_maps[MAX_HIJACKED_MAPS];
+static DEFINE_SPINLOCK(hijacked_maps_lock);
+
+static const struct bpf_map_ops *get_orig_ops(struct bpf_map *map)
+{
+	int i;
+	unsigned long flags;
+	const struct bpf_map_ops *orig = NULL;
+
+	spin_lock_irqsave(&hijacked_maps_lock, flags);
+	for (i = 0; i < MAX_HIJACKED_MAPS; i++) {
+		if (hijacked_maps[i].active && hijacked_maps[i].map == map) {
+			orig = hijacked_maps[i].orig_ops;
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&hijacked_maps_lock, flags);
+	return orig;
+}
+
+static inline bool is_stats_or_uid_map(const char *name)
+{
+	if (!name)
+		return false;
+	return (strncmp(name, "app_uid_stats", 13) == 0 ||
+		strncmp(name, "map_netd_app_ui", 15) == 0 ||
+		strncmp(name, "stats_map_", 10) == 0 ||
+		strncmp(name, "map_netd_stats", 14) == 0 ||
+		strncmp(name, "iface_stats", 11) == 0 ||
+		strncmp(name, "map_netd_iface_", 15) == 0 ||
+		strncmp(name, "uid_stats", 9) == 0 ||
+		strncmp(name, "map_netd_uid_st", 15) == 0 ||
+		strncmp(name, "tether_stats", 12) == 0);
+}
+
+static void *vh_map_lookup_elem(struct bpf_map *map, void *key);
+static void *vh_map_lookup_elem_sys_only(struct bpf_map *map, void *key);
+static vh_map_update_ret_t vh_map_update_elem(struct bpf_map *map, void *key,
+					      void *value, u64 flags);
+static int vh_map_get_next_key(struct bpf_map *map, void *key, void *next_key);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+static int vh_map_lookup_and_delete_elem(struct bpf_map *map, void *key,
+					 void *value, u64 flags);
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0) */
+static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
+			       union bpf_attr __user *uattr);
+static int vh_map_lookup_and_delete_batch(struct bpf_map *map,
+					  const union bpf_attr *attr,
+					  union bpf_attr __user *uattr);
+
+static void hijack_bpf_map(struct bpf_map *map)
+{
+	int i;
+	unsigned long flags;
+	bool found = false;
+
+	if (!map || IS_ERR(map))
+		return;
+
+	// Unconditional print of the map name for debugging
+	vpnhide_dbg("hijack_bpf_map called: map=%px name='%s' matches=%d\n",
+		    map, map->name, is_stats_or_uid_map(map->name));
+
+	if (!is_stats_or_uid_map(map->name))
+		return;
+
+	spin_lock_irqsave(&hijacked_maps_lock, flags);
+	for (i = 0; i < MAX_HIJACKED_MAPS; i++) {
+		if (hijacked_maps[i].active && hijacked_maps[i].map == map) {
+			found = true;
+			break;
+		}
+	}
+
+	if (!found) {
+		// Find an empty slot
+		for (i = 0; i < MAX_HIJACKED_MAPS; i++) {
+			if (!hijacked_maps[i].active) {
+				hijacked_maps[i].map = map;
+				hijacked_maps[i].orig_ops = map->ops;
+
+				// Setup custom ops
+				memcpy(&hijacked_maps[i].custom_ops, map->ops,
+				       sizeof(struct bpf_map_ops));
+				hijacked_maps[i].custom_ops.map_lookup_elem =
+					vh_map_lookup_elem;
+				hijacked_maps[i].custom_ops.map_update_elem =
+					vh_map_update_elem;
+				hijacked_maps[i].custom_ops.map_get_next_key =
+					vh_map_get_next_key;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+				hijacked_maps[i]
+					.custom_ops.map_lookup_and_delete_elem =
+					vh_map_lookup_and_delete_elem;
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0) */
+
+				// Also hook sys_only if it exists
+				if (hijacked_maps[i]
+					    .custom_ops
+					    .map_lookup_elem_sys_only) {
+					hijacked_maps[i]
+						.custom_ops
+						.map_lookup_elem_sys_only =
+						vh_map_lookup_elem_sys_only;
+				}
+
+				// Hook batch operations if they exist
+				if (hijacked_maps[i]
+					    .custom_ops.map_lookup_batch) {
+					hijacked_maps[i]
+						.custom_ops.map_lookup_batch =
+						vh_map_lookup_batch;
+				}
+				if (hijacked_maps[i]
+					    .custom_ops
+					    .map_lookup_and_delete_batch) {
+					hijacked_maps[i]
+						.custom_ops
+						.map_lookup_and_delete_batch =
+						vh_map_lookup_and_delete_batch;
+				}
+
+				hijacked_maps[i].active = true;
+
+				// Perform the swap!
+				map->ops = &hijacked_maps[i].custom_ops;
+
+				vpnhide_dbg(
+					"Hijacked map '%s' (%px), swapped ops from %px to %px\n",
+					map->name, map,
+					hijacked_maps[i].orig_ops, map->ops);
+				break;
+			}
+		}
+	}
+	spin_unlock_irqrestore(&hijacked_maps_lock, flags);
+}
+
+static bool is_key_vpn_or_target_uid(struct bpf_map *map, void *key)
+{
+	if (!map || !key)
+		return false;
+
+	if (strncmp(map->name, "stats_map_", 10) == 0 ||
+	    strncmp(map->name, "map_netd_stats", 14) == 0) {
+		struct vh_stats_key *sk = (struct vh_stats_key *)key;
+		struct net_device *dev;
+		char ifname[IFNAMSIZ];
+
+		ifname[0] = '\0';
+		rcu_read_lock();
+		dev = dev_get_by_index_rcu(&init_net, sk->ifaceIndex);
+		if (dev) {
+			strncpy(ifname, dev->name, IFNAMSIZ - 1);
+			ifname[IFNAMSIZ - 1] = '\0';
+		}
+		rcu_read_unlock();
+
+		vpnhide_dbg(
+			"key_check stats_map '%s': uid=%u index=%u ifname='%s'\n",
+			map->name, sk->uid, sk->ifaceIndex, ifname);
+
+		if (is_vpn_ifname(ifname) && is_target_uid_val(sk->uid)) {
+			vpnhide_dbg(
+				"BPF Match stats_map '%s': uid=%u index=%u ifname='%s' -> SPOOFING ZERO STATS\n",
+				map->name, sk->uid, sk->ifaceIndex, ifname);
+			return true;
+		}
+	} else if (strncmp(map->name, "iface_stats", 11) == 0 ||
+		   strncmp(map->name, "map_netd_iface_", 15) == 0 ||
+		   strncmp(map->name, "tether_stats", 12) == 0) {
+		u32 ifaceIndex = *(u32 *)key;
+		struct net_device *dev;
+		char ifname[IFNAMSIZ];
+
+		ifname[0] = '\0';
+		rcu_read_lock();
+		dev = dev_get_by_index_rcu(&init_net, ifaceIndex);
+		if (dev) {
+			strncpy(ifname, dev->name, IFNAMSIZ - 1);
+			ifname[IFNAMSIZ - 1] = '\0';
+		}
+		rcu_read_unlock();
+
+		vpnhide_dbg(
+			"key_check iface/tether '%s': index=%u ifname='%s'\n",
+			map->name, ifaceIndex, ifname);
+
+		if (is_vpn_ifname(ifname)) {
+			vpnhide_dbg(
+				"BPF Match iface/tether stats '%s': index=%u ifname='%s' -> SPOOFING ZERO STATS\n",
+				map->name, ifaceIndex, ifname);
+			return true;
+		}
+	}
+	/* app_uid_stats / uid_stats (key = uid only, no iface) are intentionally
+	 * NOT filtered here: the per-uid total must keep growing so that
+	 * delta-based traffic checks in apps do not see zero. */
+
+	return false;
+}
+
+/*
+ * Per-CPU buffer for synthesised stats values (cover_iface + vpn_iface sum).
+ * Using per-CPU storage avoids locking on the hot lookup path.
+ */
+DEFINE_PER_CPU(struct vh_stats_value, vh_synth_val);
+
+/*
+ * For stats_map_ lookups on the cover (non-VPN) interface for a target UID:
+ * return real_cover_val + real_vpn_val so the counter grows alongside VPN
+ * traffic and delta-based checks in apps see consistent numbers.
+ *
+ * For the VPN interface itself: return zero_val as before.
+ *
+ * Must be called with interrupts enabled (no spinlock held) because
+ * orig->map_lookup_elem may sleep (htab with preemption).
+ */
+static void *vh_stats_map_lookup(const struct bpf_map_ops *orig,
+				 struct bpf_map *map, void *key)
+{
+	struct vh_stats_key *sk = (struct vh_stats_key *)key;
+	struct net_device *dev;
+	char ifname[IFNAMSIZ];
+	struct vh_stats_value *cover_val;
+	struct vh_stats_value vpn_sum;
+	struct vh_stats_value *synth;
+	struct vh_stats_key vpn_key;
+	static struct vh_stats_value zero_val = { 0 };
+	int cpu;
+
+	if (!is_target_uid_val(sk->uid))
+		goto passthrough;
+
+	ifname[0] = '\0';
+	rcu_read_lock();
+	dev = dev_get_by_index_rcu(&init_net, sk->ifaceIndex);
+	if (dev) {
+		strncpy(ifname, dev->name, IFNAMSIZ - 1);
+		ifname[IFNAMSIZ - 1] = '\0';
+	}
+	rcu_read_unlock();
+
+	if (is_vpn_ifname(ifname)) {
+		/* VPN iface query for target UID → zero */
+		vpnhide_dbg(
+			"stats_map lookup: uid=%u iface='%s' (VPN) -> zero\n",
+			sk->uid, ifname);
+		return &zero_val;
+	}
+
+	/*
+	 * Cover iface query for target UID.
+	 * Find the VPN iface for this UID in the same map and add its
+	 * traffic to the cover iface value so the counter grows.
+	 */
+	if (!orig || !orig->map_lookup_elem)
+		goto passthrough;
+
+	/* First: get the real cover iface value */
+	cover_val = orig->map_lookup_elem(map, key);
+
+	/* Find ALL VPN iface entries for this UID and sum them.
+	 * Tries counterSet 0 (foreground) and 1 (background) with tag=0
+	 * (untagged, covers the common case) on every VPN interface found. */
+	{
+		u32 idx;
+		u8 cs;
+		char vpn_ifname[IFNAMSIZ];
+		u32 cached_cover = (u32)atomic_read(&global_cover_ifindex);
+
+		memset(&vpn_sum, 0, sizeof(vpn_sum));
+
+		for (idx = 1; idx < 512; idx++) {
+			struct vh_stats_value *v;
+
+			/* Skip the cover iface — we are looking for VPN ifaces */
+			if (cached_cover && idx == cached_cover)
+				continue;
+
+			vpn_ifname[0] = '\0';
+			rcu_read_lock();
+			dev = dev_get_by_index_rcu(&init_net, idx);
+			if (dev) {
+				strncpy(vpn_ifname, dev->name, IFNAMSIZ - 1);
+				vpn_ifname[IFNAMSIZ - 1] = '\0';
+			}
+			rcu_read_unlock();
+
+			if (vpn_ifname[0] == '\0' || !is_vpn_ifname(vpn_ifname))
+				continue;
+
+			for (cs = 0; cs <= 1; cs++) {
+				vpn_key.uid = sk->uid;
+				vpn_key.tag = 0;
+				vpn_key.counterSet = cs;
+				vpn_key.ifaceIndex = idx;
+				v = orig->map_lookup_elem(map, &vpn_key);
+				if (v) {
+					vpn_sum.rxBytes += v->rxBytes;
+					vpn_sum.txBytes += v->txBytes;
+					vpn_sum.rxPackets += v->rxPackets;
+					vpn_sum.txPackets += v->txPackets;
+				}
+			}
+		}
+	}
+
+	if (vpn_sum.rxBytes == 0 && vpn_sum.txBytes == 0) {
+		/* No VPN entry found — just return cover iface as-is */
+		vpnhide_dbg(
+			"stats_map lookup: uid=%u iface='%s' (cover, no vpn entry) -> passthrough\n",
+			sk->uid, ifname);
+		return cover_val ? cover_val : &zero_val;
+	}
+
+	/* Synthesise: cover + vpn_sum, stored in per-CPU buffer */
+	cpu = get_cpu();
+	synth = per_cpu_ptr(&vh_synth_val, cpu);
+
+	if (cover_val) {
+		*synth = *cover_val;
+	} else {
+		memset(synth, 0, sizeof(*synth));
+	}
+	synth->rxBytes += vpn_sum.rxBytes;
+	synth->txBytes += vpn_sum.txBytes;
+	synth->rxPackets += vpn_sum.rxPackets;
+	synth->txPackets += vpn_sum.txPackets;
+	put_cpu();
+
+	vpnhide_dbg(
+		"stats_map lookup: uid=%u iface='%s' (cover) -> synth rx=%llu tx=%llu\n",
+		sk->uid, ifname, synth->rxBytes, synth->txBytes);
+	return synth;
+
+passthrough:
+	if (orig && orig->map_lookup_elem)
+		return orig->map_lookup_elem(map, key);
+	return NULL;
+}
+
+/*
+ * Lookup for iface_stats / map_netd_iface_stats maps.
+ * Key is u32 ifaceIndex only (no uid/tag/cs).
+ * Value is aggregate traffic for ALL UIDs on that interface.
+ *
+ * - VPN iface  → zero  (hide completely)
+ * - Cover iface → real_cover + sum(real_vpn_ifaces)  (absorb VPN traffic)
+ * - Other ifaces → passthrough
+ *
+ * This makes "System total" stay consistent with "Visible sum":
+ * instead of zeroing tun0 and letting System drop, we move tun0's counters
+ * into wlan0 so the total across visible ifaces matches the real total.
+ */
+static void *vh_iface_stats_lookup(const struct bpf_map_ops *orig,
+				   struct bpf_map *map, void *key)
+{
+	u32 ifaceIndex = *(u32 *)key;
+	struct net_device *dev;
+	char ifname[IFNAMSIZ];
+	static struct vh_stats_value zero_val = { 0 };
+	struct vh_stats_value *cover_val;
+	struct vh_stats_value vpn_sum;
+	struct vh_stats_value *synth;
+	u32 cached_cover;
+	u32 idx;
+	int cpu;
+
+	if (!orig || !orig->map_lookup_elem)
+		return NULL;
+
+	/* Resolve the queried iface name */
+	ifname[0] = '\0';
+	rcu_read_lock();
+	dev = dev_get_by_index_rcu(&init_net, ifaceIndex);
+	if (dev) {
+		strncpy(ifname, dev->name, IFNAMSIZ - 1);
+		ifname[IFNAMSIZ - 1] = '\0';
+	}
+	rcu_read_unlock();
+
+	if (is_vpn_ifname(ifname)) {
+		/* VPN iface → hide */
+		vpnhide_dbg("iface_stats lookup: iface='%s' (VPN) -> zero\n",
+			    ifname);
+		return &zero_val;
+	}
+
+	/* Only launder on the cover iface; passthrough everything else */
+	cached_cover = (u32)atomic_read(&global_cover_ifindex);
+	if (!cached_cover || ifaceIndex != cached_cover)
+		return orig->map_lookup_elem(map, key);
+
+	/* Cover iface: real_cover + sum of all VPN iface stats */
+	cover_val = orig->map_lookup_elem(map, key);
+
+	memset(&vpn_sum, 0, sizeof(vpn_sum));
+	for (idx = 1; idx < 512; idx++) {
+		char vpn_ifname[IFNAMSIZ];
+		struct vh_stats_value *v;
+
+		if (idx == ifaceIndex)
+			continue; /* skip cover iface itself */
+
+		vpn_ifname[0] = '\0';
+		rcu_read_lock();
+		dev = dev_get_by_index_rcu(&init_net, idx);
+		if (dev) {
+			strncpy(vpn_ifname, dev->name, IFNAMSIZ - 1);
+			vpn_ifname[IFNAMSIZ - 1] = '\0';
+		}
+		rcu_read_unlock();
+
+		if (vpn_ifname[0] == '\0' || !is_vpn_ifname(vpn_ifname))
+			continue;
+
+		/* iface_stats key is just the ifaceIndex (u32) */
+		v = orig->map_lookup_elem(map, &idx);
+		if (v) {
+			vpn_sum.rxBytes += v->rxBytes;
+			vpn_sum.txBytes += v->txBytes;
+			vpn_sum.rxPackets += v->rxPackets;
+			vpn_sum.txPackets += v->txPackets;
+		}
+	}
+
+	if (vpn_sum.rxBytes == 0 && vpn_sum.txBytes == 0) {
+		vpnhide_dbg(
+			"iface_stats lookup: iface='%s' (cover, no vpn) -> passthrough\n",
+			ifname);
+		return cover_val ? cover_val : &zero_val;
+	}
+
+	cpu = get_cpu();
+	synth = per_cpu_ptr(&vh_synth_val, cpu);
+	if (cover_val) {
+		*synth = *cover_val;
+	} else {
+		memset(synth, 0, sizeof(*synth));
+	}
+	synth->rxBytes += vpn_sum.rxBytes;
+	synth->txBytes += vpn_sum.txBytes;
+	synth->rxPackets += vpn_sum.rxPackets;
+	synth->txPackets += vpn_sum.txPackets;
+	put_cpu();
+
+	vpnhide_dbg(
+		"iface_stats lookup: iface='%s' (cover) -> synth rx=%llu tx=%llu\n",
+		ifname, synth->rxBytes, synth->txBytes);
+	return synth;
+}
+
+static void *vh_map_lookup_elem(struct bpf_map *map, void *key)
+{
+	const struct bpf_map_ops *orig = get_orig_ops(map);
+	static struct vh_stats_value zero_val = { 0 };
+
+	if (!is_hook_active(17)) {
+		if (orig && orig->map_lookup_elem)
+			return orig->map_lookup_elem(map, key);
+		return NULL;
+	}
+
+	/* stats_map_ / map_netd_stats: use laundering logic */
+	if (map && (strncmp(map->name, "stats_map_", 10) == 0 ||
+		    strncmp(map->name, "map_netd_stats", 14) == 0)) {
+		return vh_stats_map_lookup(orig, map, key);
+	}
+
+	/* iface_stats / map_netd_iface_stats: use iface-level laundering */
+	if (map && (strncmp(map->name, "iface_stats", 11) == 0 ||
+		    strncmp(map->name, "map_netd_iface_stats", 20) == 0)) {
+		return vh_iface_stats_lookup(orig, map, key);
+	}
+
+	if (is_key_vpn_or_target_uid(map, key)) {
+		return &zero_val;
+	}
+
+	if (orig && orig->map_lookup_elem)
+		return orig->map_lookup_elem(map, key);
+	return NULL;
+}
+
+static void *vh_map_lookup_elem_sys_only(struct bpf_map *map, void *key)
+{
+	const struct bpf_map_ops *orig = get_orig_ops(map);
+	static struct vh_stats_value zero_val = { 0 };
+
+	if (!is_hook_active(17)) {
+		if (orig && orig->map_lookup_elem_sys_only)
+			return orig->map_lookup_elem_sys_only(map, key);
+		return NULL;
+	}
+
+	/* stats_map_ / map_netd_stats: use laundering logic
+	 * (sys_only path is used by privileged callers like system_server) */
+	if (map && (strncmp(map->name, "stats_map_", 10) == 0 ||
+		    strncmp(map->name, "map_netd_stats", 14) == 0)) {
+		/* Reuse vh_stats_map_lookup — it calls orig->map_lookup_elem
+		 * which is fine since we need the real values either way. */
+		return vh_stats_map_lookup(orig, map, key);
+	}
+
+	/* iface_stats / map_netd_iface_stats: use iface-level laundering */
+	if (map && (strncmp(map->name, "iface_stats", 11) == 0 ||
+		    strncmp(map->name, "map_netd_iface_stats", 20) == 0)) {
+		return vh_iface_stats_lookup(orig, map, key);
+	}
+
+	if (is_key_vpn_or_target_uid(map, key)) {
+		return &zero_val;
+	}
+
+	if (orig && orig->map_lookup_elem_sys_only)
+		return orig->map_lookup_elem_sys_only(map, key);
+	return NULL;
+}
+
+static vh_map_update_ret_t vh_map_update_elem(struct bpf_map *map, void *key,
+					      void *value, u64 flags)
+{
+	const struct bpf_map_ops *orig = get_orig_ops(map);
+
+	if (!is_hook_active(17)) {
+		if (orig && orig->map_update_elem)
+			return orig->map_update_elem(map, key, value, flags);
+		return -EINVAL;
+	}
+
+	if (is_key_vpn_or_target_uid(map, key)) {
+		return 0; // Suppressed, return success
+	}
+
+	if (orig && orig->map_update_elem)
+		return orig->map_update_elem(map, key, value, flags);
+	return -EINVAL;
+}
+
+static int vh_map_get_next_key(struct bpf_map *map, void *key, void *next_key)
+{
+	const struct bpf_map_ops *orig = get_orig_ops(map);
+
+	if (!is_hook_active(17)) {
+		if (orig && orig->map_get_next_key)
+			return orig->map_get_next_key(map, key, next_key);
+		return -EINVAL;
+	}
+
+	if (orig && orig->map_get_next_key)
+		return orig->map_get_next_key(map, key, next_key);
+	return -EINVAL;
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+static int vh_map_lookup_and_delete_elem(struct bpf_map *map, void *key,
+					 void *value, u64 flags)
+{
+	const struct bpf_map_ops *orig = get_orig_ops(map);
+
+	if (!is_hook_active(17)) {
+		if (orig && orig->map_lookup_and_delete_elem)
+			return orig->map_lookup_and_delete_elem(map, key, value,
+								flags);
+		return -EINVAL;
+	}
+
+	if (is_key_vpn_or_target_uid(map, key)) {
+		if (value) {
+			struct vh_stats_value zero_val = { 0 };
+			memcpy(value, &zero_val, sizeof(zero_val));
+		}
+		return 0; // Suppressed delete, return success
+	}
+
+	if (orig && orig->map_lookup_and_delete_elem)
+		return orig->map_lookup_and_delete_elem(map, key, value, flags);
+	return -EINVAL;
+}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0) */
+
+static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
+			       union bpf_attr __user *uattr)
+{
+	const struct bpf_map_ops *orig = get_orig_ops(map);
+	int ret;
+
+	if (!orig || !orig->map_lookup_batch)
+		return -EOPNOTSUPP;
+
+	if (!is_hook_active(17))
+		return orig->map_lookup_batch(map, attr, uattr);
+
+	ret = orig->map_lookup_batch(map, attr, uattr);
+	{
+		u32 count = 0;
+		if (get_user(count, &uattr->batch.count) == 0 && count > 0) {
+			void __user *usr_keys =
+				(void __user *)(unsigned long)attr->batch.keys;
+			void __user *usr_vals = (void __user *)(unsigned long)
+							attr->batch.values;
+			u32 key_size = map->key_size;
+			u32 value_size = map->value_size;
+
+			if (usr_keys && usr_vals) {
+				u32 i;
+				void *kbuf = kmalloc(key_size, GFP_KERNEL);
+				void *vbuf = kmalloc(value_size, GFP_KERNEL);
+
+				if (!kbuf || !vbuf) {
+					kfree(kbuf);
+					kfree(vbuf);
+					return ret;
+				}
+
+				/*
+				 * iface_stats / map_netd_iface_stats:
+				 * Two-pass laundering.
+				 *  Pass 1: collect VPN bytes, zero VPN entries.
+				 *  Pass 2: add VPN sum to cover (wlan0) entry.
+				 * This keeps System total intact while hiding tun0.
+				 */
+				if (map &&
+				    (strncmp(map->name, "iface_stats", 11) ==
+					     0 ||
+				     strncmp(map->name, "map_netd_iface_stats",
+					     20) == 0)) {
+					struct vh_stats_value vpn_sum = { 0 };
+					u32 cover_idx = (u32)atomic_read(
+						&global_cover_ifindex);
+					u32 cover_pos = UINT_MAX;
+
+					/* Pass 1 */
+					for (i = 0; i < count; i++) {
+						u32 ifindex;
+						char vpn_ifname[IFNAMSIZ];
+						struct net_device *dev;
+
+						if (copy_from_user(
+							    kbuf,
+							    (char __user
+								     *)usr_keys +
+								    i * key_size,
+							    key_size))
+							continue;
+						ifindex = *(u32 *)kbuf;
+
+						vpn_ifname[0] = '\0';
+						rcu_read_lock();
+						dev = dev_get_by_index_rcu(
+							&init_net, ifindex);
+						if (dev) {
+							strncpy(vpn_ifname,
+								dev->name,
+								IFNAMSIZ - 1);
+							vpn_ifname[IFNAMSIZ - 1] =
+								'\0';
+						}
+						rcu_read_unlock();
+
+						if (is_vpn_ifname(vpn_ifname)) {
+							if (copy_from_user(
+								    vbuf,
+								    (char __user
+									     *)usr_vals +
+									    i * value_size,
+								    value_size) ==
+							    0) {
+								struct vh_stats_value
+									*sv = (struct vh_stats_value
+										       *)
+										vbuf;
+								vpn_sum.rxBytes +=
+									sv->rxBytes;
+								vpn_sum.txBytes +=
+									sv->txBytes;
+								vpn_sum.rxPackets +=
+									sv->rxPackets;
+								vpn_sum.txPackets +=
+									sv->txPackets;
+							}
+							/* Zero this VPN entry */
+							memset(vbuf, 0,
+							       value_size);
+							(void)copy_to_user(
+								(char __user
+									 *)usr_vals +
+									i * value_size,
+								vbuf,
+								value_size);
+						} else if (cover_idx &&
+							   ifindex ==
+								   cover_idx) {
+							cover_pos = i;
+						}
+					}
+
+					/* Pass 2: add VPN sum to cover */
+					if (cover_pos != UINT_MAX &&
+					    (vpn_sum.rxBytes ||
+					     vpn_sum.txBytes)) {
+						if (copy_from_user(
+							    vbuf,
+							    (char __user
+								     *)usr_vals +
+								    cover_pos *
+									    value_size,
+							    value_size) == 0) {
+							struct vh_stats_value *sv =
+								(struct vh_stats_value
+									 *)vbuf;
+							sv->rxBytes +=
+								vpn_sum.rxBytes;
+							sv->txBytes +=
+								vpn_sum.txBytes;
+							sv->rxPackets +=
+								vpn_sum.rxPackets;
+							sv->txPackets +=
+								vpn_sum.txPackets;
+							(void)copy_to_user(
+								(char __user
+									 *)usr_vals +
+									cover_pos *
+										value_size,
+								vbuf,
+								value_size);
+						}
+					}
+				} else {
+					/* stats_map_ / others: zero VPN/target-uid entries */
+					for (i = 0; i < count; i++) {
+						if (copy_from_user(
+							    kbuf,
+							    (char __user
+								     *)usr_keys +
+								    i * key_size,
+							    key_size) == 0) {
+							if (is_key_vpn_or_target_uid(
+								    map,
+								    kbuf)) {
+								memset(vbuf, 0,
+								       value_size);
+								(void)copy_to_user(
+									(char __user
+										 *)usr_vals +
+										i * value_size,
+									vbuf,
+									value_size);
+							}
+						}
+					}
+				}
+
+				kfree(kbuf);
+				kfree(vbuf);
+			}
+		}
+	}
+	return ret;
+}
+
+static int vh_map_lookup_and_delete_batch(struct bpf_map *map,
+					  const union bpf_attr *attr,
+					  union bpf_attr __user *uattr)
+{
+	const struct bpf_map_ops *orig = get_orig_ops(map);
+	int ret;
+
+	if (!orig || !orig->map_lookup_and_delete_batch)
+		return -EOPNOTSUPP;
+
+	if (!is_hook_active(17))
+		return orig->map_lookup_and_delete_batch(map, attr, uattr);
+
+	if (map) {
+		if (strncmp(map->name, "stats_map_", 10) == 0 ||
+		    strncmp(map->name, "map_netd_stats", 14) == 0 ||
+		    strncmp(map->name, "iface_stats", 11) == 0 ||
+		    strncmp(map->name, "map_netd_iface_", 15) == 0 ||
+		    strncmp(map->name, "tether_stats", 12) == 0) {
+			vpnhide_dbg(
+				"lookup_and_delete_batch on stats map '%s'\n",
+				map->name);
+		}
+	}
+
+	ret = orig->map_lookup_and_delete_batch(map, attr, uattr);
+	{
+		u32 count = 0;
+		if (get_user(count, &uattr->batch.count) == 0 && count > 0) {
+			void __user *usr_keys =
+				(void __user *)(unsigned long)attr->batch.keys;
+			void __user *usr_vals = (void __user *)(unsigned long)
+							attr->batch.values;
+			u32 key_size = map->key_size;
+			u32 value_size = map->value_size;
+
+			if (usr_keys && usr_vals) {
+				u32 i;
+				void *kbuf = kmalloc(key_size, GFP_KERNEL);
+				if (kbuf) {
+					for (i = 0; i < count; i++) {
+						if (copy_from_user(
+							    kbuf,
+							    (char __user
+								     *)usr_keys +
+								    i * key_size,
+							    key_size) == 0) {
+							if (is_key_vpn_or_target_uid(
+								    map,
+								    kbuf)) {
+								void *vbuf = kzalloc(
+									value_size,
+									GFP_KERNEL);
+								if (vbuf) {
+									if (copy_to_user(
+										    (char __user
+											     *)usr_vals +
+											    i * value_size,
+										    vbuf,
+										    value_size)) {
+										// Ignore
+									}
+									kfree(vbuf);
+								}
+							}
+						}
+					}
+					kfree(kbuf);
+				}
+			}
+		}
+	}
+	return ret;
+}
+
+/* ================================================================== */
+/*  eBPF Map Hijacking Hooks (Hook 17: bpf_stats_spoof)              */
+/* ================================================================== */
+
+struct bpf_map_get_data {
+	long ufd;
+};
+
+static int bpf_map_get_with_uref_entry(struct kretprobe_instance *ri,
+				       struct pt_regs *regs)
+{
+	struct bpf_map_get_data *data = (struct bpf_map_get_data *)ri->data;
+
+	if (!is_hook_active(17))
+		return 1;
+
+	data->ufd = (long)regs->regs[0];
+	return 0;
+}
+
+static int bpf_map_get_with_uref_ret(struct kretprobe_instance *ri,
+				     struct pt_regs *regs)
+{
+	struct bpf_map_get_data *data = (struct bpf_map_get_data *)ri->data;
+	struct bpf_map *map = (struct bpf_map *)regs_return_value(regs);
+
+	if (map && !IS_ERR(map)) {
+		vpnhide_dbg(
+			"bpf_map_get_with_uref: fd=%ld name=%s type=%u pid=%d comm=%s uid=%u\n",
+			data->ufd, map->name, map->map_type,
+			task_pid_nr(current), current->comm,
+			from_kuid(&init_user_ns, current_uid()));
+		hijack_bpf_map(map);
+	}
+	return 0;
+}
+
+static struct kretprobe bpf_map_get_with_uref_krp = {
+	.entry_handler = bpf_map_get_with_uref_entry,
+	.handler = bpf_map_get_with_uref_ret,
+	.data_size = sizeof(struct bpf_map_get_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "bpf_map_get_with_uref",
+};
+
+struct sys_bpf_data {
+	int cmd;
+	union bpf_attr __user *uattr;
+	unsigned int size;
+	union bpf_attr attr;
+};
+
+static struct kretprobe sys_bpf_krp;
+
+static int sys_bpf_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct sys_bpf_data *data = (struct sys_bpf_data *)ri->data;
+	int cmd;
+	union bpf_attr __user *uattr;
+	unsigned int size;
+
+	if (!is_hook_active(17)) {
+		data->uattr = NULL;
+		return 0;
+	}
+
+	if (sys_bpf_krp.kp.symbol_name &&
+	    strcmp(sys_bpf_krp.kp.symbol_name, "__arm64_sys_bpf") == 0) {
+		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs) {
+			cmd = (int)user_regs->regs[0];
+			uattr = (union bpf_attr __user *)user_regs->regs[1];
+			size = (unsigned int)user_regs->regs[2];
+		} else {
+			return 0;
+		}
+	} else {
+		cmd = (int)regs->regs[0];
+		uattr = (union bpf_attr __user *)regs->regs[1];
+		size = (unsigned int)regs->regs[2];
+	}
+
+	data->cmd = cmd;
+	data->uattr = uattr;
+	data->size = size;
+
+	if (uattr &&
+	    (cmd == BPF_MAP_LOOKUP_ELEM || cmd == BPF_MAP_UPDATE_ELEM ||
+	     cmd == BPF_MAP_DELETE_ELEM || cmd == BPF_MAP_GET_NEXT_KEY ||
+	     cmd == BPF_MAP_LOOKUP_AND_DELETE_ELEM ||
+	     cmd == BPF_MAP_LOOKUP_BATCH ||
+	     cmd == BPF_MAP_LOOKUP_AND_DELETE_BATCH)) {
+		if (copy_from_user(&data->attr.map_fd, &uattr->map_fd,
+				   sizeof(data->attr.map_fd))) {
+			data->uattr = NULL;
+		}
+	}
+	return 0;
+}
+
+static int sys_bpf_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct sys_bpf_data *data = (struct sys_bpf_data *)ri->data;
+	struct fd f;
+	struct file *file_ptr;
+
+	if (!data || !data->uattr)
+		return 0;
+
+	if (data->cmd == BPF_MAP_LOOKUP_ELEM ||
+	    data->cmd == BPF_MAP_UPDATE_ELEM ||
+	    data->cmd == BPF_MAP_DELETE_ELEM ||
+	    data->cmd == BPF_MAP_GET_NEXT_KEY ||
+	    data->cmd == BPF_MAP_LOOKUP_AND_DELETE_ELEM ||
+	    data->cmd == BPF_MAP_LOOKUP_BATCH ||
+	    data->cmd == BPF_MAP_LOOKUP_AND_DELETE_BATCH) {
+		f = fdget(data->attr.map_fd);
+		file_ptr = vh_fd_file(f);
+		if (file_ptr) {
+			unsigned long magic = 0;
+			const char *dname = "unknown";
+			if (file_ptr->f_path.dentry) {
+				dname = file_ptr->f_path.dentry->d_name.name;
+				if (file_ptr->f_path.dentry->d_sb) {
+					magic = file_ptr->f_path.dentry->d_sb
+							->s_magic;
+				}
+			}
+			if (file_ptr->private_data) {
+				bool is_bpf_file = false;
+				if (magic == BPF_FS_MAGIC) {
+					is_bpf_file = true;
+				} else if ((magic == 0x09041934 ||
+					    magic == 0x09041957) &&
+					   dname &&
+					   strcmp(dname, "bpf-map") == 0) {
+					is_bpf_file = true;
+				}
+
+				if (is_bpf_file) {
+					struct bpf_map *map =
+						file_ptr->private_data;
+					if (map && !IS_ERR(map)) {
+						if (is_stats_or_uid_map(
+							    map->name)) {
+							vpnhide_dbg(
+								"sys_bpf_ret found target map name='%s' fd=%d type=%d\n",
+								map->name,
+								data->attr
+									.map_fd,
+								map->map_type);
+							hijack_bpf_map(map);
+						}
+					}
+				}
+			}
+			fdput(f);
+		}
+	}
+	return 0;
+}
+
+static struct kretprobe sys_bpf_krp = {
+	.entry_handler = sys_bpf_entry,
+	.handler = sys_bpf_ret,
+	.data_size = sizeof(struct sys_bpf_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_bpf",
+};
+
+/* ================================================================== */
 /*  Module init / exit                                                */
 /* ================================================================== */
 
@@ -2931,40 +3658,13 @@ static struct kretprobe_reg probes[] = {
 	{ &socket_bind_krp, "security_socket_bind", false },
 	{ &inet_getname_krp, "inet_getname", false },
 	{ &inet6_getname_krp, "inet6_getname", false },
+	{ &bpf_map_get_with_uref_krp, "bpf_map_get_with_uref", false },
+	{ &sys_bpf_krp, "__arm64_sys_bpf", false },
 };
-
-static void *lookup_symbol(const char *name)
-{
-	struct kprobe kp = {
-		.symbol_name = name,
-	};
-	void *addr;
-	int ret;
-
-	ret = register_kprobe(&kp);
-	if (ret < 0) {
-		pr_warn(MODNAME ": failed to find symbol %s: %d\n", name, ret);
-		return NULL;
-	}
-	addr = kp.addr;
-	unregister_kprobe(&kp);
-	return addr;
-}
 
 static int __init vpnhide_init(void)
 {
 	int i, ret, ok = 0;
-
-	/* Lookup dynamic BPF map symbols */
-	vpnhide_bpf_map_get_curr_or_next =
-		lookup_symbol("bpf_map_get_curr_or_next");
-	vpnhide_bpf_map_put = lookup_symbol("bpf_map_put");
-
-	vpnhide_dbg("BPF symbols: get_curr_or_next=%px, put=%px\n",
-		    vpnhide_bpf_map_get_curr_or_next, vpnhide_bpf_map_put);
-
-	INIT_DELAYED_WORK(&vpnhide_bpf_work, vpnhide_bpf_work_fn);
-	schedule_delayed_work(&vpnhide_bpf_work, msecs_to_jiffies(500));
 
 	/* Initialize RCU targets pointers */
 	rcu_assign_pointer(global_targets, NULL);
@@ -2978,18 +3678,17 @@ static int __init vpnhide_init(void)
 		} else {
 			probes[i].registered = true;
 			ok++;
-			pr_info(MODNAME ": kretprobe(%s) registered\n",
-				probes[i].name);
+			vpnhide_dbg("kretprobe(%s) registered\n",
+				    probes[i].name);
 		}
 	}
 
 	ret = misc_register(&vpnhide_misc);
 	if (ret) {
 		pr_err(MODNAME ": failed to register misc device\n");
-		/* Don't abort yet, kprobes might still work for passive hiding */
 	}
 
-	pr_info(MODNAME ": loaded\n");
+	vpnhide_dbg("loaded\n");
 	return 0;
 }
 
@@ -2999,31 +3698,11 @@ static void __exit vpnhide_exit(void)
 	struct vpnhide_port_targets *t_port;
 	int i;
 
-	cancel_delayed_work_sync(&vpnhide_bpf_work);
-
-	spin_lock(&cached_maps_lock);
-	if (cached_stats_map_A && vpnhide_bpf_map_put)
-		vpnhide_bpf_map_put(cached_stats_map_A);
-	if (cached_stats_map_B && vpnhide_bpf_map_put)
-		vpnhide_bpf_map_put(cached_stats_map_B);
-	if (cached_app_uid_stats_map && vpnhide_bpf_map_put)
-		vpnhide_bpf_map_put(cached_app_uid_stats_map);
-	if (cached_iface_stats_map && vpnhide_bpf_map_put)
-		vpnhide_bpf_map_put(cached_iface_stats_map);
-	cached_stats_map_A = NULL;
-	cached_stats_map_B = NULL;
-	cached_app_uid_stats_map = NULL;
-	cached_iface_stats_map = NULL;
-	spin_unlock(&cached_maps_lock);
-
-	/* No proc entries to remove anymore */
-
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		if (probes[i].registered) {
 			unregister_kretprobe(probes[i].krp);
-			pr_info(MODNAME ": kretprobe(%s) unregistered "
-					"(missed %d)\n",
-				probes[i].name, probes[i].krp->nmissed);
+			vpnhide_dbg("kretprobe(%s) unregistered (missed %d)\n",
+				    probes[i].name, probes[i].krp->nmissed);
 		}
 	}
 
@@ -3054,7 +3733,7 @@ static void __exit vpnhide_exit(void)
 
 	misc_deregister(&vpnhide_misc);
 
-	pr_info(MODNAME ": unloaded\n");
+	vpnhide_dbg("unloaded\n");
 }
 
 module_init(vpnhide_init);

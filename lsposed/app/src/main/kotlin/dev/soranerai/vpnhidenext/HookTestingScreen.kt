@@ -211,11 +211,11 @@ val ALL_HOOKS =
         HookInfo(
             17,
             "bpf_stats_spoof",
-            "bpf_stats_spoof (eBPF)",
+            "bpf_map_get_with_uref + __arm64_sys_bpf",
             if (isRussian) {
-                "Периодически очищает счетчики eBPF-карт TrafficStats для целевых приложений и VPN-интерфейса."
+                "Перехватывает открытие eBPF-карт через bpf_map_get_with_uref и sys_bpf, подменяя операции чтения/записи на карты TrafficStats/iface_stats/app_uid_stats, возвращая нулевые счётчики трафика для целевых UID и VPN-интерфейсов."
             } else {
-                "Periodically zeroes out TrafficStats eBPF map counters for targeted apps and the VPN interface."
+                "Intercepts BPF map access via bpf_map_get_with_uref and sys_bpf syscall, hijacking map ops on TrafficStats/iface_stats/app_uid_stats maps to return zero traffic counters for targeted UIDs and VPN interfaces."
             },
         ),
     )
