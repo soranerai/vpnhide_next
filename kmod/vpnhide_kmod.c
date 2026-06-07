@@ -187,6 +187,11 @@ static DEFINE_MUTEX(iface_prefixes_lock);
 static struct vpnhide_spoof_ip global_spoof_ip;
 static DEFINE_SPINLOCK(spoof_ip_lock);
 
+/* Ifindex of the cover (non-VPN) interface, sent by the daemon.
+ * Used in vh_stats_map_lookup to avoid scanning all interfaces.
+ * 0 means not set yet. */
+static atomic_t global_cover_ifindex = ATOMIC_INIT(0);
+
 static bool vpnhide_is_vpn_ifname(const char *name)
 {
 	struct vpnhide_iface_prefixes *p;
@@ -2054,6 +2059,16 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		ret = 0;
 		break;
 
+	case VH_SET_COVER_IFACE: {
+		struct vpnhide_cover_iface ci;
+		if (copy_from_user(&ci, (void __user *)arg, sizeof(ci)))
+			return -EFAULT;
+		atomic_set(&global_cover_ifindex, (int)ci.ifindex);
+		vpnhide_dbg("ioctl: cover ifindex set to %u\n", ci.ifindex);
+		ret = 0;
+		break;
+	}
+
 	case VH_GET_ACTIVE_HOOKS:
 		val = READ_ONCE(active_hooks_mask);
 		if (put_user(val, (unsigned int __user *)arg))
@@ -2790,25 +2805,263 @@ static bool is_key_vpn_or_target_uid(struct bpf_map *map, void *key)
 				map->name, ifaceIndex, ifname);
 			return true;
 		}
-	} else if (strncmp(map->name, "app_uid_stats", 13) == 0 ||
-		   strncmp(map->name, "map_netd_app_ui", 15) == 0 ||
-		   strncmp(map->name, "uid_stats", 9) == 0 ||
-		   strncmp(map->name, "map_netd_uid_st", 15) == 0) {
-		u32 uid = *(u32 *)key;
+	}
+	/* app_uid_stats / uid_stats (key = uid only, no iface) are intentionally
+	 * NOT filtered here: the per-uid total must keep growing so that
+	 * delta-based traffic checks in apps do not see zero. */
 
+	return false;
+}
+
+/*
+ * Per-CPU buffer for synthesised stats values (cover_iface + vpn_iface sum).
+ * Using per-CPU storage avoids locking on the hot lookup path.
+ */
+DEFINE_PER_CPU(struct vh_stats_value, vh_synth_val);
+
+/*
+ * For stats_map_ lookups on the cover (non-VPN) interface for a target UID:
+ * return real_cover_val + real_vpn_val so the counter grows alongside VPN
+ * traffic and delta-based checks in apps see consistent numbers.
+ *
+ * For the VPN interface itself: return zero_val as before.
+ *
+ * Must be called with interrupts enabled (no spinlock held) because
+ * orig->map_lookup_elem may sleep (htab with preemption).
+ */
+static void *vh_stats_map_lookup(const struct bpf_map_ops *orig,
+				 struct bpf_map *map, void *key)
+{
+	struct vh_stats_key *sk = (struct vh_stats_key *)key;
+	struct net_device *dev;
+	char ifname[IFNAMSIZ];
+	struct vh_stats_value *cover_val;
+	struct vh_stats_value vpn_sum;
+	struct vh_stats_value *synth;
+	struct vh_stats_key vpn_key;
+	static struct vh_stats_value zero_val = { 0 };
+	int cpu;
+
+	if (!is_target_uid_val(sk->uid))
+		goto passthrough;
+
+	ifname[0] = '\0';
+	rcu_read_lock();
+	dev = dev_get_by_index_rcu(&init_net, sk->ifaceIndex);
+	if (dev) {
+		strncpy(ifname, dev->name, IFNAMSIZ - 1);
+		ifname[IFNAMSIZ - 1] = '\0';
+	}
+	rcu_read_unlock();
+
+	if (is_vpn_ifname(ifname)) {
+		/* VPN iface query for target UID → zero */
 		vpnhide_dbg(
-			"key_check app_uid_stats '%s': uid=%u is_target=%d\n",
-			map->name, uid, is_target_uid_val(uid));
+			"stats_map lookup: uid=%u iface='%s' (VPN) -> zero\n",
+			sk->uid, ifname);
+		return &zero_val;
+	}
 
-		if (is_target_uid_val(uid)) {
-			vpnhide_dbg(
-				"BPF Match app_uid_stats '%s': uid=%u -> SPOOFING ZERO STATS\n",
-				map->name, uid);
-			return true;
+	/*
+	 * Cover iface query for target UID.
+	 * Find the VPN iface for this UID in the same map and add its
+	 * traffic to the cover iface value so the counter grows.
+	 */
+	if (!orig || !orig->map_lookup_elem)
+		goto passthrough;
+
+	/* First: get the real cover iface value */
+	cover_val = orig->map_lookup_elem(map, key);
+
+	/* Find ALL VPN iface entries for this UID and sum them.
+	 * Tries counterSet 0 (foreground) and 1 (background) with tag=0
+	 * (untagged, covers the common case) on every VPN interface found. */
+	{
+		u32 idx;
+		u8 cs;
+		char vpn_ifname[IFNAMSIZ];
+		u32 cached_cover = (u32)atomic_read(&global_cover_ifindex);
+
+		memset(&vpn_sum, 0, sizeof(vpn_sum));
+
+		for (idx = 1; idx < 512; idx++) {
+			struct vh_stats_value *v;
+
+			/* Skip the cover iface — we are looking for VPN ifaces */
+			if (cached_cover && idx == cached_cover)
+				continue;
+
+			vpn_ifname[0] = '\0';
+			rcu_read_lock();
+			dev = dev_get_by_index_rcu(&init_net, idx);
+			if (dev) {
+				strncpy(vpn_ifname, dev->name, IFNAMSIZ - 1);
+				vpn_ifname[IFNAMSIZ - 1] = '\0';
+			}
+			rcu_read_unlock();
+
+			if (vpn_ifname[0] == '\0' || !is_vpn_ifname(vpn_ifname))
+				continue;
+
+			for (cs = 0; cs <= 1; cs++) {
+				vpn_key.uid = sk->uid;
+				vpn_key.tag = 0;
+				vpn_key.counterSet = cs;
+				vpn_key.ifaceIndex = idx;
+				v = orig->map_lookup_elem(map, &vpn_key);
+				if (v) {
+					vpn_sum.rxBytes += v->rxBytes;
+					vpn_sum.txBytes += v->txBytes;
+					vpn_sum.rxPackets += v->rxPackets;
+					vpn_sum.txPackets += v->txPackets;
+				}
+			}
 		}
 	}
 
-	return false;
+	if (vpn_sum.rxBytes == 0 && vpn_sum.txBytes == 0) {
+		/* No VPN entry found — just return cover iface as-is */
+		vpnhide_dbg(
+			"stats_map lookup: uid=%u iface='%s' (cover, no vpn entry) -> passthrough\n",
+			sk->uid, ifname);
+		return cover_val ? cover_val : &zero_val;
+	}
+
+	/* Synthesise: cover + vpn_sum, stored in per-CPU buffer */
+	cpu = get_cpu();
+	synth = per_cpu_ptr(&vh_synth_val, cpu);
+
+	if (cover_val) {
+		*synth = *cover_val;
+	} else {
+		memset(synth, 0, sizeof(*synth));
+	}
+	synth->rxBytes += vpn_sum.rxBytes;
+	synth->txBytes += vpn_sum.txBytes;
+	synth->rxPackets += vpn_sum.rxPackets;
+	synth->txPackets += vpn_sum.txPackets;
+	put_cpu();
+
+	vpnhide_dbg(
+		"stats_map lookup: uid=%u iface='%s' (cover) -> synth rx=%llu tx=%llu\n",
+		sk->uid, ifname, synth->rxBytes, synth->txBytes);
+	return synth;
+
+passthrough:
+	if (orig && orig->map_lookup_elem)
+		return orig->map_lookup_elem(map, key);
+	return NULL;
+}
+
+/*
+ * Lookup for iface_stats / map_netd_iface_stats maps.
+ * Key is u32 ifaceIndex only (no uid/tag/cs).
+ * Value is aggregate traffic for ALL UIDs on that interface.
+ *
+ * - VPN iface  → zero  (hide completely)
+ * - Cover iface → real_cover + sum(real_vpn_ifaces)  (absorb VPN traffic)
+ * - Other ifaces → passthrough
+ *
+ * This makes "System total" stay consistent with "Visible sum":
+ * instead of zeroing tun0 and letting System drop, we move tun0's counters
+ * into wlan0 so the total across visible ifaces matches the real total.
+ */
+static void *vh_iface_stats_lookup(const struct bpf_map_ops *orig,
+				   struct bpf_map *map, void *key)
+{
+	u32 ifaceIndex = *(u32 *)key;
+	struct net_device *dev;
+	char ifname[IFNAMSIZ];
+	static struct vh_stats_value zero_val = { 0 };
+	struct vh_stats_value *cover_val;
+	struct vh_stats_value vpn_sum;
+	struct vh_stats_value *synth;
+	u32 cached_cover;
+	u32 idx;
+	int cpu;
+
+	if (!orig || !orig->map_lookup_elem)
+		return NULL;
+
+	/* Resolve the queried iface name */
+	ifname[0] = '\0';
+	rcu_read_lock();
+	dev = dev_get_by_index_rcu(&init_net, ifaceIndex);
+	if (dev) {
+		strncpy(ifname, dev->name, IFNAMSIZ - 1);
+		ifname[IFNAMSIZ - 1] = '\0';
+	}
+	rcu_read_unlock();
+
+	if (is_vpn_ifname(ifname)) {
+		/* VPN iface → hide */
+		vpnhide_dbg("iface_stats lookup: iface='%s' (VPN) -> zero\n",
+			    ifname);
+		return &zero_val;
+	}
+
+	/* Only launder on the cover iface; passthrough everything else */
+	cached_cover = (u32)atomic_read(&global_cover_ifindex);
+	if (!cached_cover || ifaceIndex != cached_cover)
+		return orig->map_lookup_elem(map, key);
+
+	/* Cover iface: real_cover + sum of all VPN iface stats */
+	cover_val = orig->map_lookup_elem(map, key);
+
+	memset(&vpn_sum, 0, sizeof(vpn_sum));
+	for (idx = 1; idx < 512; idx++) {
+		char vpn_ifname[IFNAMSIZ];
+		struct vh_stats_value *v;
+
+		if (idx == ifaceIndex)
+			continue; /* skip cover iface itself */
+
+		vpn_ifname[0] = '\0';
+		rcu_read_lock();
+		dev = dev_get_by_index_rcu(&init_net, idx);
+		if (dev) {
+			strncpy(vpn_ifname, dev->name, IFNAMSIZ - 1);
+			vpn_ifname[IFNAMSIZ - 1] = '\0';
+		}
+		rcu_read_unlock();
+
+		if (vpn_ifname[0] == '\0' || !is_vpn_ifname(vpn_ifname))
+			continue;
+
+		/* iface_stats key is just the ifaceIndex (u32) */
+		v = orig->map_lookup_elem(map, &idx);
+		if (v) {
+			vpn_sum.rxBytes += v->rxBytes;
+			vpn_sum.txBytes += v->txBytes;
+			vpn_sum.rxPackets += v->rxPackets;
+			vpn_sum.txPackets += v->txPackets;
+		}
+	}
+
+	if (vpn_sum.rxBytes == 0 && vpn_sum.txBytes == 0) {
+		vpnhide_dbg(
+			"iface_stats lookup: iface='%s' (cover, no vpn) -> passthrough\n",
+			ifname);
+		return cover_val ? cover_val : &zero_val;
+	}
+
+	cpu = get_cpu();
+	synth = per_cpu_ptr(&vh_synth_val, cpu);
+	if (cover_val) {
+		*synth = *cover_val;
+	} else {
+		memset(synth, 0, sizeof(*synth));
+	}
+	synth->rxBytes += vpn_sum.rxBytes;
+	synth->txBytes += vpn_sum.txBytes;
+	synth->rxPackets += vpn_sum.rxPackets;
+	synth->txPackets += vpn_sum.txPackets;
+	put_cpu();
+
+	vpnhide_dbg(
+		"iface_stats lookup: iface='%s' (cover) -> synth rx=%llu tx=%llu\n",
+		ifname, synth->rxBytes, synth->txBytes);
+	return synth;
 }
 
 static void *vh_map_lookup_elem(struct bpf_map *map, void *key)
@@ -2822,17 +3075,16 @@ static void *vh_map_lookup_elem(struct bpf_map *map, void *key)
 		return NULL;
 	}
 
-	if (map && key) {
-		if (strncmp(map->name, "stats_map_", 10) == 0 ||
-		    strncmp(map->name, "map_netd_stats", 14) == 0 ||
-		    strncmp(map->name, "iface_stats", 11) == 0 ||
-		    strncmp(map->name, "map_netd_iface_", 15) == 0 ||
-		    strncmp(map->name, "tether_stats", 12) == 0) {
-			struct vh_stats_key *sk = (struct vh_stats_key *)key;
-			vpnhide_dbg(
-				"lookup_elem on stats map '%s': uid=%u index=%u\n",
-				map->name, sk->uid, sk->ifaceIndex);
-		}
+	/* stats_map_ / map_netd_stats: use laundering logic */
+	if (map && (strncmp(map->name, "stats_map_", 10) == 0 ||
+		    strncmp(map->name, "map_netd_stats", 14) == 0)) {
+		return vh_stats_map_lookup(orig, map, key);
+	}
+
+	/* iface_stats / map_netd_iface_stats: use iface-level laundering */
+	if (map && (strncmp(map->name, "iface_stats", 11) == 0 ||
+		    strncmp(map->name, "map_netd_iface_stats", 20) == 0)) {
+		return vh_iface_stats_lookup(orig, map, key);
 	}
 
 	if (is_key_vpn_or_target_uid(map, key)) {
@@ -2855,17 +3107,19 @@ static void *vh_map_lookup_elem_sys_only(struct bpf_map *map, void *key)
 		return NULL;
 	}
 
-	if (map && key) {
-		if (strncmp(map->name, "stats_map_", 10) == 0 ||
-		    strncmp(map->name, "map_netd_stats", 14) == 0 ||
-		    strncmp(map->name, "iface_stats", 11) == 0 ||
-		    strncmp(map->name, "map_netd_iface_", 15) == 0 ||
-		    strncmp(map->name, "tether_stats", 12) == 0) {
-			struct vh_stats_key *sk = (struct vh_stats_key *)key;
-			vpnhide_dbg(
-				"lookup_elem_sys_only on stats map '%s': uid=%u index=%u\n",
-				map->name, sk->uid, sk->ifaceIndex);
-		}
+	/* stats_map_ / map_netd_stats: use laundering logic
+	 * (sys_only path is used by privileged callers like system_server) */
+	if (map && (strncmp(map->name, "stats_map_", 10) == 0 ||
+		    strncmp(map->name, "map_netd_stats", 14) == 0)) {
+		/* Reuse vh_stats_map_lookup — it calls orig->map_lookup_elem
+		 * which is fine since we need the real values either way. */
+		return vh_stats_map_lookup(orig, map, key);
+	}
+
+	/* iface_stats / map_netd_iface_stats: use iface-level laundering */
+	if (map && (strncmp(map->name, "iface_stats", 11) == 0 ||
+		    strncmp(map->name, "map_netd_iface_stats", 20) == 0)) {
+		return vh_iface_stats_lookup(orig, map, key);
 	}
 
 	if (is_key_vpn_or_target_uid(map, key)) {
@@ -2951,17 +3205,6 @@ static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
 	if (!is_hook_active(17))
 		return orig->map_lookup_batch(map, attr, uattr);
 
-	if (map) {
-		if (strncmp(map->name, "stats_map_", 10) == 0 ||
-		    strncmp(map->name, "map_netd_stats", 14) == 0 ||
-		    strncmp(map->name, "iface_stats", 11) == 0 ||
-		    strncmp(map->name, "map_netd_iface_", 15) == 0 ||
-		    strncmp(map->name, "tether_stats", 12) == 0) {
-			vpnhide_dbg("lookup_batch on stats map '%s'\n",
-				    map->name);
-		}
-	}
-
 	ret = orig->map_lookup_batch(map, attr, uattr);
 	{
 		u32 count = 0;
@@ -2976,7 +3219,129 @@ static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
 			if (usr_keys && usr_vals) {
 				u32 i;
 				void *kbuf = kmalloc(key_size, GFP_KERNEL);
-				if (kbuf) {
+				void *vbuf = kmalloc(value_size, GFP_KERNEL);
+
+				if (!kbuf || !vbuf) {
+					kfree(kbuf);
+					kfree(vbuf);
+					return ret;
+				}
+
+				/*
+				 * iface_stats / map_netd_iface_stats:
+				 * Two-pass laundering.
+				 *  Pass 1: collect VPN bytes, zero VPN entries.
+				 *  Pass 2: add VPN sum to cover (wlan0) entry.
+				 * This keeps System total intact while hiding tun0.
+				 */
+				if (map &&
+				    (strncmp(map->name, "iface_stats", 11) ==
+					     0 ||
+				     strncmp(map->name, "map_netd_iface_stats",
+					     20) == 0)) {
+					struct vh_stats_value vpn_sum = { 0 };
+					u32 cover_idx = (u32)atomic_read(
+						&global_cover_ifindex);
+					u32 cover_pos = UINT_MAX;
+
+					/* Pass 1 */
+					for (i = 0; i < count; i++) {
+						u32 ifindex;
+						char vpn_ifname[IFNAMSIZ];
+						struct net_device *dev;
+
+						if (copy_from_user(
+							    kbuf,
+							    (char __user
+								     *)usr_keys +
+								    i * key_size,
+							    key_size))
+							continue;
+						ifindex = *(u32 *)kbuf;
+
+						vpn_ifname[0] = '\0';
+						rcu_read_lock();
+						dev = dev_get_by_index_rcu(
+							&init_net, ifindex);
+						if (dev) {
+							strncpy(vpn_ifname,
+								dev->name,
+								IFNAMSIZ - 1);
+							vpn_ifname[IFNAMSIZ - 1] =
+								'\0';
+						}
+						rcu_read_unlock();
+
+						if (is_vpn_ifname(vpn_ifname)) {
+							if (copy_from_user(
+								    vbuf,
+								    (char __user
+									     *)usr_vals +
+									    i * value_size,
+								    value_size) ==
+							    0) {
+								struct vh_stats_value
+									*sv = (struct vh_stats_value
+										       *)
+										vbuf;
+								vpn_sum.rxBytes +=
+									sv->rxBytes;
+								vpn_sum.txBytes +=
+									sv->txBytes;
+								vpn_sum.rxPackets +=
+									sv->rxPackets;
+								vpn_sum.txPackets +=
+									sv->txPackets;
+							}
+							/* Zero this VPN entry */
+							memset(vbuf, 0,
+							       value_size);
+							(void)copy_to_user(
+								(char __user
+									 *)usr_vals +
+									i * value_size,
+								vbuf,
+								value_size);
+						} else if (cover_idx &&
+							   ifindex ==
+								   cover_idx) {
+							cover_pos = i;
+						}
+					}
+
+					/* Pass 2: add VPN sum to cover */
+					if (cover_pos != UINT_MAX &&
+					    (vpn_sum.rxBytes ||
+					     vpn_sum.txBytes)) {
+						if (copy_from_user(
+							    vbuf,
+							    (char __user
+								     *)usr_vals +
+								    cover_pos *
+									    value_size,
+							    value_size) == 0) {
+							struct vh_stats_value *sv =
+								(struct vh_stats_value
+									 *)vbuf;
+							sv->rxBytes +=
+								vpn_sum.rxBytes;
+							sv->txBytes +=
+								vpn_sum.txBytes;
+							sv->rxPackets +=
+								vpn_sum.rxPackets;
+							sv->txPackets +=
+								vpn_sum.txPackets;
+							(void)copy_to_user(
+								(char __user
+									 *)usr_vals +
+									cover_pos *
+										value_size,
+								vbuf,
+								value_size);
+						}
+					}
+				} else {
+					/* stats_map_ / others: zero VPN/target-uid entries */
 					for (i = 0; i < count; i++) {
 						if (copy_from_user(
 							    kbuf,
@@ -2987,25 +3352,21 @@ static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
 							if (is_key_vpn_or_target_uid(
 								    map,
 								    kbuf)) {
-								void *vbuf = kzalloc(
-									value_size,
-									GFP_KERNEL);
-								if (vbuf) {
-									if (copy_to_user(
-										    (char __user
-											     *)usr_vals +
-											    i * value_size,
-										    vbuf,
-										    value_size)) {
-										// Ignore
-									}
-									kfree(vbuf);
-								}
+								memset(vbuf, 0,
+								       value_size);
+								(void)copy_to_user(
+									(char __user
+										 *)usr_vals +
+										i * value_size,
+									vbuf,
+									value_size);
 							}
 						}
 					}
-					kfree(kbuf);
 				}
+
+				kfree(kbuf);
+				kfree(vbuf);
 			}
 		}
 	}

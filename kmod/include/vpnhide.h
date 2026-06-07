@@ -44,8 +44,8 @@ struct vpnhide_iface_ioctl_data {
 };
 
 struct vpnhide_spoof_ip {
-	__be32 ipv4_addr;       /* IPv4 address in network byte order */
-	__u8 ipv6_addr[16];     /* IPv6 address */
+	__be32 ipv4_addr; /* IPv4 address in network byte order */
+	__u8 ipv6_addr[16]; /* IPv6 address */
 	__u8 has_ipv4;
 	__u8 has_ipv6;
 };
@@ -57,8 +57,7 @@ struct vpnhide_spoof_ip {
 #define VH_SET_PORT_RULES _IO(VH_IOCTL_MAGIC, 0x06)
 #define VH_SET_IFACE_PREFIXES \
 	_IOW(VH_IOCTL_MAGIC, 0x07, struct vpnhide_iface_ioctl_data)
-#define VH_SET_SPOOF_IP \
-	_IOW(VH_IOCTL_MAGIC, 0x08, struct vpnhide_spoof_ip)
+#define VH_SET_SPOOF_IP _IOW(VH_IOCTL_MAGIC, 0x08, struct vpnhide_spoof_ip)
 #define VH_SET_ACTIVE_HOOKS _IOW(VH_IOCTL_MAGIC, 0x09, unsigned int)
 #define VH_GET_ACTIVE_HOOKS _IOR(VH_IOCTL_MAGIC, 0x0A, unsigned int)
 
@@ -81,5 +80,13 @@ struct vpnhide_kmod_stats_data {
 #define VH_SET_BPF_MAP_FOPS _IOW(VH_IOCTL_MAGIC, 0x0E, unsigned long)
 #define VH_SET_STATS_MAP_A _IOW(VH_IOCTL_MAGIC, 0x0F, int)
 #define VH_SET_STATS_MAP_B _IOW(VH_IOCTL_MAGIC, 0x10, int)
+
+/* Cover interface: the visible non-VPN iface whose stats absorb VPN traffic */
+struct vpnhide_cover_iface {
+	__u32 ifindex; /* 0 = not set / disabled */
+};
+
+#define VH_SET_COVER_IFACE \
+	_IOW(VH_IOCTL_MAGIC, 0x11, struct vpnhide_cover_iface)
 
 #endif /* _VPNHIDE_H */

@@ -769,6 +769,38 @@ fn check_proc_net_dev() -> CheckOutput {
     check_proc_file("/proc/net/dev")
 }
 
+/// Parse /proc/net/dev and return raw per-interface TX/RX byte counters as CSV.
+///
+/// Format: one line per interface, "ifname,tx_bytes,rx_bytes".
+/// Called from Kotlin to get ground-truth stats bypassing Java SELinux restrictions.
+/// Returns an empty string if the file is unreadable (SELinux denial or not available).
+#[uniffi::export]
+fn parse_proc_net_dev_csv() -> String {
+    let content = match std::fs::read_to_string("/proc/net/dev") {
+        Ok(s) => s,
+        Err(_) => return String::new(),
+    };
+    let mut out = String::new();
+    for line in content.lines().skip(2) {
+        // Format: "  iface: rx_bytes rx_pkts ... [8 fields] tx_bytes tx_pkts ..."
+        let trimmed = line.trim();
+        let colon = match trimmed.find(':') {
+            Some(p) => p,
+            None => continue,
+        };
+        let iface = trimmed[..colon].trim();
+        if iface.is_empty() {
+            continue;
+        }
+        let fields: Vec<&str> = trimmed[colon + 1..].split_ascii_whitespace().collect();
+        // fields[0] = rx_bytes, fields[8] = tx_bytes
+        let rx_bytes: u64 = fields.first().and_then(|s| s.parse().ok()).unwrap_or(0);
+        let tx_bytes: u64 = fields.get(8).and_then(|s| s.parse().ok()).unwrap_or(0);
+        out.push_str(&format!("{},{},{}\n", iface, tx_bytes, rx_bytes));
+    }
+    out
+}
+
 #[uniffi::export]
 fn check_proc_net_fib_trie() -> CheckOutput {
     check_proc_file("/proc/net/fib_trie")

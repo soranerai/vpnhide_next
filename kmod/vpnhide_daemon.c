@@ -315,6 +315,15 @@ static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 			strcpy(last_ipv6, new_ipv6);
 		}
 	}
+
+	/* Always update cover ifindex so the kernel's BPF stats laundering
+	 * uses the correct interface even if the spoof IP hasn't changed. */
+	if (best_ifname[0] != '\0') {
+		struct vpnhide_cover_iface ci;
+		ci.ifindex = if_nametoindex(best_ifname);
+		if (ci.ifindex > 0)
+			ioctl(fd, VH_SET_COVER_IFACE, &ci);
+	}
 }
 
 static int get_target_uids(int fd, uid_t *uids, int max_uids)
