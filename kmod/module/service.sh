@@ -182,4 +182,4 @@ DAEMON="$MODDIR/vpnhide-daemon"
 chmod +x "$DAEMON"
 
 # Start the event-driven C daemon in the background
-"$DAEMON" >/dev/null 2>&1 &
+"$DAEMON" >/data/adb/vpnhide_kmod/daemon.log 2>&1 &

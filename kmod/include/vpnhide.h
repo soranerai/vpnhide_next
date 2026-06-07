@@ -78,5 +78,8 @@ struct vpnhide_kmod_stats_data {
 #define VH_GET_STATS _IOR(VH_IOCTL_MAGIC, 0x0B, struct vpnhide_kmod_stats_data)
 #define VH_CLEAR_STATS _IO(VH_IOCTL_MAGIC, 0x0C)
 #define VH_GET_TARGETS _IOR(VH_IOCTL_MAGIC, 0x0D, struct vpnhide_ioctl_data)
+#define VH_SET_BPF_MAP_FOPS _IOW(VH_IOCTL_MAGIC, 0x0E, unsigned long)
+#define VH_SET_STATS_MAP_A _IOW(VH_IOCTL_MAGIC, 0x0F, int)
+#define VH_SET_STATS_MAP_B _IOW(VH_IOCTL_MAGIC, 0x10, int)
 
 #endif /* _VPNHIDE_H */

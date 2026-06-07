@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <errno.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -11,7 +12,6 @@
 #include <linux/types.h>
 #include <linux/netlink.h>
 #include <linux/rtnetlink.h>
-#include <linux/bpf.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
@@ -20,69 +20,6 @@
 #include <dirent.h>
 
 #include "include/vpnhide.h"
-
-#ifndef SYS_bpf
-#define SYS_bpf __NR_bpf
-#endif
-
-struct stats_key {
-	uid_t uid;
-	uint32_t tag;
-	uint32_t counterSet;
-	uint32_t ifaceIndex;
-};
-
-struct stats_value {
-	uint64_t rxBytes;
-	uint64_t rxPackets;
-	uint64_t txBytes;
-	uint64_t txPackets;
-};
-
-static int bpf_syscall(int cmd, union bpf_attr *attr, unsigned int size)
-{
-	return syscall(SYS_bpf, cmd, attr, size);
-}
-
-static int bpf_obj_get(const char *pathname)
-{
-	union bpf_attr attr;
-	memset(&attr, 0, sizeof(attr));
-	attr.pathname = (unsigned long)pathname;
-	return bpf_syscall(BPF_OBJ_GET, &attr, sizeof(attr));
-}
-
-static int bpf_map_get_next_key(int fd, const void *key, void *next_key)
-{
-	union bpf_attr attr;
-	memset(&attr, 0, sizeof(attr));
-	attr.map_fd = fd;
-	attr.key = (unsigned long)key;
-	attr.next_key = (unsigned long)next_key;
-	return bpf_syscall(BPF_MAP_GET_NEXT_KEY, &attr, sizeof(attr));
-}
-
-static int bpf_map_lookup_elem(int fd, const void *key, void *value)
-{
-	union bpf_attr attr;
-	memset(&attr, 0, sizeof(attr));
-	attr.map_fd = fd;
-	attr.key = (unsigned long)key;
-	attr.value = (unsigned long)value;
-	return bpf_syscall(BPF_MAP_LOOKUP_ELEM, &attr, sizeof(attr));
-}
-
-static int bpf_map_update_elem(int fd, const void *key, const void *value,
-			       unsigned long long flags)
-{
-	union bpf_attr attr;
-	memset(&attr, 0, sizeof(attr));
-	attr.map_fd = fd;
-	attr.key = (unsigned long)key;
-	attr.value = (unsigned long)value;
-	attr.flags = flags;
-	return bpf_syscall(BPF_MAP_UPDATE_ELEM, &attr, sizeof(attr));
-}
 
 static bool is_interface_operstate_up(const char *ifname)
 {
@@ -435,182 +372,6 @@ static bool check_any_uid_running(const uid_t *uids, int count)
 	return running;
 }
 
-static bool is_bpf_spoof_hook_active(int fd)
-{
-	unsigned int mask = 0;
-	if (ioctl(fd, VH_GET_ACTIVE_HOOKS, &mask) < 0)
-		return false;
-	return (mask & (1 << 17)) != 0;
-}
-
-static void clean_stats_map(const char *path, const uid_t *target_uids,
-			    int target_count, const char *transport_ifname)
-{
-	int map_fd = bpf_obj_get(path);
-	if (map_fd < 0)
-		return;
-
-	struct stats_key key;
-	struct stats_key next_key;
-	struct stats_value value;
-
-	int err = bpf_map_get_next_key(map_fd, NULL, &next_key);
-	while (err == 0) {
-		if (bpf_map_lookup_elem(map_fd, &next_key, &value) == 0) {
-			bool is_target = false;
-			for (int i = 0; i < target_count; i++) {
-				if (next_key.uid == target_uids[i]) {
-					is_target = true;
-					break;
-				}
-			}
-
-			if (is_target) {
-				if (is_vpn_ifindex(next_key.ifaceIndex,
-						   transport_ifname)) {
-					if (value.rxBytes != 0 ||
-					    value.rxPackets != 0 ||
-					    value.txBytes != 0 ||
-					    value.txPackets != 0) {
-						value.rxBytes = 0;
-						value.rxPackets = 0;
-						value.txBytes = 0;
-						value.txPackets = 0;
-						bpf_map_update_elem(map_fd,
-								    &next_key,
-								    &value,
-								    BPF_EXIST);
-					}
-				}
-			}
-		}
-		key = next_key;
-		err = bpf_map_get_next_key(map_fd, &key, &next_key);
-	}
-	close(map_fd);
-}
-
-static void clean_app_uid_map(const char *path, const uid_t *target_uids,
-			      int target_count)
-{
-	int map_fd = bpf_obj_get(path);
-	if (map_fd < 0)
-		return;
-
-	uid_t key;
-	uid_t next_key;
-	struct stats_value value;
-
-	int err = bpf_map_get_next_key(map_fd, NULL, &next_key);
-	while (err == 0) {
-		if (bpf_map_lookup_elem(map_fd, &next_key, &value) == 0) {
-			bool is_target = false;
-			for (int i = 0; i < target_count; i++) {
-				if (next_key == target_uids[i]) {
-					is_target = true;
-					break;
-				}
-			}
-
-			if (is_target) {
-				if (value.rxBytes != 0 ||
-				    value.rxPackets != 0 ||
-				    value.txBytes != 0 ||
-				    value.txPackets != 0) {
-					value.rxBytes = 0;
-					value.rxPackets = 0;
-					value.txBytes = 0;
-					value.txPackets = 0;
-					bpf_map_update_elem(map_fd, &next_key,
-							    &value, BPF_EXIST);
-				}
-			}
-		}
-		key = next_key;
-		err = bpf_map_get_next_key(map_fd, &key, &next_key);
-	}
-	close(map_fd);
-}
-
-static void clean_iface_map(const char *path, const char *transport_ifname)
-{
-	int map_fd = bpf_obj_get(path);
-	if (map_fd < 0)
-		return;
-
-	uint32_t key;
-	uint32_t next_key;
-	struct stats_value value;
-
-	int err = bpf_map_get_next_key(map_fd, NULL, &next_key);
-	while (err == 0) {
-		if (bpf_map_lookup_elem(map_fd, &next_key, &value) == 0) {
-			if (is_vpn_ifindex(next_key, transport_ifname)) {
-				if (value.rxBytes != 0 ||
-				    value.rxPackets != 0 ||
-				    value.txBytes != 0 ||
-				    value.txPackets != 0) {
-					value.rxBytes = 0;
-					value.rxPackets = 0;
-					value.txBytes = 0;
-					value.txPackets = 0;
-					bpf_map_update_elem(map_fd, &next_key,
-							    &value, BPF_EXIST);
-				}
-			}
-		}
-		key = next_key;
-		err = bpf_map_get_next_key(map_fd, &key, &next_key);
-	}
-	close(map_fd);
-}
-
-static bool run_bpf_sweep_and_detect(int fd, const char *last_ipv4,
-				     const char *last_ipv6)
-{
-	uid_t target_uids[MAX_TARGET_UIDS];
-	int target_count = 0;
-	bool any_running = false;
-	char transport_ifname[IFNAMSIZ];
-
-	if (!is_bpf_spoof_hook_active(fd))
-		return false;
-
-	target_count = get_target_uids(fd, target_uids, MAX_TARGET_UIDS);
-	if (target_count <= 0)
-		return false;
-
-	any_running = check_any_uid_running(target_uids, target_count);
-	if (!any_running)
-		return false;
-
-	transport_ifname[0] = '\0';
-	get_transport_ifname_cached(last_ipv4, last_ipv6, transport_ifname,
-				    sizeof(transport_ifname));
-
-	clean_stats_map("/sys/fs/bpf/netd_shared/map_netd_stats_map_A",
-			target_uids, target_count, transport_ifname);
-	clean_stats_map("/sys/fs/bpf/map_netd_stats_map_A", target_uids,
-			target_count, transport_ifname);
-
-	clean_stats_map("/sys/fs/bpf/netd_shared/map_netd_stats_map_B",
-			target_uids, target_count, transport_ifname);
-	clean_stats_map("/sys/fs/bpf/map_netd_stats_map_B", target_uids,
-			target_count, transport_ifname);
-
-	clean_app_uid_map("/sys/fs/bpf/netd_shared/map_netd_app_uid_stats_map",
-			  target_uids, target_count);
-	clean_app_uid_map("/sys/fs/bpf/map_netd_app_uid_stats_map", target_uids,
-			  target_count);
-
-	clean_iface_map("/sys/fs/bpf/netd_shared/map_netd_iface_stats_map",
-			transport_ifname);
-	clean_iface_map("/sys/fs/bpf/map_netd_iface_stats_map",
-			transport_ifname);
-
-	return true;
-}
-
 int main(int argc, char **argv)
 {
 	int fd, nl_fd;
@@ -618,11 +379,17 @@ int main(int argc, char **argv)
 	char last_ipv4[64];
 	char last_ipv6[64];
 
+	setbuf(stdout, NULL);
+	setbuf(stderr, NULL);
+
 	strcpy(last_ipv4, "none");
 	strcpy(last_ipv6, "none");
 
 	fd = open("/dev/vpnhide_ctrl", O_RDWR);
 	if (fd < 0) {
+		fprintf(stderr,
+			"vpnhide-daemon: failed to open /dev/vpnhide_ctrl: %d (%s)\n",
+			errno, strerror(errno));
 		return 1;
 	}
 
@@ -669,10 +436,6 @@ int main(int argc, char **argv)
 
 		// Always update spoof IP to ensure we self-correct and catch DHCP/route settle times
 		update_spoof_ip(fd, last_ipv4, last_ipv6);
-
-		// Perform BPF map sweep and get if any targets are running
-		targets_active =
-			run_bpf_sweep_and_detect(fd, last_ipv4, last_ipv6);
 
 		// Adjust poll timeout dynamically:
 		// 3 seconds when targets are active, 15 seconds when inactive
