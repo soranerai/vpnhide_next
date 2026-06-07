@@ -1,6 +1,5 @@
 package dev.soranerai.vpnhidenext
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -14,12 +13,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -226,8 +223,7 @@ val ALL_JAVA_HOOKS =
         HookInfo(1, "NetworkCapabilities", "android.net.NetworkCapabilities", ""),
         HookInfo(2, "NetworkInfo", "android.net.NetworkInfo", ""),
         HookInfo(3, "Network", "android.net.Network", ""),
-        HookInfo(4, "WifiInfo", "android.net.wifi.WifiInfo", ""),
-        HookInfo(5, "ConnectivityService", "com.android.server.ConnectivityService", ""),
+        HookInfo(4, "ConnectivityService", "com.android.server.ConnectivityService", ""),
     )
 
 val JAVA_HOOK_DESCRIPTIONS =
@@ -273,8 +269,9 @@ fun HookTestingScreen(
                 dev.soranerai.vpnhidenext.db.AppDatabase
                     .getInstance(context)
             val config =
-                db.globalConfigDao().getConfig() ?: dev.soranerai.vpnhidenext.db
-                    .DbGlobalConfig()
+                db.globalConfigDao().getConfig()
+                    ?: dev.soranerai.vpnhidenext.db
+                        .DbGlobalConfig()
             withContext(Dispatchers.Main) {
                 mask = config.kernelHookMask.toUInt()
                 javaMask = config.javaHookMask.toUInt()
@@ -284,9 +281,7 @@ fun HookTestingScreen(
         }
     }
 
-    LaunchedEffect(Unit) {
-        refreshMasksFromDb()
-    }
+    LaunchedEffect(Unit) { refreshMasksFromDb() }
 
     fun applyNewMask(newMask: UInt) {
         val oldMask = mask
@@ -356,7 +351,10 @@ fun HookTestingScreen(
                 title = { Text(stringResource(R.string.hook_testing_title)) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                        )
                     }
                 },
                 colors =
@@ -369,10 +367,7 @@ fun HookTestingScreen(
         modifier = modifier,
     ) { innerPadding ->
         Column(
-            modifier =
-                Modifier
-                    .padding(innerPadding)
-                    .fillMaxSize(),
+            modifier = Modifier.padding(innerPadding).fillMaxSize(),
         ) {
             TabRow(
                 selectedTabIndex = selectedTabIndex,
@@ -383,12 +378,22 @@ fun HookTestingScreen(
                 Tab(
                     selected = selectedTabIndex == 0,
                     onClick = { selectedTabIndex = 0 },
-                    text = { Text(stringResource(R.string.hook_testing_tab_kernel), fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            stringResource(R.string.hook_testing_tab_kernel),
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
                 )
                 Tab(
                     selected = selectedTabIndex == 1,
                     onClick = { selectedTabIndex = 1 },
-                    text = { Text(stringResource(R.string.hook_testing_tab_framework), fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            stringResource(R.string.hook_testing_tab_framework),
+                            fontWeight = FontWeight.Bold,
+                        )
+                    },
                 )
             }
 
@@ -405,7 +410,11 @@ fun HookTestingScreen(
                     // KERNEL TAB
                     ElevatedCard(
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        colors =
+                            CardDefaults.elevatedCardColors(
+                                containerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                            ),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
@@ -428,7 +437,11 @@ fun HookTestingScreen(
 
                     if (errorMessage != null) {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        MaterialTheme.colorScheme.errorContainer,
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
@@ -454,12 +467,17 @@ fun HookTestingScreen(
                                 ) {
                                     Column {
                                         Text(
-                                            text = stringResource(R.string.hook_testing_kernel_mask_title),
+                                            text =
+                                                stringResource(
+                                                    R.string
+                                                        .hook_testing_kernel_mask_title,
+                                                ),
                                             style = MaterialTheme.typography.titleSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(
-                                            text = "0x${currentMask.toString(16).uppercase()} ($currentMask)",
+                                            text =
+                                                "0x${currentMask.toString(16).uppercase()} ($currentMask)",
                                             style = MaterialTheme.typography.headlineSmall,
                                             fontFamily = FontFamily.Monospace,
                                             fontWeight = FontWeight.Bold,
@@ -481,7 +499,12 @@ fun HookTestingScreen(
                                     Button(
                                         onClick = { applyNewMask(0xFFFFFFFFu) },
                                         enabled = !applyingState && currentMask != 0xFFFFFFFFu,
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        colors =
+                                            ButtonDefaults.buttonColors(
+                                                containerColor =
+                                                    MaterialTheme.colorScheme
+                                                        .primary,
+                                            ),
                                         modifier = Modifier.weight(1f),
                                     ) {
                                         Icon(Icons.Default.ToggleOn, contentDescription = null)
@@ -492,10 +515,18 @@ fun HookTestingScreen(
                                     OutlinedButton(
                                         onClick = { applyNewMask(0x0000u) },
                                         enabled = !applyingState && currentMask != 0x0000u,
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                        colors =
+                                            ButtonDefaults.outlinedButtonColors(
+                                                contentColor =
+                                                    MaterialTheme.colorScheme.error,
+                                            ),
                                         modifier = Modifier.weight(1f),
                                     ) {
-                                        Icon(Icons.Default.ToggleOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                        Icon(
+                                            Icons.Default.ToggleOff,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
                                         Spacer(Modifier.width(6.dp))
                                         Text(stringResource(R.string.hook_testing_btn_disable_all))
                                     }
@@ -523,18 +554,20 @@ fun HookTestingScreen(
                                         CardDefaults.elevatedCardColors(
                                             containerColor =
                                                 if (isEnabled) {
-                                                    MaterialTheme.colorScheme.surface
+                                                    MaterialTheme.colorScheme
+                                                        .surface
                                                 } else {
-                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                    MaterialTheme.colorScheme
+                                                        .surfaceVariant
+                                                        .copy(
+                                                            alpha = 0.5f,
+                                                        )
                                                 },
                                         ),
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Row(
-                                        modifier =
-                                            Modifier
-                                                .padding(16.dp)
-                                                .fillMaxWidth(),
+                                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
@@ -546,13 +579,17 @@ fun HookTestingScreen(
                                                 )
                                                 Text(
                                                     text = hook.name,
-                                                    style = MaterialTheme.typography.titleMedium,
+                                                    style =
+                                                        MaterialTheme.typography
+                                                            .titleMedium,
                                                     fontWeight = FontWeight.Bold,
                                                     color =
                                                         if (isEnabled) {
-                                                            MaterialTheme.colorScheme.onSurface
+                                                            MaterialTheme.colorScheme
+                                                                .onSurface
                                                         } else {
-                                                            MaterialTheme.colorScheme.onSurface
+                                                            MaterialTheme.colorScheme
+                                                                .onSurface
                                                                 .copy(
                                                                     alpha = 0.5f,
                                                                 )
@@ -565,13 +602,31 @@ fun HookTestingScreen(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = if (isEnabled) 1.0f else 0.5f),
+                                                color =
+                                                    MaterialTheme.colorScheme.secondary
+                                                        .copy(
+                                                            alpha =
+                                                                if (isEnabled) {
+                                                                    1.0f
+                                                                } else {
+                                                                    0.5f
+                                                                },
+                                                        ),
                                             )
                                             Spacer(Modifier.height(6.dp))
                                             Text(
                                                 text = hook.description,
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 0.8f else 0.4f),
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurface
+                                                        .copy(
+                                                            alpha =
+                                                                if (isEnabled) {
+                                                                    0.8f
+                                                                } else {
+                                                                    0.4f
+                                                                },
+                                                        ),
                                             )
                                         }
 
@@ -585,7 +640,8 @@ fun HookTestingScreen(
                                                     if (checked) {
                                                         currentMask or (1u shl hook.index)
                                                     } else {
-                                                        currentMask and (1u shl hook.index).inv()
+                                                        currentMask and
+                                                            (1u shl hook.index).inv()
                                                     }
                                                 applyNewMask(newMask)
                                             },
@@ -599,19 +655,29 @@ fun HookTestingScreen(
                     // FRAMEWORK (JAVA) TAB
                     ElevatedCard(
                         shape = RoundedCornerShape(12.dp),
-                        colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        colors =
+                            CardDefaults.elevatedCardColors(
+                                containerColor =
+                                    MaterialTheme.colorScheme.surfaceVariant,
+                            ),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = stringResource(R.string.hook_testing_framework_card_title),
+                                text =
+                                    stringResource(
+                                        R.string.hook_testing_framework_card_title,
+                                    ),
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
                             )
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                text = stringResource(R.string.hook_testing_framework_card_desc),
+                                text =
+                                    stringResource(
+                                        R.string.hook_testing_framework_card_desc,
+                                    ),
                                 style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
@@ -622,7 +688,11 @@ fun HookTestingScreen(
 
                     if (javaErrorMessage != null) {
                         Card(
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor =
+                                        MaterialTheme.colorScheme.errorContainer,
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Text(
@@ -648,12 +718,17 @@ fun HookTestingScreen(
                                 ) {
                                     Column {
                                         Text(
-                                            text = stringResource(R.string.hook_testing_framework_mask_title),
+                                            text =
+                                                stringResource(
+                                                    R.string
+                                                        .hook_testing_framework_mask_title,
+                                                ),
                                             style = MaterialTheme.typography.titleSmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
                                         Text(
-                                            text = "0x${currentJavaMask.toString(16).uppercase()} ($currentJavaMask)",
+                                            text =
+                                                "0x${currentJavaMask.toString(16).uppercase()} ($currentJavaMask)",
                                             style = MaterialTheme.typography.headlineSmall,
                                             fontFamily = FontFamily.Monospace,
                                             fontWeight = FontWeight.Bold,
@@ -674,8 +749,15 @@ fun HookTestingScreen(
                                 ) {
                                     Button(
                                         onClick = { applyNewJavaMask(0xFFFFFFFFu) },
-                                        enabled = !applyingJavaState && currentJavaMask != 0xFFFFFFFFu,
-                                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                        enabled =
+                                            !applyingJavaState &&
+                                                currentJavaMask != 0xFFFFFFFFu,
+                                        colors =
+                                            ButtonDefaults.buttonColors(
+                                                containerColor =
+                                                    MaterialTheme.colorScheme
+                                                        .primary,
+                                            ),
                                         modifier = Modifier.weight(1f),
                                     ) {
                                         Icon(Icons.Default.ToggleOn, contentDescription = null)
@@ -685,11 +767,20 @@ fun HookTestingScreen(
 
                                     OutlinedButton(
                                         onClick = { applyNewJavaMask(0x00u) },
-                                        enabled = !applyingJavaState && currentJavaMask != 0x00u,
-                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                                        enabled =
+                                            !applyingJavaState && currentJavaMask != 0x00u,
+                                        colors =
+                                            ButtonDefaults.outlinedButtonColors(
+                                                contentColor =
+                                                    MaterialTheme.colorScheme.error,
+                                            ),
                                         modifier = Modifier.weight(1f),
                                     ) {
-                                        Icon(Icons.Default.ToggleOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                        Icon(
+                                            Icons.Default.ToggleOff,
+                                            contentDescription = null,
+                                            tint = MaterialTheme.colorScheme.error,
+                                        )
                                         Spacer(Modifier.width(6.dp))
                                         Text(stringResource(R.string.hook_testing_btn_disable_all))
                                     }
@@ -717,18 +808,20 @@ fun HookTestingScreen(
                                         CardDefaults.elevatedCardColors(
                                             containerColor =
                                                 if (isEnabled) {
-                                                    MaterialTheme.colorScheme.surface
+                                                    MaterialTheme.colorScheme
+                                                        .surface
                                                 } else {
-                                                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                                    MaterialTheme.colorScheme
+                                                        .surfaceVariant
+                                                        .copy(
+                                                            alpha = 0.5f,
+                                                        )
                                                 },
                                         ),
                                     modifier = Modifier.fillMaxWidth(),
                                 ) {
                                     Row(
-                                        modifier =
-                                            Modifier
-                                                .padding(16.dp)
-                                                .fillMaxWidth(),
+                                        modifier = Modifier.padding(16.dp).fillMaxWidth(),
                                         verticalAlignment = Alignment.CenterVertically,
                                     ) {
                                         Column(modifier = Modifier.weight(1f)) {
@@ -740,13 +833,17 @@ fun HookTestingScreen(
                                                 )
                                                 Text(
                                                     text = hook.name,
-                                                    style = MaterialTheme.typography.titleMedium,
+                                                    style =
+                                                        MaterialTheme.typography
+                                                            .titleMedium,
                                                     fontWeight = FontWeight.Bold,
                                                     color =
                                                         if (isEnabled) {
-                                                            MaterialTheme.colorScheme.onSurface
+                                                            MaterialTheme.colorScheme
+                                                                .onSurface
                                                         } else {
-                                                            MaterialTheme.colorScheme.onSurface
+                                                            MaterialTheme.colorScheme
+                                                                .onSurface
                                                                 .copy(
                                                                     alpha = 0.5f,
                                                                 )
@@ -759,13 +856,37 @@ fun HookTestingScreen(
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.secondary.copy(alpha = if (isEnabled) 1.0f else 0.5f),
+                                                color =
+                                                    MaterialTheme.colorScheme.secondary
+                                                        .copy(
+                                                            alpha =
+                                                                if (isEnabled) {
+                                                                    1.0f
+                                                                } else {
+                                                                    0.5f
+                                                                },
+                                                        ),
                                             )
                                             Spacer(Modifier.height(6.dp))
                                             Text(
-                                                text = stringResource(JAVA_HOOK_DESCRIPTIONS[hook.index] ?: R.string.app_name),
+                                                text =
+                                                    stringResource(
+                                                        JAVA_HOOK_DESCRIPTIONS[
+                                                            hook.index,
+                                                        ]
+                                                            ?: R.string.app_name,
+                                                    ),
                                                 style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (isEnabled) 0.8f else 0.4f),
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurface
+                                                        .copy(
+                                                            alpha =
+                                                                if (isEnabled) {
+                                                                    0.8f
+                                                                } else {
+                                                                    0.4f
+                                                                },
+                                                        ),
                                             )
                                         }
 
@@ -777,9 +898,11 @@ fun HookTestingScreen(
                                             onCheckedChange = { checked ->
                                                 val newMask =
                                                     if (checked) {
-                                                        currentJavaMask or (1u shl hook.index)
+                                                        currentJavaMask or
+                                                            (1u shl hook.index)
                                                     } else {
-                                                        currentJavaMask and (1u shl hook.index).inv()
+                                                        currentJavaMask and
+                                                            (1u shl hook.index).inv()
                                                     }
                                                 applyNewJavaMask(newMask)
                                             },
@@ -791,7 +914,8 @@ fun HookTestingScreen(
                     }
                 }
 
-                val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val bottomNavPadding =
+                    WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
                 Spacer(Modifier.height(bottomNavPadding + 32.dp))
             }
         }
