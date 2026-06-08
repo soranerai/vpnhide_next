@@ -756,6 +756,244 @@ class HookEntry : IXposedHookLoadPackage {
         return brokenFields
     }
 
+    private val isInternalCheck = ThreadLocal.withInitial { false }
+
+    // Cache: packageName -> is package VPN?
+    private val vpnPackageCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
+
+    // Hook and hide any VPN app from the LSPosed targets automatically
+    private fun hookPackageManager(classLoader: ClassLoader) {
+        try {
+            var targetClass: Class<*>? =
+                try {
+                    XposedHelpers.findClass(
+                        "com.android.server.pm.PackageManagerService\$IPackageManagerImpl",
+                        classLoader,
+                    )
+                } catch (e: Throwable) {
+                    null
+                }
+
+            if (targetClass == null) {
+                targetClass =
+                    try {
+                        XposedHelpers.findClass(
+                            "com.android.server.pm.IPackageManagerBase",
+                            classLoader,
+                        )
+                    } catch (e: Throwable) {
+                        XposedHelpers.findClass(
+                            "com.android.server.pm.PackageManagerService",
+                            classLoader,
+                        )
+                    }
+            }
+
+            val hasMethod = targetClass.declaredMethods.any { it.name == "queryIntentServices" }
+            if (!hasMethod && targetClass.superclass != Any::class.java) {
+                val superBase = targetClass.superclass
+                if (superBase != null && superBase.name.contains("IPackageManager")) {
+                    targetClass = superBase
+                }
+            }
+
+            val sliceClass =
+                XposedHelpers.findClass("android.content.pm.ParceledListSlice", classLoader)
+
+            val isVpnApp =
+                fun(
+                    packageName: String,
+                    pmInstance: Any,
+                    userId: Int,
+                ): Boolean {
+                    vpnPackageCache[packageName]?.let {
+                        return it
+                    }
+
+                    isInternalCheck.set(true)
+                    val isVpn =
+                        try {
+                            val vpnCheckIntent =
+                                android.content.Intent("android.net.VpnService").apply {
+                                    `package` = packageName
+                                }
+                            val flags =
+                                if (android.os.Build.VERSION.SDK_INT >= 33) 0L else 0
+                            val sliceResult =
+                                XposedHelpers.callMethod(
+                                    pmInstance,
+                                    "queryIntentServices",
+                                    vpnCheckIntent,
+                                    null as String?,
+                                    flags,
+                                    userId,
+                                )
+                            val vpnServices =
+                                try {
+                                    XposedHelpers.callMethod(sliceResult, "getList") as?
+                                        List<*>
+                                } catch (e: Throwable) {
+                                    null
+                                }
+
+                            !vpnServices.isNullOrEmpty()
+                        } catch (t: Throwable) {
+                            false
+                        } finally {
+                            isInternalCheck.remove()
+                        }
+
+                    vpnPackageCache[packageName] = isVpn
+                    return isVpn
+                }
+
+            // --- STAGE 1: queryIntentServices ---
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "queryIntentServices",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5) ||
+                            isInternalCheck.get() as Boolean ||
+                            !isTargetCaller()
+                        ) {
+                            return
+                        }
+
+                        val intent =
+                            param.args.getOrNull(0) as? android.content.Intent ?: return
+
+                        if (intent.action == "android.net.VpnService" ||
+                            intent.component?.className?.contains("VpnService") ==
+                            true
+                        ) {
+                            val result = param.result ?: return
+
+                            if (result.javaClass.name != "android.content.pm.ParceledListSlice") {
+                                if (result is List<*>) {
+                                    param.result = java.util.Collections.emptyList<Any>()
+                                }
+                                return
+                            }
+
+                            val list =
+                                try {
+                                    XposedHelpers.callMethod(result, "getList") as? List<*>
+                                } catch (e: Throwable) {
+                                    null
+                                }
+
+                            if (list.isNullOrEmpty()) return
+
+                            val emptyList = java.util.Collections.emptyList<Any>()
+                            param.result = XposedHelpers.newInstance(sliceClass, emptyList)
+
+                            HookLog.i(
+                                "VpnHide: Successfully hid ${list.size} VPN services (Replaced ParceledListSlice)",
+                            )
+                        }
+                    }
+                },
+            )
+
+            // --- STAGE 2: getPackageInfo
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "getPackageInfo",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5) ||
+                            isInternalCheck.get() as Boolean ||
+                            !isTargetCaller()
+                        ) {
+                            return
+                        }
+                        if (param.result == null) return
+
+                        val requestedPackage = param.args.getOrNull(0) as? String ?: return
+                        val userId = param.args.getOrNull(2) as? Int ?: return
+
+                        if (isVpnApp(requestedPackage, param.thisObject, userId)) {
+                            param.result = null
+                            HookLog.i(
+                                "VpnHide: Spoofed getPackageInfo as Not Found for $requestedPackage",
+                            )
+                        }
+                    }
+                },
+            )
+
+            // --- STAGE 3: getInstalledPackages and getInstalledApplications
+            val listMethods = arrayOf("getInstalledPackages", "getInstalledApplications")
+            for (methodName in listMethods) {
+                XposedBridge.hookAllMethods(
+                    targetClass,
+                    methodName,
+                    object : XC_MethodHook() {
+                        override fun afterHookedMethod(param: MethodHookParam) {
+                            if (!isJavaHookActive(5) ||
+                                isInternalCheck.get() as Boolean ||
+                                !isTargetCaller()
+                            ) {
+                                return
+                            }
+
+                            val result = param.result ?: return
+                            if (result.javaClass.name != "android.content.pm.ParceledListSlice") {
+                                return
+                            }
+
+                            val list =
+                                try {
+                                    XposedHelpers.callMethod(result, "getList") as? List<*>
+                                } catch (e: Throwable) {
+                                    null
+                                }
+
+                            if (list.isNullOrEmpty()) return
+
+                            val userId = param.args.getOrNull(1) as? Int ?: 0
+
+                            val filteredList =
+                                list.filter { item ->
+                                    val packageName =
+                                        try {
+                                            XposedHelpers.getObjectField(
+                                                item,
+                                                "packageName",
+                                            ) as?
+                                                String
+                                        } catch (e: Throwable) {
+                                            null
+                                        }
+
+                                    if (packageName != null) {
+                                        !isVpnApp(packageName, param.thisObject, userId)
+                                    } else {
+                                        true
+                                    }
+                                }
+
+                            if (filteredList.size != list.size) {
+                                param.result =
+                                    XposedHelpers.newInstance(sliceClass, filteredList)
+                                HookLog.i(
+                                    "VpnHide: Filtered ${list.size - filteredList.size} VPN apps from $methodName",
+                                )
+                            }
+                        }
+                    },
+                )
+            }
+
+            HookLog.i(
+                "VpnHide: All PM hooks (query, info, installed lists) successfully applied to ${targetClass.name}",
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: Failed to hook PM: ${t::class.java.simpleName}: ${t.message}")
+        }
+    }
+
     private fun startNetworkMonitoring() {
         if (!monitoringStarted.compareAndSet(false, true)) return
         val thread =
@@ -1348,6 +1586,7 @@ class HookEntry : IXposedHookLoadPackage {
         )
 
         checkAndHookExistingService("connectivity", smClass)
+        checkAndHookExistingService("package", smClass)
     }
 
     private fun checkAndHookExistingService(
@@ -1375,6 +1614,13 @@ class HookEntry : IXposedHookLoadPackage {
             "connectivity" -> {
                 HookLog.i("VpnHide: Installing APEX Connectivity hooks...")
                 tryHook("ConnectivityService.networkLogic") { hookConnectivityService(classLoader) }
+            }
+
+            "package" -> {
+                HookLog.i(
+                    "VpnHide: Installing PackageManager hooks via APEX/ServiceManager loader...",
+                )
+                tryHook("PackageManager.queryIntentServices") { hookPackageManager(classLoader) }
             }
         }
     }

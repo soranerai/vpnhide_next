@@ -72,6 +72,67 @@ struct vh_stats_value {
 	u64 txPackets;
 };
 
+static bool g_stats_pkts_first __read_mostly = false;
+
+static inline u64 sv_rx_bytes(const struct vh_stats_value *sv)
+{
+	return g_stats_pkts_first ? sv->rxPackets : sv->rxBytes;
+}
+static inline u64 sv_tx_bytes(const struct vh_stats_value *sv)
+{
+	return g_stats_pkts_first ? sv->txPackets : sv->txBytes;
+}
+static inline u64 sv_rx_pkts(const struct vh_stats_value *sv)
+{
+	return g_stats_pkts_first ? sv->rxBytes : sv->rxPackets;
+}
+static inline u64 sv_tx_pkts(const struct vh_stats_value *sv)
+{
+	return g_stats_pkts_first ? sv->txBytes : sv->txPackets;
+}
+static inline void sv_add(struct vh_stats_value *dst,
+			  const struct vh_stats_value *src)
+{
+	if (g_stats_pkts_first) {
+		dst->rxPackets +=
+			src->rxPackets; /* rxPackets field = rxBytes */
+		dst->rxBytes += src->rxBytes; /* rxBytes field  = rxPackets */
+		dst->txPackets += src->txPackets;
+		dst->txBytes += src->txBytes;
+	} else {
+		dst->rxBytes += src->rxBytes;
+		dst->rxPackets += src->rxPackets;
+		dst->txBytes += src->txBytes;
+		dst->txPackets += src->txPackets;
+	}
+}
+
+static void detect_stats_layout(const struct bpf_map_ops *orig,
+				struct bpf_map *map)
+{
+	u32 lo_idx = 1;
+	struct vh_stats_value *lo = orig->map_lookup_elem(map, &lo_idx);
+
+	if (!lo)
+		return;
+
+	if (lo->rxBytes == 0 && lo->rxPackets == 0)
+		return;
+
+	if (lo->rxBytes < lo->rxPackets) {
+		/* field[0] < field[1] → field[0] is rxPackets, field[1] is rxBytes */
+		if (!g_stats_pkts_first) {
+			g_stats_pkts_first = true;
+			pr_info("vpnhide: iface_stats: pkts-first layout detected (android12-5.10 style)\n");
+		}
+	} else {
+		if (g_stats_pkts_first) {
+			g_stats_pkts_first = false;
+			pr_info("vpnhide: iface_stats: bytes-first layout detected (android14-6.1 style)\n");
+		}
+	}
+}
+
 static void hijack_bpf_map(struct bpf_map *map);
 
 #ifndef CONFIG_ARM64
@@ -2742,6 +2803,15 @@ static void hijack_bpf_map(struct bpf_map *map)
 					"Hijacked map '%s' (%px), swapped ops from %px to %px\n",
 					map->name, map,
 					hijacked_maps[i].orig_ops, map->ops);
+
+				/* Detect iface_stats field layout (5.10 vs 6.1) */
+				if (strncmp(map->name, "iface_stats", 11) ==
+					    0 ||
+				    strncmp(map->name, "map_netd_iface_stats",
+					    20) == 0) {
+					detect_stats_layout(
+						hijacked_maps[i].orig_ops, map);
+				}
 				break;
 			}
 		}
@@ -2994,9 +3064,13 @@ static void *vh_iface_stats_lookup(const struct bpf_map_ops *orig,
 	rcu_read_unlock();
 
 	if (is_vpn_ifname(ifname)) {
-		/* VPN iface → hide */
-		vpnhide_dbg("iface_stats lookup: iface='%s' (VPN) -> zero\n",
-			    ifname);
+		/* VPN iface → log real value then hide */
+		struct vh_stats_value *real_val =
+			orig->map_lookup_elem(map, key);
+		vpnhide_dbg(
+			"iface_stats lookup: iface='%s' (VPN) real rx=%llu tx=%llu -> zero\n",
+			ifname, real_val ? real_val->rxBytes : 0ULL,
+			real_val ? real_val->txBytes : 0ULL);
 		return &zero_val;
 	}
 
@@ -3030,37 +3104,33 @@ static void *vh_iface_stats_lookup(const struct bpf_map_ops *orig,
 
 		/* iface_stats key is just the ifaceIndex (u32) */
 		v = orig->map_lookup_elem(map, &idx);
-		if (v) {
-			vpn_sum.rxBytes += v->rxBytes;
-			vpn_sum.txBytes += v->txBytes;
-			vpn_sum.rxPackets += v->rxPackets;
-			vpn_sum.txPackets += v->txPackets;
-		}
+		vpnhide_dbg(
+			"iface_stats lookup: vpn scan idx=%u iface='%s' map_entry=%s rx_bytes=%llu tx_bytes=%llu\n",
+			idx, vpn_ifname, v ? "found" : "absent",
+			v ? sv_rx_bytes(v) : 0ULL, v ? sv_tx_bytes(v) : 0ULL);
+		if (v)
+			sv_add(&vpn_sum, v);
 	}
 
-	if (vpn_sum.rxBytes == 0 && vpn_sum.txBytes == 0) {
+	if (sv_rx_bytes(&vpn_sum) == 0 && sv_tx_bytes(&vpn_sum) == 0) {
 		vpnhide_dbg(
-			"iface_stats lookup: iface='%s' (cover, no vpn) -> passthrough\n",
+			"iface_stats lookup: iface='%s' (cover, no vpn bytes in map) -> passthrough\n",
 			ifname);
 		return cover_val ? cover_val : &zero_val;
 	}
 
 	cpu = get_cpu();
 	synth = per_cpu_ptr(&vh_synth_val, cpu);
-	if (cover_val) {
+	if (cover_val)
 		*synth = *cover_val;
-	} else {
+	else
 		memset(synth, 0, sizeof(*synth));
-	}
-	synth->rxBytes += vpn_sum.rxBytes;
-	synth->txBytes += vpn_sum.txBytes;
-	synth->rxPackets += vpn_sum.rxPackets;
-	synth->txPackets += vpn_sum.txPackets;
+	sv_add(synth, &vpn_sum);
 	put_cpu();
 
 	vpnhide_dbg(
-		"iface_stats lookup: iface='%s' (cover) -> synth rx=%llu tx=%llu\n",
-		ifname, synth->rxBytes, synth->txBytes);
+		"iface_stats lookup: iface='%s' (cover) -> synth rx_bytes=%llu tx_bytes=%llu\n",
+		ifname, sv_rx_bytes(synth), sv_tx_bytes(synth));
 	return synth;
 }
 
@@ -3284,14 +3354,8 @@ static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
 									*sv = (struct vh_stats_value
 										       *)
 										vbuf;
-								vpn_sum.rxBytes +=
-									sv->rxBytes;
-								vpn_sum.txBytes +=
-									sv->txBytes;
-								vpn_sum.rxPackets +=
-									sv->rxPackets;
-								vpn_sum.txPackets +=
-									sv->txPackets;
+								sv_add(&vpn_sum,
+								       sv);
 							}
 							/* Zero this VPN entry */
 							memset(vbuf, 0,
@@ -3311,8 +3375,8 @@ static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
 
 					/* Pass 2: add VPN sum to cover */
 					if (cover_pos != UINT_MAX &&
-					    (vpn_sum.rxBytes ||
-					     vpn_sum.txBytes)) {
+					    (sv_rx_bytes(&vpn_sum) ||
+					     sv_tx_bytes(&vpn_sum))) {
 						if (copy_from_user(
 							    vbuf,
 							    (char __user
@@ -3323,14 +3387,7 @@ static int vh_map_lookup_batch(struct bpf_map *map, const union bpf_attr *attr,
 							struct vh_stats_value *sv =
 								(struct vh_stats_value
 									 *)vbuf;
-							sv->rxBytes +=
-								vpn_sum.rxBytes;
-							sv->txBytes +=
-								vpn_sum.txBytes;
-							sv->rxPackets +=
-								vpn_sum.rxPackets;
-							sv->txPackets +=
-								vpn_sum.txPackets;
+							sv_add(sv, &vpn_sum);
 							(void)copy_to_user(
 								(char __user
 									 *)usr_vals +

@@ -255,8 +255,9 @@
     <string name="hook_desc_network_capabilities">Filters VPN transport out of NetworkCapabilities, cloaking it as Wi-Fi or cellular connections.</string>
     <string name="hook_desc_network_info">Morphs VPN connection status into standard mobile network status (DISCONNECTED or MOBILE) to hide active VPNs.</string>
     <string name="hook_desc_network">Redirects active network requests from the VPN network instance to the best available physical network.</string>
-    <string name="hook_desc_wifi_info">Restores real IP, SSID, and BSSID redacted by default Android 12+ privacy controls for location-less apps.</string>
     <string name="hook_desc_connectivity_service">Filters VPN network out of global network lists and blocks leakage of active VPN callbacks.</string>
+    <string name="hook_desc_package_manager">Filters VpnServices and hides VPN packages from targeted apps.</string>
+
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Backup &amp; Restore</string>
     <string name="backup_restore_description">Export your protected apps, tunnel interface prefixes, and port hiding rules to a JSON file, or restore them from an existing backup.</string>

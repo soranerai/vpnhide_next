@@ -208,8 +208,9 @@
     <string name="hook_desc_network_capabilities">Фильтрует транспорт VPN из NetworkCapabilities, маскируя его под Wi-Fi или сотовую связь.</string>
     <string name="hook_desc_network_info">Маскирует VPN-соединение под обычный тип мобильной сети (DISCONNECTED или MOBILE) для целевых приложений.</string>
     <string name="hook_desc_network">Перенаправляет запросы к VPN-сети на лучшую доступную физическую сеть для целевых приложений.</string>
-    <string name="hook_desc_wifi_info">Восстанавливает реальные IP, SSID и BSSID, скрытые стандартными механизмами приватности Android 12+.</string>
     <string name="hook_desc_connectivity_service">Скрывает VPN-сеть из общих списков сетей и блокирует утечку обратных вызовов (callbacks) о VPN.</string>
+    <string name="hook_desc_package_manager">Фильтрует VpnServices и скрывает VPN приложения для целевых приложений.</string>
+
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Резервное копирование</string>
     <string name="backup_restore_description">Экспортируйте список защищаемых приложений, префиксы туннелей и правила скрытия портов в файл JSON или восстановите их из существующей резервной копии.</string>

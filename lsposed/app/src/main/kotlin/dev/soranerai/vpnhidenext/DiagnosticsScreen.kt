@@ -962,6 +962,11 @@ internal fun runAllChecks(
             nativeCheck(res.getString(R.string.check_netlink_getneigh)) {
                 checkNetlinkGetneigh()
             },
+            checkTrafficStatsDiscrepancy(
+                cm,
+                context,
+                res.getString(R.string.check_traffic_stats),
+            ),
         )
 
     val java =
@@ -982,11 +987,6 @@ internal fun runAllChecks(
             ),
             checkWifiInfoSpoof(context, res.getString(R.string.check_wifi_info_spoof)),
             checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)),
-            checkTrafficStatsDiscrepancy(
-                cm,
-                context,
-                res.getString(R.string.check_traffic_stats),
-            ),
         )
 
     val all = native + java
@@ -1630,11 +1630,11 @@ private fun checkTrafficStatsDiscrepancy(
     name: String,
 ): CheckResult {
     try {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.S) {
+        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.VANILLA_ICE_CREAM) {
             return CheckResult(
                 name,
                 true,
-                "TrafficStats per-interface queries require Android 12+ (API 31+)",
+                "TrafficStats per-interface queries require Android 15+ (API 35+)",
             )
         }
 
