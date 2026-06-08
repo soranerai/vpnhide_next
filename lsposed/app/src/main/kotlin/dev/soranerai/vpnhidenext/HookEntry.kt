@@ -986,8 +986,84 @@ class HookEntry : IXposedHookLoadPackage {
                 )
             }
 
+            // --- STAGE 4: resolveService ---
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "resolveService",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5) ||
+                            isInternalCheck.get() as Boolean ||
+                            !isTargetCaller()
+                        ) {
+                            return
+                        }
+
+                        val intent =
+                            param.args.getOrNull(0) as? android.content.Intent ?: return
+
+                        if (intent.action == "android.net.VpnService" ||
+                            intent.component?.className?.contains("VpnService") == true
+                        ) {
+                            if (param.result != null) {
+                                param.result = null
+                                HookLog.i("VpnHide: Blocked resolveService for VpnService")
+                            }
+                        }
+                    }
+                },
+            )
+
+            // --- STAGE 5: queryIntentActivities ---
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "queryIntentActivities",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(5) ||
+                            isInternalCheck.get() as Boolean ||
+                            !isTargetCaller()
+                        ) {
+                            return
+                        }
+
+                        val intent =
+                            param.args.getOrNull(0) as? android.content.Intent ?: return
+
+                        if (intent.action == "android.net.VpnService" ||
+                            intent.component?.className?.contains("VpnService") == true
+                        ) {
+                            val result = param.result ?: return
+
+                            if (result.javaClass.name != "android.content.pm.ParceledListSlice") {
+                                if (result is List<*>) {
+                                    param.result = java.util.Collections.emptyList<Any>()
+                                }
+                                return
+                            }
+
+                            val list =
+                                try {
+                                    XposedHelpers.callMethod(result, "getList") as? List<*>
+                                } catch (e: Throwable) {
+                                    null
+                                }
+
+                            if (list.isNullOrEmpty()) return
+
+                            val emptyList = java.util.Collections.emptyList<Any>()
+                            param.result = XposedHelpers.newInstance(sliceClass, emptyList)
+
+                            HookLog.i(
+                                "VpnHide: Successfully hid ${list.size} VPN activities via queryIntentActivities",
+                            )
+                        }
+                    }
+                },
+            )
+
             HookLog.i(
-                "VpnHide: All PM hooks (query, info, installed lists) successfully applied to ${targetClass.name}",
+                "VpnHide: All PM hooks successfully applied to ${targetClass.name}",
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: Failed to hook PM: ${t::class.java.simpleName}: ${t.message}")
