@@ -36,6 +36,7 @@
 *   **Modern DB Engine**: Driven by Room (SQLite) database with automatic inotify reload.
 *   **ARM64 Only**: Dropped support for legacy architectures and optimized for arm64-v8a.
 *   **Intercept Statistics Monitoring (Native & Framework)**: Real-time, lazy-loaded statistics of all blocked and spoofed calls with details on specific Java framework APIs and native syscall vectors (ioctl, netlink, getsockname, connect).
+*   **Auto-hide VPN apps**: Automatically hide VPN applications from LSPosed targets.
 
 ### Detailed comparison with the original (in detail)
 
