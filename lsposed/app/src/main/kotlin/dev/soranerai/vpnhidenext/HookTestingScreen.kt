@@ -224,6 +224,7 @@ val ALL_JAVA_HOOKS =
         HookInfo(2, "NetworkInfo", "android.net.NetworkInfo", ""),
         HookInfo(3, "Network", "android.net.Network", ""),
         HookInfo(4, "ConnectivityService", "com.android.server.ConnectivityService", ""),
+        HookInfo(5, "PackageManager", "com.android.server.pm.PackageManagerService\$IPackageManagerImpl", ""),
     )
 
 val JAVA_HOOK_DESCRIPTIONS =
@@ -232,8 +233,8 @@ val JAVA_HOOK_DESCRIPTIONS =
         1 to R.string.hook_desc_network_capabilities,
         2 to R.string.hook_desc_network_info,
         3 to R.string.hook_desc_network,
-        4 to R.string.hook_desc_wifi_info,
-        5 to R.string.hook_desc_connectivity_service,
+        4 to R.string.hook_desc_connectivity_service,
+        5 to R.string.hook_desc_package_manager,
     )
 
 @OptIn(ExperimentalMaterial3Api::class)
