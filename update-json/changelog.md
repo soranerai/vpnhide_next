@@ -1,3 +1,15 @@
+## v1.9.0
+
+### Added
+- Implemented kernel-level TrafficStats BPF map spoofing.
+- Implemented auto filtering VpnServices and hiding VPN packages
+
+### Changed
+- Moved TrafficStats check to native slots, bump check version filter to API 35
+
+### Fixed
+- TrafficStats volume anomaly check now uses /proc/net/dev as ground truth to detect partial BPF-laundering failures that previously produced false-green results; iface_stats laundering implemented via two-pass BPF_MAP_LOOKUP_BATCH post-processing (collect VPN bytes, add to cover interface)
+
 ## v1.8.0
 
 ### Added
@@ -46,22 +58,3 @@
 
 ### Fixed
 - Fix potential kernel panic on rt_fill_info hook, and implement stealth getsockopt spoofing via sock_common_getsockopt for IP_MTU, IPV6_MTU, and TCP_MAXSEG to prevent detection of MTU/MSS clamping.
-
-## v1.6.0
-
-### Added
-- Add getsockname diagnostic check to verify VPN hiding on connected sockets
-- Implement getsockname spoofing via userspace IP service
-- Intercept setsockopt(SO_MARK) calls to reset physical/non-VPN interface routing binds
-- Added RTM_GETRULE, TCP_MAXSEG, and RTM_GETNEIGH checks to diagnostics suite
-- Added dynamic kernel hook isolation screen to diagnostics for crash debugging
-- - WifiInfo hooks in system_server: restore IP/SSID/BSSID redacted by Android 12+ privacy controls (fixes MTS detection on Wi-Fi)
-- Suppress VPN-specific network callbacks for target apps in system_server (fixes MTS detection on cellular networks)
-- Add new diagnostic checks in the companion app to verify VPN callback suppression and WifiInfo unredaction
-
-### Fixed
-- Fix critical kernel panic (Null dereference and invalid skb register mapping in GKI 6.1+ rt_fill_info)
-- Implement robust score-based physical interface ranking to select default internet-routing interface (e.g. ccmni2 with DNS) rather than secondary cellular interfaces (e.g. ccmni1).
-- Fix register mapping in rt_fill_info hook to prevent kernel panics on ARM64
-- Fix setsockopt registers mapping for ARM64 kernels >= 6.4 (including 6.6 and 6.12)
-- Hid routing policy database rules from target apps

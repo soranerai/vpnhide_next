@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.9.0
+
+### Added
+- Implemented kernel-level TrafficStats BPF map spoofing.
+- Implemented auto filtering VpnServices and hiding VPN packages
+
+### Changed
+- Moved TrafficStats check to native slots, bump check version filter to API 35
+
+### Fixed
+- TrafficStats volume anomaly check now uses /proc/net/dev as ground truth to detect partial BPF-laundering failures that previously produced false-green results; iface_stats laundering implemented via two-pass BPF_MAP_LOOKUP_BATCH post-processing (collect VPN bytes, add to cover interface)
+
 ## v1.8.0
 
 ### Added
