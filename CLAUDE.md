@@ -26,7 +26,7 @@ These short files cover everything specific to this repo. Skipping them leads to
 
 - **Add a changelog entry BEFORE committing user-visible changes:**
   ```sh
-  ./scripts/changelog.py <type> "<EN text>" "<RU text>"
+  python3 ./scripts/changelog.py <type> "<EN text>" "<RU text>"
   # types: added | changed | fixed | removed | deprecated | security
   ```
   This writes a Markdown fragment to `changelog.d/<type>-<slug>-<hex4>.md` — nothing else. `CHANGELOG.md` is regenerated only at release time (that's what keeps PRs from conflicting on it). Commit just the new fragment alongside the code change. To preview pending entries: `./scripts/preview-changelog.py`. Skip the entry for internal refactors / docs-only / CI-only / test-only changes.

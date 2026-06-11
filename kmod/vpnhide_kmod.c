@@ -26,6 +26,7 @@
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/kprobes.h>
+#include <linux/kallsyms.h>
 #include <linux/slab.h>
 #include <linux/cred.h>
 #include <linux/uidgid.h>
@@ -2545,17 +2546,21 @@ static int inet_getname_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		sip = global_spoof_ip;
 		spin_unlock(&spoof_ip_lock);
 
-		if (sip.has_ipv4 && sin->sin_family == AF_INET) {
+		if (sin->sin_family == AF_INET) {
 			__be32 addr = sin->sin_addr.s_addr;
 			if (addr != 0 &&
 			    (ntohl(addr) & 0xFF000000) != 0x7F000000) {
-				sin->sin_addr.s_addr = sip.ipv4_addr;
+				__be32 target_ip =
+					sip.has_ipv4 ?
+						sip.ipv4_addr :
+						htonl(0xC0000004); /* 192.0.0.4 (CLAT default) */
+				sin->sin_addr.s_addr = target_ip;
 				record_kmod_intercept(from_kuid(&init_user_ns,
 								current_uid()),
 						      4);
 				vpnhide_dbg(
 					"inet_getname_ret: spoofed IPv4 from %pI4 to %pI4\n",
-					&addr, &sip.ipv4_addr);
+					&addr, &target_ip);
 			}
 		}
 	}
@@ -2596,17 +2601,31 @@ static int inet6_getname_ret(struct kretprobe_instance *ri,
 		sip = global_spoof_ip;
 		spin_unlock(&spoof_ip_lock);
 
-		if (sip.has_ipv6 && sin6->sin6_family == AF_INET6) {
+		if (sin6->sin6_family == AF_INET6) {
 			if (!ipv6_addr_any(&sin6->sin6_addr) &&
 			    !ipv6_addr_loopback(&sin6->sin6_addr)) {
 				struct in6_addr old_addr = sin6->sin6_addr;
-				memcpy(&sin6->sin6_addr, sip.ipv6_addr, 16);
+				struct in6_addr target_ip6;
+
+				if (sip.has_ipv6) {
+					memcpy(&target_ip6, sip.ipv6_addr, 16);
+				} else {
+					/* Fallback to a mock global IPv6 address (e.g. 2001:db8::100) */
+					memset(&target_ip6, 0, 16);
+					target_ip6.s6_addr[0] = 0x20;
+					target_ip6.s6_addr[1] = 0x01;
+					target_ip6.s6_addr[2] = 0x0d;
+					target_ip6.s6_addr[3] = 0xb8;
+					target_ip6.s6_addr[15] = 0x10;
+				}
+
+				memcpy(&sin6->sin6_addr, &target_ip6, 16);
 				record_kmod_intercept(from_kuid(&init_user_ns,
 								current_uid()),
 						      4);
 				vpnhide_dbg(
 					"inet6_getname_ret: spoofed IPv6 from %pI6c to %pI6c\n",
-					&old_addr, sip.ipv6_addr);
+					&old_addr, &target_ip6);
 			}
 		}
 	}
@@ -3684,6 +3703,7 @@ static struct kretprobe sys_bpf_krp = {
 struct kretprobe_reg {
 	struct kretprobe *krp;
 	const char *name;
+	const char *fallback;
 	bool registered;
 };
 
@@ -3696,36 +3716,127 @@ static struct kretprobe sock_ioctl_krp = {
 };
 
 static struct kretprobe_reg probes[] = {
-	{ &dev_ioctl_krp, "dev_ioctl", false },
-	{ &sock_ioctl_krp, "sock_ioctl", false },
-	{ &rtnl_fill_krp, "rtnl_fill_ifinfo", false },
-	{ &inet6_fill_krp, "inet6_fill_ifaddr", false },
-	{ &inet_fill_krp, "inet_fill_ifaddr", false },
-	{ &fib_route_krp, "fib_route_seq_show", false },
-	{ &ipv6_route_krp, "ipv6_route_seq_show", false },
-	{ &fib_dump_krp, "fib_dump_info", false },
-	{ &fib_rule_fill_krp, "fib_nl_fill_rule", false },
-	{ &rt6_fill_krp, "rt6_fill_node", false },
-	{ &rt_fill_krp, "rt_fill_info", false },
-	{ &sock_setsockopt_krp, "sock_setsockopt", false },
-	{ &sock_common_setsockopt_krp, "sock_common_setsockopt", false },
-	{ &sock_getsockopt_krp, "sock_getsockopt", false },
-	{ &sock_common_getsockopt_krp, "sock_common_getsockopt", false },
-	{ &socket_connect_krp, "security_socket_connect", false },
-	{ &socket_bind_krp, "security_socket_bind", false },
-	{ &inet_getname_krp, "inet_getname", false },
-	{ &inet6_getname_krp, "inet6_getname", false },
-	{ &bpf_map_get_with_uref_krp, "bpf_map_get_with_uref", false },
-	{ &sys_bpf_krp, "__arm64_sys_bpf", false },
+	{ &dev_ioctl_krp, "dev_ioctl", NULL, false },
+	{ &sock_ioctl_krp, "sock_ioctl", NULL, false },
+	{ &rtnl_fill_krp, "rtnl_fill_ifinfo", NULL, false },
+	{ &inet6_fill_krp, "inet6_fill_ifaddr", NULL, false },
+	{ &inet_fill_krp, "inet_fill_ifaddr", NULL, false },
+	{ &fib_route_krp, "fib_route_seq_show", NULL, false },
+	{ &ipv6_route_krp, "ipv6_route_seq_show", NULL, false },
+	{ &fib_dump_krp, "fib_dump_info", NULL, false },
+	{ &fib_rule_fill_krp, "fib_nl_fill_rule", NULL, false },
+	{ &rt6_fill_krp, "rt6_fill_node", NULL, false },
+	{ &rt_fill_krp, "rt_fill_info", NULL, false },
+	{ &sock_setsockopt_krp, "sock_setsockopt", NULL, false },
+	{ &sock_common_setsockopt_krp, "sock_common_setsockopt", NULL, false },
+	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false },
+	{ &sock_common_getsockopt_krp, "sock_common_getsockopt", NULL, false },
+	{ &socket_connect_krp, "security_socket_connect", NULL, false },
+	{ &socket_bind_krp, "security_socket_bind", NULL, false },
+	{ &inet_getname_krp, "inet_getname", NULL, false },
+	{ &inet6_getname_krp, "inet6_getname", NULL, false },
+	{ &bpf_map_get_with_uref_krp, "bpf_map_get_with_uref", NULL, false },
+	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false },
 };
+
+static char resolved_names[ARRAY_SIZE(probes)][KSYM_NAME_LEN];
+static unsigned long resolved_addrs[ARRAY_SIZE(probes)];
+static int resolved_priority[ARRAY_SIZE(probes)];
+
+typedef int (*kallsyms_on_each_symbol_t)(int (*fn)(void *, const char *,
+						   struct module *,
+						   unsigned long),
+					 void *);
+
+static int dummy_kprobe_pre(struct kprobe *p, struct pt_regs *regs)
+{
+	return 0;
+}
+
+static int resolve_symbols_callback(void *data, const char *name,
+				    struct module *mod, unsigned long addr)
+{
+	int i;
+	for (i = 0; i < ARRAY_SIZE(probes); i++) {
+		const char *base = probes[i].name;
+		const char *fallback = probes[i].fallback;
+		size_t len_base;
+		size_t len_fall;
+		int priority;
+
+		/* Check base name */
+		len_base = strlen(base);
+		if (strncmp(name, base, len_base) == 0 &&
+		    (name[len_base] == '\0' || name[len_base] == '.')) {
+			if (strstr(name, ".cfi_jt"))
+				continue;
+
+			priority = (name[len_base] == '\0') ? 4 : 3;
+			if (priority > resolved_priority[i]) {
+				strscpy(resolved_names[i], name, KSYM_NAME_LEN);
+				resolved_addrs[i] = addr;
+				resolved_priority[i] = priority;
+			}
+			continue;
+		}
+
+		/* Check fallback name */
+		if (fallback) {
+			len_fall = strlen(fallback);
+			if (strncmp(name, fallback, len_fall) == 0 &&
+			    (name[len_fall] == '\0' || name[len_fall] == '.')) {
+				if (strstr(name, ".cfi_jt"))
+					continue;
+
+				priority = (name[len_fall] == '\0') ? 2 : 1;
+				if (priority > resolved_priority[i]) {
+					strscpy(resolved_names[i], name,
+						KSYM_NAME_LEN);
+					resolved_addrs[i] = addr;
+					resolved_priority[i] = priority;
+				}
+			}
+		}
+	}
+	return 0;
+}
 
 static int __init vpnhide_init(void)
 {
 	int i, ret, ok = 0;
+	struct kprobe kp = {
+		.symbol_name = "kallsyms_on_each_symbol",
+		.pre_handler = dummy_kprobe_pre,
+	};
+	kallsyms_on_each_symbol_t kallsyms_on_each_symbol_ptr = NULL;
 
 	/* Initialize RCU targets pointers */
 	rcu_assign_pointer(global_targets, NULL);
 	rcu_assign_pointer(global_port_targets, NULL);
+
+	ret = register_kprobe(&kp);
+	if (ret >= 0) {
+		kallsyms_on_each_symbol_ptr =
+			(kallsyms_on_each_symbol_t)kp.addr;
+		unregister_kprobe(&kp);
+	}
+
+	if (kallsyms_on_each_symbol_ptr) {
+		kallsyms_on_each_symbol_ptr(resolve_symbols_callback, NULL);
+		for (i = 0; i < ARRAY_SIZE(probes); i++) {
+			if (resolved_addrs[i] != 0) {
+				probes[i].krp->kp.addr =
+					(void *)resolved_addrs[i];
+				probes[i].krp->kp.symbol_name = NULL;
+				if (resolved_names[i][0] != '\0') {
+					probes[i].name = resolved_names[i];
+				}
+			}
+		}
+	} else {
+		pr_warn(MODNAME
+			": could not find kallsyms_on_each_symbol address via kprobe\n");
+	}
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		ret = register_kretprobe(probes[i].krp);
