@@ -1,3 +1,12 @@
+## v1.9.5
+
+### Added
+- Support Samsung Exynos mobile data interfaces (pdp*) in vpnhide_daemon
+
+### Fixed
+- Fix cellular socket spoofing and CLAT/IPv6-only fallback
+- Resolve all kretprobe symbol names dynamically to fix registration failures due to LLVM suffixes/LTO
+
 ## v1.9.0
 
 ### Added
@@ -53,8 +62,3 @@
 ### Fixed
 - Fix first-launch self-registration and prune uninstalled apps from target database
 - Fix RTM_GETROUTE route leaking on Android 12 GKI 5.10
-
-## v1.6.1
-
-### Fixed
-- Fix potential kernel panic on rt_fill_info hook, and implement stealth getsockopt spoofing via sock_common_getsockopt for IP_MTU, IPV6_MTU, and TCP_MAXSEG to prevent detection of MTU/MSS clamping.

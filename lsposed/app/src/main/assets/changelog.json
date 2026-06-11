@@ -1,6 +1,33 @@
 {
   "history": [
     {
+      "version": "1.9.5",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Support Samsung Exynos mobile data interfaces (pdp*) in vpnhide_daemon",
+              "ru": "Поддержка мобильных интерфейсов Samsung Exynos (pdp*) в vpnhide_daemon"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix cellular socket spoofing and CLAT/IPv6-only fallback",
+              "ru": "Исправлено сокрытие адресов сокета в мобильных сетях и при использовании CLAT/IPv6-only"
+            },
+            {
+              "en": "Resolve all kretprobe symbol names dynamically to fix registration failures due to LLVM suffixes/LTO",
+              "ru": "Динамический поиск имен символов kretprobe для устранения ошибок регистрации из-за суффиксов LLVM/LTO"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.9.0",
       "sections": [
         {
