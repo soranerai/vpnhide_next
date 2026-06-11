@@ -212,21 +212,28 @@ static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 		return;
 	}
 
+	/* Helper structures to aggregate interface info */
+	struct iface_info {
+		char name[IFNAMSIZ];
+		bool has_ipv4;
+		bool has_ipv6;
+		bool has_gateway;
+		int score;
+	} interfaces[32];
+	int iface_count = 0;
+
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL)
 			continue;
 
-		// Skip down interfaces
 		if (!(ifa->ifa_flags & IFF_UP))
 			continue;
 
-		// Skip loopback
 		if (ifa->ifa_flags & IFF_LOOPBACK)
 			continue;
 
 		char *name = ifa->ifa_name;
 
-		// Skip VPN prefixes
 		if (strncmp(name, "tun", 3) == 0 ||
 		    strncmp(name, "ppp", 3) == 0 ||
 		    strncmp(name, "wg", 2) == 0 ||
@@ -237,36 +244,74 @@ static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 			continue;
 		}
 
-		// Verify operstate is up
 		if (!is_interface_operstate_up(name))
 			continue;
 
-		int score = 1000;
-		if (strncmp(name, "eth", 3) == 0) {
-			score = 100000;
-		} else if (strncmp(name, "wlan", 4) == 0 ||
-			   strncmp(name, "ap", 2) == 0) {
-			score = 50000;
-		} else if (strncmp(name, "rmnet", 5) == 0 ||
-			   strncmp(name, "ccmni", 5) == 0 ||
-			   strncmp(name, "epdg", 4) == 0 ||
-			   strncmp(name, "r_net", 5) == 0) {
-			score = 10000;
+		/* Find or create interface info slot */
+		int idx = -1;
+		for (int i = 0; i < iface_count; i++) {
+			if (strcmp(interfaces[i].name, name) == 0) {
+				idx = i;
+				break;
+			}
+		}
+		if (idx == -1 && iface_count < 32) {
+			idx = iface_count++;
+			memset(&interfaces[idx], 0, sizeof(struct iface_info));
+			strncpy(interfaces[idx].name, name, IFNAMSIZ - 1);
+			interfaces[idx].has_gateway = has_gateway_route(name);
 		}
 
-		if (has_gateway_route(name)) {
-			score += 20000;
+		if (idx != -1) {
+			int family = ifa->ifa_addr->sa_family;
+			if (family == AF_INET) {
+				interfaces[idx].has_ipv4 = true;
+			} else if (family == AF_INET6) {
+				struct sockaddr_in6 *sa =
+					(struct sockaddr_in6 *)ifa->ifa_addr;
+				if (!IN6_IS_ADDR_LINKLOCAL(&(sa->sin6_addr))) {
+					interfaces[idx].has_ipv6 = true;
+				}
+			}
+		}
+	}
+
+	/* Score all aggregated interfaces */
+	for (int i = 0; i < iface_count; i++) {
+		struct iface_info *info = &interfaces[i];
+		info->score = 1000;
+
+		if (strncmp(info->name, "eth", 3) == 0) {
+			info->score = 100000;
+		} else if (strncmp(info->name, "wlan", 4) == 0 ||
+			   strncmp(info->name, "ap", 2) == 0) {
+			info->score = 50000;
+		} else if (strncmp(info->name, "rmnet", 5) == 0 ||
+			   strncmp(info->name, "ccmni", 5) == 0 ||
+			   strncmp(info->name, "epdg", 4) == 0 ||
+			   strncmp(info->name, "r_net", 5) == 0 ||
+			   strncmp(info->name, "pdp", 3) == 0) {
+			info->score = 10000;
 		}
 
-		if (score > best_score) {
-			best_score = score;
-			strncpy(best_ifname, name, IFNAMSIZ - 1);
+		if (info->has_gateway)
+			info->score += 20000;
+
+		/* Add priority for dual-stack or having actual IP addresses */
+		if (info->has_ipv4)
+			info->score += 5000;
+		if (info->has_ipv6)
+			info->score += 5000;
+
+		if (info->score > best_score) {
+			best_score = info->score;
+			strncpy(best_ifname, info->name, IFNAMSIZ - 1);
 			best_ifname[IFNAMSIZ - 1] = '\0';
 		}
 	}
 
 	if (best_score > 0) {
-		// Find IPv4 and IPv6 for the best interface
+		/* Find IPv4 and IPv6 for the best interface */
 		for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 			if (ifa->ifa_addr == NULL ||
 			    strcmp(ifa->ifa_name, best_ifname) != 0)
@@ -281,7 +326,6 @@ static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 			} else if (family == AF_INET6) {
 				struct sockaddr_in6 *sa =
 					(struct sockaddr_in6 *)ifa->ifa_addr;
-				// Skip link-local
 				if (IN6_IS_ADDR_LINKLOCAL(&(sa->sin6_addr)))
 					continue;
 				inet_ntop(AF_INET6, &(sa->sin6_addr), new_ipv6,
