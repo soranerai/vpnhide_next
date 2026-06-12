@@ -1195,7 +1195,7 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
 
     val script =
         """
-        echo 1 > /data/system/vpnhide_hook_stats_req 2>/dev/null
+        echo 1 > /data/system/vpnhide/vpnhide_hook_stats_req 2>/dev/null
         sleep 1.1
         echo "framework_stats=${'$'}(cat /data/system/vpnhide_hook_stats.txt 2>/dev/null | base64 | tr -d '\n')"
         rm -f /data/system/vpnhide_hook_stats.txt 2>/dev/null
@@ -1288,7 +1288,7 @@ internal fun resetInterceptStats(
     @Suppress("UNUSED_PARAMETER") context: android.content.Context,
 ) {
     // 1. Clear framework hook stats
-    suExec("echo 'clear' > /data/system/vpnhide_hook_stats_req 2>/dev/null")
+    suExec("echo 'clear' > /data/system/vpnhide/vpnhide_hook_stats_req 2>/dev/null")
 
     // 2. Clear native kmod stats
     suExec("$KMOD_CTL stats clear 2>/dev/null")

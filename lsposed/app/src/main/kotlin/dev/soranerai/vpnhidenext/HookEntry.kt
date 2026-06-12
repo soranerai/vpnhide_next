@@ -56,7 +56,6 @@ class HookEntry : IXposedHookLoadPackage {
             HookLog.i("VpnHide: system_server detected, installing Binder hooks")
             val brokenFields = installSystemServerHooks()
             writeHookStatusFile(brokenFields)
-            watchStatsRequest()
         }
     }
 
@@ -112,43 +111,27 @@ class HookEntry : IXposedHookLoadPackage {
      * on an existing file only emits ATTRIB, not CREATE/CLOSE_WRITE) and SELinux restrictions on
      * cross-UID inotify events that can silently prevent the callback from firing.
      */
-    private fun watchStatsRequest() {
-        val thread =
-            Thread(
-                {
-                    while (true) {
-                        try {
-                            val reqFile = File(STATS_REQ_FILE)
-                            if (reqFile.exists()) {
-                                val content =
-                                    runCatching { reqFile.readText().trim() }
-                                        .getOrDefault("")
-                                try {
-                                    reqFile.delete()
-                                } catch (_: Throwable) {
-                                }
-                                if (content == "clear" || content == "reset") {
-                                    hookStats.clear()
-                                    HookLog.i("VpnHide: cleared in-memory hook stats")
-                                } else {
-                                    dumpHookStats()
-                                }
-                            }
-                        } catch (t: Throwable) {
-                            HookLog.e("VpnHide: stats watcher error: ${t.message}")
-                        }
-                        try {
-                            Thread.sleep(500)
-                        } catch (_: InterruptedException) {
-                            break
-                        }
+    private fun handleStatsRequestAsync() {
+        Thread({
+            try {
+                val reqFile = File(STATS_REQ_FILE)
+                if (reqFile.exists()) {
+                    val content = runCatching { reqFile.readText().trim() }.getOrDefault("")
+                    try {
+                        reqFile.delete()
+                    } catch (_: Throwable) {
                     }
-                },
-                "VpnHideStatsWatcher",
-            )
-        thread.isDaemon = true
-        thread.start()
-        HookLog.i("VpnHide: stats request watcher started (polling every 500 ms)")
+                    if (content == "clear" || content == "reset") {
+                        hookStats.clear()
+                        HookLog.i("VpnHide: cleared in-memory hook stats")
+                    } else {
+                        dumpHookStats()
+                    }
+                }
+            } catch (t: Throwable) {
+                HookLog.e("VpnHide: stats event handler error: ${t.message}")
+            }
+        }, "VpnHideStatsHandler").start()
     }
 
     private inline fun tryHook(
@@ -1235,6 +1218,8 @@ class HookEntry : IXposedHookLoadPackage {
                         if (path == dbFile.name || path.startsWith("${dbFile.name}-")) {
                             invalidateTargetUids()
                             cachedJavaHooksMask = null
+                        } else if (path == "vpnhide_hook_stats_req" && (event and CLOSE_WRITE) != 0) {
+                            handleStatsRequestAsync()
                         }
                     }
                 }
@@ -2038,7 +2023,7 @@ class HookEntry : IXposedHookLoadPackage {
         const val STATS_FILE = "/data/system/vpnhide_hook_stats.txt"
 
         /** Manager app creates this file to trigger an on-demand stats dump from system_server. */
-        const val STATS_REQ_FILE = "/data/system/vpnhide_hook_stats_req"
+        const val STATS_REQ_FILE = "/data/system/vpnhide/vpnhide_hook_stats_req"
         const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
 
         internal class RollingCounter(

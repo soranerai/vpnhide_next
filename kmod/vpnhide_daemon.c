@@ -148,8 +148,17 @@ static bool is_vpn_ifindex(int ifindex, const char *transport_ifname)
 	return false;
 }
 
-static bool has_gateway_route(const char *ifname)
+#include <time.h>
+
+struct gateway_list {
+	char names[32][IFNAMSIZ];
+	int count;
+};
+
+static void load_gateway_list(struct gateway_list *list)
 {
+	list->count = 0;
+
 	FILE *f = fopen("/proc/net/route", "r");
 	if (f) {
 		char line[256];
@@ -159,10 +168,19 @@ static bool has_gateway_route(const char *ifname)
 				unsigned int dest, gw, flags;
 				if (sscanf(line, "%31s %x %x %x", iface, &dest,
 					   &gw, &flags) == 4) {
-					if (strcmp(iface, ifname) == 0 &&
-					    (flags & 0x0002)) {
-						fclose(f);
-						return true;
+					if (flags & 0x0002) { // RTF_GATEWAY
+						bool dup = false;
+						for (int i = 0; i < list->count; i++) {
+							if (strcmp(list->names[i], iface) == 0) {
+								dup = true;
+								break;
+							}
+						}
+						if (!dup && list->count < 32) {
+							strncpy(list->names[list->count], iface, IFNAMSIZ - 1);
+							list->names[list->count][IFNAMSIZ - 1] = '\0';
+							list->count++;
+						}
 					}
 				}
 			}
@@ -182,20 +200,36 @@ static bool has_gateway_route(const char *ifname)
 				   dst_ip, &dst_len, src_ip, &src_len, gw_ip,
 				   &metric, &refcnt, &use, &flags,
 				   iface) == 10) {
-				if (strcmp(iface, ifname) == 0 &&
-				    (flags & 0x0002)) {
-					fclose(f);
-					return true;
+				if (flags & 0x0002) { // RTF_GATEWAY
+					bool dup = false;
+					for (int i = 0; i < list->count; i++) {
+						if (strcmp(list->names[i], iface) == 0) {
+							dup = true;
+							break;
+						}
+					}
+					if (!dup && list->count < 32) {
+						strncpy(list->names[list->count], iface, IFNAMSIZ - 1);
+						list->names[list->count][IFNAMSIZ - 1] = '\0';
+						list->count++;
+					}
 				}
 			}
 		}
 		fclose(f);
 	}
+}
 
+static bool has_gateway_route(const struct gateway_list *list, const char *ifname)
+{
+	for (int i = 0; i < list->count; i++) {
+		if (strcmp(list->names[i], ifname) == 0)
+			return true;
+	}
 	return false;
 }
 
-static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
+static void update_spoof_ip(int fd, const struct gateway_list *gw_list, char *last_ipv4, char *last_ipv6)
 {
 	struct ifaddrs *ifaddr = NULL;
 	struct ifaddrs *ifa = NULL;
@@ -259,7 +293,7 @@ static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 			idx = iface_count++;
 			memset(&interfaces[idx], 0, sizeof(struct iface_info));
 			strncpy(interfaces[idx].name, name, IFNAMSIZ - 1);
-			interfaces[idx].has_gateway = has_gateway_route(name);
+			interfaces[idx].has_gateway = has_gateway_route(gw_list, name);
 		}
 
 		if (idx != -1) {
@@ -425,6 +459,13 @@ static bool check_any_uid_running(const uid_t *uids, int count)
 	return running;
 }
 
+static unsigned long long get_time_ms(void)
+{
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (unsigned long long)ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
 int main(int argc, char **argv)
 {
 	int fd, nl_fd;
@@ -463,21 +504,38 @@ int main(int argc, char **argv)
 	}
 
 	// Initial update
-	update_spoof_ip(fd, last_ipv4, last_ipv6);
+	struct gateway_list gw_list;
+	load_gateway_list(&gw_list);
+	update_spoof_ip(fd, &gw_list, last_ipv4, last_ipv6);
 
-	int poll_timeout = 3000;
-	bool targets_active = false;
+	unsigned long long next_update_time = 0;
+	bool update_pending = false;
+	int retry_count = 0;
 
 	while (1) {
+		int poll_timeout = -1;
+		if (update_pending) {
+			unsigned long long now = get_time_ms();
+			if (now >= next_update_time) {
+				poll_timeout = 0;
+			} else {
+				poll_timeout = (int)(next_update_time - now);
+			}
+		}
+
 		struct pollfd pfd;
 		pfd.fd = nl_fd;
 		pfd.events = POLLIN;
 
 		int ret = poll(&pfd, 1, poll_timeout);
 		if (ret < 0) {
+			if (errno == EINTR)
+				continue;
 			sleep(1);
 			continue;
 		}
+
+		bool trigger_update = false;
 
 		if (ret > 0 && (pfd.revents & POLLIN)) {
 			char buf[4096];
@@ -485,14 +543,31 @@ int main(int argc, char **argv)
 			while (recv(nl_fd, buf, sizeof(buf), MSG_DONTWAIT) > 0)
 				;
 			usleep(200000); // 200ms debounce
+			trigger_update = true;
 		}
 
-		// Always update spoof IP to ensure we self-correct and catch DHCP/route settle times
-		update_spoof_ip(fd, last_ipv4, last_ipv6);
+		if (update_pending && get_time_ms() >= next_update_time) {
+			trigger_update = true;
+			update_pending = false;
+		}
 
-		// Adjust poll timeout dynamically:
-		// 3 seconds when targets are active, 15 seconds when inactive
-		poll_timeout = targets_active ? 3000 : 15000;
+		if (trigger_update) {
+			load_gateway_list(&gw_list);
+			update_spoof_ip(fd, &gw_list, last_ipv4, last_ipv6);
+
+			if (ret > 0) {
+				// Netlink event occurred, schedule follow-ups
+				next_update_time = get_time_ms() + 1000;
+				update_pending = true;
+				retry_count = 2;
+			} else if (retry_count > 0) {
+				retry_count--;
+				if (retry_count == 1) {
+					next_update_time = get_time_ms() + 2000;
+					update_pending = true;
+				}
+			}
+		}
 	}
 
 	close(nl_fd);
