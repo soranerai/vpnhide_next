@@ -15,6 +15,12 @@
 
 <p align="center"><strong><a href="README.md">Русская версия</a></strong></p>
 
+> [!WARNING]
+> **This fork uses highly aggressive kernel-level (kmod) and system framework hiding techniques.**
+> Stable operation across all devices, ROMs, and kernel versions **is not and cannot be guaranteed**.
+> In accordance with the MIT License, this software is provided "AS IS", without warranty of any kind. The author is not responsible for any issues, bootloops, or kernel panics.
+> Specifically, on kernels with active **CFI (Control Flow Integrity)**, attempts at dynamic symbol resolution or function hooking can trigger immediate Kernel Panics. Additionally, incorrect behavior is possible on ROMs with modified or disabled SELinux environments. Use at your own risk.
+
 **vpnhide** is a tool to hide VPN usage from Android applications. It makes the VPN connection invisible even to services that actively try to detect it (such as banking apps, streaming platforms, or region-restricted services).
 
 **Main differences from the original (in brief):**
