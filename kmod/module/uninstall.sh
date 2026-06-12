@@ -9,7 +9,7 @@ rm -f /data/system/vpnhide_observer_uids.txt
 rm -f /data/system/vpnhide_debug_logging
 rm -f /data/system/vpnhide_hook_active
 rm -f /data/system/vpnhide_hook_stats.txt
-rm -f /data/system/vpnhide_hook_stats_req
+rm -f /data/system/vpnhide/vpnhide_hook_stats_req
 rm -f /data/system/vpnhide_physical_ip
 
 # 2. Clean up /data/adb directories and legacy target files

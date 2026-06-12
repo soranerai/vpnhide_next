@@ -2966,32 +2966,29 @@ static void *vh_stats_map_lookup(const struct bpf_map_ops *orig,
 	 * Tries counterSet 0 (foreground) and 1 (background) with tag=0
 	 * (untagged, covers the common case) on every VPN interface found. */
 	{
-		u32 idx;
 		u8 cs;
-		char vpn_ifname[IFNAMSIZ];
 		u32 cached_cover = (u32)atomic_read(&global_cover_ifindex);
+		int vpn_indices[16];
+		int vpn_count = 0;
+		int i;
 
 		memset(&vpn_sum, 0, sizeof(vpn_sum));
 
-		for (idx = 1; idx < 512; idx++) {
-			struct vh_stats_value *v;
-
-			/* Skip the cover iface — we are looking for VPN ifaces */
-			if (cached_cover && idx == cached_cover)
+		rcu_read_lock();
+		for_each_netdev_rcu(&init_net, dev) {
+			if (vpn_count >= 16)
+				break;
+			if (cached_cover && dev->ifindex == cached_cover)
 				continue;
-
-			vpn_ifname[0] = '\0';
-			rcu_read_lock();
-			dev = dev_get_by_index_rcu(&init_net, idx);
-			if (dev) {
-				strncpy(vpn_ifname, dev->name, IFNAMSIZ - 1);
-				vpn_ifname[IFNAMSIZ - 1] = '\0';
+			if (is_vpn_ifname(dev->name)) {
+				vpn_indices[vpn_count++] = dev->ifindex;
 			}
-			rcu_read_unlock();
+		}
+		rcu_read_unlock();
 
-			if (vpn_ifname[0] == '\0' || !is_vpn_ifname(vpn_ifname))
-				continue;
-
+		for (i = 0; i < vpn_count; i++) {
+			u32 idx = vpn_indices[i];
+			struct vh_stats_value *v;
 			for (cs = 0; cs <= 1; cs++) {
 				vpn_key.uid = sk->uid;
 				vpn_key.tag = 0;
