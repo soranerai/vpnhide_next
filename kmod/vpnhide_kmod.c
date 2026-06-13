@@ -26,7 +26,6 @@
 #include <linux/kernel.h>
 #include <linux/version.h>
 #include <linux/kprobes.h>
-#include <linux/kallsyms.h>
 #include <linux/slab.h>
 #include <linux/cred.h>
 #include <linux/uidgid.h>
@@ -3736,104 +3735,13 @@ static struct kretprobe_reg probes[] = {
 	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false },
 };
 
-static char resolved_names[ARRAY_SIZE(probes)][KSYM_NAME_LEN];
-static unsigned long resolved_addrs[ARRAY_SIZE(probes)];
-static int resolved_priority[ARRAY_SIZE(probes)];
-
-typedef int (*kallsyms_on_each_symbol_t)(int (*fn)(void *, const char *,
-						   struct module *,
-						   unsigned long),
-					 void *);
-
-static int dummy_kprobe_pre(struct kprobe *p, struct pt_regs *regs)
-{
-	return 0;
-}
-
-static int resolve_symbols_callback(void *data, const char *name,
-				    struct module *mod, unsigned long addr)
-{
-	int i;
-	for (i = 0; i < ARRAY_SIZE(probes); i++) {
-		const char *base = probes[i].name;
-		const char *fallback = probes[i].fallback;
-		size_t len_base;
-		size_t len_fall;
-		int priority;
-
-		/* Check base name */
-		len_base = strlen(base);
-		if (strncmp(name, base, len_base) == 0 &&
-		    (name[len_base] == '\0' || name[len_base] == '.')) {
-			if (strstr(name, ".cfi_jt"))
-				continue;
-
-			priority = (name[len_base] == '\0') ? 4 : 3;
-			if (priority > resolved_priority[i]) {
-				strscpy(resolved_names[i], name, KSYM_NAME_LEN);
-				resolved_addrs[i] = addr;
-				resolved_priority[i] = priority;
-			}
-			continue;
-		}
-
-		/* Check fallback name */
-		if (fallback) {
-			len_fall = strlen(fallback);
-			if (strncmp(name, fallback, len_fall) == 0 &&
-			    (name[len_fall] == '\0' || name[len_fall] == '.')) {
-				if (strstr(name, ".cfi_jt"))
-					continue;
-
-				priority = (name[len_fall] == '\0') ? 2 : 1;
-				if (priority > resolved_priority[i]) {
-					strscpy(resolved_names[i], name,
-						KSYM_NAME_LEN);
-					resolved_addrs[i] = addr;
-					resolved_priority[i] = priority;
-				}
-			}
-		}
-	}
-	return 0;
-}
-
 static int __init vpnhide_init(void)
 {
 	int i, ret, ok = 0;
-	struct kprobe kp = {
-		.symbol_name = "kallsyms_on_each_symbol",
-		.pre_handler = dummy_kprobe_pre,
-	};
-	kallsyms_on_each_symbol_t kallsyms_on_each_symbol_ptr = NULL;
 
 	/* Initialize RCU targets pointers */
 	rcu_assign_pointer(global_targets, NULL);
 	rcu_assign_pointer(global_port_targets, NULL);
-
-	ret = register_kprobe(&kp);
-	if (ret >= 0) {
-		kallsyms_on_each_symbol_ptr =
-			(kallsyms_on_each_symbol_t)kp.addr;
-		unregister_kprobe(&kp);
-	}
-
-	if (kallsyms_on_each_symbol_ptr) {
-		kallsyms_on_each_symbol_ptr(resolve_symbols_callback, NULL);
-		for (i = 0; i < ARRAY_SIZE(probes); i++) {
-			if (resolved_addrs[i] != 0) {
-				probes[i].krp->kp.addr =
-					(void *)resolved_addrs[i];
-				probes[i].krp->kp.symbol_name = NULL;
-				if (resolved_names[i][0] != '\0') {
-					probes[i].name = resolved_names[i];
-				}
-			}
-		}
-	} else {
-		pr_warn(MODNAME
-			": could not find kallsyms_on_each_symbol address via kprobe\n");
-	}
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
 		ret = register_kretprobe(probes[i].krp);
