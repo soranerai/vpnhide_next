@@ -1,3 +1,11 @@
+## v1.9.6
+
+### Changed
+- Reverted dynamic symbol resolution in kernel module to prevent CFI panics on fresh kernels
+
+### Fixed
+- Optimize CPU and battery usage in kernel module, daemon, and lsposed hook
+
 ## v1.9.5
 
 ### Added
@@ -48,17 +56,3 @@
 
 ### Fixed
 - Fix cross-profile SecurityException during dashboard stats package resolution
-
-## v1.7.0
-
-### Added
-- Add getNetworkForType() diagnostics check and AOSP ConnectivityService hook to hide VPN network type
-- Implement native and framework-level real-time call intercept statistics on the Dashboard
-- Add dynamic Java/Framework hook disabling on the fly to Diagnostics isolation screen
-
-### Changed
-- Make Dashboard module and protection status cards more compact and side-by-side
-
-### Fixed
-- Fix first-launch self-registration and prune uninstalled apps from target database
-- Fix RTM_GETROUTE route leaking on Android 12 GKI 5.10

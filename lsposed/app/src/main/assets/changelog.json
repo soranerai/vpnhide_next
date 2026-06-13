@@ -1,6 +1,29 @@
 {
   "history": [
     {
+      "version": "1.9.6",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Reverted dynamic symbol resolution in kernel module to prevent CFI panics on fresh kernels",
+              "ru": "Откачено динамическое разрешение символов в модуле ядра для предотвращения паники CFI на свежих ядрах"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Optimize CPU and battery usage in kernel module, daemon, and lsposed hook",
+              "ru": "Оптимизация потребления CPU и батареи в модуле ядра, демоне и хуке lsposed"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.9.5",
       "sections": [
         {
