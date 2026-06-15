@@ -1,6 +1,24 @@
 {
   "history": [
     {
+      "version": "1.9.7",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Replaced eBPF map ops hijacking with direct syscall filtering, and add batch lookup support for statistics laundering",
+              "ru": "Заменен перехвата map ops в eBPF на прямую фильтрацию системного вызова, а также добавлена поддержка пакетного чтения для очистки статистики"
+            },
+            {
+              "en": "Prevent VPN apps from hiding themselves",
+              "ru": "Не скрывать VPN-приложение от самого себя"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.9.6",
       "sections": [
         {

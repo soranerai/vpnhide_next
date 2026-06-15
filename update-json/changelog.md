@@ -1,3 +1,9 @@
+## v1.9.7
+
+### Fixed
+- Replaced eBPF map ops hijacking with direct syscall filtering, and add batch lookup support for statistics laundering
+- Prevent VPN apps from hiding themselves
+
 ## v1.9.6
 
 ### Changed
@@ -43,16 +49,3 @@
 - Optimize Hook Isolation
 - Replace Room ORM with raw SQLite
 - Refined diagnostics screen styling with smooth rounded cards and status-aware detail tints
-
-## v1.7.5
-
-### Added
-- Implement app settings backup and restore (.json) in diagnostics
-- Implement manual statistics reset and automatic 30-minute stats expiration on the dashboard
-
-### Changed
-- Completely transition to SQLite-only configuration, eliminating legacy text files
-- Exclude self package from dashboard Native targets count, and rename screen row toggles from Kernel/LSPosed to Native/Framework
-
-### Fixed
-- Fix cross-profile SecurityException during dashboard stats package resolution
