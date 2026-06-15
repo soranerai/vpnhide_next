@@ -744,6 +744,28 @@ class HookEntry : IXposedHookLoadPackage {
     // Cache: packageName -> is package VPN?
     private val vpnPackageCache = java.util.concurrent.ConcurrentHashMap<String, Boolean>()
 
+    @Suppress("UNCHECKED_CAST")
+    private fun getPackagesForUid(
+        pm: Any,
+        uid: Int,
+    ): Array<String>? =
+        try {
+            XposedHelpers.callMethod(pm, "getPackagesForUid", uid) as? Array<String>
+        } catch (t: Throwable) {
+            null
+        }
+
+    private fun isOwnApp(
+        pm: Any,
+        packageName: String,
+    ): Boolean {
+        val callingUid = Binder.getCallingUid()
+        val targetUid = if (callingUid == 1000) currentCallbackUid.get() else callingUid
+        if (targetUid == null || targetUid <= 0) return false
+        val callerPackages = getPackagesForUid(pm, targetUid) ?: return false
+        return callerPackages.contains(packageName)
+    }
+
     // Hook and hide any VPN app from the LSPosed targets automatically
     private fun hookPackageManager(classLoader: ClassLoader) {
         try {
@@ -852,28 +874,59 @@ class HookEntry : IXposedHookLoadPackage {
                         ) {
                             val result = param.result ?: return
 
-                            if (result.javaClass.name != "android.content.pm.ParceledListSlice") {
-                                if (result is List<*>) {
-                                    param.result = java.util.Collections.emptyList<Any>()
-                                }
-                                return
-                            }
-
                             val list =
-                                try {
-                                    XposedHelpers.callMethod(result, "getList") as? List<*>
-                                } catch (e: Throwable) {
-                                    null
+                                if (result.javaClass.name == "android.content.pm.ParceledListSlice") {
+                                    try {
+                                        XposedHelpers.callMethod(result, "getList") as? List<*>
+                                    } catch (e: Throwable) {
+                                        null
+                                    }
+                                } else {
+                                    result as? List<*>
                                 }
 
                             if (list.isNullOrEmpty()) return
 
-                            val emptyList = java.util.Collections.emptyList<Any>()
-                            param.result = XposedHelpers.newInstance(sliceClass, emptyList)
+                            val callingUid = Binder.getCallingUid()
+                            val targetUid = if (callingUid == 1000) currentCallbackUid.get() else callingUid
+                            val callerPackages =
+                                if (targetUid != null &&
+                                    targetUid > 0
+                                ) {
+                                    getPackagesForUid(param.thisObject, targetUid)
+                                } else {
+                                    null
+                                }
 
-                            HookLog.i(
-                                "VpnHide: Successfully hid ${list.size} VPN services (Replaced ParceledListSlice)",
-                            )
+                            val userId = param.args.lastOrNull() as? Int ?: 0
+                            val filteredList =
+                                list.filter { item ->
+                                    val packageName =
+                                        try {
+                                            val serviceInfo = XposedHelpers.getObjectField(item, "serviceInfo")
+                                            XposedHelpers.getObjectField(serviceInfo, "packageName") as? String
+                                        } catch (_: Throwable) {
+                                            null
+                                        }
+                                    if (packageName != null) {
+                                        val isOwn = callerPackages?.contains(packageName) == true
+                                        isOwn || !isVpnApp(packageName, param.thisObject, userId)
+                                    } else {
+                                        true
+                                    }
+                                }
+
+                            if (filteredList.size != list.size) {
+                                recordIntercept("PackageManager")
+                                if (result.javaClass.name == "android.content.pm.ParceledListSlice") {
+                                    param.result = XposedHelpers.newInstance(sliceClass, filteredList)
+                                } else {
+                                    param.result = filteredList
+                                }
+                                HookLog.i(
+                                    "VpnHide: Filtered ${list.size - filteredList.size} VPN services (Original: ${list.size})",
+                                )
+                            }
                         }
                     }
                 },
@@ -897,6 +950,8 @@ class HookEntry : IXposedHookLoadPackage {
                         val userId = param.args.getOrNull(2) as? Int ?: return
 
                         if (isVpnApp(requestedPackage, param.thisObject, userId)) {
+                            if (isOwnApp(param.thisObject, requestedPackage)) return
+                            recordIntercept("PackageManager")
                             param.result = null
                             HookLog.i(
                                 "VpnHide: Spoofed getPackageInfo as Not Found for $requestedPackage",
@@ -935,6 +990,17 @@ class HookEntry : IXposedHookLoadPackage {
 
                             if (list.isNullOrEmpty()) return
 
+                            val callingUid = Binder.getCallingUid()
+                            val targetUid = if (callingUid == 1000) currentCallbackUid.get() else callingUid
+                            val callerPackages =
+                                if (targetUid != null &&
+                                    targetUid > 0
+                                ) {
+                                    getPackagesForUid(param.thisObject, targetUid)
+                                } else {
+                                    null
+                                }
+
                             val userId = param.args.getOrNull(1) as? Int ?: 0
 
                             val filteredList =
@@ -951,13 +1017,15 @@ class HookEntry : IXposedHookLoadPackage {
                                         }
 
                                     if (packageName != null) {
-                                        !isVpnApp(packageName, param.thisObject, userId)
+                                        val isOwn = callerPackages?.contains(packageName) == true
+                                        isOwn || !isVpnApp(packageName, param.thisObject, userId)
                                     } else {
                                         true
                                     }
                                 }
 
                             if (filteredList.size != list.size) {
+                                recordIntercept("PackageManager")
                                 param.result =
                                     XposedHelpers.newInstance(sliceClass, filteredList)
                                 HookLog.i(
@@ -988,7 +1056,31 @@ class HookEntry : IXposedHookLoadPackage {
                         if (intent.action == "android.net.VpnService" ||
                             intent.component?.className?.contains("VpnService") == true
                         ) {
-                            if (param.result != null) {
+                            val result = param.result
+                            if (result != null) {
+                                val packageName =
+                                    try {
+                                        val serviceInfo = XposedHelpers.getObjectField(result, "serviceInfo")
+                                        XposedHelpers.getObjectField(serviceInfo, "packageName") as? String
+                                    } catch (_: Throwable) {
+                                        null
+                                    }
+                                if (packageName != null) {
+                                    val callingUid = Binder.getCallingUid()
+                                    val targetUid = if (callingUid == 1000) currentCallbackUid.get() else callingUid
+                                    val callerPackages =
+                                        if (targetUid != null &&
+                                            targetUid > 0
+                                        ) {
+                                            getPackagesForUid(param.thisObject, targetUid)
+                                        } else {
+                                            null
+                                        }
+                                    if (callerPackages?.contains(packageName) == true) {
+                                        return
+                                    }
+                                }
+                                recordIntercept("PackageManager")
                                 param.result = null
                                 HookLog.i("VpnHide: Blocked resolveService for VpnService")
                             }
@@ -1018,28 +1110,59 @@ class HookEntry : IXposedHookLoadPackage {
                         ) {
                             val result = param.result ?: return
 
-                            if (result.javaClass.name != "android.content.pm.ParceledListSlice") {
-                                if (result is List<*>) {
-                                    param.result = java.util.Collections.emptyList<Any>()
-                                }
-                                return
-                            }
-
                             val list =
-                                try {
-                                    XposedHelpers.callMethod(result, "getList") as? List<*>
-                                } catch (e: Throwable) {
-                                    null
+                                if (result.javaClass.name == "android.content.pm.ParceledListSlice") {
+                                    try {
+                                        XposedHelpers.callMethod(result, "getList") as? List<*>
+                                    } catch (e: Throwable) {
+                                        null
+                                    }
+                                } else {
+                                    result as? List<*>
                                 }
 
                             if (list.isNullOrEmpty()) return
 
-                            val emptyList = java.util.Collections.emptyList<Any>()
-                            param.result = XposedHelpers.newInstance(sliceClass, emptyList)
+                            val callingUid = Binder.getCallingUid()
+                            val targetUid = if (callingUid == 1000) currentCallbackUid.get() else callingUid
+                            val callerPackages =
+                                if (targetUid != null &&
+                                    targetUid > 0
+                                ) {
+                                    getPackagesForUid(param.thisObject, targetUid)
+                                } else {
+                                    null
+                                }
 
-                            HookLog.i(
-                                "VpnHide: Successfully hid ${list.size} VPN activities via queryIntentActivities",
-                            )
+                            val userId = param.args.lastOrNull() as? Int ?: 0
+                            val filteredList =
+                                list.filter { item ->
+                                    val packageName =
+                                        try {
+                                            val activityInfo = XposedHelpers.getObjectField(item, "activityInfo")
+                                            XposedHelpers.getObjectField(activityInfo, "packageName") as? String
+                                        } catch (_: Throwable) {
+                                            null
+                                        }
+                                    if (packageName != null) {
+                                        val isOwn = callerPackages?.contains(packageName) == true
+                                        isOwn || !isVpnApp(packageName, param.thisObject, userId)
+                                    } else {
+                                        true
+                                    }
+                                }
+
+                            if (filteredList.size != list.size) {
+                                recordIntercept("PackageManager")
+                                if (result.javaClass.name == "android.content.pm.ParceledListSlice") {
+                                    param.result = XposedHelpers.newInstance(sliceClass, filteredList)
+                                } else {
+                                    param.result = filteredList
+                                }
+                                HookLog.i(
+                                    "VpnHide: Filtered ${list.size - filteredList.size} VPN activities via queryIntentActivities (Original: ${list.size})",
+                                )
+                            }
                         }
                     }
                 },
