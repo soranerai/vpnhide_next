@@ -48,8 +48,6 @@ static bool is_interface_operstate_up(const char *ifname)
 	return strcmp(buf, "up") == 0 || strcmp(buf, "unknown") == 0;
 }
 
-
-
 #include <time.h>
 
 struct gateway_list {
@@ -72,15 +70,23 @@ static void load_gateway_list(struct gateway_list *list)
 					   &gw, &flags) == 4) {
 					if (flags & 0x0002) { // RTF_GATEWAY
 						bool dup = false;
-						for (int i = 0; i < list->count; i++) {
-							if (strcmp(list->names[i], iface) == 0) {
+						for (int i = 0; i < list->count;
+						     i++) {
+							if (strcmp(list->names[i],
+								   iface) ==
+							    0) {
 								dup = true;
 								break;
 							}
 						}
 						if (!dup && list->count < 32) {
-							strncpy(list->names[list->count], iface, IFNAMSIZ - 1);
-							list->names[list->count][IFNAMSIZ - 1] = '\0';
+							strncpy(list->names
+									[list->count],
+								iface,
+								IFNAMSIZ - 1);
+							list->names[list->count]
+								   [IFNAMSIZ -
+								    1] = '\0';
 							list->count++;
 						}
 					}
@@ -105,14 +111,18 @@ static void load_gateway_list(struct gateway_list *list)
 				if (flags & 0x0002) { // RTF_GATEWAY
 					bool dup = false;
 					for (int i = 0; i < list->count; i++) {
-						if (strcmp(list->names[i], iface) == 0) {
+						if (strcmp(list->names[i],
+							   iface) == 0) {
 							dup = true;
 							break;
 						}
 					}
 					if (!dup && list->count < 32) {
-						strncpy(list->names[list->count], iface, IFNAMSIZ - 1);
-						list->names[list->count][IFNAMSIZ - 1] = '\0';
+						strncpy(list->names[list->count],
+							iface, IFNAMSIZ - 1);
+						list->names[list->count]
+							   [IFNAMSIZ - 1] =
+							'\0';
 						list->count++;
 					}
 				}
@@ -122,7 +132,8 @@ static void load_gateway_list(struct gateway_list *list)
 	}
 }
 
-static bool has_gateway_route(const struct gateway_list *list, const char *ifname)
+static bool has_gateway_route(const struct gateway_list *list,
+			      const char *ifname)
 {
 	for (int i = 0; i < list->count; i++) {
 		if (strcmp(list->names[i], ifname) == 0)
@@ -131,7 +142,8 @@ static bool has_gateway_route(const struct gateway_list *list, const char *ifnam
 	return false;
 }
 
-static void update_spoof_ip(int fd, const struct gateway_list *gw_list, char *last_ipv4, char *last_ipv6)
+static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
+			    char *last_ipv4, char *last_ipv6)
 {
 	struct ifaddrs *ifaddr = NULL;
 	struct ifaddrs *ifa = NULL;
@@ -195,7 +207,8 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list, char *la
 			idx = iface_count++;
 			memset(&interfaces[idx], 0, sizeof(struct iface_info));
 			strncpy(interfaces[idx].name, name, IFNAMSIZ - 1);
-			interfaces[idx].has_gateway = has_gateway_route(gw_list, name);
+			interfaces[idx].has_gateway =
+				has_gateway_route(gw_list, name);
 		}
 
 		if (idx != -1) {
@@ -305,8 +318,6 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list, char *la
 			ioctl(fd, VH_SET_COVER_IFACE, &ci);
 	}
 }
-
-
 
 static unsigned long long get_time_ms(void)
 {
