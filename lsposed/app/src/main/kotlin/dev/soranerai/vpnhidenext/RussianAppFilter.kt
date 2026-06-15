@@ -67,6 +67,7 @@ private val KNOWN_RUSSIAN_PREFIXES =
         "today.maxi",
         "vesnasoft.teleform",
         "www.metro.com",
+        "dc.directcredit.directfinance",
     )
 
 /**
