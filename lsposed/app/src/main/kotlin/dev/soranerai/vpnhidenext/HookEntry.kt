@@ -517,20 +517,26 @@ class HookEntry : IXposedHookLoadPackage {
         pm: Any,
         pkg: String,
         userId: Int,
-    ): Int =
+    ): Int {
+        val token = android.os.Binder.clearCallingIdentity()
         try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
-                try {
-                    XposedHelpers.callMethod(pm, "getPackageUid", pkg, 0L, userId) as Int
-                } catch (_: Throwable) {
-                    XposedHelpers.callMethod(pm, "getPackageUid", pkg, 0, userId) as Int
+            return try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+                    try {
+                        XposedHelpers.callMethod(pm, "getPackageUid", pkg, 0L, userId) as Int
+                    } catch (_: Throwable) {
+                        XposedHelpers.callMethod(pm, "getPackageUid", pkg, 0, userId) as Int
+                    }
+                } else {
+                    XposedHelpers.callMethod(pm, "getPackageUid", pkg, userId) as Int
                 }
-            } else {
-                XposedHelpers.callMethod(pm, "getPackageUid", pkg, userId) as Int
+            } catch (t: Throwable) {
+                -1
             }
-        } catch (t: Throwable) {
-            -1
+        } finally {
+            android.os.Binder.restoreCallingIdentity(token)
         }
+    }
 
     private fun loadTargetUids(): Set<Int> {
         val pm = getIPackageManager()
@@ -748,12 +754,18 @@ class HookEntry : IXposedHookLoadPackage {
     private fun getPackagesForUid(
         pm: Any,
         uid: Int,
-    ): Array<String>? =
+    ): Array<String>? {
+        val token = android.os.Binder.clearCallingIdentity()
         try {
-            XposedHelpers.callMethod(pm, "getPackagesForUid", uid) as? Array<String>
-        } catch (t: Throwable) {
-            null
+            return try {
+                XposedHelpers.callMethod(pm, "getPackagesForUid", uid) as? Array<String>
+            } catch (t: Throwable) {
+                null
+            }
+        } finally {
+            android.os.Binder.restoreCallingIdentity(token)
         }
+    }
 
     private fun isOwnApp(
         pm: Any,
@@ -816,6 +828,7 @@ class HookEntry : IXposedHookLoadPackage {
                     }
 
                     isInternalCheck.set(true)
+                    val token = android.os.Binder.clearCallingIdentity()
                     val isVpn =
                         try {
                             val vpnCheckIntent =
@@ -845,6 +858,7 @@ class HookEntry : IXposedHookLoadPackage {
                         } catch (t: Throwable) {
                             false
                         } finally {
+                            android.os.Binder.restoreCallingIdentity(token)
                             isInternalCheck.remove()
                         }
 
