@@ -1,4 +1,6 @@
 obj-m += vpnhide_kmod.o
+ccflags-y += -mbranch-protection=standard
+
 
 ifeq ($(KERNELRELEASE),)
 
