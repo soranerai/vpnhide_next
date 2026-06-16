@@ -728,6 +728,7 @@ class HookEntry : IXposedHookLoadPackage {
     private fun invalidateTargetUids() {
         systemServerTargetUids = null
         systemServerIfacePrefixes = null
+        vpnPackageCache.clear()
     }
 
     private fun installSystemServerHooks(): List<String> {
@@ -829,6 +830,7 @@ class HookEntry : IXposedHookLoadPackage {
 
                     isInternalCheck.set(true)
                     val token = android.os.Binder.clearCallingIdentity()
+                    var succeeded = false
                     val isVpn =
                         try {
                             val vpnCheckIntent =
@@ -846,23 +848,34 @@ class HookEntry : IXposedHookLoadPackage {
                                     flags,
                                     userId,
                                 )
-                            val vpnServices =
-                                try {
-                                    XposedHelpers.callMethod(sliceResult, "getList") as?
-                                        List<*>
-                                } catch (e: Throwable) {
-                                    null
+                            if (sliceResult != null) {
+                                val vpnServices =
+                                    try {
+                                        XposedHelpers.callMethod(sliceResult, "getList") as?
+                                            List<*>
+                                    } catch (e: Throwable) {
+                                        null
+                                    }
+                                if (vpnServices != null) {
+                                    succeeded = true
+                                    vpnServices.isNotEmpty()
+                                } else {
+                                    false
                                 }
-
-                            !vpnServices.isNullOrEmpty()
+                            } else {
+                                false
+                            }
                         } catch (t: Throwable) {
+                            HookLog.e("VpnHide: error checking isVpnApp for $packageName: ${t.message}")
                             false
                         } finally {
                             android.os.Binder.restoreCallingIdentity(token)
                             isInternalCheck.remove()
                         }
 
-                    vpnPackageCache[packageName] = isVpn
+                    if (succeeded) {
+                        vpnPackageCache[packageName] = isVpn
+                    }
                     return isVpn
                 }
 
@@ -1785,6 +1798,30 @@ class HookEntry : IXposedHookLoadPackage {
 
         checkAndHookExistingService("connectivity", smClass)
         checkAndHookExistingService("package", smClass)
+
+        // Polling loop in background thread to handle early boot timing races
+        Thread({
+            var attempts = 0
+            while (attempts < 20) {
+                val hasConnectivity = hookedServices.any { it.startsWith("connectivity@") }
+                val hasPackage = hookedServices.any { it.startsWith("package@") }
+                if (hasConnectivity && hasPackage) {
+                    break
+                }
+                try {
+                    Thread.sleep(500)
+                } catch (_: InterruptedException) {
+                    break
+                }
+                if (!hasConnectivity) {
+                    checkAndHookExistingService("connectivity", smClass)
+                }
+                if (!hasPackage) {
+                    checkAndHookExistingService("package", smClass)
+                }
+                attempts++
+            }
+        }, "VpnHideServicePoller").start()
     }
 
     private fun checkAndHookExistingService(
