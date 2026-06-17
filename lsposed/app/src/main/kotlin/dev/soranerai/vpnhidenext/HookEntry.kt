@@ -1780,6 +1780,24 @@ class HookEntry : IXposedHookLoadPackage {
             java.util.concurrent.ConcurrentHashMap<String, Boolean>(),
         )
 
+    private fun findMethodInHierarchy(
+        clazz: Class<*>,
+        name: String,
+        vararg params: Class<*>,
+    ): java.lang.reflect.Method? {
+        var c: Class<*>? = clazz
+        while (c != null && c != Any::class.java) {
+            try {
+                val method = XposedHelpers.findMethodExact(c, name, *params)
+                method.isAccessible = true
+                return method
+            } catch (_: Throwable) {
+            }
+            c = c.superclass
+        }
+        return null
+    }
+
     private fun hookApexServices() {
         val smClass = XposedHelpers.findClass("android.os.ServiceManager", null)
 
@@ -1788,9 +1806,39 @@ class HookEntry : IXposedHookLoadPackage {
             "addService",
             object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
-                    val name = param.args[0] as? String ?: return
-                    val binder = param.args[1] as? android.os.IBinder ?: return
-                    val classLoader = binder.javaClass.classLoader ?: return
+                    val name = param.args.getOrNull(0) as? String ?: return
+                    val binder = param.args.getOrNull(1) as? android.os.IBinder ?: return
+                    val classLoader =
+                        binder.javaClass.classLoader
+                            ?: Thread.currentThread().contextClassLoader
+                            ?: ClassLoader.getSystemClassLoader()
+                    HookLog.i(
+                        "VpnHide: addService intercepted: name=$name " +
+                            "binderClass=${binder.javaClass.name} " +
+                            "classLoader=${classLoader.javaClass.name}",
+                    )
+                    handleServiceHook(name, classLoader)
+                }
+            },
+        )
+
+        XposedBridge.hookAllMethods(
+            smClass,
+            "getService",
+            object : XC_MethodHook() {
+                override fun afterHookedMethod(param: MethodHookParam) {
+                    val name = param.args.getOrNull(0) as? String ?: return
+                    if (name != "connectivity" && name != "package") return
+                    val binder = param.result as? android.os.IBinder ?: return
+                    val classLoader =
+                        binder.javaClass.classLoader
+                            ?: Thread.currentThread().contextClassLoader
+                            ?: ClassLoader.getSystemClassLoader()
+                    HookLog.i(
+                        "VpnHide: getService intercepted: name=$name " +
+                            "binderClass=${binder.javaClass.name} " +
+                            "classLoader=${classLoader.javaClass.name}",
+                    )
                     handleServiceHook(name, classLoader)
                 }
             },
@@ -1832,9 +1880,22 @@ class HookEntry : IXposedHookLoadPackage {
             val binder =
                 XposedHelpers.callStaticMethod(smClass, "getService", name) as?
                     android.os.IBinder
-            val classLoader = binder?.javaClass?.classLoader
-            if (classLoader != null) handleServiceHook(name, classLoader)
+            if (binder == null) {
+                HookLog.i("VpnHide: checkAndHookExistingService($name): binder is null")
+                return
+            }
+            val classLoader =
+                binder.javaClass.classLoader
+                    ?: Thread.currentThread().contextClassLoader
+                    ?: ClassLoader.getSystemClassLoader()
+            HookLog.i(
+                "VpnHide: checkAndHookExistingService($name): " +
+                    "binderClass=${binder.javaClass.name} " +
+                    "classLoader=${classLoader.javaClass.name}",
+            )
+            handleServiceHook(name, classLoader)
         } catch (t: Throwable) {
+            HookLog.e("VpnHide: checkAndHookExistingService($name) failed: ${t::class.java.simpleName}: ${t.message}")
         }
     }
 
@@ -2004,11 +2065,10 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             val getActiveNetworkMethod =
-                XposedHelpers.findMethodExact(
+                findMethodInHierarchy(
                     csClass,
                     "getActiveNetwork",
-                    *emptyArray<Class<*>>(),
-                )
+                ) ?: throw NoSuchMethodException("getActiveNetwork")
             XposedBridge.hookMethod(
                 getActiveNetworkMethod,
                 object : XC_MethodHook() {
@@ -2039,11 +2099,10 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             val getAllNetworksMethod =
-                XposedHelpers.findMethodExact(
+                findMethodInHierarchy(
                     csClass,
                     "getAllNetworks",
-                    *emptyArray<Class<*>>(),
-                )
+                ) ?: throw NoSuchMethodException("getAllNetworks")
             XposedBridge.hookMethod(
                 getAllNetworksMethod,
                 object : XC_MethodHook() {
@@ -2095,7 +2154,8 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             val getNetworkForTypeMethod =
-                XposedHelpers.findMethodExact(csClass, "getNetworkForType", Integer.TYPE)
+                findMethodInHierarchy(csClass, "getNetworkForType", Integer.TYPE)
+                    ?: throw NoSuchMethodException("getNetworkForType")
             XposedBridge.hookMethod(
                 getNetworkForTypeMethod,
                 object : XC_MethodHook() {
@@ -2121,11 +2181,10 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             val getDefaultProxyMethod =
-                XposedHelpers.findMethodExact(
+                findMethodInHierarchy(
                     csClass,
                     "getDefaultProxy",
-                    *emptyArray<Class<*>>(),
-                )
+                ) ?: throw NoSuchMethodException("getDefaultProxy")
             XposedBridge.hookMethod(
                 getDefaultProxyMethod,
                 object : XC_MethodHook() {
@@ -2150,11 +2209,11 @@ class HookEntry : IXposedHookLoadPackage {
 
         try {
             val getProxyForNetworkMethod =
-                XposedHelpers.findMethodExact(
+                findMethodInHierarchy(
                     csClass,
                     "getProxyForNetwork",
                     android.net.Network::class.java,
-                )
+                ) ?: throw NoSuchMethodException("getProxyForNetwork")
             XposedBridge.hookMethod(
                 getProxyForNetworkMethod,
                 object : XC_MethodHook() {
