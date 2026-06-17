@@ -590,9 +590,27 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 struct sock_setsockopt_data {
 	bool override_ret;
+	int deny_errno;
 };
 
-#define SETSOCKOPT_REG_OPTLEN 5
+/*
+ * sock_setsockopt ABI differs between kernel versions:
+ *
+ * 5.10/5.15: (struct socket*, int, int, char __user*, unsigned int)
+ *   arm64: x0=sock  x1=level  x2=optname  x3=optval  x4=optlen
+ *
+ * 6.0+: sockptr_t expands to two words in AAPCS64:
+ *   arm64: x0=sock  x1=level  x2=optname  x3=optval.user
+ *          x4=optval.is_kernel  x5=optlen
+ */
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+#define SETSOCKOPT_REG_OPTVAL    3
+#define SETSOCKOPT_REG_IS_KERNEL 4
+#define SETSOCKOPT_REG_OPTLEN    5
+#else
+#define SETSOCKOPT_REG_OPTVAL    3
+#define SETSOCKOPT_REG_OPTLEN    4
+#endif
 
 static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 				 struct pt_regs *regs)
@@ -600,9 +618,13 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 	struct sock_setsockopt_data *sdata;
 	int level = (int)regs->regs[1];
 	int optname = (int)regs->regs[2];
-	void __user *optval_ptr = (void __user *)regs->regs[3];
-	bool is_kernel = (bool)(regs->regs[4] & 1);
-	int optlen = (int)regs->regs[5];
+	void __user *optval_ptr = (void __user *)regs->regs[SETSOCKOPT_REG_OPTVAL];
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+	bool is_kernel = (bool)(regs->regs[SETSOCKOPT_REG_IS_KERNEL] & 1);
+#else
+	bool is_kernel = false;
+#endif
+	int optlen = (int)regs->regs[SETSOCKOPT_REG_OPTLEN];
 	char name[IFNAMSIZ];
 
 	if (!is_hook_active(11))
@@ -610,6 +632,7 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 
 	sdata = (void *)ri->data;
 	sdata->override_ret = false;
+	sdata->deny_errno = 0;
 
 	if (level == 0x5648 && optname == 0x88) {
 		uid_t uid = from_kuid(&init_user_ns, current_uid());
@@ -651,9 +674,10 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 
 			if (is_vpn_ifname(name)) {
 				vpnhide_dbg(
-					"sock_setsockopt: spoofing SO_BINDTODEVICE to %s\n",
+					"sock_setsockopt: denying SO_BINDTODEVICE to VPN iface '%s' with ENODEV\n",
 					name);
-				regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
+				sdata->override_ret = true;
+				sdata->deny_errno = ENODEV;
 			}
 		} else if (optname == SO_BINDTOIFINDEX) {
 			int ifindex;
@@ -678,10 +702,10 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 			dev = dev_get_by_index_rcu(net, ifindex);
 			if (dev && is_vpn_ifname(dev->name)) {
 				vpnhide_dbg(
-					"sock_setsockopt: spoofing SO_BINDTOIFINDEX %d (%s)\n",
+					"sock_setsockopt: denying SO_BINDTOIFINDEX %d (%s) with ENODEV\n",
 					ifindex, dev->name);
-				regs->regs[2] = SO_BINDTODEVICE;
-				regs->regs[SETSOCKOPT_REG_OPTLEN] = 0;
+				sdata->override_ret = true;
+				sdata->deny_errno = ENODEV;
 			}
 			rcu_read_unlock();
 		} else if (optname == SO_MARK) {
@@ -755,7 +779,7 @@ static int sock_setsockopt_ret(struct kretprobe_instance *ri,
 {
 	struct sock_setsockopt_data *sdata = (void *)ri->data;
 	if (sdata->override_ret) {
-		regs_set_return_value(regs, 0);
+		regs_set_return_value(regs, sdata->deny_errno ? -sdata->deny_errno : 0);
 	}
 	return 0;
 }
