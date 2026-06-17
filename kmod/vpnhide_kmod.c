@@ -604,12 +604,12 @@ struct sock_setsockopt_data {
  *          x4=optval.is_kernel  x5=optlen
  */
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
-#define SETSOCKOPT_REG_OPTVAL    3
+#define SETSOCKOPT_REG_OPTVAL 3
 #define SETSOCKOPT_REG_IS_KERNEL 4
-#define SETSOCKOPT_REG_OPTLEN    5
+#define SETSOCKOPT_REG_OPTLEN 5
 #else
-#define SETSOCKOPT_REG_OPTVAL    3
-#define SETSOCKOPT_REG_OPTLEN    4
+#define SETSOCKOPT_REG_OPTVAL 3
+#define SETSOCKOPT_REG_OPTLEN 4
 #endif
 
 static int sock_setsockopt_entry(struct kretprobe_instance *ri,
@@ -618,7 +618,8 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 	struct sock_setsockopt_data *sdata;
 	int level = (int)regs->regs[1];
 	int optname = (int)regs->regs[2];
-	void __user *optval_ptr = (void __user *)regs->regs[SETSOCKOPT_REG_OPTVAL];
+	void __user *optval_ptr =
+		(void __user *)regs->regs[SETSOCKOPT_REG_OPTVAL];
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
 	bool is_kernel = (bool)(regs->regs[SETSOCKOPT_REG_IS_KERNEL] & 1);
 #else
@@ -779,7 +780,8 @@ static int sock_setsockopt_ret(struct kretprobe_instance *ri,
 {
 	struct sock_setsockopt_data *sdata = (void *)ri->data;
 	if (sdata->override_ret) {
-		regs_set_return_value(regs, sdata->deny_errno ? -sdata->deny_errno : 0);
+		regs_set_return_value(
+			regs, sdata->deny_errno ? -sdata->deny_errno : 0);
 	}
 	return 0;
 }
@@ -792,12 +794,169 @@ static struct kretprobe sock_setsockopt_krp = {
 	.kp.symbol_name = "sock_setsockopt",
 };
 
-static struct kretprobe sock_common_setsockopt_krp = {
+static int sk_setsockopt_entry(struct kretprobe_instance *ri,
+			       struct pt_regs *regs)
+{
+	struct sock_setsockopt_data *sdata;
+	struct sock *sk = (struct sock *)regs->regs[0];
+	int level = (int)regs->regs[1];
+	int optname = (int)regs->regs[2];
+	void __user *optval_ptr = (void __user *)regs->regs[3];
+	bool is_kernel = (bool)(regs->regs[4] & 1);
+	int optlen = (int)regs->regs[5];
+	char name[IFNAMSIZ];
+
+	if (!is_hook_active(11))
+		return 1;
+
+	if (is_kernel)
+		return 1;
+
+	sdata = (void *)ri->data;
+	sdata->override_ret = false;
+	sdata->deny_errno = 0;
+
+	if (level == 0x5648 && optname == 0x88) {
+		uid_t uid = from_kuid(&init_user_ns, current_uid());
+		if (uid == 1000 || uid == 0) {
+			struct vpnhide_spoof_ip sip;
+			if (optlen == sizeof(sip)) {
+				if (copy_from_user(&sip, optval_ptr,
+						   sizeof(sip)) == 0) {
+					spin_lock(&spoof_ip_lock);
+					global_spoof_ip = sip;
+					spin_unlock(&spoof_ip_lock);
+					vpnhide_dbg(
+						"sk_setsockopt: updated spoof IP: IPv4=%pI4 (%d), IPv6=%pI6c (%d)\n",
+						&sip.ipv4_addr, sip.has_ipv4,
+						sip.ipv6_addr, sip.has_ipv6);
+					sdata->override_ret = true;
+				}
+			}
+		}
+		return 0;
+	}
+
+	if (!is_target_uid())
+		return 0;
+
+	if (level == SOL_SOCKET) {
+		if (optname == SO_BINDTODEVICE) {
+			if (optlen <= 0)
+				return 0;
+			if (optlen > IFNAMSIZ)
+				optlen = IFNAMSIZ;
+
+			if (copy_from_user(name, optval_ptr, optlen))
+				return 0;
+			name[optlen - 1] = '\0';
+
+			if (is_vpn_ifname(name)) {
+				vpnhide_dbg(
+					"sk_setsockopt: denying SO_BINDTODEVICE to VPN iface '%s' with ENODEV\n",
+					name);
+				sdata->override_ret = true;
+				sdata->deny_errno = ENODEV;
+			}
+		} else if (optname == SO_BINDTOIFINDEX) {
+			int ifindex;
+			struct net_device *dev;
+			struct net *net;
+
+			if (optlen != sizeof(int))
+				return 0;
+			if (copy_from_user(&ifindex, optval_ptr, sizeof(int)))
+				return 0;
+
+			if (ifindex <= 0)
+				return 0;
+
+			net = sk ? sock_net(sk) :
+				   (current->nsproxy ?
+					    current->nsproxy->net_ns :
+					    &init_net);
+			rcu_read_lock();
+			dev = dev_get_by_index_rcu(net, ifindex);
+			if (dev && is_vpn_ifname(dev->name)) {
+				vpnhide_dbg(
+					"sk_setsockopt: denying SO_BINDTOIFINDEX %d (%s) with ENODEV\n",
+					ifindex, dev->name);
+				sdata->override_ret = true;
+				sdata->deny_errno = ENODEV;
+			}
+			rcu_read_unlock();
+		} else if (optname == SO_MARK) {
+			int mark;
+			if (optlen != sizeof(int))
+				return 0;
+			if (copy_from_user(&mark, optval_ptr, sizeof(int)))
+				return 0;
+
+			if (mark != 0) {
+				int zero_mark = 0;
+				vpnhide_dbg(
+					"sk_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
+					mark);
+				if (copy_to_user(optval_ptr, &zero_mark,
+						 sizeof(int))) {
+					vpnhide_dbg(
+						"sk_setsockopt: failed to overwrite SO_MARK with 0\n");
+				}
+			}
+		}
+	} else if (level == IPPROTO_IP) {
+		if (optname == IP_MTU_DISCOVER) {
+			int discover;
+			if (optlen == sizeof(int)) {
+				if (copy_from_user(&discover, optval_ptr,
+						   sizeof(int)) == 0) {
+					if (discover != IP_PMTUDISC_DONT) {
+						int fake_disc =
+							IP_PMTUDISC_DONT;
+						if (copy_to_user(optval_ptr,
+								 &fake_disc,
+								 sizeof(int)) ==
+						    0) {
+							vpnhide_dbg(
+								"sk_setsockopt: spoofed IP_MTU_DISCOVER from %d to IP_PMTUDISC_DONT\n",
+								discover);
+						}
+					}
+				}
+			}
+		}
+	} else if (level == IPPROTO_IPV6) {
+		if (optname == IPV6_MTU_DISCOVER) {
+			int discover;
+			if (optlen == sizeof(int)) {
+				if (copy_from_user(&discover, optval_ptr,
+						   sizeof(int)) == 0) {
+					if (discover != IPV6_PMTUDISC_DONT) {
+						int fake_disc =
+							IPV6_PMTUDISC_DONT;
+						if (copy_to_user(optval_ptr,
+								 &fake_disc,
+								 sizeof(int)) ==
+						    0) {
+							vpnhide_dbg(
+								"sk_setsockopt: spoofed IPV6_MTU_DISCOVER from %d to IPV6_PMTUDISC_DONT\n",
+								discover);
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return 0;
+}
+
+static struct kretprobe sk_setsockopt_krp = {
 	.handler = sock_setsockopt_ret,
-	.entry_handler = sock_setsockopt_entry,
+	.entry_handler = sk_setsockopt_entry,
 	.data_size = sizeof(struct sock_setsockopt_data),
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "sock_common_setsockopt",
+	.kp.symbol_name = "sk_setsockopt",
 };
 
 /* ================================================================== */
@@ -1030,12 +1189,39 @@ static struct kretprobe sock_getsockopt_krp = {
 	.kp.symbol_name = "sock_getsockopt",
 };
 
-static struct kretprobe sock_common_getsockopt_krp = {
-	.entry_handler = sock_getsockopt_entry,
+static int sk_getsockopt_entry(struct kretprobe_instance *ri,
+			       struct pt_regs *regs)
+{
+	struct sock_getsockopt_data *data;
+	struct sock *sk = (struct sock *)regs->regs[0];
+	bool is_kernel = (bool)(regs->regs[4] & 1);
+
+	if (!is_hook_active(12))
+		return 1;
+
+	if (is_kernel)
+		return 1;
+
+	data = (void *)ri->data;
+
+	data->level = (int)regs->regs[1];
+	data->optname = (int)regs->regs[2];
+	data->optval = (void __user *)regs->regs[3];
+	data->optlen = (int __user *)regs->regs[5];
+	data->net =
+		sk ? sock_net(sk) :
+		     (current->nsproxy ? current->nsproxy->net_ns : &init_net);
+	data->active = is_target_uid();
+
+	return 0;
+}
+
+static struct kretprobe sk_getsockopt_krp = {
+	.entry_handler = sk_getsockopt_entry,
 	.handler = sock_getsockopt_ret,
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
 	.data_size = sizeof(struct sock_getsockopt_data),
-	.kp.symbol_name = "sock_common_getsockopt",
+	.kp.symbol_name = "sk_getsockopt",
 };
 
 /* ================================================================== */
@@ -3150,6 +3336,7 @@ struct kretprobe_reg {
 	const char *name;
 	const char *fallback;
 	bool registered;
+	int primary_idx;
 };
 
 static struct kretprobe sock_ioctl_krp = {
@@ -3161,26 +3348,26 @@ static struct kretprobe sock_ioctl_krp = {
 };
 
 static struct kretprobe_reg probes[] = {
-	{ &dev_ioctl_krp, "dev_ioctl", NULL, false },
-	{ &sock_ioctl_krp, "sock_ioctl", NULL, false },
-	{ &rtnl_fill_krp, "rtnl_fill_ifinfo", NULL, false },
-	{ &inet6_fill_krp, "inet6_fill_ifaddr", NULL, false },
-	{ &inet_fill_krp, "inet_fill_ifaddr", NULL, false },
-	{ &fib_route_krp, "fib_route_seq_show", NULL, false },
-	{ &ipv6_route_krp, "ipv6_route_seq_show", NULL, false },
-	{ &fib_dump_krp, "fib_dump_info", NULL, false },
-	{ &fib_rule_fill_krp, "fib_nl_fill_rule", NULL, false },
-	{ &rt6_fill_krp, "rt6_fill_node", NULL, false },
-	{ &rt_fill_krp, "rt_fill_info", NULL, false },
-	{ &sock_setsockopt_krp, "sock_setsockopt", NULL, false },
-	{ &sock_common_setsockopt_krp, "sock_common_setsockopt", NULL, false },
-	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false },
-	{ &sock_common_getsockopt_krp, "sock_common_getsockopt", NULL, false },
-	{ &socket_connect_krp, "security_socket_connect", NULL, false },
-	{ &socket_bind_krp, "security_socket_bind", NULL, false },
-	{ &inet_getname_krp, "inet_getname", NULL, false },
-	{ &inet6_getname_krp, "inet6_getname", NULL, false },
-	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false },
+	{ &dev_ioctl_krp, "dev_ioctl", NULL, false, -1 },
+	{ &sock_ioctl_krp, "sock_ioctl", NULL, false, -1 },
+	{ &rtnl_fill_krp, "rtnl_fill_ifinfo", NULL, false, -1 },
+	{ &inet6_fill_krp, "inet6_fill_ifaddr", NULL, false, -1 },
+	{ &inet_fill_krp, "inet_fill_ifaddr", NULL, false, -1 },
+	{ &fib_route_krp, "fib_route_seq_show", NULL, false, -1 },
+	{ &ipv6_route_krp, "ipv6_route_seq_show", NULL, false, -1 },
+	{ &fib_dump_krp, "fib_dump_info", NULL, false, -1 },
+	{ &fib_rule_fill_krp, "fib_nl_fill_rule", NULL, false, -1 },
+	{ &rt6_fill_krp, "rt6_fill_node", NULL, false, -1 },
+	{ &rt_fill_krp, "rt_fill_info", NULL, false, -1 },
+	{ &sk_setsockopt_krp, "sk_setsockopt", NULL, false, -1 },
+	{ &sock_setsockopt_krp, "sock_setsockopt", NULL, false, 11 },
+	{ &sk_getsockopt_krp, "sk_getsockopt", NULL, false, -1 },
+	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false, 13 },
+	{ &socket_connect_krp, "security_socket_connect", NULL, false, -1 },
+	{ &socket_bind_krp, "security_socket_bind", NULL, false, -1 },
+	{ &inet_getname_krp, "inet_getname", NULL, false, -1 },
+	{ &inet6_getname_krp, "inet6_getname", NULL, false, -1 },
+	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false, -1 },
 };
 
 static int __init vpnhide_init(void)
@@ -3192,6 +3379,14 @@ static int __init vpnhide_init(void)
 	rcu_assign_pointer(global_port_targets, NULL);
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
+		if (probes[i].primary_idx >= 0) {
+			int p_idx = probes[i].primary_idx;
+			if (probes[p_idx].registered) {
+				pr_warn("kretprobe(%s) skipped because primary kretprobe(%s) is registered\n",
+					probes[i].name, probes[p_idx].name);
+				continue;
+			}
+		}
 		ret = register_kretprobe(probes[i].krp);
 		if (ret < 0) {
 			pr_warn(MODNAME ": kretprobe(%s) failed: %d\n",
