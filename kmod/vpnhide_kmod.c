@@ -593,39 +593,14 @@ struct sock_setsockopt_data {
 	int deny_errno;
 };
 
-/*
- * sock_setsockopt ABI differs between kernel versions:
- *
- * 5.10/5.15: (struct socket*, int, int, char __user*, unsigned int)
- *   arm64: x0=sock  x1=level  x2=optname  x3=optval  x4=optlen
- *
- * 6.0+: sockptr_t expands to two words in AAPCS64:
- *   arm64: x0=sock  x1=level  x2=optname  x3=optval.user
- *          x4=optval.is_kernel  x5=optlen
- */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
-#define SETSOCKOPT_REG_OPTVAL 3
-#define SETSOCKOPT_REG_IS_KERNEL 4
-#define SETSOCKOPT_REG_OPTLEN 5
-#else
-#define SETSOCKOPT_REG_OPTVAL 3
-#define SETSOCKOPT_REG_OPTLEN 4
-#endif
+static struct kretprobe sys_setsockopt_krp;
 
-static int sock_setsockopt_entry(struct kretprobe_instance *ri,
-				 struct pt_regs *regs)
+static int sys_setsockopt_entry(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
 {
 	struct sock_setsockopt_data *sdata;
-	int level = (int)regs->regs[1];
-	int optname = (int)regs->regs[2];
-	void __user *optval_ptr =
-		(void __user *)regs->regs[SETSOCKOPT_REG_OPTVAL];
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
-	bool is_kernel = (bool)(regs->regs[SETSOCKOPT_REG_IS_KERNEL] & 1);
-#else
-	bool is_kernel = false;
-#endif
-	int optlen = (int)regs->regs[SETSOCKOPT_REG_OPTLEN];
+	int fd, level, optname, optlen;
+	void __user *optval_ptr;
 	char name[IFNAMSIZ];
 
 	if (!is_hook_active(11))
@@ -634,6 +609,28 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 	sdata = (void *)ri->data;
 	sdata->override_ret = false;
 	sdata->deny_errno = 0;
+
+	if (sys_setsockopt_krp.kp.symbol_name &&
+	    strcmp(sys_setsockopt_krp.kp.symbol_name,
+		   "__arm64_sys_setsockopt") == 0) {
+		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs &&
+		    (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
+			fd = (int)user_regs->regs[0];
+			level = (int)user_regs->regs[1];
+			optname = (int)user_regs->regs[2];
+			optval_ptr = (void __user *)user_regs->regs[3];
+			optlen = (int)user_regs->regs[4];
+		} else {
+			return 0;
+		}
+	} else {
+		fd = (int)regs->regs[0];
+		level = (int)regs->regs[1];
+		optname = (int)regs->regs[2];
+		optval_ptr = (void __user *)regs->regs[3];
+		optlen = (int)regs->regs[4];
+	}
 
 	if (level == 0x5648 && optname == 0x88) {
 		uid_t uid = from_kuid(&init_user_ns, current_uid());
@@ -646,21 +643,20 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 					global_spoof_ip = sip;
 					spin_unlock(&spoof_ip_lock);
 					vpnhide_dbg(
-						"setsockopt: updated spoof IP: IPv4=%pI4 (%d), IPv6=%pI6c (%d)\n",
+						"sys_setsockopt: updated spoof IP: IPv4=%pI4 (%d), IPv6=%pI6c (%d)\n",
 						&sip.ipv4_addr, sip.has_ipv4,
 						sip.ipv6_addr, sip.has_ipv6);
 					sdata->override_ret = true;
 				}
 			}
 		}
+		if (!sdata->override_ret)
+			return 1;
 		return 0;
 	}
 
 	if (!is_target_uid())
-		return 0;
-
-	if (is_kernel)
-		return 0;
+		return 1;
 
 	if (level == SOL_SOCKET) {
 		if (optname == SO_BINDTODEVICE) {
@@ -675,7 +671,7 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 
 			if (is_vpn_ifname(name)) {
 				vpnhide_dbg(
-					"sock_setsockopt: denying SO_BINDTODEVICE to VPN iface '%s' with ENODEV\n",
+					"sys_setsockopt: denying SO_BINDTODEVICE to VPN iface '%s' with ENODEV\n",
 					name);
 				sdata->override_ret = true;
 				sdata->deny_errno = ENODEV;
@@ -684,7 +680,6 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 			int ifindex;
 			struct net_device *dev;
 			struct net *net;
-			struct socket *sock;
 
 			if (optlen != sizeof(int))
 				return 0;
@@ -693,17 +688,13 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 
 			if (ifindex <= 0)
 				return 0;
-			sock = (struct socket *)regs->regs[0];
-			net = sock && sock->sk ?
-				      sock_net(sock->sk) :
-				      (current->nsproxy ?
-					       current->nsproxy->net_ns :
-					       &init_net);
+			net = current->nsproxy ? current->nsproxy->net_ns :
+						 &init_net;
 			rcu_read_lock();
 			dev = dev_get_by_index_rcu(net, ifindex);
 			if (dev && is_vpn_ifname(dev->name)) {
 				vpnhide_dbg(
-					"sock_setsockopt: denying SO_BINDTOIFINDEX %d (%s) with ENODEV\n",
+					"sys_setsockopt: denying SO_BINDTOIFINDEX %d (%s) with ENODEV\n",
 					ifindex, dev->name);
 				sdata->override_ret = true;
 				sdata->deny_errno = ENODEV;
@@ -719,12 +710,12 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 			if (mark != 0) {
 				int zero_mark = 0;
 				vpnhide_dbg(
-					"sock_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
+					"sys_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
 					mark);
 				if (copy_to_user(optval_ptr, &zero_mark,
 						 sizeof(int))) {
 					vpnhide_dbg(
-						"sock_setsockopt: failed to overwrite SO_MARK with 0\n");
+						"sys_setsockopt: failed to overwrite SO_MARK with 0\n");
 				}
 			}
 		}
@@ -742,7 +733,7 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 								 sizeof(int)) ==
 						    0) {
 							vpnhide_dbg(
-								"sock_setsockopt: spoofed IP_MTU_DISCOVER from %d to IP_PMTUDISC_DONT\n",
+								"sys_setsockopt: spoofed IP_MTU_DISCOVER from %d to IP_PMTUDISC_DONT\n",
 								discover);
 						}
 					}
@@ -763,7 +754,7 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 								 sizeof(int)) ==
 						    0) {
 							vpnhide_dbg(
-								"sock_setsockopt: spoofed IPV6_MTU_DISCOVER from %d to IPV6_PMTUDISC_DONT\n",
+								"sys_setsockopt: spoofed IPV6_MTU_DISCOVER from %d to IPV6_PMTUDISC_DONT\n",
 								discover);
 						}
 					}
@@ -772,11 +763,14 @@ static int sock_setsockopt_entry(struct kretprobe_instance *ri,
 		}
 	}
 
+	if (!sdata->override_ret)
+		return 1;
+
 	return 0;
 }
 
-static int sock_setsockopt_ret(struct kretprobe_instance *ri,
-			       struct pt_regs *regs)
+static int sys_setsockopt_ret(struct kretprobe_instance *ri,
+			      struct pt_regs *regs)
 {
 	struct sock_setsockopt_data *sdata = (void *)ri->data;
 	if (sdata->override_ret) {
@@ -786,177 +780,12 @@ static int sock_setsockopt_ret(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static struct kretprobe sock_setsockopt_krp = {
-	.handler = sock_setsockopt_ret,
-	.entry_handler = sock_setsockopt_entry,
+static struct kretprobe sys_setsockopt_krp = {
+	.handler = sys_setsockopt_ret,
+	.entry_handler = sys_setsockopt_entry,
 	.data_size = sizeof(struct sock_setsockopt_data),
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "sock_setsockopt",
-};
-
-static int sk_setsockopt_entry(struct kretprobe_instance *ri,
-			       struct pt_regs *regs)
-{
-	struct sock_setsockopt_data *sdata;
-	struct sock *sk = (struct sock *)regs->regs[0];
-	int level = (int)regs->regs[1];
-	int optname = (int)regs->regs[2];
-	void __user *optval_ptr = (void __user *)regs->regs[3];
-	bool is_kernel = (bool)(regs->regs[4] & 1);
-	int optlen = (int)regs->regs[5];
-	char name[IFNAMSIZ];
-
-	if (!is_hook_active(11))
-		return 1;
-
-	if (is_kernel)
-		return 1;
-
-	sdata = (void *)ri->data;
-	sdata->override_ret = false;
-	sdata->deny_errno = 0;
-
-	if (level == 0x5648 && optname == 0x88) {
-		uid_t uid = from_kuid(&init_user_ns, current_uid());
-		if (uid == 1000 || uid == 0) {
-			struct vpnhide_spoof_ip sip;
-			if (optlen == sizeof(sip)) {
-				if (copy_from_user(&sip, optval_ptr,
-						   sizeof(sip)) == 0) {
-					spin_lock(&spoof_ip_lock);
-					global_spoof_ip = sip;
-					spin_unlock(&spoof_ip_lock);
-					vpnhide_dbg(
-						"sk_setsockopt: updated spoof IP: IPv4=%pI4 (%d), IPv6=%pI6c (%d)\n",
-						&sip.ipv4_addr, sip.has_ipv4,
-						sip.ipv6_addr, sip.has_ipv6);
-					sdata->override_ret = true;
-				}
-			}
-		}
-		return 0;
-	}
-
-	if (!is_target_uid())
-		return 0;
-
-	if (level == SOL_SOCKET) {
-		if (optname == SO_BINDTODEVICE) {
-			if (optlen <= 0)
-				return 0;
-			if (optlen > IFNAMSIZ)
-				optlen = IFNAMSIZ;
-
-			if (copy_from_user(name, optval_ptr, optlen))
-				return 0;
-			name[optlen - 1] = '\0';
-
-			if (is_vpn_ifname(name)) {
-				vpnhide_dbg(
-					"sk_setsockopt: denying SO_BINDTODEVICE to VPN iface '%s' with ENODEV\n",
-					name);
-				sdata->override_ret = true;
-				sdata->deny_errno = ENODEV;
-			}
-		} else if (optname == SO_BINDTOIFINDEX) {
-			int ifindex;
-			struct net_device *dev;
-			struct net *net;
-
-			if (optlen != sizeof(int))
-				return 0;
-			if (copy_from_user(&ifindex, optval_ptr, sizeof(int)))
-				return 0;
-
-			if (ifindex <= 0)
-				return 0;
-
-			net = sk ? sock_net(sk) :
-				   (current->nsproxy ?
-					    current->nsproxy->net_ns :
-					    &init_net);
-			rcu_read_lock();
-			dev = dev_get_by_index_rcu(net, ifindex);
-			if (dev && is_vpn_ifname(dev->name)) {
-				vpnhide_dbg(
-					"sk_setsockopt: denying SO_BINDTOIFINDEX %d (%s) with ENODEV\n",
-					ifindex, dev->name);
-				sdata->override_ret = true;
-				sdata->deny_errno = ENODEV;
-			}
-			rcu_read_unlock();
-		} else if (optname == SO_MARK) {
-			int mark;
-			if (optlen != sizeof(int))
-				return 0;
-			if (copy_from_user(&mark, optval_ptr, sizeof(int)))
-				return 0;
-
-			if (mark != 0) {
-				int zero_mark = 0;
-				vpnhide_dbg(
-					"sk_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
-					mark);
-				if (copy_to_user(optval_ptr, &zero_mark,
-						 sizeof(int))) {
-					vpnhide_dbg(
-						"sk_setsockopt: failed to overwrite SO_MARK with 0\n");
-				}
-			}
-		}
-	} else if (level == IPPROTO_IP) {
-		if (optname == IP_MTU_DISCOVER) {
-			int discover;
-			if (optlen == sizeof(int)) {
-				if (copy_from_user(&discover, optval_ptr,
-						   sizeof(int)) == 0) {
-					if (discover != IP_PMTUDISC_DONT) {
-						int fake_disc =
-							IP_PMTUDISC_DONT;
-						if (copy_to_user(optval_ptr,
-								 &fake_disc,
-								 sizeof(int)) ==
-						    0) {
-							vpnhide_dbg(
-								"sk_setsockopt: spoofed IP_MTU_DISCOVER from %d to IP_PMTUDISC_DONT\n",
-								discover);
-						}
-					}
-				}
-			}
-		}
-	} else if (level == IPPROTO_IPV6) {
-		if (optname == IPV6_MTU_DISCOVER) {
-			int discover;
-			if (optlen == sizeof(int)) {
-				if (copy_from_user(&discover, optval_ptr,
-						   sizeof(int)) == 0) {
-					if (discover != IPV6_PMTUDISC_DONT) {
-						int fake_disc =
-							IPV6_PMTUDISC_DONT;
-						if (copy_to_user(optval_ptr,
-								 &fake_disc,
-								 sizeof(int)) ==
-						    0) {
-							vpnhide_dbg(
-								"sk_setsockopt: spoofed IPV6_MTU_DISCOVER from %d to IPV6_PMTUDISC_DONT\n",
-								discover);
-						}
-					}
-				}
-			}
-		}
-	}
-
-	return 0;
-}
-
-static struct kretprobe sk_setsockopt_krp = {
-	.handler = sock_setsockopt_ret,
-	.entry_handler = sk_setsockopt_entry,
-	.data_size = sizeof(struct sock_setsockopt_data),
-	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "sk_setsockopt",
+	.kp.symbol_name = "__arm64_sys_setsockopt",
 };
 
 /* ================================================================== */
@@ -3359,10 +3188,9 @@ static struct kretprobe_reg probes[] = {
 	{ &fib_rule_fill_krp, "fib_nl_fill_rule", NULL, false, -1 },
 	{ &rt6_fill_krp, "rt6_fill_node", NULL, false, -1 },
 	{ &rt_fill_krp, "rt_fill_info", NULL, false, -1 },
-	{ &sk_setsockopt_krp, "sk_setsockopt", NULL, false, -1 },
-	{ &sock_setsockopt_krp, "sock_setsockopt", NULL, false, 11 },
+	{ &sys_setsockopt_krp, "__arm64_sys_setsockopt", NULL, false, -1 },
 	{ &sk_getsockopt_krp, "sk_getsockopt", NULL, false, -1 },
-	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false, 13 },
+	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false, 12 },
 	{ &socket_connect_krp, "security_socket_connect", NULL, false, -1 },
 	{ &socket_bind_krp, "security_socket_bind", NULL, false, -1 },
 	{ &inet_getname_krp, "inet_getname", NULL, false, -1 },
