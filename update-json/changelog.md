@@ -1,3 +1,20 @@
+## v1.10.0
+
+### Changed
+- Always block socket binding attempts (SO_BINDTODEVICE/SO_BINDTOIFINDEX) to VPN interfaces with ENODEV for target UIDs
+- Optimize sys_setsockopt and sys_bpf hot paths by caching wrapper detection
+- Updated kernel module hook descriptions, names and symbols in Hook Testing Screen
+
+### Fixed
+- Fix caching race conditions in system_server PackageManager hooks
+- Fix ConnectivityService hook capture on some Android 16 builds
+- Fix SO_BINDTODEVICE leak on kernels without sock_getsockopt/sock_setsockopt
+- intercept setsockopt at the syscall
+- Record statistics for sys_setsockopt intercepts to show up in diagnostics counters
+
+### Removed
+- Remove 'aikido' soft SO_BINDTODEVICE spoofing (zeroing out optlen)
+
 ## v1.9.7
 
 ### Fixed
@@ -32,20 +49,3 @@
 
 ### Fixed
 - TrafficStats volume anomaly check now uses /proc/net/dev as ground truth to detect partial BPF-laundering failures that previously produced false-green results; iface_stats laundering implemented via two-pass BPF_MAP_LOOKUP_BATCH post-processing (collect VPN bytes, add to cover interface)
-
-## v1.8.0
-
-### Added
-- Added diagnostic checks for loopback bind conflict and TrafficStats volume anomaly. Added NetworkStatsService system_server hooks to spoof TrafficStats and bypass detection.
-- Added security_socket_bind kernel hook to silently redirect blocked loopback port binds to port 0, making bind conflict scanning succeed transparently.
-- Added UDP Path MTU (PMTU) discovery active check and kernel-level socket spoofing hooks to hide PMTU bottlenecks
-- Add ConnectivityDiagnostics as an isolated Java hook with its own toggle and localized description in the isolation settings
-- Display passed checks counts ratio and partial status with premium blue theme on dashboard cards
-- Implement registerConnectivityDiagnosticsCallback suppression hook in ConnectivityService to prevent target apps from receiving VPN reports
-- Added automatic SQLite target migration from original app
-
-### Changed
-- Expanded kernel and Java active hooks mask to 32 bits for future-proof hook management
-- Optimize Hook Isolation
-- Replace Room ORM with raw SQLite
-- Refined diagnostics screen styling with smooth rounded cards and status-aware detail tints

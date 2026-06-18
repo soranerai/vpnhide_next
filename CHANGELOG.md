@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.10.0
+
+### Changed
+- Always block socket binding attempts (SO_BINDTODEVICE/SO_BINDTOIFINDEX) to VPN interfaces with ENODEV for target UIDs
+- Optimize sys_setsockopt and sys_bpf hot paths by caching wrapper detection
+- Updated kernel module hook descriptions, names and symbols in Hook Testing Screen
+
+### Fixed
+- Fix caching race conditions in system_server PackageManager hooks
+- Fix ConnectivityService hook capture on some Android 16 builds
+- Fix SO_BINDTODEVICE leak on kernels without sock_getsockopt/sock_setsockopt
+- intercept setsockopt at the syscall
+- Record statistics for sys_setsockopt intercepts to show up in diagnostics counters
+
+### Removed
+- Remove 'aikido' soft SO_BINDTODEVICE spoofing (zeroing out optlen)
+
 ## v1.9.7
 
 ### Fixed

@@ -1,6 +1,62 @@
 {
   "history": [
     {
+      "version": "1.10.0",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Always block socket binding attempts (SO_BINDTODEVICE/SO_BINDTOIFINDEX) to VPN interfaces with ENODEV for target UIDs",
+              "ru": "Попытки привязки сокетов к VPN-интерфейсам теперь всегда жестко блокируются с возвратом ENODEV для целевых UID"
+            },
+            {
+              "en": "Optimize sys_setsockopt and sys_bpf hot paths by caching wrapper detection",
+              "ru": "Оптимизирован горячий путь sys_setsockopt и sys_bpf путем кэширования типа системного вызова"
+            },
+            {
+              "en": "Updated kernel module hook descriptions, names and symbols in Hook Testing Screen",
+              "ru": "Обновлены описания, имена и символы хуков ядра на экране тестирования хуков"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix caching race conditions in system_server PackageManager hooks",
+              "ru": "Исправление гонки кэширования в хуках PackageManager в system_server"
+            },
+            {
+              "en": "Fix ConnectivityService hook capture on some Android 16 builds",
+              "ru": "Исправлен захват хука ConnectivityService на некоторых сборках Android 16"
+            },
+            {
+              "en": "Fix SO_BINDTODEVICE leak on kernels without sock_getsockopt/sock_setsockopt",
+              "ru": "Исправлена утечка SO_BINDTODEVICE на ядрах без sock_getsockopt/sock_setsockopt"
+            },
+            {
+              "en": "intercept setsockopt at the syscall",
+              "ru": "перехват setsockopt на уровне системных вызовов"
+            },
+            {
+              "en": "Record statistics for sys_setsockopt intercepts to show up in diagnostics counters",
+              "ru": "Добавлена запись статистики перехватов sys_setsockopt для отображения в счетчиках диагностики"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Remove 'aikido' soft SO_BINDTODEVICE spoofing (zeroing out optlen)",
+              "ru": "Удален мягкий спуфинг SO_BINDTODEVICE (aikido) с обнулением optlen"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.9.7",
       "sections": [
         {
