@@ -591,8 +591,10 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 struct sock_setsockopt_data {
 	bool override_ret;
 	int deny_errno;
+	bool intercepted;
 };
 
+static bool sys_setsockopt_uses_wrapper;
 static struct kretprobe sys_setsockopt_krp;
 
 static int sys_setsockopt_entry(struct kretprobe_instance *ri,
@@ -609,10 +611,9 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 	sdata = (void *)ri->data;
 	sdata->override_ret = false;
 	sdata->deny_errno = 0;
+	sdata->intercepted = false;
 
-	if (sys_setsockopt_krp.kp.symbol_name &&
-	    strcmp(sys_setsockopt_krp.kp.symbol_name,
-		   "__arm64_sys_setsockopt") == 0) {
+	if (sys_setsockopt_uses_wrapper) {
 		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
 		if (user_regs &&
 		    (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
@@ -675,6 +676,7 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 					name);
 				sdata->override_ret = true;
 				sdata->deny_errno = ENODEV;
+				sdata->intercepted = true;
 			}
 		} else if (optname == SO_BINDTOIFINDEX) {
 			int ifindex;
@@ -698,6 +700,7 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 					ifindex, dev->name);
 				sdata->override_ret = true;
 				sdata->deny_errno = ENODEV;
+				sdata->intercepted = true;
 			}
 			rcu_read_unlock();
 		} else if (optname == SO_MARK) {
@@ -713,9 +716,8 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 					"sys_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
 					mark);
 				if (copy_to_user(optval_ptr, &zero_mark,
-						 sizeof(int))) {
-					vpnhide_dbg(
-						"sys_setsockopt: failed to overwrite SO_MARK with 0\n");
+						 sizeof(int)) == 0) {
+					sdata->intercepted = true;
 				}
 			}
 		}
@@ -735,6 +737,7 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 							vpnhide_dbg(
 								"sys_setsockopt: spoofed IP_MTU_DISCOVER from %d to IP_PMTUDISC_DONT\n",
 								discover);
+							sdata->intercepted = true;
 						}
 					}
 				}
@@ -756,6 +759,7 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 							vpnhide_dbg(
 								"sys_setsockopt: spoofed IPV6_MTU_DISCOVER from %d to IPV6_PMTUDISC_DONT\n",
 								discover);
+							sdata->intercepted = true;
 						}
 					}
 				}
@@ -763,7 +767,7 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 		}
 	}
 
-	if (!sdata->override_ret)
+	if (!sdata->override_ret && !sdata->intercepted)
 		return 1;
 
 	return 0;
@@ -773,6 +777,10 @@ static int sys_setsockopt_ret(struct kretprobe_instance *ri,
 			      struct pt_regs *regs)
 {
 	struct sock_setsockopt_data *sdata = (void *)ri->data;
+	if (sdata->intercepted) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      3);
+	}
 	if (sdata->override_ret) {
 		regs_set_return_value(
 			regs, sdata->deny_errno ? -sdata->deny_errno : 0);
@@ -2775,6 +2783,7 @@ struct sys_bpf_data {
 	u32 map_fd;
 };
 
+static bool sys_bpf_uses_wrapper;
 static struct kretprobe sys_bpf_krp;
 
 static int sys_bpf_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
@@ -2789,8 +2798,7 @@ static int sys_bpf_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 0;
 	}
 
-	if (sys_bpf_krp.kp.symbol_name &&
-	    strcmp(sys_bpf_krp.kp.symbol_name, "__arm64_sys_bpf") == 0) {
+	if (sys_bpf_uses_wrapper) {
 		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
 		if (user_regs &&
 		    (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
@@ -3201,6 +3209,15 @@ static struct kretprobe_reg probes[] = {
 static int __init vpnhide_init(void)
 {
 	int i, ret, ok = 0;
+
+	if (sys_setsockopt_krp.kp.symbol_name &&
+	    strcmp(sys_setsockopt_krp.kp.symbol_name, "__arm64_sys_setsockopt") == 0) {
+		sys_setsockopt_uses_wrapper = true;
+	}
+	if (sys_bpf_krp.kp.symbol_name &&
+	    strcmp(sys_bpf_krp.kp.symbol_name, "__arm64_sys_bpf") == 0) {
+		sys_bpf_uses_wrapper = true;
+	}
 
 	/* Initialize RCU targets pointers */
 	rcu_assign_pointer(global_targets, NULL);
