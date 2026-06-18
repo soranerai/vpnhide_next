@@ -853,11 +853,16 @@ pub fn check_getsockopt_bind() -> CheckOutput {
 
         if set_ret < 0 {
             let err = std::io::Error::last_os_error();
+            let raw = err.raw_os_error().unwrap_or(0);
             libc::close(fd);
+            let reason = if raw == libc::ENODEV {
+                "kernel module returned ENODEV — interface hidden".to_string()
+            } else {
+                format!("setsockopt failed: {err}")
+            };
             return CheckOutput::pass(format!(
-                "setsockopt SO_BINDTODEVICE for '{vpn}' failed with: {err} — secure (interface not active or blocked)",
+                "setsockopt SO_BINDTODEVICE for '{vpn}' blocked — secure ({reason})",
                 vpn = vpn_iface,
-                err = err
             ));
         }
 
@@ -879,7 +884,7 @@ pub fn check_getsockopt_bind() -> CheckOutput {
         libc::close(fd);
 
         let detail = format!(
-            "setsockopt('{vpn}') -> getsockopt() returned: dev='{dev}'",
+            "setsockopt('{vpn}') returned 0 -> getsockopt() returned: dev='{dev}'",
             vpn = vpn_iface,
             dev = bound_device
         );
@@ -891,7 +896,7 @@ pub fn check_getsockopt_bind() -> CheckOutput {
             ))
         } else {
             CheckOutput::pass(format!(
-                "{detail} — secure (setsockopt successfully spoofed/sabotaged by kernel!)",
+                "{detail} — secure (setsockopt returned 0 but bind did not stick)",
                 detail = detail
             ))
         }

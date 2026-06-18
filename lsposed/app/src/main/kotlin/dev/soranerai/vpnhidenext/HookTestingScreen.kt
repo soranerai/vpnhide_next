@@ -147,22 +147,22 @@ val ALL_HOOKS =
         ),
         HookInfo(
             11,
-            "sock_setsockopt",
-            "sock_setsockopt",
+            "sys_setsockopt",
+            "__arm64_sys_setsockopt",
             if (isRussian) {
-                "Перехватывает вызовы setsockopt для предотвращения привязки целевых приложений напрямую к VPN-сокетам."
+                "Перехватывает setsockopt для блокировки привязки сокетов к VPN (SO_BINDTODEVICE/IFINDEX), сброса SO_MARK и отключения MTU Discovery."
             } else {
-                "Intercepts setsockopt calls to prevent target apps from binding directly to VPN sockets or checking parameters."
+                "Intercepts setsockopt calls to deny VPN socket binding (SO_BINDTODEVICE/IFINDEX), override SO_MARK to 0, and spoof MTU discovery."
             },
         ),
         HookInfo(
             12,
             "sock_getsockopt",
-            "sock_getsockopt",
+            "sk_getsockopt + sock_getsockopt",
             if (isRussian) {
-                "Перехватывает getsockopt для подмены опций TCP/UDP (например, TCP_MSS), маскируя присутствие VPN."
+                "Перехватывает getsockopt для подмены MTU, MSS (TCP_MAXSEG), MTU Discovery и скрытия привязки сокетов к VPN-интерфейсу."
             } else {
-                "Intercepts getsockopt calls to spoof TCP/UDP options (e.g., TCP_MSS) to pretend no VPN is active."
+                "Intercepts getsockopt calls to spoof MTU, MSS (TCP_MAXSEG), MTU discovery, and hide socket binding to a VPN interface."
             },
         ),
         HookInfo(
@@ -180,9 +180,9 @@ val ALL_HOOKS =
             "inet_getname",
             "inet_getname",
             if (isRussian) {
-                "Подменяет getsockname/getpeername для IPv4 сокетов, скрывая петлевые (loopback) адреса VPN-наблюдателей."
+                "Подменяет getsockname для IPv4 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия."
             } else {
-                "Spoofs getsockname/getpeername for IPv4 sockets to hide loopback addresses of VPN observers."
+                "Spoofs getsockname for IPv4 sockets, masking the local VPN interface IP with the cover interface IP."
             },
         ),
         HookInfo(
@@ -190,9 +190,9 @@ val ALL_HOOKS =
             "inet6_getname",
             "inet6_getname",
             if (isRussian) {
-                "Подменяет getsockname/getpeername для IPv6 сокетов, скрывая петлевые (loopback) адреса VPN-наблюдателей."
+                "Подменяет getsockname для IPv6 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия."
             } else {
-                "Spoofs getsockname/getpeername for IPv6 sockets to hide loopback addresses of VPN observers."
+                "Spoofs getsockname for IPv6 sockets, masking the local VPN interface IP with the cover interface IP."
             },
         ),
         HookInfo(
@@ -208,11 +208,11 @@ val ALL_HOOKS =
         HookInfo(
             17,
             "bpf_stats_spoof",
-            "bpf_map_get_with_uref + __arm64_sys_bpf",
+            "__arm64_sys_bpf",
             if (isRussian) {
-                "Перехватывает открытие eBPF-карт через bpf_map_get_with_uref и sys_bpf, подменяя операции чтения/записи на карты TrafficStats/iface_stats/app_uid_stats, возвращая нулевые счётчики трафика для целевых UID и VPN-интерфейсов."
+                "Перехватывает BPF-запросы через sys_bpf, возвращая нулевые счетчики трафика на BPF-картах (iface_stats, tether_stats, stats_map_) для VPN-интерфейсов и целевых UID."
             } else {
-                "Intercepts BPF map access via bpf_map_get_with_uref and sys_bpf syscall, hijacking map ops on TrafficStats/iface_stats/app_uid_stats maps to return zero traffic counters for targeted UIDs and VPN interfaces."
+                "Intercepts BPF map lookups via sys_bpf syscall to return zero traffic counters on stats maps (iface_stats, tether_stats, stats_map_) for VPN interfaces and target UIDs."
             },
         ),
     )
