@@ -1132,6 +1132,14 @@ static struct kretprobe sk_getsockopt_krp = {
 	.kp.symbol_name = "sk_getsockopt",
 };
 
+static struct kretprobe sock_common_getsockopt_krp = {
+	.entry_handler = sock_getsockopt_entry,
+	.handler = sock_getsockopt_ret,
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.data_size = sizeof(struct sock_getsockopt_data),
+	.kp.symbol_name = "sock_common_getsockopt",
+};
+
 /* ================================================================== */
 /*  Hook 3: rtnl_fill_ifinfo — netlink RTM_NEWLINK (getifaddrs path)  */
 /*  Android source path: net/core/rtnetlink.c                         */
@@ -3211,6 +3219,8 @@ static struct kretprobe_reg probes[] = {
 	{ &sys_getsockopt_krp, "__arm64_sys_getsockopt", NULL, false, -1 },
 	{ &sk_getsockopt_krp, "sk_getsockopt", NULL, false, 12 },
 	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false, 12 },
+	{ &sock_common_getsockopt_krp, "sock_common_getsockopt", NULL, false,
+	  12 },
 	{ &socket_connect_krp, "security_socket_connect", NULL, false, -1 },
 	{ &socket_bind_krp, "security_socket_bind", NULL, false, -1 },
 	{ &inet_getname_krp, "inet_getname", NULL, false, -1 },
