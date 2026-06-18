@@ -167,7 +167,28 @@ static inline void sv_add(struct vh_stats_value *dst,
 static bool debug_enabled;
 static unsigned int active_hooks_mask = 0xFFFFFFFF;
 
-static inline bool is_hook_active(int index)
+enum vpnhide_hook_idx {
+	HOOK_DEV_IOCTL = 0,
+	HOOK_SOCK_IOCTL = 1,
+	HOOK_RTNL_FILL = 2,
+	HOOK_INET6_FILL = 3,
+	HOOK_INET_FILL = 4,
+	HOOK_FIB_ROUTE = 5,
+	HOOK_IPV6_ROUTE = 6,
+	HOOK_FIB_DUMP = 7,
+	HOOK_FIB_RULE_FILL = 8,
+	HOOK_RT6_FILL = 9,
+	HOOK_RT_FILL = 10,
+	HOOK_SETSOCKOPT = 11,
+	HOOK_GETSOCKOPT = 12,
+	HOOK_CONNECT = 13,
+	HOOK_GETNAME_INET = 14,
+	HOOK_GETNAME_INET6 = 15,
+	HOOK_BIND = 16,
+	HOOK_BPF = 17,
+};
+
+static inline bool is_hook_active(enum vpnhide_hook_idx index)
 {
 	return (READ_ONCE(active_hooks_mask) & (1 << index)) != 0;
 }
@@ -381,7 +402,7 @@ struct dev_ioctl_data {
 static int dev_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct dev_ioctl_data *data;
-	if (!is_hook_active(0))
+	if (!is_hook_active(HOOK_DEV_IOCTL))
 		return 1;
 	data = (void *)ri->data;
 
@@ -605,7 +626,7 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 	void __user *optval_ptr;
 	char name[IFNAMSIZ];
 
-	if (!is_hook_active(11))
+	if (!is_hook_active(HOOK_SETSOCKOPT))
 		return 1;
 
 	sdata = (void *)ri->data;
@@ -825,7 +846,7 @@ static int sock_getsockopt_entry(struct kretprobe_instance *ri,
 	struct sock_getsockopt_data *data;
 	struct socket *sock = (struct socket *)regs->regs[0];
 
-	if (!is_hook_active(12))
+	if (!is_hook_active(HOOK_GETSOCKOPT))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1028,6 +1049,54 @@ static struct kretprobe sock_getsockopt_krp = {
 	.kp.symbol_name = "sock_getsockopt",
 };
 
+/* ================================================================== */
+/*  Hook 2c-primary: __arm64_sys_getsockopt — syscall-level hook      */
+/*                                                                    */
+/*  x0 = *pt_regs (userspace regs).                                   */
+/*  Вызывается только из userspace → нет риска перехватить            */
+/*  kernel-internal вызовы (IPsec, eBPF), в отличие от sk_getsockopt.*/
+/*  Никогда не инлайнится LTO, в отличие от sock_getsockopt на 5.15. */
+/* ================================================================== */
+
+static bool sys_getsockopt_uses_wrapper;
+
+static int sys_getsockopt_entry(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	struct sock_getsockopt_data *data = (void *)ri->data;
+
+	if (!is_hook_active(HOOK_GETSOCKOPT))
+		return 1;
+
+	if (sys_getsockopt_uses_wrapper) {
+		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
+		if (!user_regs ||
+		    (unsigned long)user_regs < 0xFFFF000000000000ULL)
+			return 0;
+		data->level = (int)user_regs->regs[1];
+		data->optname = (int)user_regs->regs[2];
+		data->optval = (void __user *)user_regs->regs[3];
+		data->optlen = (int __user *)user_regs->regs[4];
+	} else {
+		data->level = (int)regs->regs[1];
+		data->optname = (int)regs->regs[2];
+		data->optval = (void __user *)regs->regs[3];
+		data->optlen = (int __user *)regs->regs[4];
+	}
+
+	data->net = current->nsproxy ? current->nsproxy->net_ns : &init_net;
+	data->active = is_target_uid();
+	return 0;
+}
+
+static struct kretprobe sys_getsockopt_krp = {
+	.entry_handler = sys_getsockopt_entry,
+	.handler = sock_getsockopt_ret,
+	.data_size = sizeof(struct sock_getsockopt_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_getsockopt",
+};
+
 static int sk_getsockopt_entry(struct kretprobe_instance *ri,
 			       struct pt_regs *regs)
 {
@@ -1035,7 +1104,7 @@ static int sk_getsockopt_entry(struct kretprobe_instance *ri,
 	struct sock *sk = (struct sock *)regs->regs[0];
 	bool is_kernel = (bool)(regs->regs[4] & 1);
 
-	if (!is_hook_active(12))
+	if (!is_hook_active(HOOK_GETSOCKOPT))
 		return 1;
 
 	if (is_kernel)
@@ -1089,7 +1158,7 @@ static int rtnl_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	struct rtnl_fill_data *data;
 	struct net_device *dev;
 
-	if (!is_hook_active(2))
+	if (!is_hook_active(HOOK_RTNL_FILL))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1173,7 +1242,7 @@ static int inet6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	struct inet6_fill_data *data;
 	struct inet6_ifaddr *ifa;
 
-	if (!is_hook_active(3))
+	if (!is_hook_active(HOOK_INET6_FILL))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1242,7 +1311,7 @@ static int inet_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	struct inet_fill_data *data;
 	struct in_ifaddr *ifa;
 
-	if (!is_hook_active(4))
+	if (!is_hook_active(HOOK_INET_FILL))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1311,7 +1380,7 @@ struct fib_route_data {
 static int fib_route_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct fib_route_data *data;
-	if (!is_hook_active(5))
+	if (!is_hook_active(HOOK_FIB_ROUTE))
 		return 1;
 	data = (void *)ri->data;
 
@@ -1486,7 +1555,7 @@ static int fib_dump_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	struct fib_rt_info *fri;
 	struct fib_rt_info fri_copy;
 
-	if (!is_hook_active(7))
+	if (!is_hook_active(HOOK_FIB_DUMP))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1564,7 +1633,7 @@ static int fib_rule_fill_entry(struct kretprobe_instance *ri,
 	struct fib_rule *rule;
 	uid_t my_uid;
 
-	if (!is_hook_active(8))
+	if (!is_hook_active(HOOK_FIB_RULE_FILL))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1656,7 +1725,7 @@ static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	struct fib6_info *rt;
 	struct dst_entry *dst;
 
-	if (!is_hook_active(9))
+	if (!is_hook_active(HOOK_RT6_FILL))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1725,7 +1794,7 @@ static struct kretprobe rt6_fill_krp = {
 static int ipv6_route_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct fib_route_data *data;
-	if (!is_hook_active(6))
+	if (!is_hook_active(HOOK_IPV6_ROUTE))
 		return 1;
 	data = (void *)ri->data;
 
@@ -1839,7 +1908,7 @@ static int rt_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	unsigned int temp_len = 0;
 	char ifname[IFNAMSIZ];
 
-	if (!is_hook_active(10))
+	if (!is_hook_active(HOOK_RT_FILL))
 		return 1;
 
 	data = (void *)ri->data;
@@ -2276,7 +2345,7 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 	struct vpnhide_uid_port_rules *urules = NULL;
 	int i;
 
-	if (!is_hook_active(13))
+	if (!is_hook_active(HOOK_CONNECT))
 		return 1;
 
 	data = (void *)ri->data;
@@ -2421,7 +2490,7 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 	struct vpnhide_uid_port_rules *urules = NULL;
 	int i;
 
-	if (!is_hook_active(16))
+	if (!is_hook_active(HOOK_BIND))
 		return 1;
 
 	rcu_read_lock();
@@ -2539,7 +2608,7 @@ static int inet_getname_entry(struct kretprobe_instance *ri,
 	struct getname_data *data;
 	int peer = (int)regs->regs[2];
 
-	if (!is_hook_active(14))
+	if (!is_hook_active(HOOK_GETNAME_INET))
 		return 1;
 
 	data = (void *)ri->data;
@@ -2593,7 +2662,7 @@ static int inet6_getname_entry(struct kretprobe_instance *ri,
 	struct getname_data *data;
 	int peer = (int)regs->regs[2];
 
-	if (!is_hook_active(15))
+	if (!is_hook_active(HOOK_GETNAME_INET6))
 		return 1;
 
 	data = (void *)ri->data;
@@ -2674,7 +2743,7 @@ static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	unsigned int cmd = (unsigned int)regs->regs[1];
 	unsigned long arg = (unsigned long)regs->regs[2];
 
-	if (!is_hook_active(1))
+	if (!is_hook_active(HOOK_SOCK_IOCTL))
 		return 1;
 
 	data = (void *)ri->data;
@@ -2795,7 +2864,7 @@ static int sys_bpf_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	union bpf_attr __user *uattr;
 	unsigned int size;
 
-	if (!is_hook_active(17) || is_target_uid()) {
+	if (!is_hook_active(HOOK_BPF) || is_target_uid()) {
 		data->uattr = NULL;
 		return 0;
 	}
@@ -3139,7 +3208,8 @@ static struct kretprobe_reg probes[] = {
 	{ &rt6_fill_krp, "rt6_fill_node", NULL, false, -1 },
 	{ &rt_fill_krp, "rt_fill_info", NULL, false, -1 },
 	{ &sys_setsockopt_krp, "__arm64_sys_setsockopt", NULL, false, -1 },
-	{ &sk_getsockopt_krp, "sk_getsockopt", NULL, false, -1 },
+	{ &sys_getsockopt_krp, "__arm64_sys_getsockopt", NULL, false, -1 },
+	{ &sk_getsockopt_krp, "sk_getsockopt", NULL, false, 12 },
 	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false, 12 },
 	{ &socket_connect_krp, "security_socket_connect", NULL, false, -1 },
 	{ &socket_bind_krp, "security_socket_bind", NULL, false, -1 },
@@ -3157,6 +3227,11 @@ static int __init vpnhide_init(void)
 		   "__arm64_sys_setsockopt") == 0) {
 		sys_setsockopt_uses_wrapper = true;
 	}
+	if (sys_getsockopt_krp.kp.symbol_name &&
+	    strcmp(sys_getsockopt_krp.kp.symbol_name,
+		   "__arm64_sys_getsockopt") == 0) {
+		sys_getsockopt_uses_wrapper = true;
+	}
 	if (sys_bpf_krp.kp.symbol_name &&
 	    strcmp(sys_bpf_krp.kp.symbol_name, "__arm64_sys_bpf") == 0) {
 		sys_bpf_uses_wrapper = true;
@@ -3167,6 +3242,25 @@ static int __init vpnhide_init(void)
 	rcu_assign_pointer(global_port_targets, NULL);
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
+		if (strcmp(probes[i].name, "sock_getsockopt") == 0) {
+			int j;
+			bool skip = false;
+			for (j = 0; j < ARRAY_SIZE(probes); j++) {
+				if (strcmp(probes[j].name, "sk_getsockopt") ==
+				    0) {
+					if (probes[j].registered) {
+						skip = true;
+					}
+					break;
+				}
+			}
+			if (skip) {
+				pr_warn("kretprobe(%s) skipped because sk_getsockopt is registered\n",
+					probes[i].name);
+				continue;
+			}
+		}
+
 		if (probes[i].primary_idx >= 0) {
 			int p_idx = probes[i].primary_idx;
 			if (probes[p_idx].registered) {

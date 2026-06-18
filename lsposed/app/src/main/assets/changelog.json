@@ -1,6 +1,20 @@
 {
   "history": [
     {
+      "version": "1.10.1",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Migrate getsockopt intercept from sk_getsockopt/sock_getsockopt to __arm64_sys_getsockopt for better reliability against LTO inlining",
+              "ru": "Перенос перехвата getsockopt с sk_getsockopt/sock_getsockopt на __arm64_sys_getsockopt для защиты от обхода через LTO-инлайнинг"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.10.0",
       "sections": [
         {

@@ -1,3 +1,8 @@
+## v1.10.1
+
+### Changed
+- Migrate getsockopt intercept from sk_getsockopt/sock_getsockopt to __arm64_sys_getsockopt for better reliability against LTO inlining
+
 ## v1.10.0
 
 ### Changed
@@ -37,15 +42,3 @@
 ### Fixed
 - Fix cellular socket spoofing and CLAT/IPv6-only fallback
 - Resolve all kretprobe symbol names dynamically to fix registration failures due to LLVM suffixes/LTO
-
-## v1.9.0
-
-### Added
-- Implemented kernel-level TrafficStats BPF map spoofing.
-- Implemented auto filtering VpnServices and hiding VPN packages
-
-### Changed
-- Moved TrafficStats check to native slots, bump check version filter to API 35
-
-### Fixed
-- TrafficStats volume anomaly check now uses /proc/net/dev as ground truth to detect partial BPF-laundering failures that previously produced false-green results; iface_stats laundering implemented via two-pass BPF_MAP_LOOKUP_BATCH post-processing (collect VPN bytes, add to cover interface)
