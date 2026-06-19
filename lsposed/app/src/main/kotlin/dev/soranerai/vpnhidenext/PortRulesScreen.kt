@@ -315,15 +315,23 @@ private fun PortRuleCard(
                     )
                 }
                 Text(
-                    text = if (rule.startPort == rule.endPort) stringResource(R.string.port_rule_port_format, rule.startPort) else stringResource(R.string.port_rule_range_format, rule.startPort, rule.endPort),
+                    text =
+                        if (rule.startPort ==
+                            rule.endPort
+                        ) {
+                            stringResource(R.string.port_rule_port_format, rule.startPort)
+                        } else {
+                            stringResource(R.string.port_rule_range_format, rule.startPort, rule.endPort)
+                        },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isReadOnly) MaterialTheme.colorScheme.secondary else Color.Unspecified,
                 )
-                val protoLabel = when (rule.protocol) {
-                    PortProtocol.TCP -> "TCP"
-                    PortProtocol.UDP -> "UDP"
-                    PortProtocol.BOTH -> stringResource(R.string.protocol_both)
-                }
+                val protoLabel =
+                    when (rule.protocol) {
+                        PortProtocol.TCP -> "TCP"
+                        PortProtocol.UDP -> "UDP"
+                        PortProtocol.BOTH -> stringResource(R.string.protocol_both)
+                    }
                 Text(
                     text = stringResource(R.string.port_rule_protocol_format, protoLabel),
                     style = MaterialTheme.typography.labelSmall,
@@ -377,7 +385,14 @@ private fun PortRuleDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    text = if (initialRule == null) stringResource(R.string.ports_new_rule_title) else stringResource(R.string.ports_edit_rule_title),
+                    text =
+                        if (initialRule ==
+                            null
+                        ) {
+                            stringResource(R.string.ports_new_rule_title)
+                        } else {
+                            stringResource(R.string.ports_edit_rule_title)
+                        },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -424,11 +439,12 @@ private fun PortRuleDialog(
                     Text(stringResource(R.string.protocol), style = MaterialTheme.typography.labelMedium)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         PortProtocol.values().forEachIndexed { index, p ->
-                            val pLabel = when (p) {
-                                PortProtocol.TCP -> "TCP"
-                                PortProtocol.UDP -> "UDP"
-                                PortProtocol.BOTH -> stringResource(R.string.protocol_both)
-                            }
+                            val pLabel =
+                                when (p) {
+                                    PortProtocol.TCP -> "TCP"
+                                    PortProtocol.UDP -> "UDP"
+                                    PortProtocol.BOTH -> stringResource(R.string.protocol_both)
+                                }
                             SegmentedButton(
                                 selected = protocol == p,
                                 onClick = { protocol = p },

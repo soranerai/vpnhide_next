@@ -791,7 +791,10 @@ class HookEntry : IXposedHookLoadPackage {
                 return
             }
 
-        fun isManagedProfileInternal(serviceInstance: Any, userId: Int): Boolean {
+        fun isManagedProfileInternal(
+            serviceInstance: Any,
+            userId: Int,
+        ): Boolean {
             if (userId <= 0) return false
             val token = Binder.clearCallingIdentity()
             isInternalCheck.set(true)
@@ -821,7 +824,7 @@ class HookEntry : IXposedHookLoadPackage {
                             HookLog.i("VpnHide: Spoofed isManagedProfile(userId=$userId) to false")
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook isManagedProfile: ${t.message}")
@@ -846,11 +849,12 @@ class HookEntry : IXposedHookLoadPackage {
                             XposedHelpers.setIntField(userInfo, "flags", flags)
                             try {
                                 XposedHelpers.setObjectField(userInfo, "userType", "android.os.usertype.full.SECONDARY")
-                            } catch (_: Throwable) {}
+                            } catch (_: Throwable) {
+                            }
                             HookLog.i("VpnHide: Spoofed getUserInfo(userId=$userId) flags/userType to hide managed profile")
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getUserInfo: ${t.message}")
@@ -872,7 +876,7 @@ class HookEntry : IXposedHookLoadPackage {
                             HookLog.i("VpnHide: Spoofed isProfile(userId=$userId) to false")
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook isProfile: ${t.message}")
@@ -894,23 +898,27 @@ class HookEntry : IXposedHookLoadPackage {
                         val targetUid = if (callingUid == 1000) (currentCallbackUid.get() ?: callingUid) else callingUid
                         val targetUserId = targetUid / 100000
 
-                        val filteredList = result.filter { item ->
-                            if (item == null) return@filter true
-                            val itemId = try {
-                                XposedHelpers.getObjectField(item, "id") as? Int
-                            } catch (_: Throwable) {
-                                null
+                        val filteredList =
+                            result.filter { item ->
+                                if (item == null) return@filter true
+                                val itemId =
+                                    try {
+                                        XposedHelpers.getObjectField(item, "id") as? Int
+                                    } catch (_: Throwable) {
+                                        null
+                                    }
+                                itemId == null || itemId == targetUserId
                             }
-                            itemId == null || itemId == targetUserId
-                        }
 
                         if (filteredList.size != result.size) {
                             recordIntercept("UserManager")
                             param.result = filteredList
-                            HookLog.i("VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfiles (Original: ${result.size})")
+                            HookLog.i(
+                                "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfiles (Original: ${result.size})",
+                            )
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getProfiles: ${t.message}")
@@ -932,17 +940,20 @@ class HookEntry : IXposedHookLoadPackage {
                         val targetUid = if (callingUid == 1000) (currentCallbackUid.get() ?: callingUid) else callingUid
                         val targetUserId = targetUid / 100000
 
-                        val filteredList = result.filter { itemId ->
-                            itemId == targetUserId
-                        }
+                        val filteredList =
+                            result.filter { itemId ->
+                                itemId == targetUserId
+                            }
 
                         if (filteredList.size != result.size) {
                             recordIntercept("UserManager")
                             param.result = filteredList.toIntArray()
-                            HookLog.i("VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfileIds (Original: ${result.size})")
+                            HookLog.i(
+                                "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfileIds (Original: ${result.size})",
+                            )
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getProfileIds: ${t.message}")
@@ -964,7 +975,7 @@ class HookEntry : IXposedHookLoadPackage {
                             HookLog.i("VpnHide: Spoofed getProfileParent(userId=$userId) to null")
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getProfileParent: ${t.message}")
@@ -986,7 +997,7 @@ class HookEntry : IXposedHookLoadPackage {
                             HookLog.i("VpnHide: Spoofed getProfileParentId(userId=$userId) to $userId")
                         }
                     }
-                }
+                },
             )
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getProfileParentId: ${t.message}")

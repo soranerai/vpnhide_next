@@ -107,8 +107,6 @@ fun DiagnosticsScreen(
     var debugZipFile by remember { mutableStateOf<File?>(null) }
     val summaryFmt = stringResource(R.string.summary_format)
 
-
-
     // Kick off the diagnostics run once per process. If selfNeedsRestart
     // is true we skip — hooks aren't applied to this app yet, results
     // would be meaningless. DiagnosticsCache.run is idempotent: no-op
@@ -156,8 +154,6 @@ fun DiagnosticsScreen(
         BackupRestoreCard()
 
         Spacer(Modifier.height(16.dp))
-
-
 
         // Protection check section — its content depends on cache state,
         // but the bottom debug-tools section always renders below so

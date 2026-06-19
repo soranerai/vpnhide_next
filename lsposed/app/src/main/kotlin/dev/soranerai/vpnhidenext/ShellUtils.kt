@@ -222,4 +222,3 @@ internal fun buildLsposedApplyCommand(context: Context): String {
         append(" ; chcon u:object_r:system_data_file:s0 $publicDb* 2>/dev/null || true")
     }
 }
-

@@ -142,17 +142,15 @@ static bool has_gateway_route(const struct gateway_list *list,
 	return false;
 }
 
-static bool daemon_is_vpn_ifname(const char *name, const struct vpnhide_iface_ioctl_data *prefixes)
+static bool
+daemon_is_vpn_ifname(const char *name,
+		     const struct vpnhide_iface_ioctl_data *prefixes)
 {
 	/* Built-in patterns */
-	if (strncmp(name, "tun", 3) == 0 ||
-	    strncmp(name, "ppp", 3) == 0 ||
-	    strncmp(name, "wg", 2) == 0 ||
-	    strncmp(name, "tap", 3) == 0 ||
-	    strncmp(name, "ipsec", 5) == 0 ||
-	    strncmp(name, "dummy", 5) == 0 ||
-	    strncmp(name, "pdp", 3) == 0 ||
-	    strncmp(name, "p2p", 3) == 0) {
+	if (strncmp(name, "tun", 3) == 0 || strncmp(name, "ppp", 3) == 0 ||
+	    strncmp(name, "wg", 2) == 0 || strncmp(name, "tap", 3) == 0 ||
+	    strncmp(name, "ipsec", 5) == 0 || strncmp(name, "dummy", 5) == 0 ||
+	    strncmp(name, "pdp", 3) == 0 || strncmp(name, "p2p", 3) == 0) {
 		return true;
 	}
 
@@ -160,7 +158,8 @@ static bool daemon_is_vpn_ifname(const char *name, const struct vpnhide_iface_io
 	if (prefixes) {
 		for (int i = 0; i < prefixes->count; i++) {
 			int len = strlen(prefixes->prefixes[i]);
-			if (len > 0 && strncasecmp(name, prefixes->prefixes[i], len) == 0) {
+			if (len > 0 && strncasecmp(name, prefixes->prefixes[i],
+						   len) == 0) {
 				return true;
 			}
 		}
@@ -219,13 +218,17 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 			if (vpn_idx > 0) {
 				bool dup = false;
 				for (int i = 0; i < active_vpns.count; i++) {
-					if (active_vpns.ifindexes[i] == vpn_idx) {
+					if (active_vpns.ifindexes[i] ==
+					    vpn_idx) {
 						dup = true;
 						break;
 					}
 				}
-				if (!dup && active_vpns.count < MAX_ACTIVE_VPNS) {
-					active_vpns.ifindexes[active_vpns.count++] = vpn_idx;
+				if (!dup &&
+				    active_vpns.count < MAX_ACTIVE_VPNS) {
+					active_vpns
+						.ifindexes[active_vpns.count++] =
+						vpn_idx;
 				}
 			}
 			continue;

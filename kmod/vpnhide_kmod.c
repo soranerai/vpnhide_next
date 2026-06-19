@@ -7,13 +7,29 @@
  * Uses kretprobes so no modification of the running kernel is needed;
  * works on stock Android GKI kernels with CONFIG_KPROBES=y.
  *
- * Hooks:
- *   - dev_ioctl: filters SIOCGIFFLAGS / SIOCGIFNAME / SIOCGIFMTU / etc.
- *   - sock_ioctl: filters SIOCGIFCONF interface enumeration
- *   - rtnl_fill_ifinfo: filters RTM_NEWLINK netlink dumps (getifaddrs)
- *   - inet6_fill_ifaddr: filters RTM_GETADDR IPv6 responses (getifaddrs)
- *   - inet_fill_ifaddr: filters RTM_GETADDR IPv4 responses (getifaddrs)
- *   - fib_route_seq_show: filters /proc/net/route entries
+ * Hook Catalog & Consequence of Absence (What happens without them):
+ *   - dev_ioctl: Filters per-interface ioctls (SIOCGIFFLAGS, SIOCGIFINDEX, etc.).
+ *     Without it: Target apps can query state and ifindex of VPN interfaces directly by name.
+ *   - sock_ioctl: Filters SIOCGIFCONF interface lists.
+ *     Without it: Target apps can list all active network interfaces and discover the VPN interface.
+ *   - rtnl_fill_ifinfo: Filters RTM_NEWLINK netlink dumps.
+ *     Without it: Netlink link dumps (getifaddrs() path) will reveal the VPN interface details.
+ *   - inet_fill_ifaddr / inet6_fill_ifaddr: Filters RTM_GETADDR netlink addresses.
+ *     Without them: VPN IP addresses leak; getifaddrs() reconstructs dummy interfaces using them.
+ *   - fib_route_seq_show / ipv6_route_seq_show: Filters /proc/net/route & ipv6_route.
+ *     Without them: Routing rules mapped to the VPN interface will leak in procfs.
+ *   - fib_dump_info / rt6_fill_node / rt_fill_info: Filters routing table dumps (RTM_GETROUTE).
+ *     Without them: IPv4/IPv6 routing queries will return entries referencing the VPN gateway/interface.
+ *   - fib_nl_fill_rule: Filters policy routing rules (RTM_GETRULE).
+ *     Without it: Target UID policy rules mapping traffic to VPN tables will leak.
+ *   - setsockopt / getsockopt / sk_getsockopt: Handles bind/mark and MTU/MSS settings.
+ *     Without them: Apps can bind to VPN interfaces or detect the tunnel via MTU size anomalies.
+ *   - connect / bind: Controls port/host access on loopback/local interfaces.
+ *     Without them: Apps can connect to local proxies or detect active proxy ports via EADDRINUSE.
+ *   - getname / getsockname: Spoofs local socket addresses.
+ *     Without it: getsockname() queries will return the VPN interface's private IP address.
+ *   - sys_bpf: Hijacks eBPF stats maps queries.
+ *     Without it: Modern Android NetworkStatsManager leaks VPN interface indexes and traffic counters.
  *
  * Target UIDs are written to /proc/vpnhide_targets from userspace.
  *
@@ -248,7 +264,8 @@ static DEFINE_SPINLOCK(spoof_ip_lock);
 
 static void free_spoof_ip_rcu(struct rcu_head *head)
 {
-	struct vpnhide_spoof_ip_rcu *p = container_of(head, struct vpnhide_spoof_ip_rcu, rcu);
+	struct vpnhide_spoof_ip_rcu *p =
+		container_of(head, struct vpnhide_spoof_ip_rcu, rcu);
 	kfree(p);
 }
 
@@ -263,7 +280,8 @@ static int update_spoof_ip(const struct vpnhide_spoof_ip *sip)
 	new_rcu->sip = *sip;
 
 	spin_lock(&spoof_ip_lock);
-	old_rcu = rcu_dereference_protected(global_spoof_ip, lockdep_is_held(&spoof_ip_lock));
+	old_rcu = rcu_dereference_protected(global_spoof_ip,
+					    lockdep_is_held(&spoof_ip_lock));
 	rcu_assign_pointer(global_spoof_ip, new_rcu);
 	spin_unlock(&spoof_ip_lock);
 
@@ -455,16 +473,20 @@ static void record_kmod_intercept(uid_t uid, int type)
 /*  Hook 1: dev_ioctl — all per-interface ioctls                      */
 /*  Android source path: net/core/dev_ioctl.c                         */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Filters per-interface ioctls (SIOCGIFFLAGS, SIOCGIFNAME,        */
+/*    SIOCGIFMTU, SIOCGIFINDEX, SIOCGIFHWADDR, SIOCGIFADDR) and       */
+/*    returns -ENODEV if a target app queries a VPN interface.        */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can query state, MTU, ifindex, MAC, or IP address of*/
+/*    the VPN interface by its name directly, exposing its existence. */
+/*                                                                    */
 /*  dev_ioctl() on GKI 6.1:                                           */
 /*    int dev_ioctl(struct net *net, unsigned int cmd,                */
 /*                  struct ifreq *ifr, void __user *data,             */
 /*                  bool *need_copyout)                               */
 /*  arm64: x0=net, x1=cmd, x2=ifr (KERNEL ptr), x3=data (__user)      */
-/*                                                                    */
-/*  Covers SIOCGIFFLAGS, SIOCGIFNAME, SIOCGIFMTU, SIOCGIFINDEX,       */
-/*  SIOCGIFHWADDR, SIOCGIFADDR, and any other cmd that goes through   */
-/*  dev_ioctl with a VPN interface name in ifr_name. Returns ENODEV   */
-/*  for all of them.                                                  */
 /*                                                                    */
 /*  Note: SIOCGIFCONF goes through sock_ioctl -> dev_ifconf, not      */
 /*  through dev_ioctl, so it is not covered here.                     */
@@ -534,6 +556,15 @@ static struct kretprobe dev_ioctl_krp = {
 /* ================================================================== */
 /*  Hook 2: sock_ioctl — SIOCGIFCONF interface enumeration            */
 /*  Android source path: net/socket.c                                 */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts unlocked_ioctl on sockets, checks for SIOCGIFCONF,   */
+/*    and filters out VPN interface structures from the list of all   */
+/*    active network interfaces returned to target UIDs.              */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can enumerate all active network interfaces on the  */
+/*    system via ioctl(..., SIOCGIFCONF), immediately leaking the VPN.*/
 /*                                                                    */
 /*  Why sock_ioctl instead of dev_ifconf?                             */
 /*                                                                    */
@@ -673,13 +704,20 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 /*  Hook 2b: sock_setsockopt — Aikido Bind Sabotage                    */
 /*  Android source path: net/socket.c                                 */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts setsockopt calls. If a target app tries to bind a    */
+/*    socket to a VPN interface (via SO_BINDTODEVICE or               */
+/*    SO_BINDTOIFINDEX), it overrides the operation and returns       */
+/*    -ENODEV. It also handles custom control command options and     */
+/*    adjusts MTU discovery options.                                  */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can bind their sockets directly to the VPN          */
+/*    interface, bypass normal policy routing, or detect if the VPN   */
+/*    is present by checking if binding succeeds.                     */
+/*                                                                    */
 /*  sock_setsockopt(struct socket *sock, int level, int optname,      */
 /*                  sockptr_t optval, unsigned int optlen)            */
-/*                                                                    */
-/*  If a target app tries to SO_BINDTODEVICE or SO_BINDTOIFINDEX to   */
-/*  a VPN interface, we sabotage the arguments on the fly. We change  */
-/*  optlen to 0. The kernel interprets this as "remove binding", does */
-/*  nothing harmful, and returns 0 (Success) to the app.              */
 /* ================================================================== */
 
 struct sock_setsockopt_data {
@@ -737,8 +775,10 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 					if (update_spoof_ip(&sip) == 0) {
 						vpnhide_dbg(
 							"sys_setsockopt: updated spoof IP: IPv4=%pI4 (%d), IPv6=%pI6c (%d)\n",
-							&sip.ipv4_addr, sip.has_ipv4,
-							sip.ipv6_addr, sip.has_ipv6);
+							&sip.ipv4_addr,
+							sip.has_ipv4,
+							sip.ipv6_addr,
+							sip.has_ipv6);
 						sdata->override_ret = true;
 					}
 				}
@@ -801,7 +841,8 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 				vpnhide_dbg(
 					"sys_setsockopt: target app tried to set SO_MARK to 0x%x, overriding to 0\n",
 					mark);
-				if (put_user(0, (int __user *)optval_ptr) == 0) {
+				if (put_user(0, (int __user *)optval_ptr) ==
+				    0) {
 					sdata->intercepted = true;
 				}
 			}
@@ -810,9 +851,13 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 		if (optname == IP_MTU_DISCOVER) {
 			int discover;
 			if (optlen == sizeof(int)) {
-				if (get_user(discover, (int __user *)optval_ptr) == 0) {
+				if (get_user(discover,
+					     (int __user *)optval_ptr) == 0) {
 					if (discover != IP_PMTUDISC_DONT) {
-						if (put_user(IP_PMTUDISC_DONT, (int __user *)optval_ptr) == 0) {
+						if (put_user(IP_PMTUDISC_DONT,
+							     (int __user *)
+								     optval_ptr) ==
+						    0) {
 							vpnhide_dbg(
 								"sys_setsockopt: spoofed IP_MTU_DISCOVER from %d to IP_PMTUDISC_DONT\n",
 								discover);
@@ -827,9 +872,13 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 		if (optname == IPV6_MTU_DISCOVER) {
 			int discover;
 			if (optlen == sizeof(int)) {
-				if (get_user(discover, (int __user *)optval_ptr) == 0) {
+				if (get_user(discover,
+					     (int __user *)optval_ptr) == 0) {
 					if (discover != IPV6_PMTUDISC_DONT) {
-						if (put_user(IPV6_PMTUDISC_DONT, (int __user *)optval_ptr) == 0) {
+						if (put_user(IPV6_PMTUDISC_DONT,
+							     (int __user *)
+								     optval_ptr) ==
+						    0) {
 							vpnhide_dbg(
 								"sys_setsockopt: spoofed IPV6_MTU_DISCOVER from %d to IPV6_PMTUDISC_DONT\n",
 								discover);
@@ -878,6 +927,16 @@ static struct kretprobe sys_setsockopt_krp = {
 /*    - sock_getsockopt: net/socket.c                                 */
 /*    - sock_common_getsockopt: net/core/sock.c                       */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts getsockopt calls for target UIDs to spoof socket     */
+/*    options. If queried for SO_BINDTODEVICE or SO_BINDTOIFINDEX     */
+/*    referencing the VPN, it returns empty/zero. It also overrides   */
+/*    MTU/MSS sizes to match Wi-Fi/cellular defaults (e.g. 1500/1460).*/
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can verify if their sockets are bound to the VPN    */
+/*    device or detect the VPN tunnel via reduced MTU/MSS anomalies.  */
+/*                                                                    */
 /*  sock_getsockopt(struct socket *sock, int level, int optname,      */
 /*                  char __user *optval, int __user *optlen)          */
 /*  arm64: x1=level, x2=optname, x3=optval, x4=optlen                 */
@@ -902,14 +961,18 @@ static int sock_getsockopt_entry(struct kretprobe_instance *ri,
 	if (!is_hook_active(HOOK_GETSOCKOPT))
 		return 1;
 
-	if (level != SOL_SOCKET && level != IPPROTO_IP && level != IPPROTO_IPV6 && level != IPPROTO_TCP)
+	if (level != SOL_SOCKET && level != IPPROTO_IP &&
+	    level != IPPROTO_IPV6 && level != IPPROTO_TCP)
 		return 1;
 
-	if (level == SOL_SOCKET && optname != SO_BINDTODEVICE && optname != SO_BINDTOIFINDEX)
+	if (level == SOL_SOCKET && optname != SO_BINDTODEVICE &&
+	    optname != SO_BINDTOIFINDEX)
 		return 1;
-	if (level == IPPROTO_IP && optname != IP_MTU && optname != IP_MTU_DISCOVER)
+	if (level == IPPROTO_IP && optname != IP_MTU &&
+	    optname != IP_MTU_DISCOVER)
 		return 1;
-	if (level == IPPROTO_IPV6 && optname != IPV6_MTU && optname != IPV6_MTU_DISCOVER)
+	if (level == IPPROTO_IPV6 && optname != IPV6_MTU &&
+	    optname != IPV6_MTU_DISCOVER)
 		return 1;
 	if (level == IPPROTO_TCP && optname != TCP_MAXSEG)
 		return 1;
@@ -945,7 +1008,9 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
 			if (get_user(mtu, (int __user *)data->optval) == 0) {
 				if (mtu > 0 && mtu < 1500) {
-					if (put_user(1500, (int __user *)data->optval) == 0) {
+					if (put_user(1500, (int __user *)data
+								   ->optval) ==
+					    0) {
 						vpnhide_dbg(
 							"sock_getsockopt_ret: spoofed IP_MTU from %d to 1500\n",
 							mtu);
@@ -962,7 +1027,9 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
 			if (get_user(mtu, (int __user *)data->optval) == 0) {
 				if (mtu > 0 && mtu < 1500) {
-					if (put_user(1500, (int __user *)data->optval) == 0) {
+					if (put_user(1500, (int __user *)data
+								   ->optval) ==
+					    0) {
 						vpnhide_dbg(
 							"sock_getsockopt_ret: spoofed IPV6_MTU from %d to 1500\n",
 							mtu);
@@ -977,9 +1044,12 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		int discover = 0;
 		int len = 0;
 		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
-			if (get_user(discover, (int __user *)data->optval) == 0) {
+			if (get_user(discover, (int __user *)data->optval) ==
+			    0) {
 				if (discover == IP_PMTUDISC_DONT) {
-					if (put_user(IP_PMTUDISC_DO, (int __user *)data->optval) == 0) {
+					if (put_user(IP_PMTUDISC_DO,
+						     (int __user *)data
+							     ->optval) == 0) {
 						vpnhide_dbg(
 							"sock_getsockopt_ret: spoofed IP_MTU_DISCOVER to IP_PMTUDISC_DO\n");
 					}
@@ -993,9 +1063,12 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		int discover = 0;
 		int len = 0;
 		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
-			if (get_user(discover, (int __user *)data->optval) == 0) {
+			if (get_user(discover, (int __user *)data->optval) ==
+			    0) {
 				if (discover == IPV6_PMTUDISC_DONT) {
-					if (put_user(IPV6_PMTUDISC_DO, (int __user *)data->optval) == 0) {
+					if (put_user(IPV6_PMTUDISC_DO,
+						     (int __user *)data
+							     ->optval) == 0) {
 						vpnhide_dbg(
 							"sock_getsockopt_ret: spoofed IPV6_MTU_DISCOVER to IPV6_PMTUDISC_DO\n");
 					}
@@ -1011,7 +1084,9 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		if (get_user(len, data->optlen) == 0 && len >= sizeof(int)) {
 			if (get_user(mss, (int __user *)data->optval) == 0) {
 				if (mss > 0 && mss < 1460) {
-					if (put_user(1460, (int __user *)data->optval) == 0) {
+					if (put_user(1460, (int __user *)data
+								   ->optval) ==
+					    0) {
 						vpnhide_dbg(
 							"sock_getsockopt_ret: spoofed TCP_MAXSEG from %d to 1460\n",
 							mss);
@@ -1085,6 +1160,17 @@ static struct kretprobe sock_getsockopt_krp = {
 /* ================================================================== */
 /*  Hook 2c-primary: __arm64_sys_getsockopt — syscall-level hook      */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts __arm64_sys_getsockopt syscalls directly. It handles */
+/*    getsockopt queries coming from userspace. It avoids LTO-inlining */
+/*    problems and kernel-internal sockets (e.g. eBPF or IPsec).      */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    If an GKI kernel inlines sock_getsockopt (due to LTO), then     */
+/*    standard getsockopt hooks won't fire. This primary syscall hook */
+/*    ensures getsockopt queries never escape spoofing, preventing the*/
+/*    VPN from leaking via LTO-inlined paths.                         */
+/*                                                                    */
 /*  x0 = *pt_regs (userspace regs).                                   */
 /*  Вызывается только из userspace → нет риска перехватить            */
 /*  kernel-internal вызовы (IPsec, eBPF), в отличие от sk_getsockopt.*/
@@ -1120,14 +1206,18 @@ static int sys_getsockopt_entry(struct kretprobe_instance *ri,
 		optlen = (int __user *)regs->regs[4];
 	}
 
-	if (level != SOL_SOCKET && level != IPPROTO_IP && level != IPPROTO_IPV6 && level != IPPROTO_TCP)
+	if (level != SOL_SOCKET && level != IPPROTO_IP &&
+	    level != IPPROTO_IPV6 && level != IPPROTO_TCP)
 		return 1;
 
-	if (level == SOL_SOCKET && optname != SO_BINDTODEVICE && optname != SO_BINDTOIFINDEX)
+	if (level == SOL_SOCKET && optname != SO_BINDTODEVICE &&
+	    optname != SO_BINDTOIFINDEX)
 		return 1;
-	if (level == IPPROTO_IP && optname != IP_MTU && optname != IP_MTU_DISCOVER)
+	if (level == IPPROTO_IP && optname != IP_MTU &&
+	    optname != IP_MTU_DISCOVER)
 		return 1;
-	if (level == IPPROTO_IPV6 && optname != IPV6_MTU && optname != IPV6_MTU_DISCOVER)
+	if (level == IPPROTO_IPV6 && optname != IPV6_MTU &&
+	    optname != IPV6_MTU_DISCOVER)
 		return 1;
 	if (level == IPPROTO_TCP && optname != TCP_MAXSEG)
 		return 1;
@@ -1168,14 +1258,18 @@ static int sk_getsockopt_entry(struct kretprobe_instance *ri,
 	if (is_kernel)
 		return 1;
 
-	if (level != SOL_SOCKET && level != IPPROTO_IP && level != IPPROTO_IPV6 && level != IPPROTO_TCP)
+	if (level != SOL_SOCKET && level != IPPROTO_IP &&
+	    level != IPPROTO_IPV6 && level != IPPROTO_TCP)
 		return 1;
 
-	if (level == SOL_SOCKET && optname != SO_BINDTODEVICE && optname != SO_BINDTOIFINDEX)
+	if (level == SOL_SOCKET && optname != SO_BINDTODEVICE &&
+	    optname != SO_BINDTOIFINDEX)
 		return 1;
-	if (level == IPPROTO_IP && optname != IP_MTU && optname != IP_MTU_DISCOVER)
+	if (level == IPPROTO_IP && optname != IP_MTU &&
+	    optname != IP_MTU_DISCOVER)
 		return 1;
-	if (level == IPPROTO_IPV6 && optname != IPV6_MTU && optname != IPV6_MTU_DISCOVER)
+	if (level == IPPROTO_IPV6 && optname != IPV6_MTU &&
+	    optname != IPV6_MTU_DISCOVER)
 		return 1;
 	if (level == IPPROTO_TCP && optname != TCP_MAXSEG)
 		return 1;
@@ -1215,15 +1309,17 @@ static struct kretprobe sock_common_getsockopt_krp = {
 /*  Hook 3: rtnl_fill_ifinfo — netlink RTM_NEWLINK (getifaddrs path)  */
 /*  Android source path: net/core/rtnetlink.c                         */
 /*                                                                    */
-/*  rtnl_fill_ifinfo fills one interface's data into a netlink skb    */
-/*  during a RTM_GETLINK dump. If the device is a VPN and the caller  */
-/*  is a target UID, we hide the entry from the dump.                 */
+/*  What it does:                                                     */
+/*    Intercepts the netlink link info filler rtnl_fill_ifinfo. If    */
+/*    the caller is a target UID and the interface is an active VPN,  */
+/*    it trims the skb back to its pre-fill length. The netlink       */
+/*    subsystem treats it as a zero-byte successful write and skips  */
+/*    the interface entirely without returning an error.              */
 /*                                                                    */
-/*  We can't return -EMSGSIZE (causes infinite retry of the same      */
-/*  entry on android14-6.1, hanging RTM_GETLINK dumps). Instead use   */
-/*  the same skb_trim approach as inet6_fill_ifaddr below: save       */
-/*  skb->len before the fill, trim back on return, return 0. The      */
-/*  iterator then sees a successful entry of zero bytes and advances. */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Netlink link dumps (e.g., getifaddrs() or modern network state  */
+/*    libraries) will receive the VPN interface entry, fully leaking  */
+/*    its existence, state, and properties.                           */
 /* ================================================================== */
 
 struct rtnl_fill_data {
@@ -1252,9 +1348,8 @@ static int rtnl_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 	data->saved_len = data->skb ? data->skb->len : 0;
 	data->should_filter = true;
 
-	vpnhide_dbg(
-		"rtnl_fill_entry: uid=%u target=1 iface=%s -> filter\n",
-		from_kuid(&init_user_ns, current_uid()), dev->name);
+	vpnhide_dbg("rtnl_fill_entry: uid=%u target=1 iface=%s -> filter\n",
+		    from_kuid(&init_user_ns, current_uid()), dev->name);
 
 	return 0;
 }
@@ -1286,18 +1381,20 @@ static struct kretprobe rtnl_fill_krp = {
 /*  Hook 4: inet6_fill_ifaddr — RTM_GETADDR IPv6 (getifaddrs path)    */
 /*  Android source path: net/ipv6/addrconf.c                          */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Filters netlink RTM_GETADDR responses for IPv6 addresses        */
+/*    belonging to the VPN interface. Uses the skb_trim method to     */
+/*    silently discard the written IPv6 address details.              */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    If hidden in RTM_NEWLINK but not here, the VPN IPv6 address will*/
+/*    still leak in RTM_GETADDR responses. Android's libc (bionic)    */
+/*    uses these addresses to reconstruct a dummy interface entry,    */
+/*    exposing the VPN's existence.                                   */
+/*                                                                    */
 /*  inet6_fill_ifaddr(struct sk_buff *skb, struct inet6_ifaddr *ifa,  */
 /*                    struct inet6_fill_args *args)                   */
 /*  arm64: x0=skb, x1=ifa                                             */
-/*                                                                    */
-/*  getifaddrs() does RTM_GETLINK (filtered by hook 3) then           */
-/*  RTM_GETADDR. Addresses for VPN interfaces still appear in         */
-/*  RTM_GETADDR, so bionic reconstructs a tun0 entry with flags=0.    */
-/*  Filtering here prevents that.                                     */
-/*                                                                    */
-/*  We can't return -EMSGSIZE (causes infinite retry on empty skb).   */
-/*  Instead, save skb->len before and trim the skb back on return,    */
-/*  making it look like the entry was never written. Return 0.        */
 /* ================================================================== */
 
 struct inet6_fill_data {
@@ -1318,7 +1415,8 @@ static int inet6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 1;
 
 	ifa = (struct inet6_ifaddr *)regs->regs[1];
-	if (!ifa || !ifa->idev || !ifa->idev->dev || !is_active_vpn_ifindex(ifa->idev->dev->ifindex))
+	if (!ifa || !ifa->idev || !ifa->idev->dev ||
+	    !is_active_vpn_ifindex(ifa->idev->dev->ifindex))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1359,10 +1457,20 @@ static struct kretprobe inet6_fill_krp = {
 /*  Hook 5: inet_fill_ifaddr — RTM_GETADDR IPv4 (getifaddrs path)     */
 /*  Android source path: net/ipv4/devinet.c                           */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Filters netlink RTM_GETADDR responses for IPv4 addresses        */
+/*    belonging to the VPN interface. Uses the skb_trim method to     */
+/*    silently discard the written IPv4 address details.              */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    If hidden in RTM_NEWLINK but not here, the VPN IPv4 address will*/
+/*    still leak in RTM_GETADDR responses. Android's libc (bionic)    */
+/*    uses these addresses to reconstruct a dummy interface entry,    */
+/*    exposing the VPN's existence.                                   */
+/*                                                                    */
 /*  inet_fill_ifaddr(struct sk_buff *skb, struct in_ifaddr *ifa,      */
 /*                   struct inet_fill_args *args)                     */
 /*  arm64: x0=skb, x1=ifa                                             */
-/*  Same skb-trim approach as hook 4.                                 */
 /* ================================================================== */
 
 struct inet_fill_data {
@@ -1383,7 +1491,8 @@ static int inet_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		return 1;
 
 	ifa = (struct in_ifaddr *)regs->regs[1];
-	if (!ifa || !ifa->ifa_dev || !ifa->ifa_dev->dev || !is_active_vpn_ifindex(ifa->ifa_dev->dev->ifindex))
+	if (!ifa || !ifa->ifa_dev || !ifa->ifa_dev->dev ||
+	    !is_active_vpn_ifindex(ifa->ifa_dev->dev->ifindex))
 		return 1;
 
 	data = (void *)ri->data;
@@ -1423,6 +1532,14 @@ static struct kretprobe inet_fill_krp = {
 /* ================================================================== */
 /*  Hook 6: fib_route_seq_show — /proc/net/route                      */
 /*  Android source path: net/ipv4/fib_trie.c                          */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts output of /proc/net/route for target UIDs and        */
+/*    compacts out any routing entries referencing the VPN interface.  */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps reading /proc/net/route can parse active routes to  */
+/*    find the VPN interface name and destination gateway.            */
 /*                                                                    */
 /*  fib_route_seq_show(struct seq_file *seq, void *v) writes one or   */
 /*  more tab-separated route lines into seq->buf, each ending with    */
@@ -1516,6 +1633,16 @@ static struct kretprobe fib_route_krp = {
 /* ================================================================== */
 /*  Hook 7: fib_dump_info — IPv4 routes dump                          */
 /*  Android source path: net/ipv4/fib_semantics.c                     */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Filters IPv4 route dumps filled via netlink (RTM_GETROUTE). If  */
+/*    the route references the VPN interface index, the entry is      */
+/*    trimmed and hidden from netlink responses for target UIDs.      */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can use netlink RTM_GETROUTE queries to scan the    */
+/*    routing tables and discover the default gateway or routes       */
+/*    assigned to the VPN interface.                                  */
 /*                                                                    */
 /*  fib_dump_info(skb, portid, seq, event, fri, flags)                */
 /*  arm64: x0=skb, x4=fri (struct fib_rt_info*)                       */
@@ -1637,8 +1764,7 @@ static int fib_dump_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		data->skb = (struct sk_buff *)regs->regs[0];
 		data->saved_len = data->skb ? data->skb->len : 0;
 		data->should_filter = true;
-		vpnhide_dbg("fib_dump_entry: hiding route via %s\n",
-			    dev->name);
+		vpnhide_dbg("fib_dump_entry: hiding route via %s\n", dev->name);
 		rcu_read_unlock();
 		return 0;
 	}
@@ -1674,6 +1800,16 @@ static struct kretprobe fib_dump_krp = {
 /* ================================================================== */
 /*  Hook 7b: fib_nl_fill_rule — policy routing rules (RTM_GETRULE)    */
 /*  Android source path: net/core/fib_rules.c                         */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Filters policy routing rule dumps filled via netlink (RTM_GETRULE).*/
+/*    If a policy rule is bound to the target UID and points to a VPN  */
+/*    routing table, it trims the skb to hide this rule from target UIDs.*/
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can verify their network routing path by dumping    */
+/*    routing rules. They will see system-level rules directing their  */
+/*    UID's traffic to custom VPN tables, indicating a VPN is active.  */
 /*                                                                    */
 /*  fib_nl_fill_rule(skb, rule, pid, seq, type, flags, ops)           */
 /*  arm64: x0=skb, x1=rule (struct fib_rule*)                         */
@@ -1770,6 +1906,15 @@ static struct kretprobe fib_rule_fill_krp = {
 /*  Hook 8: rt6_fill_node — IPv6 routes                               */
 /*  Android source path: net/ipv6/route.c                             */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Filters IPv6 routing tables dumps filled via netlink (RTM_GETROUTE).*/
+/*    If the route outputs to the VPN interface, the netlink entry is  */
+/*    trimmed and discarded for target UIDs.                          */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can verify their network routing path by dumping    */
+/*    IPv6 routes, leaking the gateway address or VPN output interface.*/
+/*                                                                    */
 /*  rt6_fill_node(net, skb, rt, dst, ...)                             */
 /*  arm64: x1=skb, x3=dst (struct dst_entry*)                         */
 /* ================================================================== */
@@ -1804,7 +1949,8 @@ static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 			is_vpn = true;
 			ifname = dev->name;
 		}
-	} else if (dst && dst->dev && is_active_vpn_ifindex(dst->dev->ifindex)) {
+	} else if (dst && dst->dev &&
+		   is_active_vpn_ifindex(dst->dev->ifindex)) {
 		is_vpn = true;
 		ifname = dst->dev->name;
 	}
@@ -1814,7 +1960,8 @@ static int rt6_fill_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 		data->skb = (struct sk_buff *)regs->regs[1];
 		data->saved_len = data->skb ? data->skb->len : 0;
 		data->should_filter = true;
-		vpnhide_dbg("rt6_fill_entry: hiding IPv6 route via %s\n", ifname);
+		vpnhide_dbg("rt6_fill_entry: hiding IPv6 route via %s\n",
+			    ifname);
 		rcu_read_unlock();
 		return 0;
 	}
@@ -1850,6 +1997,14 @@ static struct kretprobe rt6_fill_krp = {
 /* ================================================================== */
 /*  Hook 8b: ipv6_route_seq_show — /proc/net/ipv6_route               */
 /*  Android source path: net/ipv6/route.c                             */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Filters /proc/net/ipv6_route for target UIDs to remove routing  */
+/*    entries associated with the VPN interface name.                 */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps reading /proc/net/ipv6_route will see active IPv6   */
+/*    routes over the VPN tunnel, revealing the VPN interface.        */
 /*                                                                    */
 /*  ipv6_route_seq_show(seq, v) is the IPv6 equivalent of hook 6.     */
 /*  The interface name is the LAST field in the line.                 */
@@ -1949,6 +2104,16 @@ static struct kretprobe ipv6_route_krp = {
 /* ================================================================== */
 /*  Hook 9: rt_fill_info — IPv4 single route lookup                   */
 /*  Android source path: net/ipv4/route.c                             */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Filters netlink responses for single IPv4 route queries         */
+/*    (RTM_GETROUTE). If the lookup result points to the VPN          */
+/*    interface, the response skb is trimmed and skipped for target UIDs.*/
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps querying routing for specific IP addresses will     */
+/*    receive route entries pointing directly to the VPN interface,   */
+/*    leaking that their connections are being tunneled.              */
 /*                                                                    */
 /*  6.6: rt_fill_info(net, dst, src, rt, table_id, fl4, skb, ...)     */
 /*  arm64: x0=net, x3=rt (struct rtable*), x6=skb                     */
@@ -2292,7 +2457,8 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		p = rcu_dereference(global_iface_prefixes);
 		if (p) {
 			idata->count = p->count;
-			memcpy(idata->prefixes, p->prefixes, sizeof(idata->prefixes));
+			memcpy(idata->prefixes, p->prefixes,
+			       sizeof(idata->prefixes));
 		}
 		rcu_read_unlock();
 
@@ -2331,12 +2497,12 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		}
 
 		new_vpns->count = idata->count;
-		memcpy(new_vpns->ifindexes, idata->ifindexes, sizeof(new_vpns->ifindexes));
+		memcpy(new_vpns->ifindexes, idata->ifindexes,
+		       sizeof(new_vpns->ifindexes));
 
 		spin_lock(&active_vpns_lock);
 		old_vpns = rcu_dereference_protected(
-			global_active_vpns,
-			lockdep_is_held(&active_vpns_lock));
+			global_active_vpns, lockdep_is_held(&active_vpns_lock));
 		rcu_assign_pointer(global_active_vpns, new_vpns);
 		spin_unlock(&active_vpns_lock);
 
@@ -2452,12 +2618,20 @@ static struct miscdevice vpnhide_misc = {
 /*  Hook 12: security_socket_connect — Port Hiding                    */
 /*  Android source path: security/security.c                          */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts connect syscalls (at security_socket_connect). If    */
+/*    the target app tries to connect to loopback (127.0.0.1 / ::1)   */
+/*    on specific ports used by local proxies or VPN services, it     */
+/*    forces -ECONNREFUSED to hide the local proxy/service port.       */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can connect directly to local proxy servers or local*/
+/*    DNS resolvers run by the VPN client on loopback, allowing them  */
+/*    to verify proxy connectivity and bypass/detect the tunnel.      */
+/*                                                                    */
 /*  security_socket_connect(struct socket *sock,                      */
 /*                          struct sockaddr *address, int addrlen)    */
 /*  arm64: x1=address                                                 */
-/*                                                                    */
-/*  If a target app tries to connect to 127.0.0.1 or ::1, we return   */
-/*  -ECONNREFUSED. This covers all protocols (TCP, UDP, etc.)         */
 /* ================================================================== */
 
 static bool sys_connect_uses_wrapper;
@@ -2467,6 +2641,59 @@ struct socket_connect_data {
 	bool intercepted;
 };
 
+static struct socket *resolve_sock_addr(struct pt_regs *regs, bool uses_wrapper,
+					struct sockaddr *uaddr_buf,
+					int max_uaddr_sz,
+					struct sockaddr **out_addr,
+					bool *put_needed, int *out_fd)
+{
+	int fd, err;
+	struct socket *sock = NULL;
+	*put_needed = false;
+	*out_addr = NULL;
+
+	if (uses_wrapper) {
+		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs &&
+		    (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
+			int addrlen = (int)user_regs->regs[2];
+			int copy_sz = min_t(int, addrlen, max_uaddr_sz);
+			fd = (int)user_regs->regs[0];
+			if (copy_sz > 0 &&
+			    copy_from_user(uaddr_buf,
+					   (void __user *)user_regs->regs[1],
+					   copy_sz) == 0) {
+				*out_addr = uaddr_buf;
+			}
+			sock = sockfd_lookup(fd, &err);
+			if (sock)
+				*put_needed = true;
+			*out_fd = fd;
+		}
+	} else {
+		sock = (struct socket *)regs->regs[0];
+		*out_addr = (struct sockaddr *)regs->regs[1];
+		*out_fd = -1;
+	}
+	return sock;
+}
+
+static bool should_block_port(const struct vpnhide_uid_port_rules *urules,
+			      unsigned short port, unsigned char proto)
+{
+	int i;
+	for (i = 0; i < urules->rule_count; i++) {
+		const struct vpnhide_port_rule *r = &urules->rules[i];
+		if (port >= r->start_port && port <= r->end_port) {
+			if (r->protocol == VH_PROTO_BOTH ||
+			    r->protocol == proto) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 static int socket_connect_entry(struct kretprobe_instance *ri,
 				struct pt_regs *regs)
 {
@@ -2474,12 +2701,10 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 	struct socket *sock = NULL;
 	struct sockaddr *addr = NULL;
 	struct sockaddr_storage uaddr_buf;
-	struct pt_regs *user_regs = NULL;
 	uid_t uid = from_kuid(&init_user_ns, current_uid());
 	struct vpnhide_port_targets *t;
 	struct vpnhide_uid_port_rules *urules = NULL;
 	int fd = -1;
-	int err = 0;
 	bool put_needed = false;
 	int i;
 
@@ -2490,25 +2715,12 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 	data->should_block = false;
 	data->intercepted = false;
 
-	if (sys_connect_uses_wrapper) {
-		user_regs = (struct pt_regs *)regs->regs[0];
-		if (user_regs && (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
-			int addrlen = (int)user_regs->regs[2];
-			int copy_sz = min_t(int, addrlen, sizeof(uaddr_buf));
-			fd = (int)user_regs->regs[0];
-			if (copy_sz > 0 && copy_from_user(&uaddr_buf, (void __user *)user_regs->regs[1], copy_sz) == 0) {
-				addr = (struct sockaddr *)&uaddr_buf;
-			}
-			sock = sockfd_lookup(fd, &err);
-			if (sock)
-				put_needed = true;
-		} else {
-			return 0;
-		}
-	} else {
-		sock = (struct socket *)regs->regs[0];
-		addr = (struct sockaddr *)regs->regs[1];
-	}
+	sock = resolve_sock_addr(regs, sys_connect_uses_wrapper,
+				 (struct sockaddr *)&uaddr_buf,
+				 sizeof(uaddr_buf), &addr, &put_needed, &fd);
+
+	if (sys_connect_uses_wrapper && !sock)
+		return 0;
 
 	rcu_read_lock();
 	t = rcu_dereference(global_port_targets);
@@ -2538,28 +2750,21 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 					VH_PROTO_TCP :
 					VH_PROTO_UDP;
 
-			for (i = 0; i < urules->rule_count; i++) {
-				struct vpnhide_port_rule *r = &urules->rules[i];
-				if (port >= r->start_port &&
-				    port <= r->end_port) {
-					if (r->protocol == VH_PROTO_BOTH ||
-					    r->protocol == proto) {
-						data->should_block = true;
-						if (sys_connect_uses_wrapper && user_regs) {
-							user_regs->regs[1] = 0; /* Nullify to force -EFAULT */
-							data->intercepted = true;
-						}
-						vpnhide_dbg(
-							"socket_connect: blocking IPv4 port %u (%s) for uid=%u\n",
-							port,
-							(proto ==
-							 VH_PROTO_TCP) ?
-								"TCP" :
-								"UDP",
-							uid);
-						break;
+			if (should_block_port(urules, port, proto)) {
+				data->should_block = true;
+				if (sys_connect_uses_wrapper) {
+					struct pt_regs *user_regs =
+						(struct pt_regs *)regs->regs[0];
+					if (user_regs) {
+						user_regs->regs[1] = 0;
+						data->intercepted = true;
 					}
 				}
+				vpnhide_dbg(
+					"socket_connect: blocking IPv4 port %u (%s) for uid=%u\n",
+					port,
+					(proto == VH_PROTO_TCP) ? "TCP" : "UDP",
+					uid);
 			}
 		}
 	} else if (addr->sa_family == AF_INET6) {
@@ -2584,28 +2789,21 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 					VH_PROTO_TCP :
 					VH_PROTO_UDP;
 
-			for (i = 0; i < urules->rule_count; i++) {
-				struct vpnhide_port_rule *r = &urules->rules[i];
-				if (port >= r->start_port &&
-				    port <= r->end_port) {
-					if (r->protocol == VH_PROTO_BOTH ||
-					    r->protocol == proto) {
-						data->should_block = true;
-						if (sys_connect_uses_wrapper && user_regs) {
-							user_regs->regs[1] = 0; /* Nullify to force -EFAULT */
-							data->intercepted = true;
-						}
-						vpnhide_dbg(
-							"socket_connect: blocking IPv6 port %u (%s) for uid=%u\n",
-							port,
-							(proto ==
-							 VH_PROTO_TCP) ?
-								"TCP" :
-								"UDP",
-							uid);
-						break;
+			if (should_block_port(urules, port, proto)) {
+				data->should_block = true;
+				if (sys_connect_uses_wrapper) {
+					struct pt_regs *user_regs =
+						(struct pt_regs *)regs->regs[0];
+					if (user_regs) {
+						user_regs->regs[1] = 0;
+						data->intercepted = true;
 					}
 				}
+				vpnhide_dbg(
+					"socket_connect: blocking IPv6 port %u (%s) for uid=%u\n",
+					port,
+					(proto == VH_PROTO_TCP) ? "TCP" : "UDP",
+					uid);
 			}
 		}
 	}
@@ -2653,13 +2851,21 @@ static struct kretprobe socket_connect_krp = {
 /*  Hook 12b: security_socket_bind — Loopback Port Bind Spoofing      */
 /*  Android source path: security/security.c                          */
 /*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts bind calls (at security_socket_bind). If a target    */
+/*    app tries to bind to a specific protected port on loopback      */
+/*    (such as a port used by a local proxy), it silently rewrites    */
+/*    the port argument to 0. The kernel binds to a random free       */
+/*    ephemeral port, succeeding without throwing EADDRINUSE.          */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps can try binding sockets to specific proxy ports.    */
+/*    If they get EADDRINUSE, they immediately know a local proxy is  */
+/*    running on that port, which is a common VPN detection heuristic.*/
+/*                                                                    */
 /*  security_socket_bind(struct socket *sock,                         */
 /*                       struct sockaddr *address, int addrlen)       */
-/*  arm64: x1=address                                                 */
-/*                                                                    */
-/*  If a target app tries to bind to 127.0.0.1 or ::1 on a protected  */
-/*  port, we silently rewrite the port to 0 (ephemeral). The kernel   */
-/*  will choose a free random port, bind succeeds, and return 0.       */
+/*  arm64: x1=address       */
 /* ================================================================== */
 
 static bool sys_bind_uses_wrapper;
@@ -2675,31 +2881,20 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 	struct vpnhide_port_targets *t;
 	struct vpnhide_uid_port_rules *urules = NULL;
 	int fd = -1;
-	int err = 0;
 	bool put_needed = false;
 	int i;
 
 	if (!is_hook_active(HOOK_BIND))
 		return 1;
 
+	sock = resolve_sock_addr(regs, sys_bind_uses_wrapper,
+				 (struct sockaddr *)&uaddr_buf,
+				 sizeof(uaddr_buf), &addr, &put_needed, &fd);
+
 	if (sys_bind_uses_wrapper) {
 		user_regs = (struct pt_regs *)regs->regs[0];
-		if (user_regs && (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
-			int addrlen = (int)user_regs->regs[2];
-			int copy_sz = min_t(int, addrlen, sizeof(uaddr_buf));
-			fd = (int)user_regs->regs[0];
-			if (copy_sz > 0 && copy_from_user(&uaddr_buf, (void __user *)user_regs->regs[1], copy_sz) == 0) {
-				addr = (struct sockaddr *)&uaddr_buf;
-			}
-			sock = sockfd_lookup(fd, &err);
-			if (sock)
-				put_needed = true;
-		} else {
+		if (!sock)
 			return 0;
-		}
-	} else {
-		sock = (struct socket *)regs->regs[0];
-		addr = (struct sockaddr *)regs->regs[1];
 	}
 
 	rcu_read_lock();
@@ -2730,27 +2925,29 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 					VH_PROTO_TCP :
 					VH_PROTO_UDP;
 
-			for (i = 0; i < urules->rule_count; i++) {
-				struct vpnhide_port_rule *r = &urules->rules[i];
-				if (port >= r->start_port &&
-				    port <= r->end_port) {
-					if (r->protocol == VH_PROTO_BOTH ||
-					    r->protocol == proto) {
-						if (sys_bind_uses_wrapper && user_regs) {
-							unsigned short zero_port = 0;
-							void __user *uaddr_ptr = (void __user *)user_regs->regs[1];
-							if (copy_to_user(uaddr_ptr + offsetof(struct sockaddr_in, sin_port), &zero_port, sizeof(zero_port))) {
-								vpnhide_dbg("socket_bind: copy_to_user failed for IPv4 uid=%u\n", uid);
-							}
-						} else {
-							sin->sin_port = 0;
-						}
+			if (should_block_port(urules, port, proto)) {
+				if (sys_bind_uses_wrapper && user_regs) {
+					unsigned short zero_port = 0;
+					void __user *uaddr_ptr =
+						(void __user *)
+							user_regs->regs[1];
+					if (copy_to_user(
+						    uaddr_ptr +
+							    offsetof(
+								    struct sockaddr_in,
+								    sin_port),
+						    &zero_port,
+						    sizeof(zero_port))) {
 						vpnhide_dbg(
-							"socket_bind: redirected IPv4 port %u to 0 for uid=%u\n",
-							port, uid);
-						break;
+							"socket_bind: copy_to_user failed for IPv4 uid=%u\n",
+							uid);
 					}
+				} else {
+					sin->sin_port = 0;
 				}
+				vpnhide_dbg(
+					"socket_bind: redirected IPv4 port %u to 0 for uid=%u\n",
+					port, uid);
 			}
 		}
 	} else if (addr->sa_family == AF_INET6) {
@@ -2775,27 +2972,29 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 					VH_PROTO_TCP :
 					VH_PROTO_UDP;
 
-			for (i = 0; i < urules->rule_count; i++) {
-				struct vpnhide_port_rule *r = &urules->rules[i];
-				if (port >= r->start_port &&
-				    port <= r->end_port) {
-					if (r->protocol == VH_PROTO_BOTH ||
-					    r->protocol == proto) {
-						if (sys_bind_uses_wrapper && user_regs) {
-							unsigned short zero_port = 0;
-							void __user *uaddr_ptr = (void __user *)user_regs->regs[1];
-							if (copy_to_user(uaddr_ptr + offsetof(struct sockaddr_in6, sin6_port), &zero_port, sizeof(zero_port))) {
-								vpnhide_dbg("socket_bind: copy_to_user failed for IPv6 uid=%u\n", uid);
-							}
-						} else {
-							sin6->sin6_port = 0;
-						}
+			if (should_block_port(urules, port, proto)) {
+				if (sys_bind_uses_wrapper && user_regs) {
+					unsigned short zero_port = 0;
+					void __user *uaddr_ptr =
+						(void __user *)
+							user_regs->regs[1];
+					if (copy_to_user(
+						    uaddr_ptr +
+							    offsetof(
+								    struct sockaddr_in6,
+								    sin6_port),
+						    &zero_port,
+						    sizeof(zero_port))) {
 						vpnhide_dbg(
-							"socket_bind: redirected IPv6 port %u to 0 for uid=%u\n",
-							port, uid);
-						break;
+							"socket_bind: copy_to_user failed for IPv6 uid=%u\n",
+							uid);
 					}
+				} else {
+					sin6->sin6_port = 0;
 				}
+				vpnhide_dbg(
+					"socket_bind: redirected IPv6 port %u to 0 for uid=%u\n",
+					port, uid);
 			}
 		}
 	}
@@ -2825,6 +3024,16 @@ static struct kretprobe socket_bind_krp = {
 /*  Android source path:                                              */
 /*    - inet_getname: net/ipv4/af_inet.c                              */
 /*    - inet6_getname: net/ipv6/af_inet6.c                            */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts getsockname() calls for target UIDs. If the local    */
+/*    socket address returned corresponds to the VPN interface's      */
+/*    private IP, it rewrites the IP in the response structure to a   */
+/*    standard non-VPN address (e.g. Wi-Fi/cellular IP) to spoof it.  */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    When target apps call getsockname(), they receive the exact     */
+/*    private IP address of the VPN interface, exposing the tunnel.   */
 /* ================================================================== */
 
 static bool sys_getsockname_uses_wrapper;
@@ -2839,7 +3048,8 @@ static int sys_getsockname_entry(struct kretprobe_instance *ri,
 	struct sys_getsockname_data *data;
 	struct pt_regs *user_regs;
 
-	if (!is_hook_active(HOOK_GETNAME_INET) && !is_hook_active(HOOK_GETNAME_INET6))
+	if (!is_hook_active(HOOK_GETNAME_INET) &&
+	    !is_hook_active(HOOK_GETNAME_INET6))
 		return 1;
 
 	if (!is_target_uid())
@@ -2854,56 +3064,92 @@ static int sys_getsockname_entry(struct kretprobe_instance *ri,
 	return 0;
 }
 
-static int sys_getsockname_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+static void spoof_getsockname_ipv4(void __user *uaddr,
+				   struct vpnhide_spoof_ip *sip)
+{
+	__be32 addr;
+	__be32 target_ip;
+
+	if (get_user(addr,
+		     &((struct sockaddr_in __user *)uaddr)->sin_addr.s_addr) !=
+	    0)
+		return;
+
+	if (addr == 0 || (ntohl(addr) & 0xFF000000) == 0x7F000000)
+		return;
+
+	target_ip = sip->has_ipv4 ? sip->ipv4_addr : htonl(0xC0000004);
+	if (put_user(target_ip,
+		     &((struct sockaddr_in __user *)uaddr)->sin_addr.s_addr) ==
+	    0) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      4);
+		vpnhide_dbg(
+			"sys_getsockname_ret: spoofed IPv4 from %pI4 to %pI4\n",
+			&addr, &target_ip);
+	}
+}
+
+static void spoof_getsockname_ipv6(void __user *uaddr,
+				   struct vpnhide_spoof_ip *sip)
+{
+	struct in6_addr addr6;
+	struct in6_addr old_addr;
+	struct in6_addr target_ip6;
+
+	if (copy_from_user(&addr6,
+			   &((struct sockaddr_in6 __user *)uaddr)->sin6_addr,
+			   sizeof(struct in6_addr)) != 0)
+		return;
+
+	if (ipv6_addr_any(&addr6) || ipv6_addr_loopback(&addr6))
+		return;
+
+	old_addr = addr6;
+
+	if (sip->has_ipv6) {
+		memcpy(&target_ip6, sip->ipv6_addr, 16);
+	} else {
+		memset(&target_ip6, 0, 16);
+		target_ip6.s6_addr[0] = 0x20;
+		target_ip6.s6_addr[1] = 0x01;
+		target_ip6.s6_addr[2] = 0x0d;
+		target_ip6.s6_addr[3] = 0xb8;
+		target_ip6.s6_addr[15] = 0x10;
+	}
+
+	if (copy_to_user(&((struct sockaddr_in6 __user *)uaddr)->sin6_addr,
+			 &target_ip6, sizeof(struct in6_addr)) == 0) {
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      4);
+		vpnhide_dbg(
+			"sys_getsockname_ret: spoofed IPv6 from %pI6c to %pI6c\n",
+			&old_addr, &target_ip6);
+	}
+}
+
+static int sys_getsockname_ret(struct kretprobe_instance *ri,
+			       struct pt_regs *regs)
 {
 	struct sys_getsockname_data *data = (void *)ri->data;
 	int retval = regs_return_value(regs);
 	unsigned short sa_family;
+	struct vpnhide_spoof_ip sip;
 
-	if (retval == 0 && data->uaddr) {
-		if (get_user(sa_family, (unsigned short __user *)data->uaddr) == 0) {
-			struct vpnhide_spoof_ip sip;
+	if (retval != 0 || !data->uaddr)
+		return 0;
 
-			get_spoof_ip(&sip);
+	if (get_user(sa_family, (unsigned short __user *)data->uaddr) != 0)
+		return 0;
 
-			if (sa_family == AF_INET) {
-				__be32 addr;
-				if (get_user(addr, &((struct sockaddr_in __user *)data->uaddr)->sin_addr.s_addr) == 0) {
-					if (addr != 0 && (ntohl(addr) & 0xFF000000) != 0x7F000000) {
-						__be32 target_ip = sip.has_ipv4 ? sip.ipv4_addr : htonl(0xC0000004);
-						if (put_user(target_ip, &((struct sockaddr_in __user *)data->uaddr)->sin_addr.s_addr) == 0) {
-							record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 4);
-							vpnhide_dbg("sys_getsockname_ret: spoofed IPv4 from %pI4 to %pI4\n", &addr, &target_ip);
-						}
-					}
-				}
-			} else if (sa_family == AF_INET6) {
-				struct in6_addr addr6;
-				if (copy_from_user(&addr6, &((struct sockaddr_in6 __user *)data->uaddr)->sin6_addr, sizeof(struct in6_addr)) == 0) {
-					if (!ipv6_addr_any(&addr6) && !ipv6_addr_loopback(&addr6)) {
-						struct in6_addr old_addr = addr6;
-						struct in6_addr target_ip6;
+	get_spoof_ip(&sip);
 
-						if (sip.has_ipv6) {
-							memcpy(&target_ip6, sip.ipv6_addr, 16);
-						} else {
-							memset(&target_ip6, 0, 16);
-							target_ip6.s6_addr[0] = 0x20;
-							target_ip6.s6_addr[1] = 0x01;
-							target_ip6.s6_addr[2] = 0x0d;
-							target_ip6.s6_addr[3] = 0xb8;
-							target_ip6.s6_addr[15] = 0x10;
-						}
-
-						if (copy_to_user(&((struct sockaddr_in6 __user *)data->uaddr)->sin6_addr, &target_ip6, sizeof(struct in6_addr)) == 0) {
-							record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 4);
-							vpnhide_dbg("sys_getsockname_ret: spoofed IPv6 from %pI6c to %pI6c\n", &old_addr, &target_ip6);
-						}
-					}
-				}
-			}
-		}
+	if (sa_family == AF_INET) {
+		spoof_getsockname_ipv4(data->uaddr, &sip);
+	} else if (sa_family == AF_INET6) {
+		spoof_getsockname_ipv6(data->uaddr, &sip);
 	}
+
 	return 0;
 }
 
@@ -3045,7 +3291,6 @@ static struct kretprobe inet6_getname_krp = {
 	.kp.symbol_name = "inet6_getname",
 };
 
-
 static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct sock_ioctl_data *data;
@@ -3070,6 +3315,19 @@ static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 /* ================================================================== */
 /*  eBPF Map Hijacking / Stats Hiding                                 */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts __arm64_sys_bpf syscalls to modify BPF map lookups.  */
+/*    When netd/tethering traffic stats maps (like iface_stats or     */
+/*    stats_map_) are queried, it zeroes out records mapped to the    */
+/*    VPN interface or target UIDs, and updates the cover interface   */
+/*    to absorb the VPN's traffic to avoid overall traffic gaps.      */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Target apps checking network stats via modern Android API       */
+/*    NetworkStatsManager (which queries kernel eBPF maps directly)    */
+/*    will see the VPN interface index and its data counters, leaking */
+/*    the active VPN interface and its traffic volume.                */
 /* ================================================================== */
 
 static inline bool is_stats_or_uid_map(const char *name)
@@ -3107,11 +3365,11 @@ static bool is_key_vpn_or_target_uid(struct bpf_map *map, void *key)
 	    strncmp(map->name, "map_netd_stats", 14) == 0) {
 		struct vh_stats_key *sk = (struct vh_stats_key *)key;
 
-		vpnhide_dbg(
-			"key_check stats_map '%s': uid=%u index=%u\n",
-			map->name, sk->uid, sk->ifaceIndex);
+		vpnhide_dbg("key_check stats_map '%s': uid=%u index=%u\n",
+			    map->name, sk->uid, sk->ifaceIndex);
 
-		if (is_active_vpn_ifindex(sk->ifaceIndex) || is_target_uid_val(sk->uid)) {
+		if (is_active_vpn_ifindex(sk->ifaceIndex) ||
+		    is_target_uid_val(sk->uid)) {
 			vpnhide_dbg(
 				"BPF Match stats_map '%s': uid=%u index=%u -> SPOOFING ZERO STATS\n",
 				map->name, sk->uid, sk->ifaceIndex);
@@ -3122,9 +3380,8 @@ static bool is_key_vpn_or_target_uid(struct bpf_map *map, void *key)
 		   strncmp(map->name, "tether_stats", 12) == 0) {
 		u32 ifaceIndex = *(u32 *)key;
 
-		vpnhide_dbg(
-			"key_check iface/tether '%s': index=%u\n",
-			map->name, ifaceIndex);
+		vpnhide_dbg("key_check iface/tether '%s': index=%u\n",
+			    map->name, ifaceIndex);
 
 		if (is_active_vpn_ifindex(ifaceIndex)) {
 			vpnhide_dbg(
@@ -3250,6 +3507,53 @@ fail:
 	return NULL;
 }
 
+static void collect_vpn_traffic_sum(struct bpf_map *map,
+				    struct vh_stats_value *vpn_sum)
+{
+	struct vpnhide_active_vpns *vpns;
+	rcu_read_lock();
+	vpns = rcu_dereference(global_active_vpns);
+	if (vpns) {
+		int idx;
+		for (idx = 0; idx < vpns->count; idx++) {
+			u32 vpn_idx = vpns->ifindexes[idx];
+			void *map_val =
+				map->ops->map_lookup_elem(map, &vpn_idx);
+			if (map_val) {
+				struct vh_stats_value *sv =
+					(struct vh_stats_value *)map_val;
+				sv_add(vpn_sum, sv);
+			}
+		}
+	}
+	rcu_read_unlock();
+}
+
+static void bpf_single_cover_update(struct bpf_map *map, void __user *usr_val,
+				    u32 value_size, void *vbuf,
+				    struct vh_stats_value *vpn_sum)
+{
+	struct vh_stats_value *sv;
+
+	if (!sv_rx_bytes(vpn_sum) && !sv_tx_bytes(vpn_sum))
+		return;
+
+	if (copy_from_user(vbuf, usr_val, value_size) != 0)
+		return;
+
+	sv = (struct vh_stats_value *)vbuf;
+	sv_add(sv, vpn_sum);
+
+	if (copy_to_user(usr_val, vbuf, value_size) != 0) {
+		vpnhide_dbg(
+			"sys_bpf_ret: single cover update copy_to_user failed\n");
+	} else {
+		vpnhide_dbg(
+			"sys_bpf_ret: single cover update for map '%s' success (rx=%llu, tx=%llu)\n",
+			map->name, sv_rx_bytes(vpn_sum), sv_tx_bytes(vpn_sum));
+	}
+}
+
 static void bpf_single_lookup_zero(struct bpf_map *map,
 				   const union bpf_attr *attr, u32 key_size,
 				   u32 value_size)
@@ -3258,6 +3562,11 @@ static void bpf_single_lookup_zero(struct bpf_map *map,
 	u8 vbuf_stack[256];
 	void *kbuf = NULL;
 	void *vbuf = NULL;
+	void __user *usr_key;
+	void __user *usr_val;
+	u32 ifaceIndex;
+	u32 cover_idx;
+	struct vh_stats_value vpn_sum;
 
 	if (key_size <= sizeof(kbuf_stack)) {
 		kbuf = kbuf_stack;
@@ -3272,60 +3581,36 @@ static void bpf_single_lookup_zero(struct bpf_map *map,
 		vbuf = kzalloc(value_size, GFP_KERNEL);
 	}
 
-	if (kbuf && vbuf) {
-		void __user *usr_key = (void __user *)(unsigned long)attr->key;
-		void __user *usr_val =
-			(void __user *)(unsigned long)attr->value;
+	if (!kbuf || !vbuf)
+		goto out;
 
-		if (copy_from_user(kbuf, usr_key, key_size) == 0) {
-			if (is_key_vpn_or_target_uid(map, kbuf)) {
-				vpnhide_dbg(
-					"sys_bpf_ret: single zeroing for map '%s'\n",
-					map->name);
-				if (copy_to_user(usr_val, vbuf, value_size)) {
-					vpnhide_dbg(
-						"sys_bpf_ret: single zeroing copy_to_user failed\n");
-				}
-			} else if (strncmp(map->name, "iface_stats", 11) == 0 ||
-				   strncmp(map->name, "map_netd_iface_", 15) == 0 ||
-				   strncmp(map->name, "tether_stats", 12) == 0) {
-				u32 ifaceIndex = *(u32 *)kbuf;
-				u32 cover_idx = (u32)atomic_read(&global_cover_ifindex);
-				if (cover_idx && ifaceIndex == cover_idx) {
-					struct vh_stats_value vpn_sum = { 0 };
-					struct vpnhide_active_vpns *vpns;
+	usr_key = (void __user *)(unsigned long)attr->key;
+	usr_val = (void __user *)(unsigned long)attr->value;
 
-					rcu_read_lock();
-					vpns = rcu_dereference(global_active_vpns);
-					if (vpns) {
-						int idx;
-						for (idx = 0; idx < vpns->count; idx++) {
-							u32 vpn_idx = vpns->ifindexes[idx];
-							void *map_val = map->ops->map_lookup_elem(map, &vpn_idx);
-							if (map_val) {
-								struct vh_stats_value *sv = (struct vh_stats_value *)map_val;
-								sv_add(&vpn_sum, sv);
-							}
-						}
-					}
-					rcu_read_unlock();
+	if (copy_from_user(kbuf, usr_key, key_size) != 0)
+		goto out;
 
-					if (sv_rx_bytes(&vpn_sum) || sv_tx_bytes(&vpn_sum)) {
-						if (copy_from_user(vbuf, usr_val, value_size) == 0) {
-							struct vh_stats_value *sv = (struct vh_stats_value *)vbuf;
-							sv_add(sv, &vpn_sum);
-							if (copy_to_user(usr_val, vbuf, value_size)) {
-								vpnhide_dbg("sys_bpf_ret: single cover update copy_to_user failed\n");
-							} else {
-								vpnhide_dbg("sys_bpf_ret: single cover update for map '%s' success (rx=%llu, tx=%llu)\n",
-									    map->name, sv_rx_bytes(&vpn_sum), sv_tx_bytes(&vpn_sum));
-							}
-						}
-					}
-				}
-			}
+	if (is_key_vpn_or_target_uid(map, kbuf)) {
+		vpnhide_dbg("sys_bpf_ret: single zeroing for map '%s'\n",
+			    map->name);
+		if (copy_to_user(usr_val, vbuf, value_size)) {
+			vpnhide_dbg(
+				"sys_bpf_ret: single zeroing copy_to_user failed\n");
+		}
+	} else if (strncmp(map->name, "iface_stats", 11) == 0 ||
+		   strncmp(map->name, "map_netd_iface_", 15) == 0 ||
+		   strncmp(map->name, "tether_stats", 12) == 0) {
+		ifaceIndex = *(u32 *)kbuf;
+		cover_idx = (u32)atomic_read(&global_cover_ifindex);
+		if (cover_idx && ifaceIndex == cover_idx) {
+			memset(&vpn_sum, 0, sizeof(vpn_sum));
+			collect_vpn_traffic_sum(map, &vpn_sum);
+			bpf_single_cover_update(map, usr_val, value_size, vbuf,
+						&vpn_sum);
 		}
 	}
+
+out:
 	if (kbuf && kbuf != kbuf_stack)
 		kfree(kbuf);
 	if (vbuf && vbuf != vbuf_stack)
@@ -3595,13 +3880,12 @@ static int __init vpnhide_init(void)
 		sys_bpf_uses_wrapper = true;
 	}
 	if (socket_connect_krp.kp.symbol_name &&
-	    strcmp(socket_connect_krp.kp.symbol_name,
-		   "__arm64_sys_connect") == 0) {
+	    strcmp(socket_connect_krp.kp.symbol_name, "__arm64_sys_connect") ==
+		    0) {
 		sys_connect_uses_wrapper = true;
 	}
 	if (socket_bind_krp.kp.symbol_name &&
-	    strcmp(socket_bind_krp.kp.symbol_name,
-		   "__arm64_sys_bind") == 0) {
+	    strcmp(socket_bind_krp.kp.symbol_name, "__arm64_sys_bind") == 0) {
 		sys_bind_uses_wrapper = true;
 	}
 	if (sys_getsockname_krp.kp.symbol_name &&
@@ -3707,9 +3991,8 @@ static void __exit vpnhide_exit(void)
 
 	/* Cleanup RCU active vpns */
 	spin_lock(&active_vpns_lock);
-	vpns = rcu_dereference_protected(
-		global_active_vpns,
-		lockdep_is_held(&active_vpns_lock));
+	vpns = rcu_dereference_protected(global_active_vpns,
+					 lockdep_is_held(&active_vpns_lock));
 	rcu_assign_pointer(global_active_vpns, NULL);
 	spin_unlock(&active_vpns_lock);
 
@@ -3720,9 +4003,8 @@ static void __exit vpnhide_exit(void)
 
 	/* Cleanup RCU spoof IP */
 	spin_lock(&spoof_ip_lock);
-	old_sip = rcu_dereference_protected(
-		global_spoof_ip,
-		lockdep_is_held(&spoof_ip_lock));
+	old_sip = rcu_dereference_protected(global_spoof_ip,
+					    lockdep_is_held(&spoof_ip_lock));
 	rcu_assign_pointer(global_spoof_ip, NULL);
 	spin_unlock(&spoof_ip_lock);
 
@@ -3734,8 +4016,7 @@ static void __exit vpnhide_exit(void)
 	/* Cleanup RCU iface prefixes */
 	spin_lock(&iface_prefixes_lock);
 	old_p = rcu_dereference_protected(
-		global_iface_prefixes,
-		lockdep_is_held(&iface_prefixes_lock));
+		global_iface_prefixes, lockdep_is_held(&iface_prefixes_lock));
 	rcu_assign_pointer(global_iface_prefixes, NULL);
 	spin_unlock(&iface_prefixes_lock);
 
