@@ -257,6 +257,7 @@
     <string name="hook_desc_network">Redirects active network requests from the VPN network instance to the best available physical network.</string>
     <string name="hook_desc_connectivity_service">Filters VPN network out of global network lists and blocks leakage of active VPN callbacks.</string>
     <string name="hook_desc_package_manager">Filters VpnServices and hides VPN packages from targeted apps.</string>
+    <string name="hook_desc_user_manager">Filters user profiles and spoof isManagedProfile checks to hide work profiles.</string>
 
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Backup &amp; Restore</string>
@@ -270,4 +271,114 @@
     <string name="dashboard_intercept_statistics">Intercept Statistics</string>
     <string name="dashboard_stats_lifetime_hint">Showing rolling telemetry for the last 30 minutes</string>
     <string name="btn_clear">Clear</string>
+
+    <!-- Hook Isolation Labels -->
+    <string name="hook_testing_idx_format">Idx %1$d</string>
+
+    <!-- Kernel Hook Names -->
+    <string name="hook_name_dev_ioctl">Network interfaces (ioctl)</string>
+    <string name="hook_name_sock_ioctl">Socket list (ioctl)</string>
+    <string name="hook_name_rtnl_fill_ifinfo">Interface list (Netlink)</string>
+    <string name="hook_name_inet6_fill_ifaddr">IPv6 addresses (Netlink)</string>
+    <string name="hook_name_inet_fill_ifaddr">IPv4 addresses (Netlink)</string>
+    <string name="hook_name_fib_route_seq_show">Routing table IPv4 (/proc)</string>
+    <string name="hook_name_ipv6_route_seq_show">Routing table IPv6 (/proc)</string>
+    <string name="hook_name_fib_dump_info">Route list IPv4 (Netlink)</string>
+    <string name="hook_name_fib_nl_fill_rule">Routing rules (Netlink)</string>
+    <string name="hook_name_rt6_fill_node">Route list IPv6 (Netlink)</string>
+    <string name="hook_name_rt_fill_info">Route dump IPv4 (Netlink)</string>
+    <string name="hook_name_sys_setsockopt">Socket options (setsockopt)</string>
+    <string name="hook_name_sys_getsockopt">Socket options (getsockopt)</string>
+    <string name="hook_name_sys_connect">Loopback connections (connect)</string>
+    <string name="hook_name_sys_getsockname_ipv4">Local address IPv4 (getsockname)</string>
+    <string name="hook_name_sys_getsockname_ipv6">Local address IPv6 (getsockname)</string>
+    <string name="hook_name_sys_bind">Loopback port binding (bind)</string>
+    <string name="hook_name_bpf_stats_spoof">Traffic statistics (BPF)</string>
+
+    <!-- Kernel Hook Symbols -->
+    <string name="hook_symbol_dev_ioctl" translatable="false">dev_ioctl</string>
+    <string name="hook_symbol_sock_ioctl" translatable="false">sock_ioctl</string>
+    <string name="hook_symbol_rtnl_fill_ifinfo" translatable="false">rtnl_fill_ifinfo</string>
+    <string name="hook_symbol_inet6_fill_ifaddr" translatable="false">inet6_fill_ifaddr</string>
+    <string name="hook_symbol_inet_fill_ifaddr" translatable="false">inet_fill_ifaddr</string>
+    <string name="hook_symbol_fib_route_seq_show" translatable="false">fib_route_seq_show</string>
+    <string name="hook_symbol_ipv6_route_seq_show" translatable="false">ipv6_route_seq_show</string>
+    <string name="hook_symbol_fib_dump_info" translatable="false">fib_dump_info</string>
+    <string name="hook_symbol_fib_nl_fill_rule" translatable="false">fib_nl_fill_rule</string>
+    <string name="hook_symbol_rt6_fill_node" translatable="false">rt6_fill_node</string>
+    <string name="hook_symbol_rt_fill_info" translatable="false">rt_fill_info</string>
+    <string name="hook_symbol_sys_setsockopt" translatable="false">__arm64_sys_setsockopt</string>
+    <string name="hook_symbol_sys_getsockopt" translatable="false">__arm64_sys_getsockopt</string>
+    <string name="hook_symbol_sys_connect" translatable="false">__arm64_sys_connect</string>
+    <string name="hook_symbol_sys_getsockname_ipv4" translatable="false">__arm64_sys_getsockname + inet_getname</string>
+    <string name="hook_symbol_sys_getsockname_ipv6" translatable="false">__arm64_sys_getsockname + inet6_getname</string>
+    <string name="hook_symbol_sys_bind" translatable="false">__arm64_sys_bind</string>
+    <string name="hook_symbol_bpf_stats_spoof" translatable="false">__arm64_sys_bpf</string>
+
+    <!-- Kernel Hook Descriptions -->
+    <string name="hook_desc_dev_ioctl">Intercepts general interface IOCTLs (e.g., SIOCGIFFLAGS, SIOCGIFMTU) to hide VPN interface states.</string>
+    <string name="hook_desc_sock_ioctl">Intercepts socket-level IOCTLs like SIOCGIFCONF to filter out VPN interfaces during network enumeration.</string>
+    <string name="hook_desc_rtnl_fill_ifinfo">Filters VPN network interfaces out of netlink link-dump (RTM_GETLINK) responses.</string>
+    <string name="hook_desc_inet6_fill_ifaddr">Filters VPN IPv6 addresses out of netlink address-dump (RTM_GETADDR) responses.</string>
+    <string name="hook_desc_inet_fill_ifaddr">Filters VPN IPv4 addresses out of netlink address-dump (RTM_GETADDR) responses.</string>
+    <string name="hook_desc_fib_route_seq_show">Filters out VPN routes when apps read the IPv4 routing table in /proc/net/route.</string>
+    <string name="hook_desc_ipv6_route_seq_show">Filters out VPN routes when apps read the IPv6 routing table in /proc/net/ipv6_route.</string>
+    <string name="hook_desc_fib_dump_info">Filters out IPv4 VPN routes during netlink routing table dumps.</string>
+    <string name="hook_desc_fib_nl_fill_rule">Filters out VPN policy routing rules from netlink rule-dump (RTM_GETRULE) responses.</string>
+    <string name="hook_desc_rt6_fill_node">Filters out IPv6 VPN routes from netlink route-dump (RTM_GETROUTE) responses.</string>
+    <string name="hook_desc_rt_fill_info">Filters out IPv4 VPN routes from netlink route-dump (RTM_GETROUTE) responses.</string>
+    <string name="hook_desc_sys_setsockopt">Intercepts setsockopt calls to deny VPN socket binding (SO_BINDTODEVICE/IFINDEX), override SO_MARK to 0, and spoof MTU discovery.</string>
+    <string name="hook_desc_sys_getsockopt">Intercepts getsockopt calls to spoof MTU, MSS (TCP_MAXSEG), MTU discovery, and hide socket binding to a VPN interface.</string>
+    <string name="hook_desc_sys_connect">Implements Port Hiding by blocking loopback connections to VPN daemon control ports.</string>
+    <string name="hook_desc_sys_getsockname_ipv4">Spoofs getsockname for IPv4 sockets, masking the local VPN interface IP with the cover interface IP.</string>
+    <string name="hook_desc_sys_getsockname_ipv6">Spoofs getsockname for IPv6 sockets, masking the local VPN interface IP with the cover interface IP.</string>
+    <string name="hook_desc_sys_bind">Intercepts bind() on loopback: redirects protected ports to random free ephemeral ports (0) to bypass conflict checks.</string>
+    <string name="hook_desc_bpf_stats_spoof">Intercepts BPF map lookups via sys_bpf syscall to return zero traffic counters on stats maps (iface_stats, tether_stats, stats_map_) for VPN interfaces and target UIDs.</string>
+
+    <!-- Java Hook Names -->
+    <string name="hook_name_link_properties">Link properties</string>
+    <string name="hook_name_network_capabilities">Network capabilities</string>
+    <string name="hook_name_network_info">Network status</string>
+    <string name="hook_name_network">Network requests</string>
+    <string name="hook_name_connectivity_service">Active network list</string>
+    <string name="hook_name_package_manager">Hiding VPN apps</string>
+    <string name="hook_name_user_manager">Hiding work profiles</string>
+
+    <!-- Java Hook Symbols -->
+    <string name="hook_symbol_link_properties" translatable="false">android.net.LinkProperties</string>
+    <string name="hook_symbol_network_capabilities" translatable="false">android.net.NetworkCapabilities</string>
+    <string name="hook_symbol_network_info" translatable="false">android.net.NetworkInfo</string>
+    <string name="hook_symbol_network" translatable="false">android.net.Network</string>
+    <string name="hook_symbol_connectivity_service" translatable="false">com.android.server.ConnectivityService</string>
+    <string name="hook_symbol_package_manager" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
+    <string name="hook_symbol_user_manager" translatable="false">com.android.server.pm.UserManagerService</string>
+
+
+    <!-- Intercepts Statistics Dashboard -->
+    <string name="dashboard_stats_empty_title">No Intercepts Recorded</string>
+    <string name="dashboard_stats_empty_desc">Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.</string>
+    <string name="dashboard_stats_framework_title">Framework Intercepts</string>
+    <string name="dashboard_stats_native_title">Native Intercepts</string>
+
+    <!-- Vector Labels -->
+    <string name="vector_label_ioctl">ioctl / SIOCGIF</string>
+    <string name="vector_label_netlink">netlink RTNETLINK</string>
+    <string name="vector_label_connect">Loopback Block</string>
+    <string name="vector_label_getname">getsockname Spoof</string>
+
+    <!-- Port Rules Screen -->
+    <string name="ports_mass_rules_title">Mass Rules (Global)</string>
+    <string name="ports_local_rules_title">Local Rules</string>
+    <string name="btn_save_back">Save &amp; Back</string>
+    <string name="port_rule_port_format">Port: %1$d</string>
+    <string name="port_rule_range_format">Range: %1$d - %2$d</string>
+    <string name="port_rule_protocol_format">Protocol: %1$s</string>
+    <string name="ports_new_rule_title">New Port Rule</string>
+    <string name="ports_edit_rule_title">Edit Port Rule</string>
+    <string name="ports_label_placeholder">e.g. My Server</string>
+    <string name="ports_default_range_hint">Default: All ports (1-65535)</string>
+    <string name="ports_redundant_rules_removed_warning">%1$d redundant rule(s) will be removed</string>
+    <string name="chip_native">Native</string>
+    <string name="chip_framework">Framework</string>
+    <string name="protocol_both">Both</string>
 </resources>

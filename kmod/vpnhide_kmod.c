@@ -246,6 +246,34 @@ static DEFINE_SPINLOCK(spoof_ip_lock);
  * 0 means not set yet. */
 static atomic_t global_cover_ifindex = ATOMIC_INIT(0);
 
+struct vpnhide_active_vpns {
+	int count;
+	u32 ifindexes[MAX_ACTIVE_VPNS];
+	struct rcu_head rcu;
+};
+static struct vpnhide_active_vpns __rcu *global_active_vpns;
+static DEFINE_SPINLOCK(active_vpns_lock);
+
+static bool is_active_vpn_ifindex(u32 ifindex)
+{
+	struct vpnhide_active_vpns *vpns;
+	bool found = false;
+	int i;
+
+	rcu_read_lock();
+	vpns = rcu_dereference(global_active_vpns);
+	if (vpns) {
+		for (i = 0; i < vpns->count; i++) {
+			if (vpns->ifindexes[i] == ifindex) {
+				found = true;
+				break;
+			}
+		}
+	}
+	rcu_read_unlock();
+	return found;
+}
+
 static bool vpnhide_is_vpn_ifname(const char *name)
 {
 	struct vpnhide_iface_prefixes *p;
@@ -278,6 +306,9 @@ static bool is_target_uid_val(uid_t uid)
 	struct vpnhide_targets *t;
 	bool found = false;
 	int i;
+
+	if (uid == 0 || uid == 1000)
+		return false;
 
 	rcu_read_lock();
 	t = rcu_dereference(global_targets);
@@ -701,8 +732,6 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 			}
 		} else if (optname == SO_BINDTOIFINDEX) {
 			int ifindex;
-			struct net_device *dev;
-			struct net *net;
 
 			if (optlen != sizeof(int))
 				return 0;
@@ -711,19 +740,15 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 
 			if (ifindex <= 0)
 				return 0;
-			net = current->nsproxy ? current->nsproxy->net_ns :
-						 &init_net;
-			rcu_read_lock();
-			dev = dev_get_by_index_rcu(net, ifindex);
-			if (dev && is_vpn_ifname(dev->name)) {
+
+			if (is_active_vpn_ifindex(ifindex)) {
 				vpnhide_dbg(
-					"sys_setsockopt: denying SO_BINDTOIFINDEX %d (%s) with ENODEV\n",
-					ifindex, dev->name);
+					"sys_setsockopt: denying SO_BINDTOIFINDEX %d with ENODEV\n",
+					ifindex);
 				sdata->override_ret = true;
 				sdata->deny_errno = ENODEV;
 				sdata->intercepted = true;
 			}
-			rcu_read_unlock();
 		} else if (optname == SO_MARK) {
 			int mark;
 			if (optlen != sizeof(int))
@@ -1012,8 +1037,6 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		}
 	} else if (data->optname == SO_BINDTOIFINDEX) {
 		int ifindex;
-		struct net_device *dev;
-		struct net *net = data->net;
 
 		if (copy_from_user(&ifindex, data->optval, sizeof(int)))
 			return 0;
@@ -1021,20 +1044,15 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		if (ifindex <= 0)
 			return 0;
 
-		rcu_read_lock();
-		dev = dev_get_by_index_rcu(net, ifindex);
-		if (dev && is_vpn_ifname(dev->name)) {
+		if (is_active_vpn_ifindex(ifindex)) {
 			int zero_idx = 0;
 			vpnhide_dbg(
-				"sock_getsockopt_ret: spoofing SO_BINDTOIFINDEX %d (%s) to 0\n",
-				ifindex, dev->name);
-			rcu_read_unlock();
+				"sock_getsockopt_ret: spoofing SO_BINDTOIFINDEX %d to 0\n",
+				ifindex);
 			if (copy_to_user(data->optval, &zero_idx,
 					 sizeof(int))) {
 				/* error */
 			}
-		} else {
-			rcu_read_unlock();
 		}
 	}
 
@@ -2228,6 +2246,76 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		break;
 	}
 
+	case VH_GET_IFACE_PREFIXES: {
+		struct vpnhide_iface_ioctl_data *idata;
+		struct vpnhide_iface_prefixes *p;
+
+		idata = kzalloc(sizeof(*idata), GFP_KERNEL);
+		if (!idata)
+			return -ENOMEM;
+
+		rcu_read_lock();
+		p = rcu_dereference(global_iface_prefixes);
+		if (p) {
+			idata->count = p->count;
+			memcpy(idata->prefixes, p->prefixes, sizeof(idata->prefixes));
+		}
+		rcu_read_unlock();
+
+		if (copy_to_user((void __user *)arg, idata, sizeof(*idata))) {
+			kfree(idata);
+			return -EFAULT;
+		}
+
+		kfree(idata);
+		ret = 0;
+		break;
+	}
+
+	case VH_SET_VPN_IFINDEXES: {
+		struct vpnhide_vpn_ifindexes *idata;
+		struct vpnhide_active_vpns *new_vpns, *old_vpns;
+
+		idata = kmalloc(sizeof(*idata), GFP_KERNEL);
+		if (!idata)
+			return -ENOMEM;
+
+		if (copy_from_user(idata, (void __user *)arg, sizeof(*idata))) {
+			kfree(idata);
+			return -EFAULT;
+		}
+
+		if (idata->count < 0 || idata->count > MAX_ACTIVE_VPNS) {
+			kfree(idata);
+			return -EINVAL;
+		}
+
+		new_vpns = kzalloc(sizeof(*new_vpns), GFP_KERNEL);
+		if (!new_vpns) {
+			kfree(idata);
+			return -ENOMEM;
+		}
+
+		new_vpns->count = idata->count;
+		memcpy(new_vpns->ifindexes, idata->ifindexes, sizeof(new_vpns->ifindexes));
+
+		spin_lock(&active_vpns_lock);
+		old_vpns = rcu_dereference_protected(
+			global_active_vpns,
+			lockdep_is_held(&active_vpns_lock));
+		rcu_assign_pointer(global_active_vpns, new_vpns);
+		spin_unlock(&active_vpns_lock);
+
+		if (old_vpns) {
+			synchronize_rcu();
+			kfree(old_vpns);
+		}
+
+		kfree(idata);
+		ret = 0;
+		break;
+	}
+
 	case VH_GET_ACTIVE_HOOKS:
 		val = READ_ONCE(active_hooks_mask);
 		if (put_user(val, (unsigned int __user *)arg))
@@ -2338,19 +2426,27 @@ static struct miscdevice vpnhide_misc = {
 /*  -ECONNREFUSED. This covers all protocols (TCP, UDP, etc.)         */
 /* ================================================================== */
 
+static bool sys_connect_uses_wrapper;
+
 struct socket_connect_data {
 	bool should_block;
+	bool intercepted;
 };
 
 static int socket_connect_entry(struct kretprobe_instance *ri,
 				struct pt_regs *regs)
 {
 	struct socket_connect_data *data;
-	struct socket *sock = (struct socket *)regs->regs[0];
-	struct sockaddr *addr = (struct sockaddr *)regs->regs[1];
+	struct socket *sock = NULL;
+	struct sockaddr *addr = NULL;
+	struct sockaddr_storage uaddr_buf;
+	struct pt_regs *user_regs = NULL;
 	uid_t uid = from_kuid(&init_user_ns, current_uid());
 	struct vpnhide_port_targets *t;
 	struct vpnhide_uid_port_rules *urules = NULL;
+	int fd = -1;
+	int err = 0;
+	bool put_needed = false;
 	int i;
 
 	if (!is_hook_active(HOOK_CONNECT))
@@ -2358,6 +2454,25 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 
 	data = (void *)ri->data;
 	data->should_block = false;
+	data->intercepted = false;
+
+	if (sys_connect_uses_wrapper) {
+		user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs && (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
+			fd = (int)user_regs->regs[0];
+			if (copy_from_user(&uaddr_buf, (void __user *)user_regs->regs[1], sizeof(uaddr_buf)) == 0) {
+				addr = (struct sockaddr *)&uaddr_buf;
+			}
+			sock = sockfd_lookup(fd, &err);
+			if (sock)
+				put_needed = true;
+		} else {
+			return 0;
+		}
+	} else {
+		sock = (struct socket *)regs->regs[0];
+		addr = (struct sockaddr *)regs->regs[1];
+	}
 
 	rcu_read_lock();
 	t = rcu_dereference(global_port_targets);
@@ -2372,6 +2487,8 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 
 	if (!urules || !addr || !sock || !sock->sk) {
 		rcu_read_unlock();
+		if (put_needed)
+			sockfd_put(sock);
 		return 0;
 	}
 
@@ -2392,6 +2509,10 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 					if (r->protocol == VH_PROTO_BOTH ||
 					    r->protocol == proto) {
 						data->should_block = true;
+						if (sys_connect_uses_wrapper && user_regs) {
+							user_regs->regs[1] = 0; /* Nullify to force -EFAULT */
+							data->intercepted = true;
+						}
 						vpnhide_dbg(
 							"socket_connect: blocking IPv4 port %u (%s) for uid=%u\n",
 							port,
@@ -2434,6 +2555,10 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 					if (r->protocol == VH_PROTO_BOTH ||
 					    r->protocol == proto) {
 						data->should_block = true;
+						if (sys_connect_uses_wrapper && user_regs) {
+							user_regs->regs[1] = 0; /* Nullify to force -EFAULT */
+							data->intercepted = true;
+						}
 						vpnhide_dbg(
 							"socket_connect: blocking IPv6 port %u (%s) for uid=%u\n",
 							port,
@@ -2450,6 +2575,9 @@ static int socket_connect_entry(struct kretprobe_instance *ri,
 	}
 	rcu_read_unlock();
 
+	if (put_needed)
+		sockfd_put(sock);
+
 	return 0;
 }
 
@@ -2457,11 +2585,18 @@ static int socket_connect_ret(struct kretprobe_instance *ri,
 			      struct pt_regs *regs)
 {
 	struct socket_connect_data *data = (void *)ri->data;
+	int retval = regs_return_value(regs);
 
 	if (data->should_block) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
 				      3);
-		regs_set_return_value(regs, -ECONNREFUSED);
+		if (sys_connect_uses_wrapper) {
+			if (data->intercepted && retval == -EFAULT) {
+				regs_set_return_value(regs, -ECONNREFUSED);
+			}
+		} else {
+			regs_set_return_value(regs, -ECONNREFUSED);
+		}
 	}
 
 	return 0;
@@ -2472,7 +2607,7 @@ static struct kretprobe socket_connect_krp = {
 	.entry_handler = socket_connect_entry,
 	.data_size = sizeof(struct socket_connect_data),
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "security_socket_connect",
+	.kp.symbol_name = "__arm64_sys_connect",
 };
 
 /* ================================================================== */
@@ -2488,18 +2623,43 @@ static struct kretprobe socket_connect_krp = {
 /*  will choose a free random port, bind succeeds, and return 0.       */
 /* ================================================================== */
 
+static bool sys_bind_uses_wrapper;
+
 static int socket_bind_entry(struct kretprobe_instance *ri,
 			     struct pt_regs *regs)
 {
-	struct socket *sock = (struct socket *)regs->regs[0];
-	struct sockaddr *addr = (struct sockaddr *)regs->regs[1];
+	struct socket *sock = NULL;
+	struct sockaddr *addr = NULL;
+	struct sockaddr_storage uaddr_buf;
+	struct pt_regs *user_regs = NULL;
 	uid_t uid = from_kuid(&init_user_ns, current_uid());
 	struct vpnhide_port_targets *t;
 	struct vpnhide_uid_port_rules *urules = NULL;
+	int fd = -1;
+	int err = 0;
+	bool put_needed = false;
 	int i;
 
 	if (!is_hook_active(HOOK_BIND))
 		return 1;
+
+	if (sys_bind_uses_wrapper) {
+		user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs && (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
+			fd = (int)user_regs->regs[0];
+			if (copy_from_user(&uaddr_buf, (void __user *)user_regs->regs[1], sizeof(uaddr_buf)) == 0) {
+				addr = (struct sockaddr *)&uaddr_buf;
+			}
+			sock = sockfd_lookup(fd, &err);
+			if (sock)
+				put_needed = true;
+		} else {
+			return 0;
+		}
+	} else {
+		sock = (struct socket *)regs->regs[0];
+		addr = (struct sockaddr *)regs->regs[1];
+	}
 
 	rcu_read_lock();
 	t = rcu_dereference(global_port_targets);
@@ -2514,6 +2674,8 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 
 	if (!urules || !addr || !sock || !sock->sk) {
 		rcu_read_unlock();
+		if (put_needed)
+			sockfd_put(sock);
 		return 0;
 	}
 
@@ -2533,7 +2695,15 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 				    port <= r->end_port) {
 					if (r->protocol == VH_PROTO_BOTH ||
 					    r->protocol == proto) {
-						sin->sin_port = 0;
+						if (sys_bind_uses_wrapper && user_regs) {
+							unsigned short zero_port = 0;
+							void __user *uaddr_ptr = (void __user *)user_regs->regs[1];
+							if (copy_to_user(uaddr_ptr + offsetof(struct sockaddr_in, sin_port), &zero_port, sizeof(zero_port))) {
+								vpnhide_dbg("socket_bind: copy_to_user failed for IPv4 uid=%u\n", uid);
+							}
+						} else {
+							sin->sin_port = 0;
+						}
 						vpnhide_dbg(
 							"socket_bind: redirected IPv4 port %u to 0 for uid=%u\n",
 							port, uid);
@@ -2570,7 +2740,15 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 				    port <= r->end_port) {
 					if (r->protocol == VH_PROTO_BOTH ||
 					    r->protocol == proto) {
-						sin6->sin6_port = 0;
+						if (sys_bind_uses_wrapper && user_regs) {
+							unsigned short zero_port = 0;
+							void __user *uaddr_ptr = (void __user *)user_regs->regs[1];
+							if (copy_to_user(uaddr_ptr + offsetof(struct sockaddr_in6, sin6_port), &zero_port, sizeof(zero_port))) {
+								vpnhide_dbg("socket_bind: copy_to_user failed for IPv6 uid=%u\n", uid);
+							}
+						} else {
+							sin6->sin6_port = 0;
+						}
 						vpnhide_dbg(
 							"socket_bind: redirected IPv6 port %u to 0 for uid=%u\n",
 							port, uid);
@@ -2581,6 +2759,9 @@ static int socket_bind_entry(struct kretprobe_instance *ri,
 		}
 	}
 	rcu_read_unlock();
+
+	if (put_needed)
+		sockfd_put(sock);
 
 	return 0;
 }
@@ -2595,7 +2776,7 @@ static struct kretprobe socket_bind_krp = {
 	.entry_handler = socket_bind_entry,
 	.data_size = 0,
 	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "security_socket_bind",
+	.kp.symbol_name = "__arm64_sys_bind",
 };
 
 /* ================================================================== */
@@ -2604,6 +2785,98 @@ static struct kretprobe socket_bind_krp = {
 /*    - inet_getname: net/ipv4/af_inet.c                              */
 /*    - inet6_getname: net/ipv6/af_inet6.c                            */
 /* ================================================================== */
+
+static bool sys_getsockname_uses_wrapper;
+
+struct sys_getsockname_data {
+	void __user *uaddr;
+};
+
+static int sys_getsockname_entry(struct kretprobe_instance *ri,
+				 struct pt_regs *regs)
+{
+	struct sys_getsockname_data *data = (void *)ri->data;
+	struct pt_regs *user_regs;
+
+	if (!is_hook_active(HOOK_GETNAME_INET) && !is_hook_active(HOOK_GETNAME_INET6))
+		return 1;
+
+	data->uaddr = NULL;
+
+	if (is_target_uid()) {
+		user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs && (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
+			data->uaddr = (void __user *)user_regs->regs[1];
+		}
+	}
+	return 0;
+}
+
+static int sys_getsockname_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct sys_getsockname_data *data = (void *)ri->data;
+	int retval = regs_return_value(regs);
+	unsigned short sa_family;
+
+	if (data->uaddr && retval == 0) {
+		if (copy_from_user(&sa_family, data->uaddr, sizeof(sa_family)) == 0) {
+			struct vpnhide_spoof_ip sip;
+
+			spin_lock(&spoof_ip_lock);
+			sip = global_spoof_ip;
+			spin_unlock(&spoof_ip_lock);
+
+			if (sa_family == AF_INET) {
+				struct sockaddr_in sin;
+				if (copy_from_user(&sin, data->uaddr, sizeof(sin)) == 0) {
+					__be32 addr = sin.sin_addr.s_addr;
+					if (addr != 0 && (ntohl(addr) & 0xFF000000) != 0x7F000000) {
+						__be32 target_ip = sip.has_ipv4 ? sip.ipv4_addr : htonl(0xC0000004);
+						sin.sin_addr.s_addr = target_ip;
+						if (copy_to_user(data->uaddr, &sin, sizeof(sin)) == 0) {
+							record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 4);
+							vpnhide_dbg("sys_getsockname_ret: spoofed IPv4 from %pI4 to %pI4\n", &addr, &target_ip);
+						}
+					}
+				}
+			} else if (sa_family == AF_INET6) {
+				struct sockaddr_in6 sin6;
+				if (copy_from_user(&sin6, data->uaddr, sizeof(sin6)) == 0) {
+					if (!ipv6_addr_any(&sin6.sin6_addr) && !ipv6_addr_loopback(&sin6.sin6_addr)) {
+						struct in6_addr old_addr = sin6.sin6_addr;
+						struct in6_addr target_ip6;
+
+						if (sip.has_ipv6) {
+							memcpy(&target_ip6, sip.ipv6_addr, 16);
+						} else {
+							memset(&target_ip6, 0, 16);
+							target_ip6.s6_addr[0] = 0x20;
+							target_ip6.s6_addr[1] = 0x01;
+							target_ip6.s6_addr[2] = 0x0d;
+							target_ip6.s6_addr[3] = 0xb8;
+							target_ip6.s6_addr[15] = 0x10;
+						}
+
+						memcpy(&sin6.sin6_addr, &target_ip6, 16);
+						if (copy_to_user(data->uaddr, &sin6, sizeof(sin6)) == 0) {
+							record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 4);
+							vpnhide_dbg("sys_getsockname_ret: spoofed IPv6 from %pI6c to %pI6c\n", &old_addr, &target_ip6);
+						}
+					}
+				}
+			}
+		}
+	}
+	return 0;
+}
+
+static struct kretprobe sys_getsockname_krp = {
+	.handler = sys_getsockname_ret,
+	.entry_handler = sys_getsockname_entry,
+	.data_size = sizeof(struct sys_getsockname_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_getsockname",
+};
 
 struct getname_data {
 	struct sockaddr *uaddr;
@@ -2776,17 +3049,28 @@ static int sock_ioctl_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 static inline bool is_stats_or_uid_map(const char *name)
 {
-	if (!name)
+	if (!name || name[0] == '\0')
 		return false;
-	return (strncmp(name, "app_uid_stats", 13) == 0 ||
-		strncmp(name, "map_netd_app_ui", 15) == 0 ||
-		strncmp(name, "stats_map_", 10) == 0 ||
-		strncmp(name, "map_netd_stats", 14) == 0 ||
-		strncmp(name, "iface_stats", 11) == 0 ||
-		strncmp(name, "map_netd_iface_", 15) == 0 ||
-		strncmp(name, "uid_stats", 9) == 0 ||
-		strncmp(name, "map_netd_uid_st", 15) == 0 ||
-		strncmp(name, "tether_stats", 12) == 0);
+
+	switch (name[0]) {
+	case 'a':
+		return strncmp(name, "app_uid_stats", 13) == 0;
+	case 's':
+		return strncmp(name, "stats_map_", 10) == 0;
+	case 'i':
+		return strncmp(name, "iface_stats", 11) == 0;
+	case 'u':
+		return strncmp(name, "uid_stats", 9) == 0;
+	case 't':
+		return strncmp(name, "tether_stats", 12) == 0;
+	case 'm':
+		return (strncmp(name, "map_netd_app_ui", 15) == 0 ||
+			strncmp(name, "map_netd_stats", 14) == 0 ||
+			strncmp(name, "map_netd_iface_", 15) == 0 ||
+			strncmp(name, "map_netd_uid_st", 15) == 0);
+	default:
+		return false;
+	}
 }
 
 static bool is_key_vpn_or_target_uid(struct bpf_map *map, void *key)
@@ -2797,52 +3081,30 @@ static bool is_key_vpn_or_target_uid(struct bpf_map *map, void *key)
 	if (strncmp(map->name, "stats_map_", 10) == 0 ||
 	    strncmp(map->name, "map_netd_stats", 14) == 0) {
 		struct vh_stats_key *sk = (struct vh_stats_key *)key;
-		struct net_device *dev;
-		char ifname[IFNAMSIZ];
-
-		ifname[0] = '\0';
-		rcu_read_lock();
-		dev = dev_get_by_index_rcu(&init_net, sk->ifaceIndex);
-		if (dev) {
-			strncpy(ifname, dev->name, IFNAMSIZ - 1);
-			ifname[IFNAMSIZ - 1] = '\0';
-		}
-		rcu_read_unlock();
 
 		vpnhide_dbg(
-			"key_check stats_map '%s': uid=%u index=%u ifname='%s'\n",
-			map->name, sk->uid, sk->ifaceIndex, ifname);
+			"key_check stats_map '%s': uid=%u index=%u\n",
+			map->name, sk->uid, sk->ifaceIndex);
 
-		if (is_vpn_ifname(ifname) || is_target_uid_val(sk->uid)) {
+		if (is_active_vpn_ifindex(sk->ifaceIndex) || is_target_uid_val(sk->uid)) {
 			vpnhide_dbg(
-				"BPF Match stats_map '%s': uid=%u index=%u ifname='%s' -> SPOOFING ZERO STATS\n",
-				map->name, sk->uid, sk->ifaceIndex, ifname);
+				"BPF Match stats_map '%s': uid=%u index=%u -> SPOOFING ZERO STATS\n",
+				map->name, sk->uid, sk->ifaceIndex);
 			return true;
 		}
 	} else if (strncmp(map->name, "iface_stats", 11) == 0 ||
 		   strncmp(map->name, "map_netd_iface_", 15) == 0 ||
 		   strncmp(map->name, "tether_stats", 12) == 0) {
 		u32 ifaceIndex = *(u32 *)key;
-		struct net_device *dev;
-		char ifname[IFNAMSIZ];
-
-		ifname[0] = '\0';
-		rcu_read_lock();
-		dev = dev_get_by_index_rcu(&init_net, ifaceIndex);
-		if (dev) {
-			strncpy(ifname, dev->name, IFNAMSIZ - 1);
-			ifname[IFNAMSIZ - 1] = '\0';
-		}
-		rcu_read_unlock();
 
 		vpnhide_dbg(
-			"key_check iface/tether '%s': index=%u ifname='%s'\n",
-			map->name, ifaceIndex, ifname);
+			"key_check iface/tether '%s': index=%u\n",
+			map->name, ifaceIndex);
 
-		if (is_vpn_ifname(ifname)) {
+		if (is_active_vpn_ifindex(ifaceIndex)) {
 			vpnhide_dbg(
-				"BPF Match iface/tether stats '%s': index=%u ifname='%s' -> SPOOFING ZERO STATS\n",
-				map->name, ifaceIndex, ifname);
+				"BPF Match iface/tether stats '%s': index=%u -> SPOOFING ZERO STATS\n",
+				map->name, ifaceIndex);
 			return true;
 		}
 	}
@@ -2985,6 +3247,43 @@ static void bpf_single_lookup_zero(struct bpf_map *map,
 					vpnhide_dbg(
 						"sys_bpf_ret: single zeroing copy_to_user failed\n");
 				}
+			} else if (strncmp(map->name, "iface_stats", 11) == 0 ||
+				   strncmp(map->name, "map_netd_iface_", 15) == 0 ||
+				   strncmp(map->name, "tether_stats", 12) == 0) {
+				u32 ifaceIndex = *(u32 *)kbuf;
+				u32 cover_idx = (u32)atomic_read(&global_cover_ifindex);
+				if (cover_idx && ifaceIndex == cover_idx) {
+					struct vh_stats_value vpn_sum = { 0 };
+					struct vpnhide_active_vpns *vpns;
+
+					rcu_read_lock();
+					vpns = rcu_dereference(global_active_vpns);
+					if (vpns) {
+						int idx;
+						for (idx = 0; idx < vpns->count; idx++) {
+							u32 vpn_idx = vpns->ifindexes[idx];
+							void *map_val = map->ops->map_lookup_elem(map, &vpn_idx);
+							if (map_val) {
+								struct vh_stats_value *sv = (struct vh_stats_value *)map_val;
+								sv_add(&vpn_sum, sv);
+							}
+						}
+					}
+					rcu_read_unlock();
+
+					if (sv_rx_bytes(&vpn_sum) || sv_tx_bytes(&vpn_sum)) {
+						if (copy_from_user(vbuf, usr_val, value_size) == 0) {
+							struct vh_stats_value *sv = (struct vh_stats_value *)vbuf;
+							sv_add(sv, &vpn_sum);
+							if (copy_to_user(usr_val, vbuf, value_size)) {
+								vpnhide_dbg("sys_bpf_ret: single cover update copy_to_user failed\n");
+							} else {
+								vpnhide_dbg("sys_bpf_ret: single cover update for map '%s' success (rx=%llu, tx=%llu)\n",
+									    map->name, sv_rx_bytes(&vpn_sum), sv_tx_bytes(&vpn_sum));
+							}
+						}
+					}
+				}
 			}
 		}
 	}
@@ -3003,24 +3302,13 @@ static void bpf_batch_zero_iface(struct bpf_map *map, void __user *usr_keys,
 
 	for (i = 0; i < count; i++) {
 		u32 ifindex;
-		char vpn_ifname[IFNAMSIZ];
-		struct net_device *dev;
 
 		if (copy_from_user(kbuf, (char __user *)usr_keys + i * key_size,
 				   key_size))
 			continue;
 		ifindex = *(u32 *)kbuf;
 
-		vpn_ifname[0] = '\0';
-		rcu_read_lock();
-		dev = dev_get_by_index_rcu(&init_net, ifindex);
-		if (dev) {
-			strncpy(vpn_ifname, dev->name, IFNAMSIZ - 1);
-			vpn_ifname[IFNAMSIZ - 1] = '\0';
-		}
-		rcu_read_unlock();
-
-		if (is_vpn_ifname(vpn_ifname)) {
+		if (is_active_vpn_ifindex(ifindex)) {
 			if (copy_from_user(vbuf,
 					   (char __user *)usr_vals +
 						   i * value_size,
@@ -3221,10 +3509,13 @@ static struct kretprobe_reg probes[] = {
 	{ &sock_getsockopt_krp, "sock_getsockopt", NULL, false, 12 },
 	{ &sock_common_getsockopt_krp, "sock_common_getsockopt", NULL, false,
 	  12 },
-	{ &socket_connect_krp, "security_socket_connect", NULL, false, -1 },
-	{ &socket_bind_krp, "security_socket_bind", NULL, false, -1 },
-	{ &inet_getname_krp, "inet_getname", NULL, false, -1 },
-	{ &inet6_getname_krp, "inet6_getname", NULL, false, -1 },
+	{ &socket_connect_krp, "__arm64_sys_connect", NULL, false, -1 },
+	{ &socket_bind_krp, "__arm64_sys_bind", NULL, false, -1 },
+	{ &socket_connect_krp, "security_socket_connect", NULL, false, 16 },
+	{ &socket_bind_krp, "security_socket_bind", NULL, false, 17 },
+	{ &sys_getsockname_krp, "__arm64_sys_getsockname", NULL, false, -1 },
+	{ &inet_getname_krp, "inet_getname", NULL, false, 20 },
+	{ &inet6_getname_krp, "inet6_getname", NULL, false, 20 },
 	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false, -1 },
 };
 
@@ -3245,6 +3536,21 @@ static int __init vpnhide_init(void)
 	if (sys_bpf_krp.kp.symbol_name &&
 	    strcmp(sys_bpf_krp.kp.symbol_name, "__arm64_sys_bpf") == 0) {
 		sys_bpf_uses_wrapper = true;
+	}
+	if (socket_connect_krp.kp.symbol_name &&
+	    strcmp(socket_connect_krp.kp.symbol_name,
+		   "__arm64_sys_connect") == 0) {
+		sys_connect_uses_wrapper = true;
+	}
+	if (socket_bind_krp.kp.symbol_name &&
+	    strcmp(socket_bind_krp.kp.symbol_name,
+		   "__arm64_sys_bind") == 0) {
+		sys_bind_uses_wrapper = true;
+	}
+	if (sys_getsockname_krp.kp.symbol_name &&
+	    strcmp(sys_getsockname_krp.kp.symbol_name,
+		   "__arm64_sys_getsockname") == 0) {
+		sys_getsockname_uses_wrapper = true;
 	}
 
 	/* Initialize RCU targets pointers */
@@ -3304,6 +3610,7 @@ static void __exit vpnhide_exit(void)
 {
 	struct vpnhide_targets *t;
 	struct vpnhide_port_targets *t_port;
+	struct vpnhide_active_vpns *vpns;
 	int i;
 
 	for (i = 0; i < ARRAY_SIZE(probes); i++) {
@@ -3337,6 +3644,19 @@ static void __exit vpnhide_exit(void)
 	if (t_port) {
 		synchronize_rcu();
 		kfree(t_port);
+	}
+
+	/* Cleanup RCU active vpns */
+	spin_lock(&active_vpns_lock);
+	vpns = rcu_dereference_protected(
+		global_active_vpns,
+		lockdep_is_held(&active_vpns_lock));
+	rcu_assign_pointer(global_active_vpns, NULL);
+	spin_unlock(&active_vpns_lock);
+
+	if (vpns) {
+		synchronize_rcu();
+		kfree(vpns);
 	}
 
 	misc_deregister(&vpnhide_misc);

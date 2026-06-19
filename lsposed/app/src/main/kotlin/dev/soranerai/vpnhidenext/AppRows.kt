@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.*
+import androidx.compose.ui.res.stringResource
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -82,10 +83,10 @@ internal fun AppRow(
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (installed.kmod) {
-                    ProtectionChip("Native", app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
+                    ProtectionChip(stringResource(R.string.chip_native), app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
                 }
 
-                ProtectionChip("Framework", app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
+                ProtectionChip(stringResource(R.string.chip_framework), app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
             }
         }
     }

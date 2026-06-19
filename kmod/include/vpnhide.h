@@ -89,4 +89,17 @@ struct vpnhide_cover_iface {
 #define VH_SET_COVER_IFACE \
 	_IOW(VH_IOCTL_MAGIC, 0x11, struct vpnhide_cover_iface)
 
+#define MAX_ACTIVE_VPNS 16
+
+struct vpnhide_vpn_ifindexes {
+	int count;
+	__u32 ifindexes[MAX_ACTIVE_VPNS];
+};
+
+#define VH_GET_IFACE_PREFIXES \
+	_IOR(VH_IOCTL_MAGIC, 0x13, struct vpnhide_iface_ioctl_data)
+
+#define VH_SET_VPN_IFINDEXES \
+	_IOW(VH_IOCTL_MAGIC, 0x14, struct vpnhide_vpn_ifindexes)
+
 #endif /* _VPNHIDE_H */

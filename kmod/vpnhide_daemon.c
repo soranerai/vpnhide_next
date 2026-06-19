@@ -142,6 +142,32 @@ static bool has_gateway_route(const struct gateway_list *list,
 	return false;
 }
 
+static bool daemon_is_vpn_ifname(const char *name, const struct vpnhide_iface_ioctl_data *prefixes)
+{
+	/* Built-in patterns */
+	if (strncmp(name, "tun", 3) == 0 ||
+	    strncmp(name, "ppp", 3) == 0 ||
+	    strncmp(name, "wg", 2) == 0 ||
+	    strncmp(name, "tap", 3) == 0 ||
+	    strncmp(name, "ipsec", 5) == 0 ||
+	    strncmp(name, "dummy", 5) == 0 ||
+	    strncmp(name, "pdp", 3) == 0 ||
+	    strncmp(name, "p2p", 3) == 0) {
+		return true;
+	}
+
+	/* Configured prefixes */
+	if (prefixes) {
+		for (int i = 0; i < prefixes->count; i++) {
+			int len = strlen(prefixes->prefixes[i]);
+			if (len > 0 && strncasecmp(name, prefixes->prefixes[i], len) == 0) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
 static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 			    char *last_ipv4, char *last_ipv6)
 {
@@ -151,6 +177,12 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 	int best_score = -1;
 	char new_ipv4[64];
 	char new_ipv6[64];
+	struct vpnhide_iface_ioctl_data prefixes;
+	struct vpnhide_vpn_ifindexes active_vpns;
+
+	memset(&prefixes, 0, sizeof(prefixes));
+	memset(&active_vpns, 0, sizeof(active_vpns));
+	ioctl(fd, VH_GET_IFACE_PREFIXES, &prefixes);
 
 	best_ifname[0] = '\0';
 	strcpy(new_ipv4, "none");
@@ -182,13 +214,20 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 
 		char *name = ifa->ifa_name;
 
-		if (strncmp(name, "tun", 3) == 0 ||
-		    strncmp(name, "ppp", 3) == 0 ||
-		    strncmp(name, "wg", 2) == 0 ||
-		    strncmp(name, "tap", 3) == 0 ||
-		    strncmp(name, "ipsec", 5) == 0 ||
-		    strncmp(name, "dummy", 5) == 0 ||
-		    strncmp(name, "p2p", 3) == 0) {
+		if (daemon_is_vpn_ifname(name, &prefixes)) {
+			unsigned int vpn_idx = if_nametoindex(name);
+			if (vpn_idx > 0) {
+				bool dup = false;
+				for (int i = 0; i < active_vpns.count; i++) {
+					if (active_vpns.ifindexes[i] == vpn_idx) {
+						dup = true;
+						break;
+					}
+				}
+				if (!dup && active_vpns.count < MAX_ACTIVE_VPNS) {
+					active_vpns.ifindexes[active_vpns.count++] = vpn_idx;
+				}
+			}
 			continue;
 		}
 
@@ -218,9 +257,9 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 			} else if (family == AF_INET6) {
 				struct sockaddr_in6 *sa =
 					(struct sockaddr_in6 *)ifa->ifa_addr;
-				if (!IN6_IS_ADDR_LINKLOCAL(&(sa->sin6_addr))) {
-					interfaces[idx].has_ipv6 = true;
-				}
+				if (IN6_IS_ADDR_LINKLOCAL(&(sa->sin6_addr)))
+					continue;
+				interfaces[idx].has_ipv6 = true;
 			}
 		}
 	}
@@ -317,6 +356,9 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 		if (ci.ifindex > 0)
 			ioctl(fd, VH_SET_COVER_IFACE, &ci);
 	}
+
+	/* Send the list of active VPNs to the kernel module */
+	ioctl(fd, VH_SET_VPN_IFINDEXES, &active_vpns);
 }
 
 static unsigned long long get_time_ms(void)

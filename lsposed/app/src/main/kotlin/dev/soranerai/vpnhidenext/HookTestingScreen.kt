@@ -23,218 +23,167 @@ import kotlinx.coroutines.withContext
 
 data class HookInfo(
     val index: Int,
-    val name: String,
-    val symbol: String,
-    val description: String,
+    val nameRes: Int,
+    val symbolRes: Int,
+    val descriptionRes: Int,
 )
-
-private val isRussian =
-    java.util.Locale
-        .getDefault()
-        .language == "ru"
 
 val ALL_HOOKS =
     listOf(
         HookInfo(
             0,
-            "dev_ioctl",
-            "dev_ioctl",
-            if (isRussian) {
-                "Перехватывает общие IOCTL сетевых интерфейсов (например, SIOCGIFFLAGS, SIOCGIFMTU) для скрытия статуса VPN."
-            } else {
-                "Intercepts general interface IOCTLs (e.g., SIOCGIFFLAGS, SIOCGIFMTU) to hide VPN interface states."
-            },
+            R.string.hook_name_dev_ioctl,
+            R.string.hook_symbol_dev_ioctl,
+            R.string.hook_desc_dev_ioctl,
         ),
         HookInfo(
             1,
-            "sock_ioctl",
-            "sock_ioctl",
-            if (isRussian) {
-                "Перехватывает IOCTL сокетов, такие как SIOCGIFCONF, чтобы отфильтровать VPN-интерфейсы при их перечислении."
-            } else {
-                "Intercepts socket-level IOCTLs like SIOCGIFCONF to filter out VPN interfaces during network enumeration."
-            },
+            R.string.hook_name_sock_ioctl,
+            R.string.hook_symbol_sock_ioctl,
+            R.string.hook_desc_sock_ioctl,
         ),
         HookInfo(
             2,
-            "rtnl_fill_ifinfo",
-            "rtnl_fill_ifinfo",
-            if (isRussian) {
-                "Фильтрует VPN-интерфейсы из ответов Netlink на дампы линков (RTM_GETLINK)."
-            } else {
-                "Filters VPN network interfaces out of netlink link-dump (RTM_GETLINK) responses."
-            },
+            R.string.hook_name_rtnl_fill_ifinfo,
+            R.string.hook_symbol_rtnl_fill_ifinfo,
+            R.string.hook_desc_rtnl_fill_ifinfo,
         ),
         HookInfo(
             3,
-            "inet6_fill_ifaddr",
-            "inet6_fill_ifaddr",
-            if (isRussian) {
-                "Фильтрует IPv6-адреса VPN из ответов Netlink на дампы адресов (RTM_GETADDR)."
-            } else {
-                "Filters VPN IPv6 addresses out of netlink address-dump (RTM_GETADDR) responses."
-            },
+            R.string.hook_name_inet6_fill_ifaddr,
+            R.string.hook_symbol_inet6_fill_ifaddr,
+            R.string.hook_desc_inet6_fill_ifaddr,
         ),
         HookInfo(
             4,
-            "inet_fill_ifaddr",
-            "inet_fill_ifaddr",
-            if (isRussian) {
-                "Фильтрует IPv4-адреса VPN из ответов Netlink на дампы адресов (RTM_GETADDR)."
-            } else {
-                "Filters VPN IPv4 addresses out of netlink address-dump (RTM_GETADDR) responses."
-            },
+            R.string.hook_name_inet_fill_ifaddr,
+            R.string.hook_symbol_inet_fill_ifaddr,
+            R.string.hook_desc_inet_fill_ifaddr,
         ),
         HookInfo(
             5,
-            "fib_route_seq_show",
-            "fib_route_seq_show",
-            if (isRussian) {
-                "Фильтрует VPN-маршруты при чтении приложениями таблицы маршрутизации IPv4 в /proc/net/route."
-            } else {
-                "Filters out VPN routes when apps read the IPv4 routing table in /proc/net/route."
-            },
+            R.string.hook_name_fib_route_seq_show,
+            R.string.hook_symbol_fib_route_seq_show,
+            R.string.hook_desc_fib_route_seq_show,
         ),
         HookInfo(
             6,
-            "ipv6_route_seq_show",
-            "ipv6_route_seq_show",
-            if (isRussian) {
-                "Фильтрует VPN-маршруты при чтении приложениями таблицы маршрутизации IPv6 в /proc/net/ipv6_route."
-            } else {
-                "Filters out VPN routes when apps read the IPv6 routing table in /proc/net/ipv6_route."
-            },
+            R.string.hook_name_ipv6_route_seq_show,
+            R.string.hook_symbol_ipv6_route_seq_show,
+            R.string.hook_desc_ipv6_route_seq_show,
         ),
         HookInfo(
             7,
-            "fib_dump_info",
-            "fib_dump_info",
-            if (isRussian) {
-                "Фильтрует VPN-маршруты IPv4 во время дампов таблиц маршрутизации через Netlink."
-            } else {
-                "Filters out IPv4 VPN routes during netlink routing table dumps."
-            },
+            R.string.hook_name_fib_dump_info,
+            R.string.hook_symbol_fib_dump_info,
+            R.string.hook_desc_fib_dump_info,
         ),
         HookInfo(
             8,
-            "fib_nl_fill_rule",
-            "fib_nl_fill_rule",
-            if (isRussian) {
-                "Фильтрует VPN-правила маршрутизации (policy routing) из ответов Netlink на дампы правил (RTM_GETRULE)."
-            } else {
-                "Filters out VPN policy routing rules from netlink rule-dump (RTM_GETRULE) responses."
-            },
+            R.string.hook_name_fib_nl_fill_rule,
+            R.string.hook_symbol_fib_nl_fill_rule,
+            R.string.hook_desc_fib_nl_fill_rule,
         ),
         HookInfo(
             9,
-            "rt6_fill_node",
-            "rt6_fill_node",
-            if (isRussian) {
-                "Фильтрует VPN-маршруты IPv6 из ответов Netlink на дампы маршрутов (RTM_GETROUTE)."
-            } else {
-                "Filters out IPv6 VPN routes from netlink route-dump (RTM_GETROUTE) responses."
-            },
+            R.string.hook_name_rt6_fill_node,
+            R.string.hook_symbol_rt6_fill_node,
+            R.string.hook_desc_rt6_fill_node,
         ),
         HookInfo(
             10,
-            "rt_fill_info",
-            "rt_fill_info",
-            if (isRussian) {
-                "Фильтрует VPN-маршруты IPv4 из ответов Netlink на дампы маршрутов (RTM_GETROUTE)."
-            } else {
-                "Filters out IPv4 VPN routes from netlink route-dump (RTM_GETROUTE) responses."
-            },
+            R.string.hook_name_rt_fill_info,
+            R.string.hook_symbol_rt_fill_info,
+            R.string.hook_desc_rt_fill_info,
         ),
         HookInfo(
             11,
-            "sys_setsockopt",
-            "__arm64_sys_setsockopt",
-            if (isRussian) {
-                "Перехватывает setsockopt для блокировки привязки сокетов к VPN (SO_BINDTODEVICE/IFINDEX), сброса SO_MARK и отключения MTU Discovery."
-            } else {
-                "Intercepts setsockopt calls to deny VPN socket binding (SO_BINDTODEVICE/IFINDEX), override SO_MARK to 0, and spoof MTU discovery."
-            },
+            R.string.hook_name_sys_setsockopt,
+            R.string.hook_symbol_sys_setsockopt,
+            R.string.hook_desc_sys_setsockopt,
         ),
         HookInfo(
             12,
-            "sock_getsockopt",
-            "sk_getsockopt + sock_getsockopt",
-            if (isRussian) {
-                "Перехватывает getsockopt для подмены MTU, MSS (TCP_MAXSEG), MTU Discovery и скрытия привязки сокетов к VPN-интерфейсу."
-            } else {
-                "Intercepts getsockopt calls to spoof MTU, MSS (TCP_MAXSEG), MTU discovery, and hide socket binding to a VPN interface."
-            },
+            R.string.hook_name_sys_getsockopt,
+            R.string.hook_symbol_sys_getsockopt,
+            R.string.hook_desc_sys_getsockopt,
         ),
         HookInfo(
             13,
-            "security_socket_connect",
-            "security_socket_connect",
-            if (isRussian) {
-                "Скрывает порты: блокирует loopback-подключения целевых приложений к управляющим портам VPN-демонов."
-            } else {
-                "Implements Port Hiding by blocking loopback connections to VPN daemon control ports."
-            },
+            R.string.hook_name_sys_connect,
+            R.string.hook_symbol_sys_connect,
+            R.string.hook_desc_sys_connect,
         ),
         HookInfo(
             14,
-            "inet_getname",
-            "inet_getname",
-            if (isRussian) {
-                "Подменяет getsockname для IPv4 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия."
-            } else {
-                "Spoofs getsockname for IPv4 sockets, masking the local VPN interface IP with the cover interface IP."
-            },
+            R.string.hook_name_sys_getsockname_ipv4,
+            R.string.hook_symbol_sys_getsockname_ipv4,
+            R.string.hook_desc_sys_getsockname_ipv4,
         ),
         HookInfo(
             15,
-            "inet6_getname",
-            "inet6_getname",
-            if (isRussian) {
-                "Подменяет getsockname для IPv6 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия."
-            } else {
-                "Spoofs getsockname for IPv6 sockets, masking the local VPN interface IP with the cover interface IP."
-            },
+            R.string.hook_name_sys_getsockname_ipv6,
+            R.string.hook_symbol_sys_getsockname_ipv6,
+            R.string.hook_desc_sys_getsockname_ipv6,
         ),
         HookInfo(
             16,
-            "security_socket_bind",
-            "security_socket_bind",
-            if (isRussian) {
-                "Перехватывает bind() на loopback: перенаправляет порты на случайные свободные порты (0) для обхода проверок занятости."
-            } else {
-                "Intercepts loopback bind() calls: redirects protected ports to random free ephemeral ports (0) to bypass conflict checks."
-            },
+            R.string.hook_name_sys_bind,
+            R.string.hook_symbol_sys_bind,
+            R.string.hook_desc_sys_bind,
         ),
         HookInfo(
             17,
-            "bpf_stats_spoof",
-            "__arm64_sys_bpf",
-            if (isRussian) {
-                "Перехватывает BPF-запросы через sys_bpf, возвращая нулевые счетчики трафика на BPF-картах (iface_stats, tether_stats, stats_map_) для VPN-интерфейсов и целевых UID."
-            } else {
-                "Intercepts BPF map lookups via sys_bpf syscall to return zero traffic counters on stats maps (iface_stats, tether_stats, stats_map_) for VPN interfaces and target UIDs."
-            },
+            R.string.hook_name_bpf_stats_spoof,
+            R.string.hook_symbol_bpf_stats_spoof,
+            R.string.hook_desc_bpf_stats_spoof,
         ),
     )
 
 val ALL_JAVA_HOOKS =
     listOf(
-        HookInfo(0, "LinkProperties", "android.net.LinkProperties", ""),
-        HookInfo(1, "NetworkCapabilities", "android.net.NetworkCapabilities", ""),
-        HookInfo(2, "NetworkInfo", "android.net.NetworkInfo", ""),
-        HookInfo(3, "Network", "android.net.Network", ""),
-        HookInfo(4, "ConnectivityService", "com.android.server.ConnectivityService", ""),
-        HookInfo(5, "PackageManager", "com.android.server.pm.PackageManagerService\$IPackageManagerImpl", ""),
-    )
-
-val JAVA_HOOK_DESCRIPTIONS =
-    mapOf(
-        0 to R.string.hook_desc_link_properties,
-        1 to R.string.hook_desc_network_capabilities,
-        2 to R.string.hook_desc_network_info,
-        3 to R.string.hook_desc_network,
-        4 to R.string.hook_desc_connectivity_service,
-        5 to R.string.hook_desc_package_manager,
+        HookInfo(
+            0,
+            R.string.hook_name_link_properties,
+            R.string.hook_symbol_link_properties,
+            R.string.hook_desc_link_properties,
+        ),
+        HookInfo(
+            1,
+            R.string.hook_name_network_capabilities,
+            R.string.hook_symbol_network_capabilities,
+            R.string.hook_desc_network_capabilities,
+        ),
+        HookInfo(
+            2,
+            R.string.hook_name_network_info,
+            R.string.hook_symbol_network_info,
+            R.string.hook_desc_network_info,
+        ),
+        HookInfo(
+            3,
+            R.string.hook_name_network,
+            R.string.hook_symbol_network,
+            R.string.hook_desc_network,
+        ),
+        HookInfo(
+            4,
+            R.string.hook_name_connectivity_service,
+            R.string.hook_symbol_connectivity_service,
+            R.string.hook_desc_connectivity_service,
+        ),
+        HookInfo(
+            5,
+            R.string.hook_name_package_manager,
+            R.string.hook_symbol_package_manager,
+            R.string.hook_desc_package_manager,
+        ),
+        HookInfo(
+            6,
+            R.string.hook_name_user_manager,
+            R.string.hook_symbol_user_manager,
+            R.string.hook_desc_user_manager,
+        ),
     )
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -354,7 +303,7 @@ fun HookTestingScreen(
                     IconButton(onClick = onBack) {
                         Icon(
                             Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
                 },
@@ -575,11 +524,11 @@ fun HookTestingScreen(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 SuggestionChip(
                                                     onClick = {},
-                                                    label = { Text("Idx ${hook.index}") },
+                                                    label = { Text(stringResource(R.string.hook_testing_idx_format, hook.index)) },
                                                     modifier = Modifier.padding(end = 8.dp),
                                                 )
                                                 Text(
-                                                    text = hook.name,
+                                                    text = stringResource(hook.nameRes),
                                                     style =
                                                         MaterialTheme.typography
                                                             .titleMedium,
@@ -599,7 +548,7 @@ fun HookTestingScreen(
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text(
-                                                text = hook.symbol,
+                                                text = stringResource(hook.symbolRes),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
@@ -616,7 +565,7 @@ fun HookTestingScreen(
                                             )
                                             Spacer(Modifier.height(6.dp))
                                             Text(
-                                                text = hook.description,
+                                                text = stringResource(hook.descriptionRes),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color =
                                                     MaterialTheme.colorScheme.onSurface
@@ -829,11 +778,11 @@ fun HookTestingScreen(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 SuggestionChip(
                                                     onClick = {},
-                                                    label = { Text("Idx ${hook.index}") },
+                                                    label = { Text(stringResource(R.string.hook_testing_idx_format, hook.index)) },
                                                     modifier = Modifier.padding(end = 8.dp),
                                                 )
                                                 Text(
-                                                    text = hook.name,
+                                                    text = stringResource(hook.nameRes),
                                                     style =
                                                         MaterialTheme.typography
                                                             .titleMedium,
@@ -853,7 +802,7 @@ fun HookTestingScreen(
                                             }
                                             Spacer(Modifier.height(4.dp))
                                             Text(
-                                                text = hook.symbol,
+                                                text = stringResource(hook.symbolRes),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontFamily = FontFamily.Monospace,
                                                 fontWeight = FontWeight.Bold,
@@ -870,13 +819,7 @@ fun HookTestingScreen(
                                             )
                                             Spacer(Modifier.height(6.dp))
                                             Text(
-                                                text =
-                                                    stringResource(
-                                                        JAVA_HOOK_DESCRIPTIONS[
-                                                            hook.index,
-                                                        ]
-                                                            ?: R.string.app_name,
-                                                    ),
+                                                text = stringResource(hook.descriptionRes),
                                                 style = MaterialTheme.typography.bodySmall,
                                                 color =
                                                     MaterialTheme.colorScheme.onSurface

@@ -278,12 +278,21 @@ private fun BulkRuleCard(
                         color = MaterialTheme.colorScheme.primary,
                     )
                 }
+                val protoLabel = when (rule.protocol) {
+                    PortProtocol.TCP -> "TCP"
+                    PortProtocol.UDP -> "UDP"
+                    PortProtocol.BOTH -> stringResource(R.string.protocol_both)
+                }
                 Text(
-                    text = if (rule.startPort == rule.endPort) "Port: ${rule.startPort}" else "Range: ${rule.startPort} - ${rule.endPort}",
+                    text = if (rule.startPort == rule.endPort) {
+                        stringResource(R.string.port_rule_port_format, rule.startPort)
+                    } else {
+                        stringResource(R.string.port_rule_range_format, rule.startPort, rule.endPort)
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Text(
-                    text = "${stringResource(R.string.protocol)}: ${rule.protocol}",
+                    text = "${stringResource(R.string.protocol)}: $protoLabel",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
@@ -359,12 +368,17 @@ private fun BulkRuleDialog(
                     Text(stringResource(R.string.protocol), style = MaterialTheme.typography.labelMedium)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         PortProtocol.values().forEachIndexed { index, p ->
+                            val pLabel = when (p) {
+                                PortProtocol.TCP -> "TCP"
+                                PortProtocol.UDP -> "UDP"
+                                PortProtocol.BOTH -> stringResource(R.string.protocol_both)
+                            }
                             SegmentedButton(
                                 selected = protocol == p,
                                 onClick = { protocol = p },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = PortProtocol.values().size),
                             ) {
-                                Text(p.name, fontSize = 10.sp)
+                                Text(pLabel, fontSize = 10.sp)
                             }
                         }
                     }

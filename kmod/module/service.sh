@@ -168,15 +168,7 @@ else
     log -t vpnhide "boot: database or sqlite3 not found, no rules applied yet"
 fi
 
-# Apply autodisable / testing active hooks mask if configured
-AUTODISABLE_FILE="/data/adb/vpnhide_kmod/autodisable_mask.txt"
-if [ -f "$AUTODISABLE_FILE" ] && [ -x "$CTL" ]; then
-    MASK=$(tr -d '\r\n' < "$AUTODISABLE_FILE")
-    if [ -n "$MASK" ]; then
-        log -t vpnhide "boot: applying active hooks mask $MASK"
-        "$CTL" active_hooks "$MASK"
-    fi
-fi
+
 
 DAEMON="$MODDIR/vpnhide-daemon"
 chmod +x "$DAEMON"

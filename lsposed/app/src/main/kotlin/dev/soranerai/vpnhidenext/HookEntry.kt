@@ -779,6 +779,220 @@ class HookEntry : IXposedHookLoadPackage {
         return callerPackages.contains(packageName)
     }
 
+    private fun hookUserManagerService(classLoader: ClassLoader) {
+        val targetClass =
+            try {
+                XposedHelpers.findClass(
+                    "com.android.server.pm.UserManagerService",
+                    classLoader,
+                )
+            } catch (e: Throwable) {
+                HookLog.e("VpnHide: failed to load UserManagerService class: ${e.message}")
+                return
+            }
+
+        fun isManagedProfileInternal(serviceInstance: Any, userId: Int): Boolean {
+            if (userId <= 0) return false
+            val token = Binder.clearCallingIdentity()
+            isInternalCheck.set(true)
+            try {
+                return XposedHelpers.callMethod(serviceInstance, "isManagedProfile", userId) as? Boolean ?: false
+            } catch (t: Throwable) {
+                return false
+            } finally {
+                isInternalCheck.remove()
+                Binder.restoreCallingIdentity(token)
+            }
+        }
+
+        try {
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "isManagedProfile",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
+                        if (!isTargetCaller()) return
+
+                        val userId = param.args.getOrNull(0) as? Int ?: return
+                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                            recordIntercept("UserManager")
+                            param.result = false
+                            HookLog.i("VpnHide: Spoofed isManagedProfile(userId=$userId) to false")
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook isManagedProfile: ${t.message}")
+        }
+
+        try {
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "getUserInfo",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
+                        if (!isTargetCaller()) return
+
+                        val userInfo = param.result ?: return
+                        val userId = XposedHelpers.getIntField(userInfo, "id")
+                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                            recordIntercept("UserManager")
+                            var flags = XposedHelpers.getIntField(userInfo, "flags")
+                            flags = flags and 0x00000020.inv() // FLAG_MANAGED_PROFILE
+                            flags = flags and 0x00001000.inv() // FLAG_PROFILE
+                            XposedHelpers.setIntField(userInfo, "flags", flags)
+                            try {
+                                XposedHelpers.setObjectField(userInfo, "userType", "android.os.usertype.full.SECONDARY")
+                            } catch (_: Throwable) {}
+                            HookLog.i("VpnHide: Spoofed getUserInfo(userId=$userId) flags/userType to hide managed profile")
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getUserInfo: ${t.message}")
+        }
+
+        try {
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "isProfile",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
+                        if (!isTargetCaller()) return
+
+                        val userId = param.args.getOrNull(0) as? Int ?: return
+                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                            recordIntercept("UserManager")
+                            param.result = false
+                            HookLog.i("VpnHide: Spoofed isProfile(userId=$userId) to false")
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook isProfile: ${t.message}")
+        }
+
+        try {
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "getProfiles",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
+                        if (!isTargetCaller()) return
+
+                        val result = param.result as? List<*> ?: return
+                        if (result.isEmpty()) return
+
+                        val callingUid = Binder.getCallingUid()
+                        val targetUid = if (callingUid == 1000) (currentCallbackUid.get() ?: callingUid) else callingUid
+                        val targetUserId = targetUid / 100000
+
+                        val filteredList = result.filter { item ->
+                            if (item == null) return@filter true
+                            val itemId = try {
+                                XposedHelpers.getObjectField(item, "id") as? Int
+                            } catch (_: Throwable) {
+                                null
+                            }
+                            itemId == null || itemId == targetUserId
+                        }
+
+                        if (filteredList.size != result.size) {
+                            recordIntercept("UserManager")
+                            param.result = filteredList
+                            HookLog.i("VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfiles (Original: ${result.size})")
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getProfiles: ${t.message}")
+        }
+
+        try {
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "getProfileIds",
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
+                        if (!isTargetCaller()) return
+
+                        val result = param.result as? IntArray ?: return
+                        if (result.isEmpty()) return
+
+                        val callingUid = Binder.getCallingUid()
+                        val targetUid = if (callingUid == 1000) (currentCallbackUid.get() ?: callingUid) else callingUid
+                        val targetUserId = targetUid / 100000
+
+                        val filteredList = result.filter { itemId ->
+                            itemId == targetUserId
+                        }
+
+                        if (filteredList.size != result.size) {
+                            recordIntercept("UserManager")
+                            param.result = filteredList.toIntArray()
+                            HookLog.i("VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfileIds (Original: ${result.size})")
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getProfileIds: ${t.message}")
+        }
+
+        try {
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "getProfileParent",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
+                        if (!isTargetCaller()) return
+
+                        val userId = param.args.getOrNull(0) as? Int ?: return
+                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                            recordIntercept("UserManager")
+                            param.result = null
+                            HookLog.i("VpnHide: Spoofed getProfileParent(userId=$userId) to null")
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getProfileParent: ${t.message}")
+        }
+
+        try {
+            XposedBridge.hookAllMethods(
+                targetClass,
+                "getProfileParentId",
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
+                        if (!isTargetCaller()) return
+
+                        val userId = param.args.getOrNull(0) as? Int ?: return
+                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                            recordIntercept("UserManager")
+                            param.result = userId
+                            HookLog.i("VpnHide: Spoofed getProfileParentId(userId=$userId) to $userId")
+                        }
+                    }
+                }
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook getProfileParentId: ${t.message}")
+        }
+    }
+
     // Hook and hide any VPN app from the LSPosed targets automatically
     private fun hookPackageManager(classLoader: ClassLoader) {
         try {
@@ -1828,7 +2042,7 @@ class HookEntry : IXposedHookLoadPackage {
             object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val name = param.args.getOrNull(0) as? String ?: return
-                    if (name != "connectivity" && name != "package") return
+                    if (name != "connectivity" && name != "package" && name != "user") return
                     val binder = param.result as? android.os.IBinder ?: return
                     val classLoader =
                         binder.javaClass.classLoader
@@ -1846,6 +2060,7 @@ class HookEntry : IXposedHookLoadPackage {
 
         checkAndHookExistingService("connectivity", smClass)
         checkAndHookExistingService("package", smClass)
+        checkAndHookExistingService("user", smClass)
 
         // Polling loop in background thread to handle early boot timing races
         Thread({
@@ -1853,7 +2068,8 @@ class HookEntry : IXposedHookLoadPackage {
             while (attempts < 20) {
                 val hasConnectivity = hookedServices.any { it.startsWith("connectivity@") }
                 val hasPackage = hookedServices.any { it.startsWith("package@") }
-                if (hasConnectivity && hasPackage) {
+                val hasUser = hookedServices.any { it.startsWith("user@") }
+                if (hasConnectivity && hasPackage && hasUser) {
                     break
                 }
                 try {
@@ -1866,6 +2082,9 @@ class HookEntry : IXposedHookLoadPackage {
                 }
                 if (!hasPackage) {
                     checkAndHookExistingService("package", smClass)
+                }
+                if (!hasUser) {
+                    checkAndHookExistingService("user", smClass)
                 }
                 attempts++
             }
@@ -1917,6 +2136,11 @@ class HookEntry : IXposedHookLoadPackage {
                     "VpnHide: Installing PackageManager hooks via APEX/ServiceManager loader...",
                 )
                 tryHook("PackageManager.queryIntentServices") { hookPackageManager(classLoader) }
+            }
+
+            "user" -> {
+                HookLog.i("VpnHide: Installing UserManager hooks...")
+                tryHook("UserManagerService.profiles") { hookUserManagerService(classLoader) }
             }
         }
     }

@@ -210,6 +210,7 @@
     <string name="hook_desc_network">Перенаправляет запросы к VPN-сети на лучшую доступную физическую сеть для целевых приложений.</string>
     <string name="hook_desc_connectivity_service">Скрывает VPN-сеть из общих списков сетей и блокирует утечку обратных вызовов (callbacks) о VPN.</string>
     <string name="hook_desc_package_manager">Фильтрует VpnServices и скрывает VPN приложения для целевых приложений.</string>
+    <string name="hook_desc_user_manager">Фильтрует профили пользователей и подменяет проверки isManagedProfile для сокрытия рабочего профиля.</string>
 
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Резервное копирование</string>
@@ -223,4 +224,84 @@
     <string name="dashboard_intercept_statistics">Статистика перехватов</string>
     <string name="dashboard_stats_lifetime_hint">Показывается скользящая статистика за последние 30 минут</string>
     <string name="btn_clear">Сбросить</string>
+
+    <!-- Hook Isolation Labels -->
+    <string name="hook_testing_idx_format">Idx %1$d</string>
+
+    <!-- Kernel Hook Descriptions -->
+    <string name="hook_desc_dev_ioctl">Перехватывает общие IOCTL сетевых интерфейсов (например, SIOCGIFFLAGS, SIOCGIFMTU) для скрытия статуса VPN.</string>
+    <string name="hook_desc_sock_ioctl">Перехватывает IOCTL сокетов, такие как SIOCGIFCONF, чтобы отфильтровать VPN-интерфейсы при их перечислении.</string>
+    <string name="hook_desc_rtnl_fill_ifinfo">Фильтрует VPN-интерфейсы из ответов Netlink на дампы линков (RTM_GETLINK).</string>
+    <string name="hook_desc_inet6_fill_ifaddr">Фильтрует IPv6-адреса VPN из ответов Netlink на дампы адресов (RTM_GETADDR).</string>
+    <string name="hook_desc_inet_fill_ifaddr">Фильтрует IPv4-адреса VPN из ответов Netlink на дампы адресов (RTM_GETADDR).</string>
+    <string name="hook_desc_fib_route_seq_show">Фильтрует VPN-маршруты при чтении приложениями таблицы маршрутизации IPv4 в /proc/net/route.</string>
+    <string name="hook_desc_ipv6_route_seq_show">Фильтрует VPN-маршруты при чтении приложениями таблицы маршрутизации IPv6 в /proc/net/ipv6_route.</string>
+    <string name="hook_desc_fib_dump_info">Фильтрует VPN-маршруты IPv4 во время дампов таблиц маршрутизации через Netlink.</string>
+    <string name="hook_desc_fib_nl_fill_rule">Фильтрует VPN-правила маршрутизации (policy routing) из ответов Netlink на дампы правил (RTM_GETRULE).</string>
+    <string name="hook_desc_rt6_fill_node">Фильтрует VPN-маршруты IPv6 из ответов Netlink на дампы маршрутов (RTM_GETROUTE).</string>
+    <string name="hook_desc_rt_fill_info">Фильтрует VPN-маршруты IPv4 из ответов Netlink на дампы маршрутов (RTM_GETROUTE).</string>
+    <string name="hook_desc_sys_setsockopt">Перехватывает setsockopt для блокировки привязки сокетов к VPN (SO_BINDTODEVICE/IFINDEX), сброса SO_MARK и отключения MTU Discovery.</string>
+    <string name="hook_desc_sys_getsockopt">Перехватывает getsockopt для подмены MTU, MSS (TCP_MAXSEG), MTU Discovery и скрытия привязки сокетов к VPN-интерфейсу.</string>
+    <string name="hook_desc_sys_connect">Скрывает порты: блокирует loopback-подключения целевых приложений к управляющим портам VPN-демонов.</string>
+    <string name="hook_desc_sys_getsockname_ipv4">Подменяет getsockname для IPv4 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия.</string>
+    <string name="hook_desc_sys_getsockname_ipv6">Подменяет getsockname для IPv6 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия.</string>
+    <string name="hook_desc_sys_bind">Перехватывает bind() на loopback: перенаправляет порты на случайные свободные порты (0) для обхода проверок занятости.</string>
+    <string name="hook_desc_bpf_stats_spoof">Перехватывает BPF-запросы через sys_bpf, возвращая нулевые счетчики трафика на BPF-картах (iface_stats, tether_stats, stats_map_) для VPN-интерфейсов и целевых UID.</string>
+
+    <!-- Kernel Hook Names -->
+    <string name="hook_name_dev_ioctl">Сетевые интерфейсы (ioctl)</string>
+    <string name="hook_name_sock_ioctl">Список сокетов (ioctl)</string>
+    <string name="hook_name_rtnl_fill_ifinfo">Список интерфейсов (Netlink)</string>
+    <string name="hook_name_inet6_fill_ifaddr">Адреса IPv6 (Netlink)</string>
+    <string name="hook_name_inet_fill_ifaddr">Адреса IPv4 (Netlink)</string>
+    <string name="hook_name_fib_route_seq_show">Таблица маршрутов IPv4 (/proc)</string>
+    <string name="hook_name_ipv6_route_seq_show">Таблица маршрутов IPv6 (/proc)</string>
+    <string name="hook_name_fib_dump_info">Таблица маршрутов IPv4 (Netlink)</string>
+    <string name="hook_name_fib_nl_fill_rule">Правила маршрутизации (Netlink)</string>
+    <string name="hook_name_rt6_fill_node">Таблица маршрутов IPv6 (Netlink)</string>
+    <string name="hook_name_rt_fill_info">Дамп маршрутов IPv4 (Netlink)</string>
+    <string name="hook_name_sys_setsockopt">Параметры сокетов (setsockopt)</string>
+    <string name="hook_name_sys_getsockopt">Параметры сокетов (getsockopt)</string>
+    <string name="hook_name_sys_connect">Подключения loopback (connect)</string>
+    <string name="hook_name_sys_getsockname_ipv4">Локальный адрес IPv4 (getsockname)</string>
+    <string name="hook_name_sys_getsockname_ipv6">Локальный адрес IPv6 (getsockname)</string>
+    <string name="hook_name_sys_bind">Привязка портов loopback (bind)</string>
+    <string name="hook_name_bpf_stats_spoof">Статистика трафика (BPF)</string>
+
+    <!-- Java Hook Names -->
+    <string name="hook_name_link_properties">Свойства соединения</string>
+    <string name="hook_name_network_capabilities">Возможности сети</string>
+    <string name="hook_name_network_info">Состояние сети</string>
+    <string name="hook_name_network">Сетевые запросы</string>
+    <string name="hook_name_connectivity_service">Список активных сетей</string>
+    <string name="hook_name_package_manager">Сокрытие VPN-приложений</string>
+    <string name="hook_name_user_manager">Сокрытие рабочего профиля</string>
+
+    <!-- Intercepts Statistics Dashboard -->
+    <string name="dashboard_stats_empty_title">Перехваты отсутствуют</string>
+    <string name="dashboard_stats_empty_desc">Активный VPN-трафик от целевых приложений будет отслеживаться, перехватываться и записываться здесь в реальном времени.</string>
+    <string name="dashboard_stats_framework_title">Перехваты Framework</string>
+    <string name="dashboard_stats_native_title">Перехваты Native</string>
+
+    <!-- Vector Labels -->
+    <string name="vector_label_ioctl">ioctl / SIOCGIF</string>
+    <string name="vector_label_netlink">netlink RTNETLINK</string>
+    <string name="vector_label_connect">Блокировка Loopback</string>
+    <string name="vector_label_getname">Спуфинг getsockname</string>
+
+    <!-- Port Rules Screen -->
+    <string name="ports_mass_rules_title">Массовые правила (глобальные)</string>
+    <string name="ports_local_rules_title">Локальные правила</string>
+    <string name="btn_save_back">Сохранить и выйти</string>
+    <string name="port_rule_port_format">Порт: %1$d</string>
+    <string name="port_rule_range_format">Диапазон: %1$d - %2$d</string>
+    <string name="port_rule_protocol_format">Протокол: %1$s</string>
+    <string name="ports_new_rule_title">Новое правило портов</string>
+    <string name="ports_edit_rule_title">Редактировать правило</string>
+    <string name="ports_label_placeholder">например, Мой Сервер</string>
+    <string name="ports_default_range_hint">По умолчанию: все порты (1-65535)</string>
+    <string name="ports_redundant_rules_removed_warning">%1$d избыточных правил будет удалено</string>
+    <string name="chip_native">Native</string>
+    <string name="chip_framework">Framework</string>
+    <string name="protocol_both">Оба</string>
 </resources>
