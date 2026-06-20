@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.11.0
+
+### Added
+- Added UserManager hooks to hide work profiles from targeted apps
+- Implement RCU-based active VPN interface caching inside the kernel module driven by the daemon, eliminating runtime string matching and netdev traversals on hot BPF paths
+
+### Changed
+- Migrated remaining hardcoded UI strings to localized resources
+- Migrated socket bind, connect, and getsockname hooks to top-level syscall wrappers to prevent bypasses via inlining
+- Optimize all kretprobe hooks to return 1 early from entry handlers for non-target UIDs and non-matching requests, skipping return handler execution and releasing kretprobe resources instantly
+- Optimize hot-path locking and memory copying (RCU for spoof IP, stack arrays for BPF, get/put_user for socket options)
+- Optimize __sys_bpf hot paths by adding fast-path filter checks and rapid switch matching
+- Optimized kretprobe hooks by skipping return handlers for non-target processes, significantly reducing CPU overhead
+- Remove dev_get_by_index_rcu lookups from setsockopt and getsockopt hooks, using active VPN cache for SO_BINDTOIFINDEX instead
+- Updated hook card titles in Hook Isolation screen to show user-friendly names instead of technical identifiers
+- Updated Hook Isolation screen to match recent kernel-level hook refactorings and migrated all UI strings to localized resources
+- Removed all /data/system config files, replacing file observers with direct /dev/vpnhide_ctrl kernel blocking reads.
+
+### Fixed
+- Add sock_common_getsockopt fallback hook to properly spoof TCP_MAXSEG when syscall hook is disabled
+- Fix BPF map laundering instability for single lookup queries
+
+### Removed
+- Removed early-boot kernel crash detection and automatic hook mitigation logic
+
 ## v1.10.1
 
 ### Changed

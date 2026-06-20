@@ -1,6 +1,91 @@
 {
   "history": [
     {
+      "version": "1.11.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Added UserManager hooks to hide work profiles from targeted apps",
+              "ru": "Добавлены хуки UserManager для сокрытия рабочего профиля от целевых приложений"
+            },
+            {
+              "en": "Implement RCU-based active VPN interface caching inside the kernel module driven by the daemon, eliminating runtime string matching and netdev traversals on hot BPF paths",
+              "ru": "Реализация RCU-кэширования активных VPN-интерфейсов в модуле ядра под управлением демона, устраняющая сравнения строк и обходы сетевых устройств на горячих путях BPF"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Migrated remaining hardcoded UI strings to localized resources",
+              "ru": "Перенесены оставшиеся жестко заданные строки интерфейса в локализованные ресурсы"
+            },
+            {
+              "en": "Migrated socket bind, connect, and getsockname hooks to top-level syscall wrappers to prevent bypasses via inlining",
+              "ru": "Хуки bind, connect и getsockname перенесены на уровень системных вызовов для предотвращения обхода через инлайнинг"
+            },
+            {
+              "en": "Optimize all kretprobe hooks to return 1 early from entry handlers for non-target UIDs and non-matching requests, skipping return handler execution and releasing kretprobe resources instantly",
+              "ru": "Оптимизация всех хуков kretprobe для быстрого возврата 1 из входных обработчиков для нецелевых процессов и несовпадающих запросов, предотвращая вызов обработчиков возврата и мгновенно освобождая ресурсы kretprobe"
+            },
+            {
+              "en": "Optimize hot-path locking and memory copying (RCU for spoof IP, stack arrays for BPF, get/put_user for socket options)",
+              "ru": "Оптимизация блокировок и копирований на горячих путях (RCU для IP-спуфинга, стековые буферы для BPF, get/put_user для сокет-опций)"
+            },
+            {
+              "en": "Optimize __sys_bpf hot paths by adding fast-path filter checks and rapid switch matching",
+              "ru": "Оптимизация горячих путей __sys_bpf с помощью быстрых проверок фильтрации и быстрого сопоставления через switch"
+            },
+            {
+              "en": "Optimized kretprobe hooks by skipping return handlers for non-target processes, significantly reducing CPU overhead",
+              "ru": "Оптимизированы kretprobe хуки за счет пропуска обработчиков возврата для нецелевых процессов, что значительно снижает нагрузку на CPU"
+            },
+            {
+              "en": "Remove dev_get_by_index_rcu lookups from setsockopt and getsockopt hooks, using active VPN cache for SO_BINDTOIFINDEX instead",
+              "ru": "Удаление вызовов dev_get_by_index_rcu из хуков setsockopt и getsockopt, использование кэша активных VPN для SO_BINDTOIFINDEX"
+            },
+            {
+              "en": "Updated hook card titles in Hook Isolation screen to show user-friendly names instead of technical identifiers",
+              "ru": "Обновлены заголовки карточек хуков на экране изоляции для отображения понятных названий вместо технических идентификаторов"
+            },
+            {
+              "en": "Updated Hook Isolation screen to match recent kernel-level hook refactorings and migrated all UI strings to localized resources",
+              "ru": "Экран изоляции хуков обновлен под последние изменения в модуле ядра, все строки интерфейса перенесены в локализованные ресурсы"
+            },
+            {
+              "en": "Removed all /data/system config files, replacing file observers with direct /dev/vpnhide_ctrl kernel blocking reads.",
+              "ru": "Удалена зависимость от файлов конфигурации в /data/system, файловые наблюдатели заменены на прямое блокирующее чтение из ядра через /dev/vpnhide_ctrl."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Add sock_common_getsockopt fallback hook to properly spoof TCP_MAXSEG when syscall hook is disabled",
+              "ru": "Добавлен хук fallback sock_common_getsockopt для корректного спуфинга TCP_MAXSEG при отключенном хуке системного вызова"
+            },
+            {
+              "en": "Fix BPF map laundering instability for single lookup queries",
+              "ru": "Исправление нестабильности лаундеринга BPF карт при одиночных запросах"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Removed early-boot kernel crash detection and automatic hook mitigation logic",
+              "ru": "Удалена логика раннего детектирования крашей ядра и автоматического отключения хуков"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.10.1",
       "sections": [
         {
