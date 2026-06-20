@@ -202,23 +202,3 @@ internal fun buildKmodPortRulesApplyCommand(rules: Map<Int, List<PortRule>>): St
         append("[ -n \"\$ARGS\" ] && $KMOD_CTL port_rules \$ARGS; fi")
     }
 }
-
-internal fun buildLsposedApplyCommand(context: Context): String {
-    val dbFile = context.getDatabasePath("vpnhide_database").absolutePath
-    val publicDir = "/data/system/vpnhide"
-    val publicDb = "$publicDir/vpnhide_config.db"
-
-    // We copy the database and its WAL/SHM files to /data/system/vpnhide/
-    // so system_server can read them without SELinux issues.
-    return buildString {
-        append("mkdir -p $publicDir && chmod 755 $publicDir && chown system:system $publicDir")
-        append(" ; rm -f $publicDb*")
-        // We use the sqlite3 binary if available, or fall back to a simple cp if not.
-        append(" ; cp $dbFile $publicDb")
-        append(" ; [ -f $dbFile-wal ] && cp $dbFile-wal $publicDb-wal || true")
-        append(" ; [ -f $dbFile-shm ] && cp $dbFile-shm $publicDb-shm || true")
-        append(" ; chmod 644 $publicDb*")
-        append(" ; chown system:system $publicDb*")
-        append(" ; chcon u:object_r:system_data_file:s0 $publicDb* 2>/dev/null || true")
-    }
-}
