@@ -100,7 +100,7 @@ apply_all_rules_from_db() {
         pm_list="$(pm list packages -U --user all 2>/dev/null)"
         if [ -n "$pm_list" ]; then
             local apps
-            apps="$($SQLITE "$DB" "SELECT packageName, userId FROM app_protection" 2>/dev/null)"
+            apps="$($SQLITE "$DB" "SELECT packageName, userId FROM app_protection WHERE userId is null" 2>/dev/null)"
             for app_row in $apps; do
                 local pkg
                 local user
