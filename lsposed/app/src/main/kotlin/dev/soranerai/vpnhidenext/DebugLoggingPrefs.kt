@@ -1,6 +1,9 @@
 package dev.soranerai.vpnhidenext
 
 import android.content.Context
+import android.util.Log
+import dev.soranerai.vpnhidenext.db.AppDatabase
+import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 
 /**
  * Persisted "debug logging" preference and its propagation to the
@@ -14,31 +17,28 @@ import android.content.Context
  *    service.sh` at boot so the persistent toggle survives reboots
  *    even when the app isn't opened)
  */
-private const val PREFS_NAME = "vpnhide_prefs"
-private const val KEY_DEBUG_LOGGING = "debug_logging"
-
 internal const val SS_DEBUG_LOGGING_FILE = "/data/system/vpnhide_debug_logging"
 
 /** Default is OFF — stealth-first matches the project's anti-detection stance. */
-internal fun isEnabledInPrefs(context: Context): Boolean =
-    context
-        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .getBoolean(KEY_DEBUG_LOGGING, false)
+internal suspend fun isEnabledInPrefs(context: Context): Boolean {
+    val db = AppDatabase.getInstance(context)
+    return db.globalConfigDao().getConfig()?.debugLogging == 1
+}
 
 /**
  * Flip the persisted preference and propagate it to every sink. Runs
  * SU commands, so callers should invoke from a background dispatcher.
  * Use this for the user-facing toggle in Diagnostics.
  */
-internal fun setDebugLoggingEnabled(
+internal suspend fun setDebugLoggingEnabled(
     context: Context,
     enabled: Boolean,
 ) {
-    context
-        .getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        .edit()
-        .putBoolean(KEY_DEBUG_LOGGING, enabled)
-        .apply()
+    Log.d("VpnHide", "setDebugLoggingEnabled: enabled=$enabled")
+    val db = AppDatabase.getInstance(context)
+    val dao = db.globalConfigDao()
+    val current = dao.getConfig() ?: DbGlobalConfig()
+    dao.insertConfig(current.copy(debugLogging = if (enabled) 1 else 0))
     applyDebugLoggingRuntime(enabled)
 }
 
@@ -57,25 +57,8 @@ internal fun applyDebugLoggingRuntime(enabled: Boolean) {
 
 private fun writeDebugFlagFiles(enabled: Boolean) {
     val value = if (enabled) "1" else "0"
-    // Independent writes batched into one su invocation to keep the
-    // toggle UI snappy — each round-trip is ~50-100ms from Kotlin.
-    // Sinks fail silently when the corresponding component isn't
-    // installed / loaded (kmod /proc node
-    // absent), which is the desired behavior: the flag has no target.
-    //
-    //   1. system_server hook file: /data/system, labelled
-    //      system_data_file so system_server (and nothing else) can
-    //      read it. `chcon || true` so devices without chcon still
-    //      end up with a working file at the kernel-default label.
-    //   2. Kernel module /proc toggle: in-kernel volatile, per-boot.
-    //      service.sh re-seeds it at every boot from SS_DEBUG_LOGGING_FILE,
-    //      so a persistent ON survives reboots without the app needing
-    //      to open.
     suExec(
-        "echo '$value' > $SS_DEBUG_LOGGING_FILE" +
-            " && chmod 644 $SS_DEBUG_LOGGING_FILE" +
-            " && chcon u:object_r:system_data_file:s0 $SS_DEBUG_LOGGING_FILE 2>/dev/null; " +
-            "[ -c $DEV_NODE ] && $KMOD_CTL debug $value; " +
+        "[ -c $DEV_NODE ] && $KMOD_CTL debug $value; " +
             "true",
     )
 }

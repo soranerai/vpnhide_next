@@ -4,6 +4,7 @@ import android.content.ContentValues
 import android.content.Context
 import android.database.Cursor
 import android.database.sqlite.SQLiteDatabase
+import android.util.Log
 import dev.soranerai.vpnhidenext.PortProtocol
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -77,7 +78,7 @@ internal interface IfacePrefixDao {
 internal class AppDatabase private constructor(
     context: Context,
 ) {
-    private val helper = DbHelper(context.applicationContext)
+    private val helper = DbHelper(context)
 
     val writableDatabase: SQLiteDatabase
         get() = helper.writableDatabase
@@ -106,8 +107,8 @@ internal class AppDatabase private constructor(
         db.delete("iface_prefixes", null, null)
         db.delete("global_config", null, null)
         db.execSQL(
-            "INSERT OR IGNORE INTO global_config (id, kernelHookMask, javaHookMask) " +
-                "VALUES ('default', 4294967295, 4294967295)",
+            "INSERT OR IGNORE INTO global_config (id, kernelHookMask, javaHookMask, debugLogging) " +
+                "VALUES ('default', 4294967295, 4294967295, 0)",
         )
         DbNotifier.notifyChanged("app_protection")
         DbNotifier.notifyChanged("port_rules")
@@ -476,6 +477,7 @@ internal class AppDatabase private constructor(
                             put("id", config.id)
                             put("kernelHookMask", config.kernelHookMask)
                             put("javaHookMask", config.javaHookMask)
+                            put("debugLogging", config.debugLogging)
                         }
                     writableDatabase.insertWithOnConflict(
                         "global_config",
@@ -494,7 +496,21 @@ internal class AppDatabase private constructor(
 
         fun getInstance(context: Context): AppDatabase =
             instance ?: synchronized(this) {
-                instance ?: AppDatabase(context).also { instance = it }
+                if (instance == null) {
+                    val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
+                    if (!context.isDeviceProtectedStorage) {
+                        val ceDbFile = context.getDatabasePath(DbHelper.DATABASE_NAME)
+                        if (ceDbFile.exists()) {
+                            try {
+                                deContext.moveDatabaseFrom(context, DbHelper.DATABASE_NAME)
+                            } catch (e: Exception) {
+                                Log.e("VpnHideDb", "Failed to move database to device protected storage: ${e.message}", e)
+                            }
+                        }
+                    }
+                    instance = AppDatabase(deContext)
+                }
+                instance!!
             }
     }
 }
@@ -591,10 +607,12 @@ private fun Cursor.toDbGlobalConfig(): DbGlobalConfig {
     val idIdx = getColumnIndexOrThrow("id")
     val kMaskIdx = getColumnIndexOrThrow("kernelHookMask")
     val jMaskIdx = getColumnIndexOrThrow("javaHookMask")
+    val debugLoggingIdx = getColumnIndexOrThrow("debugLogging")
 
     return DbGlobalConfig(
         id = getString(idIdx),
         kernelHookMask = getLong(kMaskIdx),
         javaHookMask = getLong(jMaskIdx),
+        debugLogging = getInt(debugLoggingIdx),
     )
 }

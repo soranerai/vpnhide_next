@@ -242,6 +242,13 @@ struct vpnhide_port_targets {
 static struct vpnhide_targets __rcu *global_targets;
 static DEFINE_SPINLOCK(targets_update_lock);
 
+static struct vpnhide_targets __rcu *global_lsposed_targets;
+static DEFINE_SPINLOCK(lsposed_targets_update_lock);
+
+static DECLARE_WAIT_QUEUE_HEAD(vpnhide_config_wait);
+static atomic_t vpnhide_config_generation = ATOMIC_INIT(1);
+static unsigned int java_hooks_mask = 0xFFFFFFFF;
+
 static struct vpnhide_port_targets __rcu *global_port_targets;
 static DEFINE_SPINLOCK(port_targets_update_lock);
 
@@ -2260,7 +2267,203 @@ static int update_targets(uid_t *uids, int count)
 	}
 
 	vpnhide_dbg("Normal targets updated: %d UIDs\n", count);
+	atomic_inc(&vpnhide_config_generation);
+	wake_up_interruptible(&vpnhide_config_wait);
 	return 0;
+}
+
+static int update_lsposed_targets(uid_t *uids, int count)
+{
+	struct vpnhide_targets *new_t, *old_t;
+
+	new_t = kzalloc(sizeof(*new_t), GFP_KERNEL);
+	if (!new_t)
+		return -ENOMEM;
+
+	new_t->count = count;
+	if (count > 0)
+		memcpy(new_t->uids, uids, count * sizeof(uid_t));
+
+	spin_lock(&lsposed_targets_update_lock);
+	old_t = rcu_dereference_protected(
+		global_lsposed_targets,
+		lockdep_is_held(&lsposed_targets_update_lock));
+	rcu_assign_pointer(global_lsposed_targets, new_t);
+	spin_unlock(&lsposed_targets_update_lock);
+
+	if (old_t) {
+		synchronize_rcu();
+		kfree(old_t);
+	}
+
+	vpnhide_dbg("LSPosed targets updated: %d UIDs\n", count);
+	atomic_inc(&vpnhide_config_generation);
+	wake_up_interruptible(&vpnhide_config_wait);
+	return 0;
+}
+
+static char java_stats_buf[4096];
+static DEFINE_MUTEX(java_stats_lock);
+static char java_status_buf[256];
+static DEFINE_MUTEX(java_status_lock);
+
+struct vpnhide_dev_reader {
+	unsigned long generation;
+	char *buf;
+	size_t buf_len;
+	size_t read_pos;
+};
+
+static int vpnhide_dev_open(struct inode *inode, struct file *file)
+{
+	struct vpnhide_dev_reader *reader;
+
+	reader = kzalloc(sizeof(*reader), GFP_KERNEL);
+	if (!reader)
+		return -ENOMEM;
+
+	file->private_data = reader;
+	return 0;
+}
+
+static int vpnhide_dev_release(struct inode *inode, struct file *file)
+{
+	struct vpnhide_dev_reader *reader = file->private_data;
+
+	if (reader) {
+		kvfree(reader->buf);
+		kfree(reader);
+	}
+	return 0;
+}
+
+static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
+				size_t count, loff_t *ppos)
+{
+	struct vpnhide_dev_reader *reader = file->private_data;
+
+	if (!reader)
+		return -EINVAL;
+
+	if (reader->read_pos >= reader->buf_len) {
+		unsigned long gen =
+			(unsigned long)atomic_read(&vpnhide_config_generation);
+		if (reader->generation >= gen) {
+			if (file->f_flags & O_NONBLOCK)
+				return -EAGAIN;
+			if (wait_event_interruptible(
+				    vpnhide_config_wait,
+				    reader->generation <
+					    (unsigned long)atomic_read(
+						    &vpnhide_config_generation)))
+				return -ERESTARTSYS;
+		}
+
+		kvfree(reader->buf);
+		/* Allocate a large buffer (64KB) via kvmalloc to safely handle thousands of targets. 
+		 * Uses scnprintf instead of snprintf to prevent buffer overflow/underflow. */
+		reader->buf = kvmalloc(65536, GFP_KERNEL);
+		if (!reader->buf)
+			return -ENOMEM;
+
+		{
+			int offset = 0;
+			struct vpnhide_targets *lt;
+			struct vpnhide_iface_prefixes *ip;
+			int i;
+
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset,
+					    "java_hook_mask: %u\n",
+					    READ_ONCE(java_hooks_mask));
+
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset,
+					    "debug_enabled: %d\n",
+					    READ_ONCE(debug_enabled));
+
+			rcu_read_lock();
+			lt = rcu_dereference(global_lsposed_targets);
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset, "lsposed_targets:");
+			if (lt) {
+				for (i = 0; i < lt->count; i++) {
+					offset +=
+						scnprintf(reader->buf + offset,
+							  65536 - offset, " %u",
+							  lt->uids[i]);
+				}
+			}
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset, "\n");
+
+			ip = rcu_dereference(global_iface_prefixes);
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset, "iface_prefixes:");
+			if (ip) {
+				for (i = 0; i < ip->count; i++) {
+					offset +=
+						scnprintf(reader->buf + offset,
+							  65536 - offset, " %s",
+							  ip->prefixes[i]);
+				}
+			}
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset, "\n\n");
+			rcu_read_unlock();
+
+			reader->buf_len = offset;
+		}
+
+		reader->generation =
+			(unsigned long)atomic_read(&vpnhide_config_generation);
+		reader->read_pos = 0;
+	}
+
+	{
+		size_t to_copy = min(count, reader->buf_len - reader->read_pos);
+		if (copy_to_user(buf, reader->buf + reader->read_pos, to_copy))
+			return -EFAULT;
+		reader->read_pos += to_copy;
+		return to_copy;
+	}
+}
+
+static ssize_t vpnhide_dev_write(struct file *file, const char __user *buf,
+				 size_t count, loff_t *ppos)
+{
+	char *kbuf;
+	if (count > 4096)
+		return -EINVAL;
+
+	kbuf = kmalloc(count + 1, GFP_KERNEL);
+	if (!kbuf)
+		return -ENOMEM;
+
+	if (copy_from_user(kbuf, buf, count)) {
+		kfree(kbuf);
+		return -EFAULT;
+	}
+	kbuf[count] = '\0';
+
+	if (strncmp(kbuf, "stats:", 6) == 0) {
+		mutex_lock(&java_stats_lock);
+		strncpy(java_stats_buf, kbuf + 6, sizeof(java_stats_buf) - 1);
+		java_stats_buf[sizeof(java_stats_buf) - 1] = '\0';
+		mutex_unlock(&java_stats_lock);
+	} else if (strncmp(kbuf, "status:", 7) == 0) {
+		mutex_lock(&java_status_lock);
+		strncpy(java_status_buf, kbuf + 7, sizeof(java_status_buf) - 1);
+		java_status_buf[sizeof(java_status_buf) - 1] = '\0';
+		mutex_unlock(&java_status_lock);
+	} else if (strcmp(kbuf, "clear_stats") == 0) {
+		mutex_lock(&java_stats_lock);
+		java_stats_buf[0] = '\0';
+		mutex_unlock(&java_stats_lock);
+	}
+
+	kfree(kbuf);
+	return count;
 }
 
 static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
@@ -2274,6 +2477,7 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 	switch (cmd) {
 	case VH_SET_TARGETS:
 	case VH_SET_PORT_TARGETS:
+	case VH_SET_LSPOSED_TARGETS:
 		kdata = kmalloc(sizeof(*kdata), GFP_KERNEL);
 		if (!kdata)
 			return -ENOMEM;
@@ -2290,6 +2494,8 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 
 		if (cmd == VH_SET_TARGETS)
 			ret = update_targets(kdata->uids, kdata->count);
+		else if (cmd == VH_SET_LSPOSED_TARGETS)
+			ret = update_lsposed_targets(kdata->uids, kdata->count);
 		else {
 			struct vpnhide_uid_port_rules *rules;
 			rules = kvmalloc_array(kdata->count, sizeof(*rules),
@@ -2314,7 +2520,8 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		kfree(kdata);
 		break;
 
-	case VH_GET_TARGETS: {
+	case VH_GET_TARGETS:
+	case VH_GET_LSPOSED_TARGETS: {
 		struct vpnhide_targets *t;
 		struct vpnhide_ioctl_data *kdata;
 
@@ -2323,7 +2530,10 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 			return -ENOMEM;
 
 		rcu_read_lock();
-		t = rcu_dereference(global_targets);
+		if (cmd == VH_GET_TARGETS)
+			t = rcu_dereference(global_targets);
+		else
+			t = rcu_dereference(global_lsposed_targets);
 		if (t) {
 			kdata->count = t->count;
 			memcpy(kdata->uids, t->uids, sizeof(t->uids));
@@ -2409,9 +2619,27 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		}
 
 		kfree(idata);
+		atomic_inc(&vpnhide_config_generation);
+		wake_up_interruptible(&vpnhide_config_wait);
 		ret = 0;
 		break;
 	}
+
+	case VH_SET_JAVA_HOOK_MASK:
+		if (get_user(val, (unsigned int __user *)arg))
+			return -EFAULT;
+		WRITE_ONCE(java_hooks_mask, val);
+		atomic_inc(&vpnhide_config_generation);
+		wake_up_interruptible(&vpnhide_config_wait);
+		ret = 0;
+		break;
+
+	case VH_GET_JAVA_HOOK_MASK:
+		val = READ_ONCE(java_hooks_mask);
+		if (put_user(val, (unsigned int __user *)arg))
+			return -EFAULT;
+		ret = 0;
+		break;
 
 	case VH_SET_SPOOF_IP: {
 		struct vpnhide_spoof_ip sip;
@@ -2586,6 +2814,30 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		break;
 	}
 
+	case VH_GET_JAVA_STATS: {
+		mutex_lock(&java_stats_lock);
+		if (copy_to_user((void __user *)arg, java_stats_buf,
+				 sizeof(java_stats_buf))) {
+			mutex_unlock(&java_stats_lock);
+			return -EFAULT;
+		}
+		mutex_unlock(&java_stats_lock);
+		ret = 0;
+		break;
+	}
+
+	case VH_GET_HOOK_STATUS: {
+		mutex_lock(&java_status_lock);
+		if (copy_to_user((void __user *)arg, java_status_buf,
+				 sizeof(java_status_buf))) {
+			mutex_unlock(&java_status_lock);
+			return -EFAULT;
+		}
+		mutex_unlock(&java_status_lock);
+		ret = 0;
+		break;
+	}
+
 	default:
 		return -ENOIOCTLCMD;
 	}
@@ -2601,6 +2853,10 @@ static long vpnhide_dev_ioctl(struct file *file, unsigned int cmd,
 
 static const struct file_operations vpnhide_fops = {
 	.owner = THIS_MODULE,
+	.open = vpnhide_dev_open,
+	.release = vpnhide_dev_release,
+	.read = vpnhide_dev_read,
+	.write = vpnhide_dev_write,
 	.unlocked_ioctl = vpnhide_dev_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl = vpnhide_dev_ioctl,
@@ -3974,6 +4230,22 @@ static void __exit vpnhide_exit(void)
 	if (t) {
 		synchronize_rcu();
 		kfree(t);
+	}
+
+	/* Cleanup RCU LSPosed targets */
+	{
+		struct vpnhide_targets *t_lsposed;
+		spin_lock(&lsposed_targets_update_lock);
+		t_lsposed = rcu_dereference_protected(
+			global_lsposed_targets,
+			lockdep_is_held(&lsposed_targets_update_lock));
+		rcu_assign_pointer(global_lsposed_targets, NULL);
+		spin_unlock(&lsposed_targets_update_lock);
+
+		if (t_lsposed) {
+			synchronize_rcu();
+			kfree(t_lsposed);
+		}
 	}
 
 	/* Cleanup RCU port targets */

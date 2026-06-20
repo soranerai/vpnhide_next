@@ -817,7 +817,7 @@ internal suspend fun loadDashboardState(
     )
 
     // lsposed hook status
-    val (_, hookStatusRaw) = suExec("cat ${HookEntry.HOOK_STATUS_FILE} 2>/dev/null || true")
+    val (_, hookStatusRaw) = suExec("$KMOD_CTL hook_status 2>/dev/null || true")
     val hookProps = parseProps(hookStatusRaw)
     val hookVersion = hookProps["version"]
     val hookBootId = hookProps["boot_id"]
@@ -984,12 +984,8 @@ internal suspend fun loadDashboardState(
     // ── Warnings: suboptimal-but-working setups ──
 
     // W3: user has debug logging turned on — VPNHide Next is writing verbose lines
-    // to logcat that a forensic reader with root can see. The flag file is
-    // written by the Diagnostics → Debug logging toggle; absent file ⇒
-    // default off ⇒ no warning.
-    val (debugEnabledExit, debugEnabledRaw) =
-        suExec("cat /data/system/vpnhide_debug_logging 2>/dev/null")
-    if (debugEnabledExit == 0 && debugEnabledRaw.trim() == "1") {
+    // to logcat that a forensic reader with root can see.
+    if (isEnabledInPrefs(context)) {
         warn(res.getString(R.string.dashboard_issue_debug_logging_on))
     }
 
@@ -1195,11 +1191,8 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
 
     val script =
         """
-        echo 1 > /data/system/vpnhide/vpnhide_hook_stats_req 2>/dev/null
-        sleep 1.1
-        echo "framework_stats=${'$'}(cat /data/system/vpnhide_hook_stats.txt 2>/dev/null | base64 | tr -d '\n')"
-        rm -f /data/system/vpnhide_hook_stats.txt 2>/dev/null
         if [ -x $KMOD_CTL ] && [ -c $DEV_NODE ]; then
+          echo "framework_stats=${'$'}($KMOD_CTL java_stats 2>/dev/null | base64 | tr -d '\n')"
           echo "native_stats=${'$'}($KMOD_CTL stats 2>/dev/null | base64 | tr -d '\n')"
         fi
         """.trimIndent()
@@ -1288,7 +1281,7 @@ internal fun resetInterceptStats(
     @Suppress("UNUSED_PARAMETER") context: android.content.Context,
 ) {
     // 1. Clear framework hook stats
-    suExec("echo 'clear' > /data/system/vpnhide/vpnhide_hook_stats_req 2>/dev/null")
+    suExec("$KMOD_CTL java_stats clear 2>/dev/null")
 
     // 2. Clear native kmod stats
     suExec("$KMOD_CTL stats clear 2>/dev/null")

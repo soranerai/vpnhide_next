@@ -41,6 +41,18 @@ class HookEntry : IXposedHookLoadPackage {
     // ThreadLocal context to track the target UID during system_server push callbacks
     private val currentCallbackUid = ThreadLocal<Int>()
 
+    // ThreadLocal stack to track calling UIDs across Binder.clearCallingIdentity / restoreCallingIdentity
+    private val callingUidStack = ThreadLocal.withInitial { ArrayList<Int>() }
+
+    private fun getInheritedCallingUid(): Int? {
+        val stack = callingUidStack.get()
+        if (stack != null && stack.isNotEmpty()) {
+            val uid = stack[stack.size - 1]
+            if (uid != 1000) return uid
+        }
+        return null
+    }
+
     @Volatile private var cachedJavaHooksMask: UInt? = null
 
     override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
@@ -73,65 +85,7 @@ class HookEntry : IXposedHookLoadPackage {
         val appStats =
             hookStats.computeIfAbsent(targetUid) { java.util.concurrent.ConcurrentHashMap() }
         appStats.computeIfAbsent(hookName) { RollingCounter() }.increment()
-    }
-
-    /**
-     * Dumps the in-memory hookStats map to STATS_FILE exactly once. Called only when the manager
-     * app signals via STATS_REQ_FILE. No continuous disk I/O — all stats live in the
-     * ConcurrentHashMap.
-     */
-    private fun dumpHookStats() {
-        try {
-            val sb = java.lang.StringBuilder()
-            for ((uid, appStats) in hookStats) {
-                for ((hook, rollingCounter) in appStats) {
-                    val count = rollingCounter.getSum()
-                    if (count > 0) {
-                        sb
-                            .append(uid)
-                            .append(';')
-                            .append(hook)
-                            .append(';')
-                            .append(count)
-                            .append('\n')
-                    }
-                }
-            }
-            File(STATS_FILE).writeText(sb.toString())
-        } catch (t: Throwable) {
-            HookLog.e("VpnHide: failed to dump hook stats: ${t.message}")
-        }
-    }
-
-    /**
-     * Polls STATS_REQ_FILE every 500 ms from a daemon thread. When the manager app creates that
-     * file, system_server deletes it and dumps hookStats to STATS_FILE exactly once.
-     *
-     * A dedicated thread is used instead of FileObserver to avoid inotify edge cases (e.g. 'touch'
-     * on an existing file only emits ATTRIB, not CREATE/CLOSE_WRITE) and SELinux restrictions on
-     * cross-UID inotify events that can silently prevent the callback from firing.
-     */
-    private fun handleStatsRequestAsync() {
-        Thread({
-            try {
-                val reqFile = File(STATS_REQ_FILE)
-                if (reqFile.exists()) {
-                    val content = runCatching { reqFile.readText().trim() }.getOrDefault("")
-                    try {
-                        reqFile.delete()
-                    } catch (_: Throwable) {
-                    }
-                    if (content == "clear" || content == "reset") {
-                        hookStats.clear()
-                        HookLog.i("VpnHide: cleared in-memory hook stats")
-                    } else {
-                        dumpHookStats()
-                    }
-                }
-            } catch (t: Throwable) {
-                HookLog.e("VpnHide: stats event handler error: ${t.message}")
-            }
-        }, "VpnHideStatsHandler").start()
+        hookStatsChanged.set(true)
     }
 
     private inline fun tryHook(
@@ -559,86 +513,15 @@ class HookEntry : IXposedHookLoadPackage {
                 return it
             }
             val uids = mutableSetOf<Int>()
-            try {
-                val dbFile = File(DB_PATH)
-                if (dbFile.exists()) {
-                    SQLiteDatabase
-                        .openDatabase(
-                            dbFile.absolutePath,
-                            null,
-                            SQLiteDatabase.OPEN_READONLY or
-                                SQLiteDatabase.NO_LOCALIZED_COLLATORS,
-                        ).use { db ->
-                            db
-                                .rawQuery(
-                                    "SELECT packageName, userId, uid FROM app_protection WHERE lsposed = 1",
-                                    null,
-                                ).use { cursor ->
-                                    val uidIdx = cursor.getColumnIndex("uid")
-                                    val pkgIdx = cursor.getColumnIndex("packageName")
-                                    val userIdIdx = cursor.getColumnIndex("userId")
-                                    while (cursor.moveToNext()) {
-                                        val pkg =
-                                            if (pkgIdx != -1) {
-                                                cursor.getString(pkgIdx)
-                                            } else {
-                                                ""
-                                            }
-                                        val userId =
-                                            if (userIdIdx != -1) {
-                                                cursor.getInt(userIdIdx)
-                                            } else {
-                                                0
-                                            }
-                                        val dbUid =
-                                            if (uidIdx != -1) {
-                                                cursor.getInt(uidIdx)
-                                            } else {
-                                                0
-                                            }
-
-                                        if (pkg.isNotEmpty()) {
-                                            val resolvedUid =
-                                                if (pm != null) {
-                                                    val realUid =
-                                                        getPackageUid(
-                                                            pm,
-                                                            pkg,
-                                                            userId,
-                                                        )
-                                                    if (realUid > 0) realUid else dbUid
-                                                } else {
-                                                    dbUid
-                                                }
-                                            if (resolvedUid > 0) {
-                                                uids.add(resolvedUid)
-                                            }
-                                        }
-                                    }
-                                }
-                        }
-                }
-            } catch (t: Throwable) {
-                HookLog.e("VpnHide: failed to read database: ${t.message}")
-            }
-
-            if (selfUid == -1) {
-                if (pm != null) {
-                    selfUid = getPackageUid(pm, "dev.soranerai.vpnhidenext", 0)
-                }
-            }
             if (selfUid != -1) uids.add(selfUid)
-
-            val result: Set<Int> = uids.toSet()
-            systemServerTargetUids = result
-            return result
+            return uids
         }
     }
 
     private fun isTargetCaller(): Boolean {
         val callingUid = Binder.getCallingUid()
         if (callingUid == 1000) { // system_server is pushing data
-            val cbUid = currentCallbackUid.get()
+            val cbUid = currentCallbackUid.get() ?: getInheritedCallingUid()
             if (cbUid != null) {
                 return loadTargetUids().contains(cbUid)
             }
@@ -647,83 +530,13 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     private fun isJavaHookActive(bitIndex: Int): Boolean {
-        var mask = cachedJavaHooksMask
-        if (mask == null) {
-            mask =
-                try {
-                    val dbFile = File(DB_PATH)
-                    if (dbFile.exists()) {
-                        SQLiteDatabase
-                            .openDatabase(
-                                dbFile.absolutePath,
-                                null,
-                                SQLiteDatabase.OPEN_READONLY or
-                                    SQLiteDatabase.NO_LOCALIZED_COLLATORS,
-                            ).use { db ->
-                                db
-                                    .rawQuery(
-                                        "SELECT javaHookMask FROM global_config LIMIT 1",
-                                        null,
-                                    ).use { cursor ->
-                                        if (cursor.moveToFirst()) {
-                                            cursor.getLong(0).toUInt()
-                                        } else {
-                                            0xFFFFFFFFu
-                                        }
-                                    }
-                            }
-                    } else {
-                        0xFFFFFFFFu
-                    }
-                } catch (t: Throwable) {
-                    0xFFFFFFFFu
-                }
-            cachedJavaHooksMask = mask
-        }
-        val activeMask = mask ?: 0xFFFFFFFFu
-        return (activeMask and (1u shl bitIndex)) != 0u
+        val mask = cachedJavaHooksMask ?: 0xFFFFFFFFu
+        return (mask and (1u shl bitIndex)) != 0u
     }
 
     @Volatile private var systemServerIfacePrefixes: List<String>? = null
 
-    private fun loadIfacePrefixes(): List<String> {
-        val cached = systemServerIfacePrefixes
-        if (cached != null) return cached
-        synchronized(uidLock) {
-            val cached2 = systemServerIfacePrefixes
-            if (cached2 != null) return cached2
-            val prefixes = mutableListOf<String>()
-            try {
-                val dbFile = File(DB_PATH)
-                if (dbFile.exists()) {
-                    SQLiteDatabase
-                        .openDatabase(
-                            dbFile.absolutePath,
-                            null,
-                            SQLiteDatabase.OPEN_READONLY or
-                                SQLiteDatabase.NO_LOCALIZED_COLLATORS,
-                        ).use { db ->
-                            db.rawQuery("SELECT prefix FROM iface_prefixes", null)?.use { cursor ->
-                                val idx = cursor.getColumnIndex("prefix")
-                                if (idx != -1) {
-                                    while (cursor.moveToNext()) {
-                                        val prefix = cursor.getString(idx)
-                                        if (prefix != null) {
-                                            prefixes.add(prefix)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                }
-            } catch (t: Throwable) {
-                HookLog.e("VpnHide: failed to load iface prefixes: ${t.message}")
-            }
-            val result = prefixes.toList()
-            systemServerIfacePrefixes = result
-            return result
-        }
-    }
+    private fun loadIfacePrefixes(): List<String> = systemServerIfacePrefixes ?: emptyList()
 
     private fun invalidateTargetUids() {
         systemServerTargetUids = null
@@ -742,8 +555,55 @@ class HookEntry : IXposedHookLoadPackage {
         tryHook("Network.writeToParcel") { hookNetworkWriteToParcel() }
 
         tryHook("APEX_Services") { hookApexServices() }
-        tryHook("FileObserver") { watchDatabaseFile() }
+        tryHook("ConfigReader") {
+            startConfigReader()
+            startStatsWriter()
+        }
+        tryHook("Binder.identityTracking") { hookBinderIdentityTracking() }
         return brokenFields
+    }
+
+    private fun hookBinderIdentityTracking() {
+        val binderClass = Binder::class.java
+        try {
+            XposedBridge.hookMethod(
+                XposedHelpers.findMethodExact(binderClass, "clearCallingIdentity", *emptyArray<Class<*>>()),
+                object : XC_MethodHook() {
+                    override fun beforeHookedMethod(param: MethodHookParam) {
+                        val callingUid = Binder.getCallingUid()
+                        val uids = systemServerTargetUids
+                        val stack = callingUidStack.get() ?: return
+                        if (stack.isEmpty()) {
+                            if (callingUid != 1000 && uids != null && uids.contains(callingUid)) {
+                                stack.add(callingUid)
+                            } else {
+                                stack.add(1000)
+                            }
+                        } else {
+                            stack.add(stack[stack.size - 1])
+                        }
+                    }
+                },
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook clearCallingIdentity: ${t.message}")
+        }
+
+        try {
+            XposedBridge.hookMethod(
+                XposedHelpers.findMethodExact(binderClass, "restoreCallingIdentity", java.lang.Long.TYPE),
+                object : XC_MethodHook() {
+                    override fun afterHookedMethod(param: MethodHookParam) {
+                        val stack = callingUidStack.get()
+                        if (stack != null && stack.isNotEmpty()) {
+                            stack.removeAt(stack.size - 1)
+                        }
+                    }
+                },
+            )
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to hook restoreCallingIdentity: ${t.message}")
+        }
     }
 
     private val isInternalCheck = ThreadLocal.withInitial { false }
@@ -811,37 +671,21 @@ class HookEntry : IXposedHookLoadPackage {
         try {
             XposedBridge.hookAllMethods(
                 targetClass,
-                "isManagedProfile",
-                object : XC_MethodHook() {
-                    override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
-                        if (!isTargetCaller()) return
-
-                        val userId = param.args.getOrNull(0) as? Int ?: return
-                        if (isManagedProfileInternal(param.thisObject, userId)) {
-                            recordIntercept("UserManager")
-                            param.result = false
-                            HookLog.i("VpnHide: Spoofed isManagedProfile(userId=$userId) to false")
-                        }
-                    }
-                },
-            )
-        } catch (t: Throwable) {
-            HookLog.e("VpnHide: failed to hook isManagedProfile: ${t.message}")
-        }
-
-        try {
-            XposedBridge.hookAllMethods(
-                targetClass,
                 "getUserInfo",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
                         if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
                         if (!isTargetCaller()) return
 
-                        val userInfo = param.result ?: return
-                        val userId = XposedHelpers.getIntField(userInfo, "id")
-                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                        val callingUid = Binder.getCallingUid()
+                        val userInfo = param.result
+                        val userId = if (userInfo != null) XposedHelpers.getIntField(userInfo, "id") else null
+                        val stackTrace = if (callingUid == 1000) "\n" + android.util.Log.getStackTraceString(Throwable()) else ""
+                        HookLog.i(
+                            "VpnHide: getUserInfo(userId=$userId) called by uid $callingUid, cbUid=${currentCallbackUid.get()}, inheritedUid=${getInheritedCallingUid()}$stackTrace",
+                        )
+
+                        if (userInfo != null && userId != null && isManagedProfileInternal(param.thisObject, userId)) {
                             recordIntercept("UserManager")
                             var flags = XposedHelpers.getIntField(userInfo, "flags")
                             flags = flags and 0x00000020.inv() // FLAG_MANAGED_PROFILE
@@ -851,7 +695,9 @@ class HookEntry : IXposedHookLoadPackage {
                                 XposedHelpers.setObjectField(userInfo, "userType", "android.os.usertype.full.SECONDARY")
                             } catch (_: Throwable) {
                             }
-                            HookLog.i("VpnHide: Spoofed getUserInfo(userId=$userId) flags/userType to hide managed profile")
+                            HookLog.i(
+                                "VpnHide: Spoofed getUserInfo(userId=$userId) flags/userType to hide managed profile for uid $callingUid",
+                            )
                         }
                     }
                 },
@@ -869,11 +715,16 @@ class HookEntry : IXposedHookLoadPackage {
                         if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
                         if (!isTargetCaller()) return
 
-                        val userId = param.args.getOrNull(0) as? Int ?: return
-                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                        val callingUid = Binder.getCallingUid()
+                        val userId = param.args.getOrNull(0) as? Int
+                        HookLog.i(
+                            "VpnHide: isProfile(userId=$userId) called by uid $callingUid, cbUid=${currentCallbackUid.get()}, inheritedUid=${getInheritedCallingUid()}",
+                        )
+
+                        if (userId != null && isManagedProfileInternal(param.thisObject, userId)) {
                             recordIntercept("UserManager")
                             param.result = false
-                            HookLog.i("VpnHide: Spoofed isProfile(userId=$userId) to false")
+                            HookLog.i("VpnHide: Spoofed isProfile(userId=$userId) to false for uid $callingUid")
                         }
                     }
                 },
@@ -891,10 +742,14 @@ class HookEntry : IXposedHookLoadPackage {
                         if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
                         if (!isTargetCaller()) return
 
+                        val callingUid = Binder.getCallingUid()
+                        HookLog.i(
+                            "VpnHide: getProfiles called by uid $callingUid, cbUid=${currentCallbackUid.get()}, inheritedUid=${getInheritedCallingUid()}",
+                        )
+
                         val result = param.result as? List<*> ?: return
                         if (result.isEmpty()) return
 
-                        val callingUid = Binder.getCallingUid()
                         val targetUid = if (callingUid == 1000) (currentCallbackUid.get() ?: callingUid) else callingUid
                         val targetUserId = targetUid / 100000
 
@@ -914,7 +769,7 @@ class HookEntry : IXposedHookLoadPackage {
                             recordIntercept("UserManager")
                             param.result = filteredList
                             HookLog.i(
-                                "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfiles (Original: ${result.size})",
+                                "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfiles (Original: ${result.size}) for uid $callingUid",
                             )
                         }
                     }
@@ -933,10 +788,14 @@ class HookEntry : IXposedHookLoadPackage {
                         if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
                         if (!isTargetCaller()) return
 
+                        val callingUid = Binder.getCallingUid()
+                        HookLog.i(
+                            "VpnHide: getProfileIds called by uid $callingUid, cbUid=${currentCallbackUid.get()}, inheritedUid=${getInheritedCallingUid()}",
+                        )
+
                         val result = param.result as? IntArray ?: return
                         if (result.isEmpty()) return
 
-                        val callingUid = Binder.getCallingUid()
                         val targetUid = if (callingUid == 1000) (currentCallbackUid.get() ?: callingUid) else callingUid
                         val targetUserId = targetUid / 100000
 
@@ -949,7 +808,7 @@ class HookEntry : IXposedHookLoadPackage {
                             recordIntercept("UserManager")
                             param.result = filteredList.toIntArray()
                             HookLog.i(
-                                "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfileIds (Original: ${result.size})",
+                                "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfileIds (Original: ${result.size}) for uid $callingUid",
                             )
                         }
                     }
@@ -968,11 +827,17 @@ class HookEntry : IXposedHookLoadPackage {
                         if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
                         if (!isTargetCaller()) return
 
-                        val userId = param.args.getOrNull(0) as? Int ?: return
-                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                        val callingUid = Binder.getCallingUid()
+                        val userId = param.args.getOrNull(0) as? Int
+                        val stackTrace = if (callingUid == 1000) "\n" + android.util.Log.getStackTraceString(Throwable()) else ""
+                        HookLog.i(
+                            "VpnHide: getProfileParent(userId=$userId) called by uid $callingUid, cbUid=${currentCallbackUid.get()}, inheritedUid=${getInheritedCallingUid()}$stackTrace",
+                        )
+
+                        if (userId != null && isManagedProfileInternal(param.thisObject, userId)) {
                             recordIntercept("UserManager")
                             param.result = null
-                            HookLog.i("VpnHide: Spoofed getProfileParent(userId=$userId) to null")
+                            HookLog.i("VpnHide: Spoofed getProfileParent(userId=$userId) to null for uid $callingUid")
                         }
                     }
                 },
@@ -990,11 +855,16 @@ class HookEntry : IXposedHookLoadPackage {
                         if (!isJavaHookActive(6) || isInternalCheck.get() == true) return
                         if (!isTargetCaller()) return
 
-                        val userId = param.args.getOrNull(0) as? Int ?: return
-                        if (isManagedProfileInternal(param.thisObject, userId)) {
+                        val callingUid = Binder.getCallingUid()
+                        val userId = param.args.getOrNull(0) as? Int
+                        HookLog.i(
+                            "VpnHide: getProfileParentId(userId=$userId) called by uid $callingUid, cbUid=${currentCallbackUid.get()}, inheritedUid=${getInheritedCallingUid()}",
+                        )
+
+                        if (userId != null && isManagedProfileInternal(param.thisObject, userId)) {
                             recordIntercept("UserManager")
                             param.result = userId
-                            HookLog.i("VpnHide: Spoofed getProfileParentId(userId=$userId) to $userId")
+                            HookLog.i("VpnHide: Spoofed getProfileParentId(userId=$userId) to $userId for uid $callingUid")
                         }
                     }
                 },
@@ -1569,38 +1439,115 @@ class HookEntry : IXposedHookLoadPackage {
             if (brokenFields.isNotEmpty()) {
                 sb.append("broken_fields=").append(brokenFields.joinToString(",")).append('\n')
             }
-            val statusFile = File(HOOK_STATUS_FILE)
-            statusFile.writeText(sb.toString())
-            HookLog.i(
-                "VpnHide: wrote hook status file (version=$version, boot_id=$bootId, " +
-                    "sdk=$sdk, broken=${brokenFields.size})",
-            )
+            val devFile = File("/dev/vpnhide_ctrl")
+            if (devFile.exists()) {
+                val flatStatus = sb.toString().replace('\n', ';')
+                devFile.outputStream().use { os ->
+                    os.write("status:$flatStatus".toByteArray())
+                }
+                HookLog.i(
+                    "VpnHide: wrote hook status to /dev/vpnhide_ctrl (version=$version, boot_id=$bootId, " +
+                        "sdk=$sdk, broken=${brokenFields.size})",
+                )
+            } else {
+                HookLog.i("VpnHide: /dev/vpnhide_ctrl not available to write status")
+            }
         } catch (t: Throwable) {
-            HookLog.e("VpnHide: failed to write hook status file: ${t.message}")
+            HookLog.e("VpnHide: failed to write hook status: ${t.message}")
         }
     }
 
-    private fun watchDatabaseFile() {
-        val dbFile = File(DB_PATH)
-        val dir = dbFile.parent ?: "/data/system/vpnhide"
-        val observer =
-            object : android.os.FileObserver(dir, CLOSE_WRITE or MOVED_TO or DELETE) {
-                override fun onEvent(
-                    event: Int,
-                    path: String?,
-                ) {
-                    if (path != null) {
-                        if (path == dbFile.name || path.startsWith("${dbFile.name}-")) {
-                            invalidateTargetUids()
-                            cachedJavaHooksMask = null
-                        } else if (path == "vpnhide_hook_stats_req" && (event and CLOSE_WRITE) != 0) {
-                            handleStatsRequestAsync()
+    private fun startConfigReader() {
+        Thread({
+            while (true) {
+                try {
+                    val file = File("/dev/vpnhide_ctrl")
+                    if (!file.exists()) {
+                        Thread.sleep(5000)
+                        continue
+                    }
+                    file.bufferedReader().use { reader ->
+                        var javaHookMask = 0xFFFFFFFFu
+                        val uids = mutableSetOf<Int>()
+                        val prefixes = mutableListOf<String>()
+
+                        while (true) {
+                            val line = reader.readLine() ?: break
+                            if (line.isEmpty()) {
+                                synchronized(uidLock) {
+                                    systemServerTargetUids = uids.toSet()
+                                    systemServerIfacePrefixes = prefixes.toList()
+                                    cachedJavaHooksMask = javaHookMask
+                                    vpnPackageCache.clear()
+                                }
+                                uids.clear()
+                                prefixes.clear()
+                                javaHookMask = 0xFFFFFFFFu
+                                continue
+                            }
+
+                            if (line.startsWith("java_hook_mask:")) {
+                                javaHookMask = line.substringAfter("java_hook_mask:").trim().toUIntOrNull() ?: 0xFFFFFFFFu
+                            } else if (line.startsWith("lsposed_targets:")) {
+                                val targetStr = line.substringAfter("lsposed_targets:").trim()
+                                if (targetStr.isNotEmpty()) {
+                                    targetStr.split(" ").forEach { uidStr ->
+                                        uidStr.toIntOrNull()?.let { uids.add(it) }
+                                    }
+                                }
+                            } else if (line.startsWith("iface_prefixes:")) {
+                                val prefixStr = line.substringAfter("iface_prefixes:").trim()
+                                if (prefixStr.isNotEmpty()) {
+                                    prefixStr.split(" ").forEach { prefixes.add(it) }
+                                }
+                            }
                         }
+                    }
+                } catch (t: Throwable) {
+                    HookLog.e("VpnHide: config reader error: ${t.message}")
+                    try {
+                        Thread.sleep(5000)
+                    } catch (_: Throwable) {
                     }
                 }
             }
-        databaseFileObserver = observer
-        observer.startWatching()
+        }, "VpnHideConfigReader").start()
+    }
+
+    private fun startStatsWriter() {
+        Thread({
+            while (true) {
+                try {
+                    Thread.sleep(2000)
+                    if (hookStatsChanged.compareAndSet(true, false)) {
+                        val sb = java.lang.StringBuilder()
+                        sb.append("stats:")
+                        for ((uid, appStats) in hookStats) {
+                            for ((hook, rollingCounter) in appStats) {
+                                val count = rollingCounter.getSum()
+                                if (count > 0) {
+                                    sb
+                                        .append(uid)
+                                        .append(';')
+                                        .append(hook)
+                                        .append(';')
+                                        .append(count)
+                                        .append('\n')
+                                }
+                            }
+                        }
+                        val devFile = File("/dev/vpnhide_ctrl")
+                        if (devFile.exists()) {
+                            devFile.outputStream().use { os ->
+                                os.write(sb.toString().toByteArray())
+                            }
+                        }
+                    }
+                } catch (t: Throwable) {
+                    HookLog.e("VpnHide: stats writer error: ${t.message}")
+                }
+            }
+        }, "VpnHideStatsWriter").start()
     }
 
     // ------------------------------------------------------------------
@@ -2485,14 +2432,8 @@ class HookEntry : IXposedHookLoadPackage {
         private const val NET_CAPABILITY_NOT_VPN = 15
         const val TYPE_VPN = 17
         const val TYPE_WIFI = 1
-        const val HOOK_STATUS_FILE = "/data/system/vpnhide_hook_active"
 
-        /** Written on-demand when the manager app creates STATS_REQ_FILE. */
-        const val STATS_FILE = "/data/system/vpnhide_hook_stats.txt"
-
-        /** Manager app creates this file to trigger an on-demand stats dump from system_server. */
-        const val STATS_REQ_FILE = "/data/system/vpnhide/vpnhide_hook_stats_req"
-        const val DB_PATH = "/data/system/vpnhide/vpnhide_config.db"
+        private val hookStatsChanged = AtomicBoolean(false)
 
         internal class RollingCounter(
             private val windowMinutes: Int = 30,

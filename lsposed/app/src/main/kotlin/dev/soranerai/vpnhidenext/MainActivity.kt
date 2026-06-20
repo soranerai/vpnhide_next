@@ -51,18 +51,10 @@ class MainActivity : ComponentActivity() {
         installSplashScreen().setKeepOnScreenCondition { !splashReady.get() }
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // Load the user's debug-logging preference before anything else
-        // runs so the first suExec + Dashboard reload honor it.
-        VpnHideLog.init(applicationContext)
-        // Re-propagate the persisted flag to the on-disk sinks as a
-        // safety-net. Most reinstall scenarios are now covered by:
-        //   - kmod's service.sh re-seeding /proc/vpnhide_debug at boot,
-        // The remaining gap is "user reinstalled a native module mid-
-        // session and didn't reboot before opening the app" — service.sh
-        // hasn't re-seeded the module-dir copy yet, so the next fork of
-        // a target app would default to OFF without this re-write.
-        // Cheap — one `su` roundtrip on a background dispatcher.
+        // Load the user's debug-logging preference on a background dispatcher
+        // and propagate the persisted flag to the on-disk sinks.
         lifecycleScope.launch(Dispatchers.IO) {
+            VpnHideLog.init(applicationContext)
             applyDebugLoggingRuntime(VpnHideLog.enabled)
         }
         setContent { VpnHideApp(onReady = { splashReady.set(true) }) }

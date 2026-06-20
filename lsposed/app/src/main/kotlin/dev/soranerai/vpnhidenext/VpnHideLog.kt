@@ -25,7 +25,7 @@ internal object VpnHideLog {
      * call after app start reflects the user's choice without waiting
      * for the settings UI to be opened.
      */
-    fun init(context: Context) {
+    suspend fun init(context: Context) {
         enabled = isEnabledInPrefs(context)
     }
 

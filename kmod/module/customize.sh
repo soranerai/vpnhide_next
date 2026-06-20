@@ -7,6 +7,7 @@ ui_print "- Installing kernel module to $MODPATH"
 set_perm "$MODPATH/vpnhide_kmod.ko" 0 0 0644
 set_perm "$MODPATH/vpnhide-ctl" 0 0 0755
 set_perm "$MODPATH/sqlite3" 0 0 0755
+set_perm "$MODPATH/sepolicy.rule" 0 0 0644
 
 # Target database paths
 DB_DIR="/data/system/vpnhide"

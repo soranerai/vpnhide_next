@@ -1,0 +1,1 @@
+allow system_server device chr_file { getattr read write append ioctl open }

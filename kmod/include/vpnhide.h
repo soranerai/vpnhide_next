@@ -102,4 +102,13 @@ struct vpnhide_vpn_ifindexes {
 #define VH_SET_VPN_IFINDEXES \
 	_IOW(VH_IOCTL_MAGIC, 0x14, struct vpnhide_vpn_ifindexes)
 
+#define VH_SET_JAVA_HOOK_MASK _IOW(VH_IOCTL_MAGIC, 0x15, unsigned int)
+#define VH_GET_JAVA_HOOK_MASK _IOR(VH_IOCTL_MAGIC, 0x16, unsigned int)
+
+#define VH_SET_LSPOSED_TARGETS _IOW(VH_IOCTL_MAGIC, 0x17, struct vpnhide_ioctl_data)
+#define VH_GET_LSPOSED_TARGETS _IOR(VH_IOCTL_MAGIC, 0x18, struct vpnhide_ioctl_data)
+
+#define VH_GET_JAVA_STATS _IOR(VH_IOCTL_MAGIC, 0x19, char[4096])
+#define VH_GET_HOOK_STATUS _IOR(VH_IOCTL_MAGIC, 0x1A, char[256])
+
 #endif /* _VPNHIDE_H */
