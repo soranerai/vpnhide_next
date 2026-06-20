@@ -25,15 +25,16 @@ internal object DatabaseSync {
 
             val parts = mutableListOf<String>()
 
-            // 1. Copy SQLite database file to system location first (absolute source of truth)
-            parts += buildLsposedApplyCommand(context)
-
             // Sync active hooks masks from database
             parts += "$KMOD_CTL active_hooks ${config.kernelHookMask}"
+            parts += "$KMOD_CTL java_hooks ${config.javaHookMask}"
 
             // 2. Build and apply VPN targets directly to the kernel module
             val kmodUids = (apps.filter { it.kmod }.map { it.uid } + selfUid).distinct().sorted()
             parts += buildKmodApplyCommand(kmodUids, targetType = "targets")
+
+            val lsposedUids = (apps.filter { it.lsposed }.map { it.uid } + selfUid).distinct().sorted()
+            parts += buildKmodApplyCommand(lsposedUids, targetType = "lsposed_targets")
 
             // 3. Build and apply Interface prefixes directly to the kernel module
             val ifaceApplyCmd =

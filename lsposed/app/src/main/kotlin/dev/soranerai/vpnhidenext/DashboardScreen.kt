@@ -947,7 +947,7 @@ private fun ChangelogDialog(
                 }
             }
         },
-        confirmButton = { TextButton(onClick = onDismiss) { Text("OK") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.ok)) } },
     )
 }
 
@@ -1035,15 +1035,14 @@ private fun InterceptStatisticsSection(
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(
-                    text = "No Intercepts Recorded",
+                    text = stringResource(R.string.dashboard_stats_empty_title),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    text =
-                        "Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.",
+                    text = stringResource(R.string.dashboard_stats_empty_desc),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
                     textAlign = TextAlign.Center,
@@ -1219,7 +1218,7 @@ private fun InterceptStatisticsSection(
                                 if (appStat.frameworkTotal > 0) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Framework Intercepts",
+                                            text = stringResource(R.string.dashboard_stats_framework_title),
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.primary,
@@ -1256,7 +1255,7 @@ private fun InterceptStatisticsSection(
                                 if (appStat.nativeTotal > 0) {
                                     Column(modifier = Modifier.weight(1f)) {
                                         Text(
-                                            text = "Native Intercepts",
+                                            text = stringResource(R.string.dashboard_stats_native_title),
                                             style = MaterialTheme.typography.labelMedium,
                                             fontWeight = FontWeight.Bold,
                                             color = MaterialTheme.colorScheme.tertiary,
@@ -1273,10 +1272,10 @@ private fun InterceptStatisticsSection(
                                             ) {
                                                 val vectorLabel =
                                                     when (vector) {
-                                                        "ioctl" -> "ioctl / SIOCGIF"
-                                                        "netlink" -> "netlink RTNETLINK"
-                                                        "connect" -> "Loopback Block"
-                                                        "getname" -> "getsockname Spoof"
+                                                        "ioctl" -> stringResource(R.string.vector_label_ioctl)
+                                                        "netlink" -> stringResource(R.string.vector_label_netlink)
+                                                        "connect" -> stringResource(R.string.vector_label_connect)
+                                                        "getname" -> stringResource(R.string.vector_label_getname)
                                                         else -> vector
                                                     }
                                                 Text(

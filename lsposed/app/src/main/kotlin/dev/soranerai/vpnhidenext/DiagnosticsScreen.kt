@@ -107,18 +107,6 @@ fun DiagnosticsScreen(
     var debugZipFile by remember { mutableStateOf<File?>(null) }
     val summaryFmt = stringResource(R.string.summary_format)
 
-    var crashInfo by remember { mutableStateOf<CrashInfo?>(null) }
-    var showTraceDialog by remember { mutableStateOf(false) }
-
-    LaunchedEffect(Unit) {
-        withContext(Dispatchers.IO) {
-            val info = readCrashInfo()
-            if (info.detected) {
-                crashInfo = info
-            }
-        }
-    }
-
     // Kick off the diagnostics run once per process. If selfNeedsRestart
     // is true we skip — hooks aren't applied to this app yet, results
     // would be meaningless. DiagnosticsCache.run is idempotent: no-op
@@ -166,138 +154,6 @@ fun DiagnosticsScreen(
         BackupRestoreCard()
 
         Spacer(Modifier.height(16.dp))
-
-        crashInfo?.let { info ->
-            var resetting by remember { mutableStateOf(false) }
-            val isRussian =
-                java.util.Locale
-                    .getDefault()
-                    .language == "ru"
-
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors =
-                    CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.errorContainer,
-                    ),
-                modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text(
-                            text =
-                                if (isRussian) {
-                                    "⚠️ ОБНАРУЖЕН СБОЙ ЯДРА"
-                                } else {
-                                    "⚠️ KERNEL CRASH DETECTED"
-                                },
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                    }
-                    Spacer(Modifier.height(8.dp))
-
-                    val hookName =
-                        info.crashedHookIndex?.let { idx ->
-                            ALL_HOOKS.getOrNull(idx)?.name ?: "Unknown"
-                        }
-                            ?: "Unknown"
-
-                    val hookSymbol =
-                        info.crashedHookIndex?.let { idx ->
-                            ALL_HOOKS.getOrNull(idx)?.symbol ?: ""
-                        }
-                            ?: ""
-
-                    Text(
-                        text =
-                            if (isRussian) {
-                                "На прошлой загрузке произошел краш ядра в хуке $hookName ($hookSymbol). Чтобы защитить систему от вечного ребута, этот хук был автоматически отключен."
-                            } else {
-                                "A kernel crash was detected in hook $hookName ($hookSymbol) during the previous boot. To protect your device from bootloops, this hook has been automatically disabled."
-                            },
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                    )
-
-                    Spacer(Modifier.height(12.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        OutlinedButton(
-                            onClick = { showTraceDialog = true },
-                            colors =
-                                ButtonDefaults.outlinedButtonColors(
-                                    contentColor =
-                                        MaterialTheme.colorScheme.onErrorContainer,
-                                ),
-                            modifier = Modifier.weight(1f),
-                        ) { Text(if (isRussian) "Подробнее" else "Details") }
-
-                        Button(
-                            onClick = {
-                                resetting = true
-                                scope.launch(Dispatchers.IO) {
-                                    clearCrashInfo()
-                                    crashInfo = null
-                                    resetting = false
-                                }
-                            },
-                            enabled = !resetting,
-                            colors =
-                                ButtonDefaults.buttonColors(
-                                    containerColor = MaterialTheme.colorScheme.error,
-                                    contentColor = MaterialTheme.colorScheme.onError,
-                                ),
-                            modifier = Modifier.weight(1.5f),
-                        ) {
-                            if (resetting) {
-                                CircularProgressIndicator(
-                                    modifier = Modifier.size(18.dp),
-                                    strokeWidth = 2.dp,
-                                    color = MaterialTheme.colorScheme.onError,
-                                )
-                            } else {
-                                Text(if (isRussian) "Сбросить и включить" else "Reset & Re-enable")
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        if (showTraceDialog && crashInfo != null) {
-            val isRussian =
-                java.util.Locale
-                    .getDefault()
-                    .language == "ru"
-            AlertDialog(
-                onDismissRequest = { showTraceDialog = false },
-                title = { Text(if (isRussian) "Лог падения ядра" else "Kernel Crash Log") },
-                text = {
-                    Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
-                        Text(
-                            text = "File: ${crashInfo?.file}",
-                            style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            text = crashInfo?.trace ?: "",
-                            fontFamily = FontFamily.Monospace,
-                            fontSize = 11.sp,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                },
-                confirmButton = {
-                    TextButton(onClick = { showTraceDialog = false }) { Text("OK") }
-                },
-            )
-        }
 
         // Protection check section — its content depends on cache state,
         // but the bottom debug-tools section always renders below so
@@ -2087,10 +1943,6 @@ private suspend fun exportDebugZip(
 
 @Composable
 private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
-    val isRussian =
-        java.util.Locale
-            .getDefault()
-            .language == "ru"
     Card(
         shape = RoundedCornerShape(16.dp),
         colors =

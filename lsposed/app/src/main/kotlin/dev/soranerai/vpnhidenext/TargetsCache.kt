@@ -232,13 +232,9 @@ internal object TargetsCache {
                 }
             }
 
-            // Copy to system database location if needed
-            val publicDb = java.io.File("/data/system/vpnhide/vpnhide_config.db")
-            val (exitCode, _) = withContext(Dispatchers.IO) { suExec("[ -f ${publicDb.absolutePath} ]") }
-            if (dbPopulatedOrUpdated || exitCode != 0) {
-                withContext(Dispatchers.IO) {
-                    suExec(buildLsposedApplyCommand(appContext))
-                }
+            if (dbPopulatedOrUpdated) {
+                dev.soranerai.vpnhidenext.db.DatabaseSync
+                    .sync(appContext)
             }
 
             val portRulesMap = mutableMapOf<Pair<String, Int>, List<PortRule>>()

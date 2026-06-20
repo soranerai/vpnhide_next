@@ -10,7 +10,7 @@ internal class DbHelper(
 ) : SQLiteOpenHelper(context, DATABASE_NAME, null, DATABASE_VERSION) {
     companion object {
         const val DATABASE_NAME = "vpnhide_database"
-        const val DATABASE_VERSION = 7
+        const val DATABASE_VERSION = 8
     }
 
     override fun onCreate(db: SQLiteDatabase) {
@@ -100,6 +100,7 @@ internal class DbHelper(
                 id TEXT NOT NULL,
                 kernelHookMask INTEGER NOT NULL DEFAULT 4294967295,
                 javaHookMask INTEGER NOT NULL DEFAULT 4294967295,
+                debugLogging INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(id)
             )
             """.trimIndent(),
@@ -109,8 +110,8 @@ internal class DbHelper(
     private fun insertDefaultConfig(db: SQLiteDatabase) {
         db.execSQL(
             """
-            INSERT OR IGNORE INTO global_config (id, kernelHookMask, javaHookMask)
-            VALUES ('default', 4294967295, 4294967295)
+            INSERT OR IGNORE INTO global_config (id, kernelHookMask, javaHookMask, debugLogging)
+            VALUES ('default', 4294967295, 4294967295, 0)
             """.trimIndent(),
         )
     }
@@ -191,6 +192,7 @@ internal class DbHelper(
                         "id" to "TEXT NOT NULL DEFAULT ''",
                         "kernelHookMask" to "INTEGER NOT NULL DEFAULT 4294967295",
                         "javaHookMask" to "INTEGER NOT NULL DEFAULT 4294967295",
+                        "debugLogging" to "INTEGER NOT NULL DEFAULT 0",
                     ),
             )
 

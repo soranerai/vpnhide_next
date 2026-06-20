@@ -93,7 +93,7 @@ internal fun PortRulesScreen(
                         )
                         Spacer(Modifier.height(16.dp))
                         Text(
-                            "No rules defined",
+                            stringResource(R.string.no_rules),
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -108,7 +108,7 @@ internal fun PortRulesScreen(
                     if (massRules.isNotEmpty()) {
                         item {
                             Text(
-                                "Mass Rules (Global)",
+                                stringResource(R.string.ports_mass_rules_title),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary,
@@ -127,7 +127,7 @@ internal fun PortRulesScreen(
                         item {
                             HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
                             Text(
-                                "Local Rules",
+                                stringResource(R.string.ports_local_rules_title),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -210,7 +210,7 @@ internal fun PortRulesScreen(
                                 )
                                 Spacer(Modifier.width(8.dp))
                                 Text(
-                                    "Save & Back",
+                                    stringResource(R.string.btn_save_back),
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.primary,
@@ -315,12 +315,25 @@ private fun PortRuleCard(
                     )
                 }
                 Text(
-                    text = if (rule.startPort == rule.endPort) "Port: ${rule.startPort}" else "Range: ${rule.startPort} - ${rule.endPort}",
+                    text =
+                        if (rule.startPort ==
+                            rule.endPort
+                        ) {
+                            stringResource(R.string.port_rule_port_format, rule.startPort)
+                        } else {
+                            stringResource(R.string.port_rule_range_format, rule.startPort, rule.endPort)
+                        },
                     style = MaterialTheme.typography.bodyMedium,
                     color = if (isReadOnly) MaterialTheme.colorScheme.secondary else Color.Unspecified,
                 )
+                val protoLabel =
+                    when (rule.protocol) {
+                        PortProtocol.TCP -> "TCP"
+                        PortProtocol.UDP -> "UDP"
+                        PortProtocol.BOTH -> stringResource(R.string.protocol_both)
+                    }
                 Text(
-                    text = "Protocol: ${rule.protocol}",
+                    text = stringResource(R.string.port_rule_protocol_format, protoLabel),
                     style = MaterialTheme.typography.labelSmall,
                     color = if (isReadOnly) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
                 )
@@ -336,7 +349,7 @@ private fun PortRuleCard(
                     containerColor = MaterialTheme.colorScheme.secondary,
                     contentColor = MaterialTheme.colorScheme.onSecondary,
                 ) {
-                    Text("GLOBAL", fontSize = 8.sp, modifier = Modifier.padding(horizontal = 4.dp))
+                    Text(stringResource(R.string.bulk_btn).uppercase(), fontSize = 8.sp, modifier = Modifier.padding(horizontal = 4.dp))
                 }
             }
         }
@@ -372,7 +385,14 @@ private fun PortRuleDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    text = if (initialRule == null) "New Port Rule" else "Edit Port Rule",
+                    text =
+                        if (initialRule ==
+                            null
+                        ) {
+                            stringResource(R.string.ports_new_rule_title)
+                        } else {
+                            stringResource(R.string.ports_edit_rule_title)
+                        },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -381,8 +401,8 @@ private fun PortRuleDialog(
                 OutlinedTextField(
                     value = label,
                     onValueChange = { label = it },
-                    label = { Text("Label (optional)") },
-                    placeholder = { Text("e.g. My Server") },
+                    label = { Text(stringResource(R.string.label_optional)) },
+                    placeholder = { Text(stringResource(R.string.ports_label_placeholder)) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.fillMaxWidth(),
@@ -392,7 +412,7 @@ private fun PortRuleDialog(
                     OutlinedTextField(
                         value = startPort,
                         onValueChange = { if (it.length <= 5) startPort = it.filter { c -> c.isDigit() } },
-                        label = { Text("Start Port") },
+                        label = { Text(stringResource(R.string.port_start)) },
                         placeholder = { Text("1") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(12.dp),
@@ -401,7 +421,7 @@ private fun PortRuleDialog(
                     OutlinedTextField(
                         value = endPort,
                         onValueChange = { if (it.length <= 5) endPort = it.filter { c -> c.isDigit() } },
-                        label = { Text("End Port") },
+                        label = { Text(stringResource(R.string.port_end)) },
                         placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(12.dp),
@@ -410,21 +430,27 @@ private fun PortRuleDialog(
                 }
 
                 Text(
-                    "Default: All ports (1-65535)",
+                    stringResource(R.string.ports_default_range_hint),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("Protocol", style = MaterialTheme.typography.labelMedium)
+                    Text(stringResource(R.string.protocol), style = MaterialTheme.typography.labelMedium)
                     SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                         PortProtocol.values().forEachIndexed { index, p ->
+                            val pLabel =
+                                when (p) {
+                                    PortProtocol.TCP -> "TCP"
+                                    PortProtocol.UDP -> "UDP"
+                                    PortProtocol.BOTH -> stringResource(R.string.protocol_both)
+                                }
                             SegmentedButton(
                                 selected = protocol == p,
                                 onClick = { protocol = p },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = PortProtocol.values().size),
                             ) {
-                                Text(p.name, fontSize = 10.sp)
+                                Text(pLabel, fontSize = 10.sp)
                             }
                         }
                     }
@@ -479,7 +505,7 @@ private fun PortRuleDialog(
                         }
                     if (rulesToRemove.isNotEmpty()) {
                         Text(
-                            text = "${rulesToRemove.size} redundant rule(s) will be removed",
+                            text = stringResource(R.string.ports_redundant_rules_removed_warning, rulesToRemove.size),
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(top = 4.dp),

@@ -13,7 +13,7 @@
 void print_usage(const char *prog)
 {
 	fprintf(stderr,
-		"Usage: %s <targets|port_targets|port_rules|iface_prefixes|set_spoof_ip|debug|active_hooks|stats> [args...]\n",
+		"Usage: %s <targets|port_targets|lsposed_targets|port_rules|iface_prefixes|set_spoof_ip|debug|active_hooks|java_hooks|stats> [args...]\n",
 		prog);
 	fprintf(stderr,
 		"  port_rules format: <uid> <rule_count> <start> <end> <proto> ...\n");
@@ -42,7 +42,8 @@ int main(int argc, char **argv)
 	}
 
 	if (strcmp(argv[1], "targets") == 0 ||
-	    strcmp(argv[1], "port_targets") == 0) {
+	    strcmp(argv[1], "port_targets") == 0 ||
+	    strcmp(argv[1], "lsposed_targets") == 0) {
 		data.count = argc - 2;
 		if (data.count > MAX_TARGET_UIDS)
 			data.count = MAX_TARGET_UIDS;
@@ -54,8 +55,10 @@ int main(int argc, char **argv)
 		unsigned long cmd;
 		if (strcmp(argv[1], "targets") == 0)
 			cmd = VH_SET_TARGETS;
-		else
+		else if (strcmp(argv[1], "port_targets") == 0)
 			cmd = VH_SET_PORT_TARGETS;
+		else
+			cmd = VH_SET_LSPOSED_TARGETS;
 
 		if (ioctl(fd, cmd, &data) < 0) {
 			perror("ioctl");
@@ -174,6 +177,51 @@ int main(int argc, char **argv)
 				perror("VH_SET_ACTIVE_HOOKS");
 				return 1;
 			}
+		}
+	} else if (strcmp(argv[1], "java_hooks") == 0) {
+		if (argc < 3) {
+			unsigned int mask = 0;
+			if (ioctl(fd, VH_GET_JAVA_HOOK_MASK, &mask) < 0) {
+				perror("VH_GET_JAVA_HOOK_MASK");
+				return 1;
+			}
+			printf("%u\n", mask);
+		} else {
+			unsigned int mask =
+				(unsigned int)strtoul(argv[2], NULL, 0);
+			if (ioctl(fd, VH_SET_JAVA_HOOK_MASK, &mask) < 0) {
+				perror("VH_SET_JAVA_HOOK_MASK");
+				return 1;
+			}
+		}
+	} else if (strcmp(argv[1], "hook_status") == 0) {
+		char buf[256];
+		memset(buf, 0, sizeof(buf));
+		if (ioctl(fd, VH_GET_HOOK_STATUS, buf) < 0) {
+			perror("VH_GET_HOOK_STATUS");
+			return 1;
+		}
+		for (int i = 0; buf[i] != '\0'; i++) {
+			if (buf[i] == ';')
+				putchar('\n');
+			else
+				putchar(buf[i]);
+		}
+		putchar('\n');
+	} else if (strcmp(argv[1], "java_stats") == 0) {
+		if (argc > 2 && strcmp(argv[2], "clear") == 0) {
+			if (write(fd, "clear_stats", 11) < 0) {
+				perror("write clear_stats");
+				return 1;
+			}
+		} else {
+			char buf[4096];
+			memset(buf, 0, sizeof(buf));
+			if (ioctl(fd, VH_GET_JAVA_STATS, buf) < 0) {
+				perror("VH_GET_JAVA_STATS");
+				return 1;
+			}
+			printf("%s", buf);
 		}
 	} else if (strcmp(argv[1], "stats") == 0) {
 		if (argc > 2 && strcmp(argv[2], "clear") == 0) {

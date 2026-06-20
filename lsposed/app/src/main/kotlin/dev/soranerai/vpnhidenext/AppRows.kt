@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -82,10 +83,10 @@ internal fun AppRow(
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (installed.kmod) {
-                    ProtectionChip("Native", app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
+                    ProtectionChip(stringResource(R.string.chip_native), app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
                 }
 
-                ProtectionChip("Framework", app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
+                ProtectionChip(stringResource(R.string.chip_framework), app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
             }
         }
     }
