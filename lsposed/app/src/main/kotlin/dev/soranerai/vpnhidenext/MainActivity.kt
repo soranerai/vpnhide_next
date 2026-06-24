@@ -37,6 +37,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
@@ -67,13 +68,24 @@ private sealed class RootState {
     ) : RootState()
 
     data object Denied : RootState()
+
+    data object Migrating : RootState()
 }
 
 @Composable
 fun VpnHideApp(onReady: () -> Unit = {}) {
     VpnHideTheme {
         var rootState by remember { mutableStateOf<RootState?>(null) }
+        val context = LocalContext.current
         LaunchedEffect(Unit) {
+            val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
+            val hasLegacyDb = deContext.getDatabasePath("vpnhide_database").exists()
+            if (hasLegacyDb) {
+                rootState = RootState.Migrating
+                withContext(Dispatchers.IO) {
+                    AppDatabase.performMigrationIfRequired(context)
+                }
+            }
             val res =
                 withContext(Dispatchers.IO) {
                     performStartupOptimized()
@@ -85,6 +97,11 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
             // splash holds until root check completes
             null -> {
                 Unit
+            }
+
+            RootState.Migrating -> {
+                LaunchedEffect(Unit) { onReady() }
+                MigrationScreen()
             }
 
             RootState.Denied -> {
@@ -825,6 +842,36 @@ private fun RefreshActionIcon(
                     Icons.Default.Refresh,
                     contentDescription = stringResource(R.string.action_refresh_apps),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MigrationScreen() {
+    Scaffold { innerPadding ->
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 4.dp
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = "Мигрирую данные...",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground
                 )
             }
         }

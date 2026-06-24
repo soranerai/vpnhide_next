@@ -1,115 +1,188 @@
 package dev.soranerai.vpnhidenext.db
 
-import android.content.ContentValues
 import android.content.Context
-import android.database.Cursor
-import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import dev.soranerai.vpnhidenext.PortProtocol
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
+import org.json.JSONObject
+import android.database.sqlite.SQLiteDatabase
+import java.io.File
+import java.io.FileOutputStream
 
 internal interface AppDao {
     fun getAllAppProtection(): Flow<List<AppProtection>>
-
-    suspend fun getAppProtection(
-        packageName: String,
-        userId: Int,
-    ): AppProtection?
-
+    suspend fun getAppProtection(packageName: String, userId: Int): AppProtection?
     suspend fun insertAppProtection(app: AppProtection)
-
     suspend fun insertAppProtections(apps: List<AppProtection>)
-
     suspend fun deleteAppProtection(app: AppProtection)
-
     suspend fun getAllAppProtectionSync(): List<AppProtection>
 }
 
 internal interface PortRuleDao {
-    fun getRulesForApp(
-        packageName: String,
-        userId: Int,
-    ): Flow<List<DbPortRule>>
-
-    suspend fun getRulesForAppSync(
-        packageName: String,
-        userId: Int,
-    ): List<DbPortRule>
-
+    fun getRulesForApp(packageName: String, userId: Int): Flow<List<DbPortRule>>
+    suspend fun getRulesForAppSync(packageName: String, userId: Int): List<DbPortRule>
     suspend fun insertRule(rule: DbPortRule)
-
     suspend fun insertRules(rules: List<DbPortRule>)
-
     suspend fun deleteRule(ruleId: Long)
-
-    suspend fun deleteRulesForApp(
-        packageName: String,
-        userId: Int,
-    )
+    suspend fun deleteRulesForApp(packageName: String, userId: Int)
 }
 
 internal interface MassPortRuleDao {
     fun getMassRules(): Flow<List<DbMassPortRule>>
-
     suspend fun getMassRulesSync(): List<DbMassPortRule>
-
     suspend fun insertMassRule(rule: DbMassPortRule)
-
     suspend fun insertMassRules(rules: List<DbMassPortRule>)
-
     suspend fun deleteMassRule(ruleId: Long)
-
     suspend fun deleteAllMassRules()
 }
 
 internal interface IfacePrefixDao {
     fun getAllPrefixes(): Flow<List<String>>
-
     suspend fun getAllPrefixesSync(): List<String>
-
     suspend fun insertPrefixes(prefixes: List<DbIfacePrefix>)
-
     suspend fun deleteAllPrefixes()
 }
+
+internal data class VpnHideConfig(
+    val globalConfig: DbGlobalConfig = DbGlobalConfig(),
+    val apps: List<AppProtection> = emptyList(),
+    val portRules: List<DbPortRule> = emptyList(),
+    val massPortRules: List<DbMassPortRule> = emptyList(),
+    val ifacePrefixes: List<String> = emptyList()
+)
 
 internal class AppDatabase private constructor(
     context: Context,
 ) {
-    private val helper = DbHelper(context)
+    private val configFile = File(context.filesDir, "vpnhide_config.json")
+    private val atomicFile = android.util.AtomicFile(configFile)
+    private val lock = Any()
 
-    val writableDatabase: SQLiteDatabase
-        get() = helper.writableDatabase
+    @Volatile
+    private var config = VpnHideConfig()
 
-    val readableDatabase: SQLiteDatabase
-        get() = helper.readableDatabase
+    private var inTransaction = false
+    private val transactionLock = Any()
+
+    init {
+        loadConfig()
+    }
+
+    private fun loadConfig() {
+        synchronized(lock) {
+            if (!configFile.exists()) {
+                config = VpnHideConfig()
+                return
+            }
+            try {
+                val jsonStr = atomicFile.openRead().use { it.reader().readText() }
+                val root = JSONObject(jsonStr)
+
+                val globalObj = root.optJSONObject("globalConfig")
+                val globalConfig = if (globalObj != null) globalObj.toDbGlobalConfig() else DbGlobalConfig()
+
+                val appsList = mutableListOf<AppProtection>()
+                val appsArray = root.optJSONArray("apps")
+                if (appsArray != null) {
+                    for (i in 0 until appsArray.length()) {
+                        appsList.add(appsArray.getJSONObject(i).toAppProtection())
+                    }
+                }
+
+                val portRulesList = mutableListOf<DbPortRule>()
+                val portRulesArray = root.optJSONArray("portRules")
+                if (portRulesArray != null) {
+                    for (i in 0 until portRulesArray.length()) {
+                        portRulesList.add(portRulesArray.getJSONObject(i).toDbPortRule())
+                    }
+                }
+
+                val massRulesList = mutableListOf<DbMassPortRule>()
+                val massRulesArray = root.optJSONArray("massPortRules")
+                if (massRulesArray != null) {
+                    for (i in 0 until massRulesArray.length()) {
+                        massRulesList.add(massRulesArray.getJSONObject(i).toDbMassPortRule())
+                    }
+                }
+
+                val prefixesList = mutableListOf<String>()
+                val prefixesArray = root.optJSONArray("ifacePrefixes")
+                if (prefixesArray != null) {
+                    for (i in 0 until prefixesArray.length()) {
+                        prefixesList.add(prefixesArray.getString(i))
+                    }
+                }
+
+                config = VpnHideConfig(
+                    globalConfig = globalConfig,
+                    apps = appsList,
+                    portRules = portRulesList,
+                    massPortRules = massRulesList,
+                    ifacePrefixes = prefixesList
+                )
+            } catch (e: Exception) {
+                Log.e("VpnHideDb", "Failed to load JSON config, fallback to default", e)
+                config = VpnHideConfig()
+            }
+        }
+    }
+
+    private fun saveConfigInternal() {
+        synchronized(lock) {
+            val root = JSONObject().apply {
+                put("globalConfig", config.globalConfig.toJson())
+                put("apps", JSONArray().apply { config.apps.forEach { put(it.toJson()) } })
+                put("portRules", JSONArray().apply { config.portRules.forEach { put(it.toJson()) } })
+                put("massPortRules", JSONArray().apply { config.massPortRules.forEach { put(it.toJson()) } })
+                put("ifacePrefixes", JSONArray().apply { config.ifacePrefixes.forEach { put(it) } })
+            }
+            val jsonStr = root.toString(2)
+            var out: FileOutputStream? = null
+            try {
+                out = atomicFile.startWrite()
+                out.write(jsonStr.toByteArray())
+                atomicFile.finishWrite(out)
+            } catch (e: Exception) {
+                Log.e("VpnHideDb", "Failed to write JSON config", e)
+                if (out != null) {
+                    atomicFile.failWrite(out)
+                }
+            }
+        }
+    }
+
+    private fun saveConfig() {
+        synchronized(transactionLock) {
+            if (inTransaction) return
+        }
+        saveConfigInternal()
+    }
 
     suspend fun <R> withTransaction(block: suspend () -> R): R =
         withContext(Dispatchers.IO) {
-            val db = writableDatabase
-            db.beginTransaction()
+            synchronized(transactionLock) {
+                inTransaction = true
+            }
             try {
                 val result = block()
-                db.setTransactionSuccessful()
+                saveConfigInternal()
                 result
             } finally {
-                db.endTransaction()
+                synchronized(transactionLock) {
+                    inTransaction = false
+                }
             }
         }
 
     fun clearAllTables() {
-        val db = writableDatabase
-        db.delete("app_protection", null, null)
-        db.delete("port_rules", null, null)
-        db.delete("mass_port_rules", null, null)
-        db.delete("iface_prefixes", null, null)
-        db.delete("global_config", null, null)
-        db.execSQL(
-            "INSERT OR IGNORE INTO global_config (id, kernelHookMask, javaHookMask, debugLogging) " +
-                "VALUES ('default', 4294967295, 4294967295, 0)",
-        )
+        synchronized(lock) {
+            config = VpnHideConfig()
+            saveConfig()
+        }
         DbNotifier.notifyChanged("app_protection")
         DbNotifier.notifyChanged("port_rules")
         DbNotifier.notifyChanged("mass_port_rules")
@@ -118,377 +191,260 @@ internal class AppDatabase private constructor(
     }
 
     fun appDao(): AppDao = appDaoImpl
-
     fun portRuleDao(): PortRuleDao = portRuleDaoImpl
-
     fun massPortRuleDao(): MassPortRuleDao = massPortRuleDaoImpl
-
     fun ifacePrefixDao(): IfacePrefixDao = ifacePrefixDaoImpl
-
     fun globalConfigDao(): GlobalConfigDao = globalConfigDaoImpl
 
-    private val appDaoImpl =
-        object : AppDao {
-            override fun getAllAppProtection(): Flow<List<AppProtection>> =
-                flow {
+    private val appDaoImpl = object : AppDao {
+        override fun getAllAppProtection(): Flow<List<AppProtection>> = flow {
+            emit(getAllAppProtectionSync())
+            DbNotifier.changeFlow.collect { table ->
+                if (table == "app_protection") {
                     emit(getAllAppProtectionSync())
-                    DbNotifier.changeFlow.collect { table ->
-                        if (table == "app_protection") {
-                            emit(getAllAppProtectionSync())
-                        }
-                    }
-                }
-
-            override suspend fun getAppProtection(
-                packageName: String,
-                userId: Int,
-            ): AppProtection? =
-                withContext(Dispatchers.IO) {
-                    readableDatabase
-                        .rawQuery(
-                            "SELECT * FROM app_protection WHERE packageName = ? AND userId = ?",
-                            arrayOf(packageName, userId.toString()),
-                        ).use { cursor ->
-                            if (cursor.moveToFirst()) {
-                                cursor.toAppProtection()
-                            } else {
-                                null
-                            }
-                        }
-                }
-
-            override suspend fun insertAppProtection(app: AppProtection) {
-                withContext(Dispatchers.IO) {
-                    val values = app.toContentValues()
-                    writableDatabase.insertWithOnConflict(
-                        "app_protection",
-                        null,
-                        values,
-                        SQLiteDatabase.CONFLICT_REPLACE,
-                    )
-                    DbNotifier.notifyChanged("app_protection")
                 }
             }
-
-            override suspend fun insertAppProtections(apps: List<AppProtection>) {
-                withContext(Dispatchers.IO) {
-                    val db = writableDatabase
-                    db.beginTransaction()
-                    try {
-                        for (app in apps) {
-                            db.insertWithOnConflict(
-                                "app_protection",
-                                null,
-                                app.toContentValues(),
-                                SQLiteDatabase.CONFLICT_REPLACE,
-                            )
-                        }
-                        db.setTransactionSuccessful()
-                    } finally {
-                        db.endTransaction()
-                    }
-                    DbNotifier.notifyChanged("app_protection")
-                }
-            }
-
-            override suspend fun deleteAppProtection(app: AppProtection) {
-                withContext(Dispatchers.IO) {
-                    writableDatabase.delete(
-                        "app_protection",
-                        "packageName = ? AND userId = ?",
-                        arrayOf(app.packageName, app.userId.toString()),
-                    )
-                    DbNotifier.notifyChanged("app_protection")
-                }
-            }
-
-            override suspend fun getAllAppProtectionSync(): List<AppProtection> =
-                withContext(Dispatchers.IO) {
-                    val list = mutableListOf<AppProtection>()
-                    readableDatabase.rawQuery("SELECT * FROM app_protection", null).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            list.add(cursor.toAppProtection())
-                        }
-                    }
-                    list
-                }
         }
 
-    private val portRuleDaoImpl =
-        object : PortRuleDao {
-            override fun getRulesForApp(
-                packageName: String,
-                userId: Int,
-            ): Flow<List<DbPortRule>> =
-                flow {
+        override suspend fun getAppProtection(packageName: String, userId: Int): AppProtection? =
+            synchronized(lock) {
+                config.apps.firstOrNull { it.packageName == packageName && it.userId == userId }
+            }
+
+        override suspend fun insertAppProtection(app: AppProtection) {
+            synchronized(lock) {
+                val list = config.apps.toMutableList()
+                list.removeAll { it.packageName == app.packageName && it.userId == app.userId }
+                list.add(app)
+                config = config.copy(apps = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("app_protection")
+        }
+
+        override suspend fun insertAppProtections(apps: List<AppProtection>) {
+            synchronized(lock) {
+                val list = config.apps.toMutableList()
+                for (app in apps) {
+                    list.removeAll { it.packageName == app.packageName && it.userId == app.userId }
+                    list.add(app)
+                }
+                config = config.copy(apps = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("app_protection")
+        }
+
+        override suspend fun deleteAppProtection(app: AppProtection) {
+            synchronized(lock) {
+                val list = config.apps.toMutableList()
+                list.removeAll { it.packageName == app.packageName && it.userId == app.userId }
+                config = config.copy(apps = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("app_protection")
+        }
+
+        override suspend fun getAllAppProtectionSync(): List<AppProtection> =
+            synchronized(lock) {
+                config.apps.toList()
+            }
+    }
+
+    private val portRuleDaoImpl = object : PortRuleDao {
+        override fun getRulesForApp(packageName: String, userId: Int): Flow<List<DbPortRule>> = flow {
+            emit(getRulesForAppSync(packageName, userId))
+            DbNotifier.changeFlow.collect { table ->
+                if (table == "port_rules") {
                     emit(getRulesForAppSync(packageName, userId))
-                    DbNotifier.changeFlow.collect { table ->
-                        if (table == "port_rules") {
-                            emit(getRulesForAppSync(packageName, userId))
-                        }
-                    }
-                }
-
-            override suspend fun getRulesForAppSync(
-                packageName: String,
-                userId: Int,
-            ): List<DbPortRule> =
-                withContext(Dispatchers.IO) {
-                    val list = mutableListOf<DbPortRule>()
-                    readableDatabase
-                        .rawQuery(
-                            "SELECT * FROM port_rules WHERE packageName = ? AND userId = ?",
-                            arrayOf(packageName, userId.toString()),
-                        ).use { cursor ->
-                            while (cursor.moveToNext()) {
-                                list.add(cursor.toDbPortRule())
-                            }
-                        }
-                    list
-                }
-
-            override suspend fun insertRule(rule: DbPortRule) {
-                withContext(Dispatchers.IO) {
-                    val values = rule.toContentValues()
-                    if (rule.id != 0L) {
-                        values.put("id", rule.id)
-                    }
-                    writableDatabase.insertWithOnConflict(
-                        "port_rules",
-                        null,
-                        values,
-                        SQLiteDatabase.CONFLICT_REPLACE,
-                    )
-                    DbNotifier.notifyChanged("port_rules")
-                }
-            }
-
-            override suspend fun insertRules(rules: List<DbPortRule>) {
-                withContext(Dispatchers.IO) {
-                    val db = writableDatabase
-                    db.beginTransaction()
-                    try {
-                        for (rule in rules) {
-                            val values = rule.toContentValues()
-                            if (rule.id != 0L) {
-                                values.put("id", rule.id)
-                            }
-                            db.insertWithOnConflict(
-                                "port_rules",
-                                null,
-                                values,
-                                SQLiteDatabase.CONFLICT_REPLACE,
-                            )
-                        }
-                        db.setTransactionSuccessful()
-                    } finally {
-                        db.endTransaction()
-                    }
-                    DbNotifier.notifyChanged("port_rules")
-                }
-            }
-
-            override suspend fun deleteRule(ruleId: Long) {
-                withContext(Dispatchers.IO) {
-                    writableDatabase.delete(
-                        "port_rules",
-                        "id = ?",
-                        arrayOf(ruleId.toString()),
-                    )
-                    DbNotifier.notifyChanged("port_rules")
-                }
-            }
-
-            override suspend fun deleteRulesForApp(
-                packageName: String,
-                userId: Int,
-            ) {
-                withContext(Dispatchers.IO) {
-                    writableDatabase.delete(
-                        "port_rules",
-                        "packageName = ? AND userId = ?",
-                        arrayOf(packageName, userId.toString()),
-                    )
-                    DbNotifier.notifyChanged("port_rules")
                 }
             }
         }
 
-    private val massPortRuleDaoImpl =
-        object : MassPortRuleDao {
-            override fun getMassRules(): Flow<List<DbMassPortRule>> =
-                flow {
+        override suspend fun getRulesForAppSync(packageName: String, userId: Int): List<DbPortRule> =
+            synchronized(lock) {
+                config.portRules.filter { it.packageName == packageName && it.userId == userId }
+            }
+
+        override suspend fun insertRule(rule: DbPortRule) {
+            synchronized(lock) {
+                val list = config.portRules.toMutableList()
+                val id = if (rule.id == 0L) {
+                    (list.maxOfOrNull { it.id } ?: 0L) + 1L
+                } else {
+                    rule.id
+                }
+                val newRule = rule.copy(id = id)
+                list.removeAll { it.id == id }
+                list.add(newRule)
+                config = config.copy(portRules = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("port_rules")
+        }
+
+        override suspend fun insertRules(rules: List<DbPortRule>) {
+            synchronized(lock) {
+                val list = config.portRules.toMutableList()
+                for (rule in rules) {
+                    val id = if (rule.id == 0L) {
+                        (list.maxOfOrNull { it.id } ?: 0L) + 1L
+                    } else {
+                        rule.id
+                    }
+                    val newRule = rule.copy(id = id)
+                    list.removeAll { it.id == id }
+                    list.add(newRule)
+                }
+                config = config.copy(portRules = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("port_rules")
+        }
+
+        override suspend fun deleteRule(ruleId: Long) {
+            synchronized(lock) {
+                val list = config.portRules.toMutableList()
+                list.removeAll { it.id == ruleId }
+                config = config.copy(portRules = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("port_rules")
+        }
+
+        override suspend fun deleteRulesForApp(packageName: String, userId: Int) {
+            synchronized(lock) {
+                val list = config.portRules.toMutableList()
+                list.removeAll { it.packageName == packageName && it.userId == userId }
+                config = config.copy(portRules = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("port_rules")
+        }
+    }
+
+    private val massPortRuleDaoImpl = object : MassPortRuleDao {
+        override fun getMassRules(): Flow<List<DbMassPortRule>> = flow {
+            emit(getMassRulesSync())
+            DbNotifier.changeFlow.collect { table ->
+                if (table == "mass_port_rules") {
                     emit(getMassRulesSync())
-                    DbNotifier.changeFlow.collect { table ->
-                        if (table == "mass_port_rules") {
-                            emit(getMassRulesSync())
-                        }
-                    }
-                }
-
-            override suspend fun getMassRulesSync(): List<DbMassPortRule> =
-                withContext(Dispatchers.IO) {
-                    val list = mutableListOf<DbMassPortRule>()
-                    readableDatabase.rawQuery("SELECT * FROM mass_port_rules", null).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            list.add(cursor.toDbMassPortRule())
-                        }
-                    }
-                    list
-                }
-
-            override suspend fun insertMassRule(rule: DbMassPortRule) {
-                withContext(Dispatchers.IO) {
-                    val values = rule.toContentValues()
-                    if (rule.id != 0L) {
-                        values.put("id", rule.id)
-                    }
-                    writableDatabase.insertWithOnConflict(
-                        "mass_port_rules",
-                        null,
-                        values,
-                        SQLiteDatabase.CONFLICT_REPLACE,
-                    )
-                    DbNotifier.notifyChanged("mass_port_rules")
-                }
-            }
-
-            override suspend fun insertMassRules(rules: List<DbMassPortRule>) {
-                withContext(Dispatchers.IO) {
-                    val db = writableDatabase
-                    db.beginTransaction()
-                    try {
-                        for (rule in rules) {
-                            val values = rule.toContentValues()
-                            if (rule.id != 0L) {
-                                values.put("id", rule.id)
-                            }
-                            db.insertWithOnConflict(
-                                "mass_port_rules",
-                                null,
-                                values,
-                                SQLiteDatabase.CONFLICT_REPLACE,
-                            )
-                        }
-                        db.setTransactionSuccessful()
-                    } finally {
-                        db.endTransaction()
-                    }
-                    DbNotifier.notifyChanged("mass_port_rules")
-                }
-            }
-
-            override suspend fun deleteMassRule(ruleId: Long) {
-                withContext(Dispatchers.IO) {
-                    writableDatabase.delete(
-                        "mass_port_rules",
-                        "id = ?",
-                        arrayOf(ruleId.toString()),
-                    )
-                    DbNotifier.notifyChanged("mass_port_rules")
-                }
-            }
-
-            override suspend fun deleteAllMassRules() {
-                withContext(Dispatchers.IO) {
-                    writableDatabase.delete("mass_port_rules", null, null)
-                    DbNotifier.notifyChanged("mass_port_rules")
                 }
             }
         }
 
-    private val ifacePrefixDaoImpl =
-        object : IfacePrefixDao {
-            override fun getAllPrefixes(): Flow<List<String>> =
-                flow {
+        override suspend fun getMassRulesSync(): List<DbMassPortRule> =
+            synchronized(lock) {
+                config.massPortRules.toList()
+            }
+
+        override suspend fun insertMassRule(rule: DbMassPortRule) {
+            synchronized(lock) {
+                val list = config.massPortRules.toMutableList()
+                val id = if (rule.id == 0L) {
+                    (list.maxOfOrNull { it.id } ?: 0L) + 1L
+                } else {
+                    rule.id
+                }
+                val newRule = rule.copy(id = id)
+                list.removeAll { it.id == id }
+                list.add(newRule)
+                config = config.copy(massPortRules = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("mass_port_rules")
+        }
+
+        override suspend fun insertMassRules(rules: List<DbMassPortRule>) {
+            synchronized(lock) {
+                val list = config.massPortRules.toMutableList()
+                for (rule in rules) {
+                    val id = if (rule.id == 0L) {
+                        (list.maxOfOrNull { it.id } ?: 0L) + 1L
+                    } else {
+                        rule.id
+                    }
+                    val newRule = rule.copy(id = id)
+                    list.removeAll { it.id == id }
+                    list.add(newRule)
+                }
+                config = config.copy(massPortRules = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("mass_port_rules")
+        }
+
+        override suspend fun deleteMassRule(ruleId: Long) {
+            synchronized(lock) {
+                val list = config.massPortRules.toMutableList()
+                list.removeAll { it.id == ruleId }
+                config = config.copy(massPortRules = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("mass_port_rules")
+        }
+
+        override suspend fun deleteAllMassRules() {
+            synchronized(lock) {
+                config = config.copy(massPortRules = emptyList())
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("mass_port_rules")
+        }
+    }
+
+    private val ifacePrefixDaoImpl = object : IfacePrefixDao {
+        override fun getAllPrefixes(): Flow<List<String>> = flow {
+            emit(getAllPrefixesSync())
+            DbNotifier.changeFlow.collect { table ->
+                if (table == "iface_prefixes") {
                     emit(getAllPrefixesSync())
-                    DbNotifier.changeFlow.collect { table ->
-                        if (table == "iface_prefixes") {
-                            emit(getAllPrefixesSync())
-                        }
-                    }
-                }
-
-            override suspend fun getAllPrefixesSync(): List<String> =
-                withContext(Dispatchers.IO) {
-                    val list = mutableListOf<String>()
-                    readableDatabase.rawQuery("SELECT prefix FROM iface_prefixes", null).use { cursor ->
-                        while (cursor.moveToNext()) {
-                            list.add(cursor.getString(0))
-                        }
-                    }
-                    list
-                }
-
-            override suspend fun insertPrefixes(prefixes: List<DbIfacePrefix>) {
-                withContext(Dispatchers.IO) {
-                    val db = writableDatabase
-                    db.beginTransaction()
-                    try {
-                        for (prefix in prefixes) {
-                            val values =
-                                ContentValues().apply {
-                                    put("prefix", prefix.prefix)
-                                }
-                            db.insertWithOnConflict(
-                                "iface_prefixes",
-                                null,
-                                values,
-                                SQLiteDatabase.CONFLICT_REPLACE,
-                            )
-                        }
-                        db.setTransactionSuccessful()
-                    } finally {
-                        db.endTransaction()
-                    }
-                    DbNotifier.notifyChanged("iface_prefixes")
-                }
-            }
-
-            override suspend fun deleteAllPrefixes() {
-                withContext(Dispatchers.IO) {
-                    writableDatabase.delete("iface_prefixes", null, null)
-                    DbNotifier.notifyChanged("iface_prefixes")
                 }
             }
         }
 
-    private val globalConfigDaoImpl =
-        object : GlobalConfigDao {
-            override suspend fun getConfig(): DbGlobalConfig? =
-                withContext(Dispatchers.IO) {
-                    readableDatabase
-                        .rawQuery(
-                            "SELECT * FROM global_config WHERE id = 'default'",
-                            null,
-                        ).use { cursor ->
-                            if (cursor.moveToFirst()) {
-                                cursor.toDbGlobalConfig()
-                            } else {
-                                null
-                            }
-                        }
-                }
-
-            override suspend fun insertConfig(config: DbGlobalConfig) {
-                withContext(Dispatchers.IO) {
-                    val values =
-                        ContentValues().apply {
-                            put("id", config.id)
-                            put("kernelHookMask", config.kernelHookMask)
-                            put("javaHookMask", config.javaHookMask)
-                            put("debugLogging", config.debugLogging)
-                        }
-                    writableDatabase.insertWithOnConflict(
-                        "global_config",
-                        null,
-                        values,
-                        SQLiteDatabase.CONFLICT_REPLACE,
-                    )
-                    DbNotifier.notifyChanged("global_config")
-                }
+        override suspend fun getAllPrefixesSync(): List<String> =
+            synchronized(lock) {
+                config.ifacePrefixes.toList()
             }
+
+        override suspend fun insertPrefixes(prefixes: List<DbIfacePrefix>) {
+            synchronized(lock) {
+                val list = config.ifacePrefixes.toMutableList()
+                for (prefix in prefixes) {
+                    if (!list.contains(prefix.prefix)) {
+                        list.add(prefix.prefix)
+                    }
+                }
+                config = config.copy(ifacePrefixes = list)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("iface_prefixes")
         }
+
+        override suspend fun deleteAllPrefixes() {
+            synchronized(lock) {
+                config = config.copy(ifacePrefixes = emptyList())
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("iface_prefixes")
+        }
+    }
+
+    private val globalConfigDaoImpl = object : GlobalConfigDao {
+        override suspend fun getConfig(): DbGlobalConfig =
+            synchronized(lock) {
+                config.globalConfig
+            }
+
+        override suspend fun insertConfig(config: DbGlobalConfig) {
+            synchronized(lock) {
+                this@AppDatabase.config = this@AppDatabase.config.copy(globalConfig = config)
+                saveConfig()
+            }
+            DbNotifier.notifyChanged("global_config")
+        }
+    }
 
     companion object {
         @Volatile
@@ -498,121 +454,266 @@ internal class AppDatabase private constructor(
             instance ?: synchronized(this) {
                 if (instance == null) {
                     val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
-                    if (!context.isDeviceProtectedStorage) {
-                        val ceDbFile = context.getDatabasePath(DbHelper.DATABASE_NAME)
-                        if (ceDbFile.exists()) {
-                            try {
-                                deContext.moveDatabaseFrom(context, DbHelper.DATABASE_NAME)
-                            } catch (e: Exception) {
-                                Log.e("VpnHideDb", "Failed to move database to device protected storage: ${e.message}", e)
-                            }
-                        }
-                    }
                     instance = AppDatabase(deContext)
                 }
                 instance!!
             }
+
+        fun performMigrationIfRequired(context: Context) {
+            val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
+            val dbFile = deContext.getDatabasePath("vpnhide_database")
+            if (!dbFile.exists()) return
+
+            Log.i("VpnHideDb", "Legacy database found, starting migration")
+
+            var sqliteDb: SQLiteDatabase? = null
+            try {
+                sqliteDb = SQLiteDatabase.openDatabase(
+                    dbFile.absolutePath,
+                    null,
+                    SQLiteDatabase.OPEN_READONLY
+                )
+
+                // Read apps
+                val apps = mutableListOf<AppProtection>()
+                try {
+                    sqliteDb.rawQuery("SELECT * FROM app_protection", null).use { cursor ->
+                        val pkgIdx = cursor.getColumnIndex("packageName")
+                        val userIdx = cursor.getColumnIndex("userId")
+                        val uidIdx = cursor.getColumnIndex("uid")
+                        val kmodIdx = cursor.getColumnIndex("kmod")
+                        val lsposedIdx = cursor.getColumnIndex("lsposed")
+                        val portHidingIdx = cursor.getColumnIndex("portHiding")
+
+                        if (pkgIdx >= 0) {
+                            while (cursor.moveToNext()) {
+                                apps.add(
+                                    AppProtection(
+                                        packageName = cursor.getString(pkgIdx),
+                                        userId = if (userIdx >= 0) cursor.getInt(userIdx) else 0,
+                                        uid = if (uidIdx >= 0) cursor.getInt(uidIdx) else 0,
+                                        kmod = if (kmodIdx >= 0) cursor.getInt(kmodIdx) == 1 else false,
+                                        lsposed = if (lsposedIdx >= 0) cursor.getInt(lsposedIdx) == 1 else false,
+                                        portHiding = if (portHidingIdx >= 0) cursor.getInt(portHidingIdx) == 1 else false
+                                    )
+                                )
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("VpnHideDb", "Migration: failed to read app_protection table", e)
+                }
+
+                // Read port rules
+                val portRules = mutableListOf<DbPortRule>()
+                try {
+                    sqliteDb.rawQuery("SELECT * FROM port_rules", null).use { cursor ->
+                        val idIdx = cursor.getColumnIndex("id")
+                        val pkgIdx = cursor.getColumnIndex("packageName")
+                        val userIdx = cursor.getColumnIndex("userId")
+                        val startIdx = cursor.getColumnIndex("startPort")
+                        val endIdx = cursor.getColumnIndex("endPort")
+                        val protoIdx = cursor.getColumnIndex("protocol")
+                        val labelIdx = cursor.getColumnIndex("label")
+                        val enabledIdx = cursor.getColumnIndex("enabled")
+
+                        while (cursor.moveToNext()) {
+                            val protoVal = if (protoIdx >= 0) cursor.getInt(protoIdx) else 0
+                            val proto = if (protoVal >= 0 && protoVal < PortProtocol.entries.size) {
+                                PortProtocol.entries[protoVal]
+                            } else {
+                                PortProtocol.TCP
+                            }
+                            portRules.add(
+                                DbPortRule(
+                                    id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L,
+                                    packageName = if (pkgIdx >= 0) cursor.getString(pkgIdx) else "",
+                                    userId = if (userIdx >= 0) cursor.getInt(userIdx) else 0,
+                                    startPort = if (startIdx >= 0) cursor.getInt(startIdx) else 0,
+                                    endPort = if (endIdx >= 0) cursor.getInt(endIdx) else 0,
+                                    protocol = proto,
+                                    label = if (labelIdx >= 0) cursor.getString(labelIdx) else "",
+                                    enabled = if (enabledIdx >= 0) cursor.getInt(enabledIdx) == 1 else true
+                                )
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("VpnHideDb", "Migration: failed to read port_rules table", e)
+                }
+
+                // Read mass port rules
+                val massPortRules = mutableListOf<DbMassPortRule>()
+                try {
+                    sqliteDb.rawQuery("SELECT * FROM mass_port_rules", null).use { cursor ->
+                        val idIdx = cursor.getColumnIndex("id")
+                        val startIdx = cursor.getColumnIndex("startPort")
+                        val endIdx = cursor.getColumnIndex("endPort")
+                        val protoIdx = cursor.getColumnIndex("protocol")
+                        val labelIdx = cursor.getColumnIndex("label")
+                        val enabledIdx = cursor.getColumnIndex("enabled")
+
+                        while (cursor.moveToNext()) {
+                            val protoVal = if (protoIdx >= 0) cursor.getInt(protoIdx) else 0
+                            val proto = if (protoVal >= 0 && protoVal < PortProtocol.entries.size) {
+                                PortProtocol.entries[protoVal]
+                            } else {
+                                PortProtocol.TCP
+                            }
+                            massPortRules.add(
+                                DbMassPortRule(
+                                    id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L,
+                                    startPort = if (startIdx >= 0) cursor.getInt(startIdx) else 0,
+                                    endPort = if (endIdx >= 0) cursor.getInt(endIdx) else 0,
+                                    protocol = proto,
+                                    label = if (labelIdx >= 0) cursor.getString(labelIdx) else "",
+                                    enabled = if (enabledIdx >= 0) cursor.getInt(enabledIdx) == 1 else true
+                                )
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("VpnHideDb", "Migration: failed to read mass_port_rules table", e)
+                }
+
+                // Read prefixes
+                val prefixes = mutableListOf<String>()
+                try {
+                    sqliteDb.rawQuery("SELECT prefix FROM iface_prefixes", null).use { cursor ->
+                        while (cursor.moveToNext()) {
+                            prefixes.add(cursor.getString(0))
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("VpnHideDb", "Migration: failed to read iface_prefixes table", e)
+                }
+
+                // Read global config
+                var globalConfig = DbGlobalConfig()
+                try {
+                    sqliteDb.rawQuery("SELECT * FROM global_config WHERE id = 'default'", null).use { cursor ->
+                        if (cursor.moveToFirst()) {
+                            val idIdx = cursor.getColumnIndex("id")
+                            val kMaskIdx = cursor.getColumnIndex("kernelHookMask")
+                            val jMaskIdx = cursor.getColumnIndex("javaHookMask")
+                            val debugLoggingIdx = cursor.getColumnIndex("debugLogging")
+
+                            globalConfig = DbGlobalConfig(
+                                id = if (idIdx >= 0) cursor.getString(idIdx) else "default",
+                                kernelHookMask = if (kMaskIdx >= 0) cursor.getLong(kMaskIdx) else 0xFFFFFFFFL,
+                                javaHookMask = if (jMaskIdx >= 0) cursor.getLong(jMaskIdx) else 0xFFFFFFFFL,
+                                debugLogging = if (debugLoggingIdx >= 0) cursor.getInt(debugLoggingIdx) else 0
+                            )
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.e("VpnHideDb", "Migration: failed to read global_config table", e)
+                }
+
+                // Write migrated config
+                val migratedConfig = VpnHideConfig(
+                    globalConfig = globalConfig,
+                    apps = apps,
+                    portRules = portRules,
+                    massPortRules = massPortRules,
+                    ifacePrefixes = prefixes
+                )
+
+                // Instantiate AppDatabase on deContext to write it
+                val db = getInstance(deContext)
+                synchronized(db.lock) {
+                    db.config = migratedConfig
+                    db.saveConfigInternal()
+                }
+
+                Log.i("VpnHideDb", "Migration complete, deleting legacy database files")
+            } catch (e: Exception) {
+                Log.e("VpnHideDb", "Critical error migrating database", e)
+            } finally {
+                sqliteDb?.close()
+            }
+
+            // Close instance to ensure any connection to database is released
+            // Now delete files
+            try {
+                deContext.deleteDatabase("vpnhide_database")
+            } catch (e: Exception) {
+                Log.e("VpnHideDb", "Failed to delete legacy database file", e)
+            }
+        }
     }
 }
 
-private fun Cursor.toAppProtection(): AppProtection {
-    val pkgIdx = getColumnIndexOrThrow("packageName")
-    val userIdx = getColumnIndexOrThrow("userId")
-    val uidIdx = getColumnIndexOrThrow("uid")
-    val kmodIdx = getColumnIndexOrThrow("kmod")
-    val lsposedIdx = getColumnIndexOrThrow("lsposed")
-    val portHidingIdx = getColumnIndexOrThrow("portHiding")
+// ── JSON Conversion Helpers ──────────────────────────────────────────
 
-    return AppProtection(
-        packageName = getString(pkgIdx),
-        userId = getInt(userIdx),
-        uid = getInt(uidIdx),
-        kmod = getInt(kmodIdx) == 1,
-        lsposed = getInt(lsposedIdx) == 1,
-        portHiding = getInt(portHidingIdx) == 1,
-    )
+private fun AppProtection.toJson(): JSONObject = JSONObject().apply {
+    put("packageName", packageName)
+    put("userId", userId)
+    put("uid", uid)
+    put("kmod", kmod)
+    put("lsposed", lsposed)
+    put("portHiding", portHiding)
 }
 
-private fun AppProtection.toContentValues(): ContentValues =
-    ContentValues().apply {
-        put("packageName", packageName)
-        put("userId", userId)
-        put("uid", uid)
-        put("kmod", if (kmod) 1 else 0)
-        put("lsposed", if (lsposed) 1 else 0)
-        put("portHiding", if (portHiding) 1 else 0)
-    }
+private fun JSONObject.toAppProtection(): AppProtection = AppProtection(
+    packageName = getString("packageName"),
+    userId = optInt("userId", 0),
+    uid = optInt("uid", 0),
+    kmod = optBoolean("kmod", false),
+    lsposed = optBoolean("lsposed", false),
+    portHiding = optBoolean("portHiding", false)
+)
 
-private fun Cursor.toDbPortRule(): DbPortRule {
-    val idIdx = getColumnIndexOrThrow("id")
-    val pkgIdx = getColumnIndexOrThrow("packageName")
-    val userIdx = getColumnIndexOrThrow("userId")
-    val startIdx = getColumnIndexOrThrow("startPort")
-    val endIdx = getColumnIndexOrThrow("endPort")
-    val protoIdx = getColumnIndexOrThrow("protocol")
-    val labelIdx = getColumnIndexOrThrow("label")
-    val enabledIdx = getColumnIndexOrThrow("enabled")
-
-    return DbPortRule(
-        id = getLong(idIdx),
-        packageName = getString(pkgIdx),
-        userId = getInt(userIdx),
-        startPort = getInt(startIdx),
-        endPort = getInt(endIdx),
-        protocol = PortProtocol.entries[getInt(protoIdx)],
-        label = getString(labelIdx),
-        enabled = getInt(enabledIdx) == 1,
-    )
+private fun DbPortRule.toJson(): JSONObject = JSONObject().apply {
+    put("id", id)
+    put("packageName", packageName)
+    put("userId", userId)
+    put("startPort", startPort)
+    put("endPort", endPort)
+    put("protocol", protocol.name)
+    put("label", label)
+    put("enabled", enabled)
 }
 
-private fun DbPortRule.toContentValues(): ContentValues =
-    ContentValues().apply {
-        put("packageName", packageName)
-        put("userId", userId)
-        put("startPort", startPort)
-        put("endPort", endPort)
-        put("protocol", protocol.ordinal)
-        put("label", label)
-        put("enabled", if (enabled) 1 else 0)
-    }
+private fun JSONObject.toDbPortRule(): DbPortRule = DbPortRule(
+    id = getLong("id"),
+    packageName = getString("packageName"),
+    userId = optInt("userId", 0),
+    startPort = getInt("startPort"),
+    endPort = getInt("endPort"),
+    protocol = PortProtocol.valueOf(optString("protocol", PortProtocol.TCP.name)),
+    label = optString("label", ""),
+    enabled = optBoolean("enabled", true)
+)
 
-private fun Cursor.toDbMassPortRule(): DbMassPortRule {
-    val idIdx = getColumnIndexOrThrow("id")
-    val startIdx = getColumnIndexOrThrow("startPort")
-    val endIdx = getColumnIndexOrThrow("endPort")
-    val protoIdx = getColumnIndexOrThrow("protocol")
-    val labelIdx = getColumnIndexOrThrow("label")
-    val enabledIdx = getColumnIndexOrThrow("enabled")
-
-    return DbMassPortRule(
-        id = getLong(idIdx),
-        startPort = getInt(startIdx),
-        endPort = getInt(endIdx),
-        protocol = PortProtocol.entries[getInt(protoIdx)],
-        label = getString(labelIdx),
-        enabled = getInt(enabledIdx) == 1,
-    )
+private fun DbMassPortRule.toJson(): JSONObject = JSONObject().apply {
+    put("id", id)
+    put("startPort", startPort)
+    put("endPort", endPort)
+    put("protocol", protocol.name)
+    put("label", label)
+    put("enabled", enabled)
 }
 
-private fun DbMassPortRule.toContentValues(): ContentValues =
-    ContentValues().apply {
-        put("startPort", startPort)
-        put("endPort", endPort)
-        put("protocol", protocol.ordinal)
-        put("label", label)
-        put("enabled", if (enabled) 1 else 0)
-    }
+private fun JSONObject.toDbMassPortRule(): DbMassPortRule = DbMassPortRule(
+    id = getLong("id"),
+    startPort = getInt("startPort"),
+    endPort = getInt("endPort"),
+    protocol = PortProtocol.valueOf(optString("protocol", PortProtocol.TCP.name)),
+    label = optString("label", ""),
+    enabled = optBoolean("enabled", true)
+)
 
-private fun Cursor.toDbGlobalConfig(): DbGlobalConfig {
-    val idIdx = getColumnIndexOrThrow("id")
-    val kMaskIdx = getColumnIndexOrThrow("kernelHookMask")
-    val jMaskIdx = getColumnIndexOrThrow("javaHookMask")
-    val debugLoggingIdx = getColumnIndexOrThrow("debugLogging")
-
-    return DbGlobalConfig(
-        id = getString(idIdx),
-        kernelHookMask = getLong(kMaskIdx),
-        javaHookMask = getLong(jMaskIdx),
-        debugLogging = getInt(debugLoggingIdx),
-    )
+private fun DbGlobalConfig.toJson(): JSONObject = JSONObject().apply {
+    put("id", id)
+    put("kernelHookMask", kernelHookMask)
+    put("javaHookMask", javaHookMask)
+    put("debugLogging", debugLogging)
 }
+
+private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig = DbGlobalConfig(
+    id = optString("id", "default"),
+    kernelHookMask = optLong("kernelHookMask", 0xFFFFFFFFL),
+    javaHookMask = optLong("javaHookMask", 0xFFFFFFFFL),
+    debugLogging = optInt("debugLogging", 0)
+)
