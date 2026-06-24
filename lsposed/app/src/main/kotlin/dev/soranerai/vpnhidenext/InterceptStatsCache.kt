@@ -1,6 +1,8 @@
 package dev.soranerai.vpnhidenext
 
 import android.content.Context
+import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
+import dev.soranerai.vpnhidenext.domain.models.AppInterceptStats
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -51,8 +53,10 @@ internal object InterceptStatsCache {
         AppListCache.apps.first { it != null }
         val next =
             withContext(Dispatchers.IO) {
-                loadInterceptStats(context)
+                val repository = DashboardRepository(context.applicationContext)
+                repository.loadInterceptStats()
             }
         _stats.value = next
     }
 }
+

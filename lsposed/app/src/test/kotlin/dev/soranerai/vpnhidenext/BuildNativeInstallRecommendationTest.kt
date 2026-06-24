@@ -1,10 +1,14 @@
 package dev.soranerai.vpnhidenext
 
+import dev.soranerai.vpnhidenext.domain.usecase.buildNativeInstallRecommendation
+import dev.soranerai.vpnhidenext.domain.usecase.parseKernelSeries
+import dev.soranerai.vpnhidenext.domain.usecase.parseKernelAndroidBranch
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+
 
 /**
  * Covers the `(kernel KMI × series)` → (kmod zip, variant, zygisk?)

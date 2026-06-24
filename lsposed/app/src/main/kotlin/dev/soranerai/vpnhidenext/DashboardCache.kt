@@ -1,7 +1,8 @@
 package dev.soranerai.vpnhidenext
 
 import android.content.Context
-import android.net.ConnectivityManager
+import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
+import dev.soranerai.vpnhidenext.domain.models.DashboardState
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -65,10 +66,10 @@ internal object DashboardCache {
     ) {
         _loading.value = true
         try {
-            val cm = context.getSystemService(ConnectivityManager::class.java)
             val next =
                 withContext(Dispatchers.IO) {
-                    loadDashboardState(cm, context.applicationContext, selfNeedsRestart)
+                    val repository = DashboardRepository(context.applicationContext)
+                    repository.loadDashboardState(selfNeedsRestart)
                 }
             _state.value = next
         } finally {
@@ -76,3 +77,4 @@ internal object DashboardCache {
         }
     }
 }
+
