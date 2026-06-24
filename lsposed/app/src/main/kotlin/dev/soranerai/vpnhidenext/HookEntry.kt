@@ -606,6 +606,7 @@ class HookEntry : IXposedHookLoadPackage {
 
     private fun startConfigReader() {
         Thread({
+            var lastJavaStatsClearGen = -1
             while (true) {
                 try {
                     val file = File("/dev/vpnhide_ctrl")
@@ -618,6 +619,7 @@ class HookEntry : IXposedHookLoadPackage {
                         val uids = mutableSetOf<Int>()
                         val prefixes = mutableListOf<String>()
                         var coverIface: String? = null
+                        var statsClearGen: Int? = null
 
                         while (true) {
                             val line = reader.readLine() ?: break
@@ -628,16 +630,28 @@ class HookEntry : IXposedHookLoadPackage {
                                     HookContext.cachedJavaHooksMask = javaHookMask
                                     HookContext.cachedPhysicalIfaceName = coverIface
                                     HookContext.vpnPackageCache.clear()
+                                    statsClearGen?.let { gen ->
+                                        if (lastJavaStatsClearGen == -1) {
+                                            lastJavaStatsClearGen = gen
+                                        } else if (gen > lastJavaStatsClearGen) {
+                                            HookContext.hookStats.clear()
+                                            lastJavaStatsClearGen = gen
+                                            HookLog.i("VpnHide: cleared java stats (gen=$gen)")
+                                        }
+                                    }
                                 }
                                 uids.clear()
                                 prefixes.clear()
                                 javaHookMask = 0xFFFFFFFFu
                                 coverIface = null
+                                statsClearGen = null
                                 continue
                             }
 
                             if (line.startsWith("java_hook_mask:")) {
                                 javaHookMask = line.substringAfter("java_hook_mask:").trim().toUIntOrNull() ?: 0xFFFFFFFFu
+                            } else if (line.startsWith("java_stats_clear_gen:")) {
+                                statsClearGen = line.substringAfter("java_stats_clear_gen:").trim().toIntOrNull()
                             } else if (line.startsWith("lsposed_targets:")) {
                                 val targetStr = line.substringAfter("lsposed_targets:").trim()
                                 if (targetStr.isNotEmpty()) {

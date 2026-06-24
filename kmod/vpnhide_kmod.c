@@ -247,6 +247,7 @@ static DEFINE_SPINLOCK(lsposed_targets_update_lock);
 
 static DECLARE_WAIT_QUEUE_HEAD(vpnhide_config_wait);
 static atomic_t vpnhide_config_generation = ATOMIC_INIT(1);
+static atomic_t java_stats_clear_generation = ATOMIC_INIT(1);
 static unsigned int java_hooks_mask = 0xFFFFFFFF;
 
 static struct vpnhide_port_targets __rcu *global_port_targets;
@@ -2382,6 +2383,11 @@ static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
 
 			offset += scnprintf(reader->buf + offset,
 					    65536 - offset,
+					    "java_stats_clear_gen: %d\n",
+					    atomic_read(&java_stats_clear_generation));
+
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset,
 					    "debug_enabled: %d\n",
 					    READ_ONCE(debug_enabled));
 
@@ -2472,6 +2478,9 @@ static ssize_t vpnhide_dev_write(struct file *file, const char __user *buf,
 		mutex_lock(&java_stats_lock);
 		java_stats_buf[0] = '\0';
 		mutex_unlock(&java_stats_lock);
+		atomic_inc(&java_stats_clear_generation);
+		atomic_inc(&vpnhide_config_generation);
+		wake_up_interruptible(&vpnhide_config_wait);
 	} else if (strncmp(kbuf, "cover_iface:", 12) == 0) {
 		char *val = kbuf + 12;
 		size_t len = strlen(val);
