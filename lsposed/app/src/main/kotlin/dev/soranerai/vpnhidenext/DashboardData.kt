@@ -636,78 +636,6 @@ internal suspend fun loadDashboardState(
         }
     }
 
-    fun readLsposedConfig(): LsposedConfig? {
-        val dbCopy = File(context.cacheDir, "snapshot_lspd.db")
-        if (snapshot.get("lspd_db_copied") != "1" || !dbCopy.isFile) {
-            VpnHideLog.w(TAG, "LSPosed config db not copied or missing")
-            return null
-        }
-
-        return try {
-            SQLiteDatabase
-                .openDatabase(dbCopy.absolutePath, null, SQLiteDatabase.OPEN_READONLY)
-                .use { db ->
-                    db
-                        .rawQuery(
-                            "SELECT mid, enabled FROM modules WHERE module_pkg_name = ?",
-                            arrayOf(selfPkg),
-                        ).use { moduleCursor ->
-                            if (!moduleCursor.moveToFirst()) {
-                                return LsposedConfig.ModuleNotConfigured
-                            }
-
-                            val mid = moduleCursor.getLong(0)
-                            val enabled = moduleCursor.getInt(1) != 0
-                            if (!enabled) {
-                                return LsposedConfig.Disabled
-                            }
-
-                            val scopeEntries = mutableListOf<Pair<String, Int>>()
-                            db
-                                .rawQuery(
-                                    "SELECT app_pkg_name, user_id FROM scope WHERE mid = ? ORDER BY user_id, app_pkg_name",
-                                    arrayOf(mid.toString()),
-                                ).use { scopeCursor ->
-                                    while (scopeCursor.moveToNext()) {
-                                        scopeEntries +=
-                                            scopeCursor.getString(0) to
-                                            scopeCursor.getInt(1)
-                                    }
-                                }
-                            val hasSystemFramework =
-                                scopeEntries.any { (pkg, userId) ->
-                                    pkg == "system" && userId == 0
-                                }
-                            val renderedEntries =
-                                scopeEntries.map { (pkg, userId) ->
-                                    if (pkg == "system" && userId == 0) {
-                                        "system"
-                                    } else {
-                                        "$pkg/$userId"
-                                    }
-                                }
-                            val extraEntries =
-                                scopeEntries
-                                    .filterNot { (pkg, userId) ->
-                                        (pkg == "system" && userId == 0) ||
-                                            pkg == selfPkg
-                                    }.map { (pkg, userId) -> "$pkg/$userId" }
-
-                            LsposedConfig.Enabled(
-                                entries = renderedEntries,
-                                hasSystemFramework = hasSystemFramework,
-                                extraEntries = extraEntries,
-                            )
-                        }
-                }
-        } catch (e: Exception) {
-            VpnHideLog.w(TAG, "failed to inspect LSPosed config db: ${e.message}")
-            null
-        } finally {
-            dbCopy.delete()
-        }
-    }
-
     fun detectLsposedFramework(): LsposedFramework {
         val installed = snapshot.get("lsp_installed") == "1"
         val disabled = snapshot.get("lsp_disabled") == "1"
@@ -865,7 +793,7 @@ internal suspend fun loadDashboardState(
                 if (lsposedFramework.disabled) {
                     LsposedConfig.Disabled
                 } else {
-                    readLsposedConfig()
+                    null
                 }
             }
         }
@@ -930,43 +858,6 @@ internal suspend fun loadDashboardState(
     if (lsposed is LsposedState.NeedsReboot) {
         err(res.getString(R.string.dashboard_issue_reboot))
     }
-    // Only report LSPosed config issues when hooks are not already active at runtime —
-    // if hooks are active, the config is clearly working regardless of what we detect on disk
-    if (lsposed !is LsposedState.Active) {
-        when (lsposedConfig) {
-            null -> {
-                err(res.getString(R.string.dashboard_issue_lsposed_config_unreadable))
-            }
-
-            LsposedConfig.ModuleNotConfigured -> {
-                if (lsposedFramework is LsposedFramework.Installed) {
-                    err(res.getString(R.string.dashboard_issue_lsposed_not_enabled))
-                }
-            }
-
-            LsposedConfig.Disabled -> {
-                err(res.getString(R.string.dashboard_issue_lsposed_not_enabled))
-            }
-
-            is LsposedConfig.Enabled -> {
-                if (!lsposedConfig.hasSystemFramework) {
-                    err(res.getString(R.string.dashboard_issue_lsposed_no_system_scope))
-                }
-                if (lsposedConfig.extraEntries.isNotEmpty()) {
-                    // Extra entries work, they're just cosmetic noise — warn.
-                    warn(
-                        res.getString(
-                            R.string.dashboard_issue_lsposed_extra_scope,
-                            lsposedConfig
-                                .extraEntries
-                                .map(::resolveScopeEntryLabel)
-                                .joinToString(", "),
-                        ),
-                    )
-                }
-            }
-        }
-    }
 
     // AOSP-drift detector: HookEntry's install-time smoke-check on the
     // private NetworkCapabilities/NetworkInfo/LinkProperties fields it
@@ -1020,7 +911,6 @@ internal suspend fun loadDashboardState(
         warn(res.getString(R.string.dashboard_issue_debug_logging_on))
     }
 
-    // W4: SELinux Permissive exposes six detection vectors we rely on SELinux
     // to block (RTM_GETROUTE, /proc/net/{tcp,tcp6,udp,udp6,dev,fib_trie},
     // /sys/class/net). See the coverage table in the top-level README.
     val (_, getenforce) = suExec("getenforce 2>/dev/null")
@@ -1103,16 +993,8 @@ internal suspend fun loadDashboardState(
         }
     }
 
-    // ── Protection checks ──
-    val vpnActive = isVpnActiveBlocking()
-    VpnHideLog.i(TAG, "vpnActive=$vpnActive selfNeedsRestart=$selfNeedsRestart")
-
     val protection: ProtectionCheck =
         when {
-            !vpnActive -> {
-                ProtectionCheck.NoVpn
-            }
-
             selfNeedsRestart -> {
                 ProtectionCheck.NeedsRestart
             }

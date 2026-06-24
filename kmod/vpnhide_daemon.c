@@ -356,8 +356,16 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 	if (best_ifname[0] != '\0') {
 		struct vpnhide_cover_iface ci;
 		ci.ifindex = if_nametoindex(best_ifname);
-		if (ci.ifindex > 0)
+		if (ci.ifindex > 0) {
 			ioctl(fd, VH_SET_COVER_IFACE, &ci);
+			char buf[64];
+			int len = snprintf(buf, sizeof(buf), "cover_iface:%s\n", best_ifname);
+			if (len > 0) {
+				write(fd, buf, len);
+			}
+		}
+	} else {
+		write(fd, "cover_iface:none\n", 17);
 	}
 
 	/* Send the list of active VPNs to the kernel module */

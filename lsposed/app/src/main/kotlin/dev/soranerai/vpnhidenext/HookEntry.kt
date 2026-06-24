@@ -36,7 +36,9 @@ import java.util.concurrent.atomic.AtomicBoolean
  */
 class HookEntry : IXposedHookLoadPackage {
     private val hookInstalled = AtomicBoolean(false)
-    private val monitoringStarted = AtomicBoolean(false)
+
+    @Volatile
+    private var cachedPhysicalIfaceName: String? = null
 
     // ThreadLocal context to track the target UID during system_server push callbacks
     private val currentCallbackUid = ThreadLocal<Int>()
@@ -113,8 +115,14 @@ class HookEntry : IXposedHookLoadPackage {
     }
 
     private fun sanitizeLinkProperties(copy: LinkProperties): Boolean {
+        val cs = getConnectivityService()
+        val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
+        return sanitizeLinkProperties(copy, cs, physicalLp)
+    }
+
+    private fun sanitizeLinkProperties(copy: LinkProperties, cs: Any?, physicalLp: LinkProperties?): Boolean {
         var modified = false
-        val targetIface = getActivePhysicalInterfaceName()
+        val targetIface = getActivePhysicalInterfaceName(cs, physicalLp)
 
         val ifaceName = XposedHelpers.getObjectField(copy, "mIfaceName") as? String
         if (ifaceName != null && isVpnInterfaceName(ifaceName)) {
@@ -162,8 +170,6 @@ class HookEntry : IXposedHookLoadPackage {
             val linkAddresses =
                 XposedHelpers.getObjectField(copy, "mLinkAddresses") as? MutableList<Any>
             if (linkAddresses != null) {
-                val cs = getConnectivityService()
-                val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
                 if (physicalLp != null) {
                     @Suppress("UNCHECKED_CAST")
                     val physicalAddresses =
@@ -201,7 +207,7 @@ class HookEntry : IXposedHookLoadPackage {
                         } catch (_: Throwable) {
                             value
                         }
-                    val stackedModified = sanitizeLinkProperties(stackedCopy)
+                    val stackedModified = sanitizeLinkProperties(stackedCopy, cs, physicalLp)
                     val stackedIface =
                         XposedHelpers.getObjectField(stackedCopy, "mIfaceName") as? String
                     if (stackedIface == null && stackedCopy.routes.isEmpty()) {
@@ -229,8 +235,6 @@ class HookEntry : IXposedHookLoadPackage {
             @Suppress("UNCHECKED_CAST")
             val dnsField = XposedHelpers.getObjectField(copy, "mDnses") as? MutableCollection<Any>
             if (dnsField != null) {
-                val cs = getConnectivityService()
-                val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
                 if (physicalLp != null) {
                     @Suppress("UNCHECKED_CAST")
                     val physicalDnses =
@@ -256,8 +260,6 @@ class HookEntry : IXposedHookLoadPackage {
         try {
             val domains = XposedHelpers.getObjectField(copy, "mDomains") as? String
             if (!domains.isNullOrEmpty()) {
-                val cs = getConnectivityService()
-                val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
                 val physicalDomains =
                     if (physicalLp != null) {
                         XposedHelpers.getObjectField(physicalLp, "mDomains") as? String
@@ -273,8 +275,6 @@ class HookEntry : IXposedHookLoadPackage {
 
         // Sanitize MTU
         try {
-            val cs = getConnectivityService()
-            val physicalLp = if (cs != null) getPhysicalLinkProperties(cs) else null
             val targetMtu =
                 if (physicalLp != null) XposedHelpers.getIntField(physicalLp, "mMtu") else 1500
             val currentMtu = XposedHelpers.getIntField(copy, "mMtu")
@@ -402,11 +402,12 @@ class HookEntry : IXposedHookLoadPackage {
         return null
     }
 
-    private fun getActivePhysicalInterfaceName(): String {
-        val cs = getConnectivityService()
-        if (cs != null) {
-            val lp = getPhysicalLinkProperties(cs)
-            val iface = lp?.interfaceName
+    private fun getActivePhysicalInterfaceName(cs: Any? = null, lp: LinkProperties? = null): String {
+        cachedPhysicalIfaceName?.let { return it }
+        val actualCs = cs ?: getConnectivityService()
+        if (actualCs != null) {
+            val actualLp = lp ?: getPhysicalLinkProperties(actualCs)
+            val iface = actualLp?.interfaceName
             if (iface != null) {
                 return iface
             }
@@ -516,7 +517,7 @@ class HookEntry : IXposedHookLoadPackage {
             }
             val uids = mutableSetOf<Int>()
             if (selfUid != -1) uids.add(selfUid)
-            return uids
+            return uids.toSet()
         }
     }
 
@@ -1300,90 +1301,7 @@ class HookEntry : IXposedHookLoadPackage {
         }
     }
 
-    private fun startNetworkMonitoring() {
-        if (!monitoringStarted.compareAndSet(false, true)) return
-        val thread =
-            Thread(
-                {
-                    HookLog.i("VpnHide: Network monitoring daemon thread started")
-                    var lastIpv4: String? = null
-                    var lastIpv6: String? = null
-                    var firstRun = true
 
-                    while (true) {
-                        try {
-                            val cs = getConnectivityService()
-                            if (cs != null) {
-                                val lp = getPhysicalLinkProperties(cs)
-                                var ipv4: String? = null
-                                var ipv6: String? = null
-
-                                if (lp != null) {
-                                    for (linkAddr in lp.linkAddresses) {
-                                        val inetAddr = linkAddr.address
-                                        val hostAddress = inetAddr.hostAddress
-                                        if (hostAddress != null) {
-                                            if (inetAddr is java.net.Inet4Address) {
-                                                ipv4 = hostAddress
-                                            } else if (inetAddr is java.net.Inet6Address) {
-                                                ipv6 = hostAddress.substringBefore('%')
-                                            }
-                                        }
-                                    }
-                                }
-
-                                if (firstRun || ipv4 != lastIpv4 || ipv6 != lastIpv6) {
-                                    HookLog.i(
-                                        "VpnHide: Physical IP changed or initial sync: IPv4=$ipv4, IPv6=$ipv6",
-                                    )
-                                    sendSpoofIpToKernel(ipv4, ipv6)
-                                    lastIpv4 = ipv4
-                                    lastIpv6 = ipv6
-                                    firstRun = false
-                                }
-                            }
-                            // Stats live only in-memory; dumped on-demand via
-                            // watchStatsRequest()
-                        } catch (t: Throwable) {
-                            HookLog.e(
-                                "VpnHide: Error in network monitoring loop: ${t::class.java.simpleName}: ${t.message}",
-                            )
-                        }
-
-                        try {
-                            Thread.sleep(3000)
-                        } catch (e: InterruptedException) {
-                            HookLog.i(
-                                "VpnHide: Network monitoring daemon thread interrupted",
-                            )
-                            break
-                        }
-                    }
-                },
-                "VpnHideNetworkMonitor",
-            )
-        thread.isDaemon = true
-        thread.start()
-    }
-
-    private fun sendSpoofIpToKernel(
-        ipv4: String?,
-        ipv6: String?,
-    ) {
-        try {
-            val file = File("/data/system/vpnhide_physical_ip")
-            val v4 = if (ipv4.isNullOrEmpty() || ipv4 == "none") "none" else ipv4
-            val v6 = if (ipv6.isNullOrEmpty() || ipv6 == "none") "none" else ipv6
-            file.writeText("$v4 $v6\n")
-            HookLog.i(
-                "VpnHide: Successfully wrote spoof IP to /data/system/vpnhide_physical_ip: IPv4=$v4, IPv6=$v6",
-            )
-        } catch (t: Throwable) {
-            HookLog.e(
-                "VpnHide: failed to write spoof IP to file: ${t::class.java.simpleName}: ${t.message}",
-            )
-        }
-    }
 
     private data class FieldProbe(
         val key: String,
@@ -1472,6 +1390,7 @@ class HookEntry : IXposedHookLoadPackage {
                         var javaHookMask = 0xFFFFFFFFu
                         val uids = mutableSetOf<Int>()
                         val prefixes = mutableListOf<String>()
+                        var coverIface: String? = null
 
                         while (true) {
                             val line = reader.readLine() ?: break
@@ -1480,11 +1399,13 @@ class HookEntry : IXposedHookLoadPackage {
                                     systemServerTargetUids = uids.toSet()
                                     systemServerIfacePrefixes = prefixes.toList()
                                     cachedJavaHooksMask = javaHookMask
+                                    cachedPhysicalIfaceName = coverIface
                                     vpnPackageCache.clear()
                                 }
                                 uids.clear()
                                 prefixes.clear()
                                 javaHookMask = 0xFFFFFFFFu
+                                coverIface = null
                                 continue
                             }
 
@@ -1502,6 +1423,9 @@ class HookEntry : IXposedHookLoadPackage {
                                 if (prefixStr.isNotEmpty()) {
                                     prefixStr.split(" ").forEach { prefixes.add(it) }
                                 }
+                            } else if (line.startsWith("cover_iface:")) {
+                                val value = line.substringAfter("cover_iface:").trim()
+                                coverIface = if (value.isEmpty() || value == "none") null else value
                             }
                         }
                     }
@@ -2426,12 +2350,7 @@ class HookEntry : IXposedHookLoadPackage {
     companion object {
         @Volatile var csInstance: Any? = null
 
-        private const val TRANSPORT_CELLULAR = 0
-        private const val TRANSPORT_WIFI = 1
-        private const val TRANSPORT_BLUETOOTH = 2
-        private const val TRANSPORT_ETHERNET = 3
-        private const val TRANSPORT_VPN = 4
-        private const val NET_CAPABILITY_NOT_VPN = 15
+
         const val TYPE_VPN = 17
         const val TYPE_WIFI = 1
 
