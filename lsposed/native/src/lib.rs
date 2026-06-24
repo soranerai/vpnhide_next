@@ -331,6 +331,13 @@ fn check_proc_file(path: &str) -> CheckOutput {
     }
 }
 
+/// Upper bound on recvmsg iterations for a single netlink dump. A real
+/// RTM_GETLINK / RTM_GETROUTE dump completes in a few 32 KiB reads; a stream
+/// that exceeds this is looping (a kernel iface filter re-sending without
+/// NLMSG_DONE — issue #61), so we stop instead of growing the result `Vec`
+/// without bound until Scudo aborts the process with an OOM map failure.
+const MAX_NETLINK_RECV_ITERS: usize = 256;
+
 /// Wrapper around recvmsg for netlink sockets. Uses recvmsg (not recv/recvfrom)
 /// so that the recvmsg hook can filter the response.
 unsafe fn netlink_recv(fd: i32, buf: &mut [u8]) -> isize {
@@ -367,6 +374,24 @@ fn open_netlink() -> Result<i32, CheckOutput> {
                 CheckOutput::fail(format!("cannot create netlink socket: {e}"))
             });
         }
+
+        // Receive timeout: a kernel-side interface filter can, on some kernels,
+        // re-send a dump without ever emitting NLMSG_DONE (issue #61, observed
+        // on android14-6.1). Without a timeout the next blocking recvmsg hangs
+        // the diagnostics thread forever; with it the read returns EAGAIN and
+        // the loop exits. Best-effort — the per-call iteration cap is the hard
+        // backstop, so a setsockopt failure is non-fatal.
+        let tv = libc::timeval {
+            tv_sec: 2,
+            tv_usec: 0,
+        };
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_RCVTIMEO,
+            std::ptr::from_ref(&tv).cast(),
+            std::mem::size_of::<libc::timeval>() as libc::socklen_t,
+        );
 
         Ok(fd)
     }
@@ -475,7 +500,7 @@ pub fn check_netlink_getlink() -> CheckOutput {
         let hdr_plus_ifinfo =
             std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<Ifinfomsg>();
 
-        loop {
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
             let len = netlink_recv(fd, &mut buf);
             if len <= 0 {
                 break;
@@ -558,7 +583,7 @@ fn check_netlink_getroute() -> CheckOutput {
         let mut total = 0u32;
         let hdr_plus_rtmsg = std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<Rtmsg>();
 
-        loop {
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
             let len = netlink_recv(fd, &mut buf);
             if len <= 0 {
                 break;
@@ -649,7 +674,7 @@ fn check_netlink_anonymous_route() -> CheckOutput {
         let mut total = 0u32;
         let hdr_plus_rtmsg = std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<Rtmsg>();
 
-        loop {
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
             let len = netlink_recv(fd, &mut buf);
             if len <= 0 {
                 break;
@@ -1068,7 +1093,7 @@ pub fn check_netlink_getrule() -> CheckOutput {
         const FRA_TABLE: u16 = 15;
         const FRA_UID_RANGE: u16 = 20;
 
-        loop {
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
             let len = netlink_recv(fd, &mut buf);
             if len <= 0 {
                 break;
@@ -1371,7 +1396,7 @@ pub fn check_netlink_getneigh() -> CheckOutput {
         const NDA_DST: u16 = 1;
         const NDA_LLADDR: u16 = 2;
 
-        loop {
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
             let len = netlink_recv(fd, &mut buf);
             if len <= 0 {
                 break;
