@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">VPNHide Next</string>
-    <string name="faq_title">FAQ</string>
     <string name="module_description">Hides active VPN connection from selected apps — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
 
     <!-- Navigation -->
@@ -15,8 +14,6 @@
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>
-    <string name="ports_help_title">How port hiding works</string>
-    <string name="ports_hint_role">Tap P to mark an app as a proxy-hide observer. Observer apps receive ECONNREFUSED when they try to connect to any port on 127.0.0.1 or ::1 — indistinguishable from a real closed port.</string>
     <string name="ports_hint_safe">Safe for banks, госуслуги, marketplaces, non-browser apps. Chromium-based browsers use localhost for dev/PWA features — avoid adding them as observers.</string>
     <string name="ports_hint_reboot">Rules are re-applied on every Save. After reboot, the module restores them automatically via service.sh.</string>
     <string name="ports_save_success">Saved · %1$d observer(s)</string>
@@ -61,8 +58,6 @@
     <string name="sort_name_asc">Name (A-Z)</string>
     <string name="sort_name_desc">Name (Z-A)</string>
     <string name="sort_selected_first">Selected first</string>
-    <string name="apps_help_title">How it works</string>
-    <string name="apps_hint_toggles">Use the checkboxes to toggle individual layers: <b>Framework</b> and <b>Native</b>. Tapping the app row will toggle both layers at once.</string>
 
 
     <!-- Root status -->
@@ -87,14 +82,8 @@
     <string name="btn_save_debug">Save</string>
     <string name="btn_share_debug">Share</string>
     <string name="diag_debug_logging_title">Debug logging</string>
-    <string name="diag_debug_logging_description">Off by default — VPNHide Next keeps logcat and dmesg near-silent. You don\'t need to flip this to collect a bug report: Start recording and Collect debug log below automatically turn logging on for the duration of the capture. Use this toggle only if you want logs to be emitted continuously across the app, system_server hooks, and the kernel module (kmod logs to dmesg).</string>
-    <string name="logcat_card_title">Full system logcat</string>
-    <string name="logcat_card_description">Records unfiltered logs from all buffers (main/system/crash/events/radio) for debugging issues that aren\'t visible in the standard checks. Start recording, reproduce the bug, then stop.</string>
-    <string name="logcat_btn_start">Start recording</string>
-    <string name="logcat_btn_stop">Stop and save</string>
-    <string name="logcat_btn_share_last">Share last (%1$s)</string>
-    <string name="logcat_recording_status">● Recording · %1$s · %2$s</string>
-    <string name="logcat_last_recording">Last recording · %1$s · %2$s</string>
+    <string name="diag_debug_logging_description">Detailed logging in logcat and dmesg. Do not enable unless necessary.</string>
+
     <string name="badge_pass">PASS</string>
     <string name="badge_fail">FAIL</string>
     <string name="badge_info">INFO</string>
@@ -105,6 +94,12 @@
     <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPNHide Next → Mobile data &amp; Wi-Fi.</string>
     <string name="section_native">Native level (kmod)</string>
     <string name="section_java">Java API level (LSPosed)</string>
+    <string name="diag_all_good_title">All Good!</string>
+    <string name="diag_all_good_desc">All diagnostics checks passed successfully. Your protection is active and fully functional.</string>
+    <string name="diag_some_failed_title">Checks Failed</string>
+    <string name="diag_some_failed_desc">Some diagnostics checks failed. This might indicate that the kernel module is not properly loaded or configuration needs attention.</string>
+    <string name="diag_btn_show_details">Show details</string>
+    <string name="diag_btn_hide_details">Hide details</string>
 
     <!-- Dashboard -->
     <string name="dashboard_modules">Modules</string>

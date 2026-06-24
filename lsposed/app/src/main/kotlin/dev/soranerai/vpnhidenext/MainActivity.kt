@@ -157,7 +157,6 @@ private fun MainScreen(
     var currentProtectionMode by remember { mutableStateOf(ProtectionMode.VpnTargets) }
     var dirtyProtectionModes by remember { mutableStateOf(setOf<ProtectionMode>()) }
     var saveTrigger by remember { mutableStateOf(0) }
-    var showFaq by remember { mutableStateOf(false) }
     var editingAppRules by remember { mutableStateOf<AppEntry?>(null) }
     var showBulkRules by remember { mutableStateOf(false) }
     var localMassRules by remember { mutableStateOf<List<PortRule>?>(null) }
@@ -278,14 +277,6 @@ private fun MainScreen(
                                 scope = scope,
                                 context = context,
                             )
-                            IconButton(onClick = { showFaq = true }) {
-                                @Suppress("DEPRECATION")
-                                Icon(
-                                    Icons.Default.HelpOutline,
-                                    contentDescription = stringResource(R.string.faq_title),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
                             if (currentTab == Tab.Protection) {
                                 IconButton(onClick = { searchActive = true }) {
                                     Icon(
@@ -652,14 +643,6 @@ private fun MainScreen(
                     }
                 }
             }
-        }
-
-        if (showFaq) {
-            BackHandler { showFaq = false }
-            FaqScreen(
-                onBack = { showFaq = false },
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-            )
         }
 
         androidx.compose.animation.AnimatedVisibility(

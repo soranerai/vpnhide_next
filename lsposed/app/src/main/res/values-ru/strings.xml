@@ -1,6 +1,5 @@
 <resources>
     <string name="app_name">VPNHide Next</string>
-    <string name="faq_title">FAQ</string>
     <string name="module_description">Скрывает активное VPN-соединение от выбранных приложений — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
 
     <!-- Navigation -->
@@ -14,8 +13,6 @@
     <string name="port_hiding_coming_soon">Скоро</string>
 
     <!-- Port hiding -->
-    <string name="ports_help_title">Как работает скрытие портов</string>
-    <string name="ports_hint_role">Нажмите P, чтобы отметить приложение как observer для proxy-hide. Observer получит ECONNREFUSED при попытке подключения к любому порту на 127.0.0.1 или ::1 — неотличимо от реально закрытого порта.</string>
     <string name="ports_hint_safe">Безопасно для банков, госуслуг, маркетплейсов, не-браузерных приложений. Chromium-браузеры используют localhost для dev/PWA — их не стоит делать observer\'ами.</string>
     <string name="ports_hint_reboot">Правила перезаписываются при каждом Save. После ребута модуль восстанавливает их автоматически через service.sh.</string>
     <string name="ports_save_success">Сохранено · наблюдателей: %1$d</string>
@@ -59,8 +56,6 @@
     <string name="sort_name_asc">По названию (А-Я)</string>
     <string name="sort_name_desc">По названию (Я-А)</string>
     <string name="sort_selected_first">Сначала выбранные</string>
-    <string name="apps_help_title">Как это работает</string>
-    <string name="apps_hint_toggles">Используйте галочки для включения отдельных уровней: <b>Framework</b> и <b>Native</b>. Нажатие на строку приложения переключает оба уровня одновременно.</string>
 
     <!-- Root status -->
     <string name="root_error_title">Требуется root-доступ</string>
@@ -157,14 +152,8 @@
     <string name="btn_save_debug">Сохранить</string>
     <string name="btn_share_debug">Поделиться</string>
     <string name="diag_debug_logging_title">Отладочные логи</string>
-    <string name="diag_debug_logging_description">По умолчанию выключено — VPNHide Next почти ничего не пишет в logcat и dmesg. Переключатель не нужен для сбора разового багрепорта: кнопки «Начать запись» и «Собрать отладочный лог» ниже автоматически включают логирование на время захвата. Этот переключатель — только если вы хотите, чтобы логи писались постоянно во всех компонентах: приложение, хуки в system_server и модуль ядра (kmod пишет в dmesg).</string>
-    <string name="logcat_card_title">Полный системный logcat</string>
-    <string name="logcat_card_description">Записывает неотфильтрованные логи из всех буферов (main/system/crash/events/radio) для диагностики проблем, которые не видны в стандартных проверках. Начните запись, воспроизведите баг, затем остановите.</string>
-    <string name="logcat_btn_start">Начать запись</string>
-    <string name="logcat_btn_stop">Остановить и сохранить</string>
-    <string name="logcat_btn_share_last">Последний (%1$s)</string>
-    <string name="logcat_recording_status">● Запись · %1$s · %2$s</string>
-    <string name="logcat_last_recording">Последняя запись · %1$s · %2$s</string>
+    <string name="diag_debug_logging_description">Подробное логирование в logcat и dmesg. Не включать без необходимости.</string>
+
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
     <string name="summary_format">%1$d/%2$d пройдено</string>
     <string name="badge_pass">ОК</string>
@@ -177,6 +166,12 @@
     <string name="banner_network_blocked">Доступ к сети отключён для этого приложения. Проверки ioctl (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) не могут быть выполнены. Включите в Настройки → Приложения → VPNHide Next → Мобильный интернет и Wi-Fi.</string>
     <string name="section_native">Нативный уровень (kmod)</string>
     <string name="section_java">Java API уровень (LSPosed)</string>
+    <string name="diag_all_good_title">Все отлично!</string>
+    <string name="diag_all_good_desc">Все проверки диагностики успешно пройдены. Ваша защита активна и работает исправно.</string>
+    <string name="diag_some_failed_title">Проверки не пройдены</string>
+    <string name="diag_some_failed_desc">Некоторые проверки диагностики не пройдены. Это может означать, что модуль ядра загружен неправильно или требуется настройка.</string>
+    <string name="diag_btn_show_details">Показать подробности</string>
+    <string name="diag_btn_hide_details">Скрыть подробности</string>
 
     <!-- Hook Isolation Diagnostics -->
     <string name="diag_hook_isolation_title">Изоляция хуков</string>
