@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 /**
@@ -47,6 +48,7 @@ internal object InterceptStatsCache {
     }
 
     private suspend fun reload(context: Context) {
+        AppListCache.apps.first { it != null }
         val next =
             withContext(Dispatchers.IO) {
                 loadInterceptStats(context)

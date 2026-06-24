@@ -588,6 +588,18 @@ internal suspend fun loadDashboardState(
 
         val packageName = entry.substringBefore('/')
         val userId = entry.substringAfter('/', "")
+        val userIdInt = userId.toIntOrNull() ?: 0
+
+        val cachedApp = AppListCache.apps.value?.find { it.packageName == packageName && it.userId == userIdInt }
+        if (cachedApp != null) {
+            val label = cachedApp.label
+            return when {
+                label.isEmpty() -> packageName
+                userId.isNotEmpty() && userId != "0" -> "$label ($userId)"
+                else -> label
+            }
+        }
+
         return try {
             val appInfo = context.packageManager.getApplicationInfo(packageName, 0)
             val appLabel =
@@ -601,7 +613,26 @@ internal suspend fun loadDashboardState(
                 else -> appLabel
             }
         } catch (_: PackageManager.NameNotFoundException) {
-            packageName
+            val (_, pathOut) = suExec("pm path $packageName 2>/dev/null")
+            val pathLine = pathOut.lines().firstOrNull { it.startsWith("package:") }
+            val apkPath = pathLine?.substringAfter("package:")?.trim()
+            val archiveInfo = if (!apkPath.isNullOrBlank()) {
+                runCatching { context.packageManager.getPackageArchiveInfo(apkPath, 0) }.getOrNull()?.applicationInfo?.apply {
+                    sourceDir = apkPath
+                    publicSourceDir = apkPath
+                }
+            } else null
+            
+            if (archiveInfo != null) {
+                val appLabel = context.packageManager.getApplicationLabel(archiveInfo).toString().trim()
+                when {
+                    appLabel.isEmpty() -> packageName
+                    userId.isNotEmpty() && userId != "0" -> "$appLabel ($userId)"
+                    else -> appLabel
+                }
+            } else {
+                packageName
+            }
         }
     }
 
@@ -1173,14 +1204,40 @@ internal fun loadInterceptStats(context: android.content.Context): List<AppInter
 
         if (!pkgs.isNullOrEmpty()) {
             val pkg = pkgs[0]
-            val label =
-                try {
+            val userId = uid / 100000
+            
+            val cachedApp = AppListCache.apps.value?.find { it.packageName == pkg && it.userId == userId }
+            var label = cachedApp?.label
+            
+            if (label == null) {
+                label = try {
                     val appInfo = pm.getApplicationInfo(pkg, 0)
                     pm.getApplicationLabel(appInfo).toString().trim()
                 } catch (_: Throwable) {
-                    pkg
+                    null
                 }
-            val res = Pair(pkg, label)
+            }
+            
+            if (label == null) {
+                val (_, pathOut) = suExec("pm path $pkg 2>/dev/null")
+                val pathLine = pathOut.lines().firstOrNull { it.startsWith("package:") }
+                val apkPath = pathLine?.substringAfter("package:")?.trim()
+                val archiveInfo = if (!apkPath.isNullOrBlank()) {
+                    runCatching { pm.getPackageArchiveInfo(apkPath, 0) }.getOrNull()?.applicationInfo?.apply {
+                        sourceDir = apkPath
+                        publicSourceDir = apkPath
+                    }
+                } else null
+                
+                label = if (archiveInfo != null) {
+                    pm.getApplicationLabel(archiveInfo).toString().trim()
+                } else {
+                    null
+                }
+            }
+            
+            val finalLabel = if (label.isNullOrEmpty()) pkg else label
+            val res = Pair(pkg, finalLabel)
             uidToAppMap[uid] = res
             return res
         }
