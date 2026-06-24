@@ -13,7 +13,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
-<p align="center"><strong><a href="README.en.md">English version</a></strong></p>
+<p align="center"><strong><a href="README.md">Russian version</a></strong></p>
 
 > [!WARNING]
 > **This fork uses extremely aggressive kernel-level and framework-level hiding methods.**
