@@ -38,22 +38,30 @@ private sealed interface LsposedConfig {
     data object Disabled : LsposedConfig
 }
 
+private fun parseKeyValue(text: String): Map<String, String> =
+    text.lines()
+        .mapNotNull {
+            val parts = it.split("=", limit = 2)
+            if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
+        }.toMap()
+
+private fun decodeBase64String(encoded: String): String =
+    try {
+        if (encoded.isBlank()) {
+            ""
+        } else {
+            String(Base64.decode(encoded, Base64.DEFAULT))
+        }
+    } catch (_: Exception) {
+        ""
+    }
+
 private data class RawDashboardSnapshot(
     val props: Map<String, String>,
 ) {
     fun get(key: String): String = props[key] ?: ""
 
-    fun decodeBase64(key: String): String =
-        try {
-            val encoded = get(key)
-            if (encoded.isBlank()) {
-                ""
-            } else {
-                String(Base64.decode(encoded, Base64.DEFAULT))
-            }
-        } catch (_: Exception) {
-            ""
-        }
+    fun decodeBase64(key: String): String = decodeBase64String(get(key))
 }
 
 class DashboardRepository(private val context: Context) {
@@ -88,14 +96,122 @@ class DashboardRepository(private val context: Context) {
             """.trimIndent()
 
         val (_, out) = suExec(script)
-        val props =
-            out
-                .lines()
-                .mapNotNull {
-                    val parts = it.split("=", limit = 2)
-                    if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
-                }.toMap()
-        return RawDashboardSnapshot(props)
+        return RawDashboardSnapshot(parseKeyValue(out))
+    }
+
+    private data class ModulePropInfo(
+        val installed: Boolean,
+        val version: String?,
+        val gkiVariant: String?,
+    )
+
+    private val updateJsonKmiRegex = Regex("""update-kmod-([^/]+)\.json""")
+
+    private fun parseModuleProp(raw: String?): ModulePropInfo {
+        if (raw == null || raw.isBlank()) return ModulePropInfo(false, null, null)
+        var version: String? = null
+        var gkiVariant: String? = null
+        var updateJsonKmi: String? = null
+        for (line in raw.lines()) {
+            when {
+                line.startsWith("version=") -> {
+                    version = normalizeVersion(line.removePrefix("version="))
+                }
+
+                line.startsWith("gkiVariant=") -> {
+                    gkiVariant = line.removePrefix("gkiVariant=").trim().ifBlank { null }
+                }
+
+                line.startsWith("updateJson=") -> {
+                    updateJsonKmi =
+                        updateJsonKmiRegex
+                            .find(line.removePrefix("updateJson="))
+                            ?.groupValues
+                            ?.get(1)
+                }
+            }
+        }
+        return ModulePropInfo(true, version, gkiVariant ?: updateJsonKmi)
+    }
+
+    private fun buildModuleVersionIssue(
+        moduleVersion: String,
+        appVersion: String,
+    ): String {
+        val normalizedModuleVersion = normalizeVersion(moduleVersion)
+        val normalizedAppVersion = normalizeVersion(appVersion)
+        return when (compareSemver(normalizedModuleVersion, normalizedAppVersion)) {
+            null, 0 -> {
+                res.getString(
+                    R.string.dashboard_issue_kmod_version_mismatch,
+                    moduleVersion,
+                    appVersion,
+                )
+            }
+
+            in Int.MIN_VALUE..-1 -> {
+                res.getString(
+                    R.string.dashboard_issue_update_kmod,
+                    moduleVersion,
+                    appVersion,
+                )
+            }
+
+            else -> {
+                res.getString(
+                    R.string.dashboard_issue_update_app_for_kmod,
+                    moduleVersion,
+                    appVersion,
+                )
+            }
+        }
+    }
+
+    private fun androidMajorVersionLabel(): String {
+        @Suppress("DEPRECATION")
+        val release =
+            if (Build.VERSION.SDK_INT >= 30) {
+                Build.VERSION.RELEASE_OR_CODENAME
+            } else {
+                Build.VERSION.RELEASE
+            }.substringBefore('.')
+        return "Android $release"
+    }
+
+    private fun readKmodLoadStatus(snapshot: RawDashboardSnapshot, currentBootId: String): KmodLoadStatus? {
+        val raw = snapshot.decodeBase64("load_status")
+        if (raw.isBlank()) return null
+        val props = parseKeyValue(raw)
+        val dmesgRaw = snapshot.decodeBase64("load_dmesg")
+        val bootId = props["boot_id"]?.trim()
+        return KmodLoadStatus(
+            timestamp = props["timestamp"]?.trim()?.toLongOrNull(),
+            bootId = bootId,
+            unameR = props["uname_r"]?.trim(),
+            gkiVariant = props["gki_variant"]?.trim()?.ifBlank { null },
+            kmodVersion = props["kmod_version"]?.trim()?.ifBlank { null },
+            rootManager = props["root_manager"]?.trim()?.ifBlank { null },
+            kprobes = props["kprobes"]?.trim()?.ifBlank { null },
+            kretprobes = props["kretprobes"]?.trim()?.ifBlank { null },
+            insmodExit = props["insmod_exit"]?.trim()?.toIntOrNull(),
+            loaded = props["loaded"]?.trim() == "1",
+            insmodStderr = props["insmod_stderr"]?.trim()?.ifBlank { null },
+            dmesgTail = dmesgRaw.trim().ifBlank { null },
+            freshForCurrentBoot = bootId != null && bootId == currentBootId,
+        )
+    }
+
+    private fun detectLsposedFramework(snapshot: RawDashboardSnapshot): LsposedFramework {
+        val installed = snapshot.get("lsp_installed") == "1"
+        val disabled = snapshot.get("lsp_disabled") == "1"
+        val framework =
+            if (installed) {
+                LsposedFramework.Installed(disabled = disabled)
+            } else {
+                LsposedFramework.NotInstalled
+            }
+        VpnHideLog.i(TAG, "lsposed framework: $framework")
+        return framework
     }
 
     suspend fun loadDashboardState(selfNeedsRestart: Boolean): DashboardState {
@@ -115,129 +231,6 @@ class DashboardRepository(private val context: Context) {
         val currentBootId = snapshot.get("boot_id")
         val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(context)
         val appsSync = db.appDao().getAllAppProtectionSync()
-
-        data class ModulePropInfo(
-            val installed: Boolean,
-            val version: String?,
-            val gkiVariant: String?,
-        )
-
-        val updateJsonKmiRegex = Regex("""update-kmod-([^/]+)\.json""")
-
-        fun parseModuleProp(raw: String?): ModulePropInfo {
-            if (raw == null || raw.isBlank()) return ModulePropInfo(false, null, null)
-            var version: String? = null
-            var gkiVariant: String? = null
-            var updateJsonKmi: String? = null
-            for (line in raw.lines()) {
-                when {
-                    line.startsWith("version=") -> {
-                        version = normalizeVersion(line.removePrefix("version="))
-                    }
-
-                    line.startsWith("gkiVariant=") -> {
-                        gkiVariant = line.removePrefix("gkiVariant=").trim().ifBlank { null }
-                    }
-
-                    line.startsWith("updateJson=") -> {
-                        updateJsonKmi =
-                            updateJsonKmiRegex
-                                .find(line.removePrefix("updateJson="))
-                                ?.groupValues
-                                ?.get(1)
-                    }
-                }
-            }
-            return ModulePropInfo(true, version, gkiVariant ?: updateJsonKmi)
-        }
-
-        fun parseProps(raw: String): Map<String, String> =
-            raw
-                .lines()
-                .mapNotNull {
-                    val parts = it.split("=", limit = 2)
-                    if (parts.size == 2) parts[0] to parts[1] else null
-                }.toMap()
-
-        fun buildModuleVersionIssue(
-            moduleVersion: String,
-            appVersion: String,
-        ): String {
-            val normalizedModuleVersion = normalizeVersion(moduleVersion)
-            val normalizedAppVersion = normalizeVersion(appVersion)
-            return when (compareSemver(normalizedModuleVersion, normalizedAppVersion)) {
-                null, 0 -> {
-                    res.getString(
-                        R.string.dashboard_issue_kmod_version_mismatch,
-                        moduleVersion,
-                        appVersion,
-                    )
-                }
-
-                in Int.MIN_VALUE..-1 -> {
-                    res.getString(
-                        R.string.dashboard_issue_update_kmod,
-                        moduleVersion,
-                        appVersion,
-                    )
-                }
-
-                else -> {
-                    res.getString(
-                        R.string.dashboard_issue_update_app_for_kmod,
-                        moduleVersion,
-                        appVersion,
-                    )
-                }
-            }
-        }
-
-        fun androidMajorVersionLabel(): String {
-            @Suppress("DEPRECATION")
-            val release =
-                if (Build.VERSION.SDK_INT >= 30) {
-                    Build.VERSION.RELEASE_OR_CODENAME
-                } else {
-                    Build.VERSION.RELEASE
-                }.substringBefore('.')
-            return "Android $release"
-        }
-
-        fun readKmodLoadStatus(currentBootId: String): KmodLoadStatus? {
-            val raw = snapshot.decodeBase64("load_status")
-            if (raw.isBlank()) return null
-            val props = parseProps(raw)
-            val dmesgRaw = snapshot.decodeBase64("load_dmesg")
-            val bootId = props["boot_id"]?.trim()
-            return KmodLoadStatus(
-                timestamp = props["timestamp"]?.trim()?.toLongOrNull(),
-                bootId = bootId,
-                unameR = props["uname_r"]?.trim(),
-                gkiVariant = props["gki_variant"]?.trim()?.ifBlank { null },
-                kmodVersion = props["kmod_version"]?.trim()?.ifBlank { null },
-                rootManager = props["root_manager"]?.trim()?.ifBlank { null },
-                kprobes = props["kprobes"]?.trim()?.ifBlank { null },
-                kretprobes = props["kretprobes"]?.trim()?.ifBlank { null },
-                insmodExit = props["insmod_exit"]?.trim()?.toIntOrNull(),
-                loaded = props["loaded"]?.trim() == "1",
-                insmodStderr = props["insmod_stderr"]?.trim()?.ifBlank { null },
-                dmesgTail = dmesgRaw.trim().ifBlank { null },
-                freshForCurrentBoot = bootId != null && bootId == currentBootId,
-            )
-        }
-
-        fun detectLsposedFramework(): LsposedFramework {
-            val installed = snapshot.get("lsp_installed") == "1"
-            val disabled = snapshot.get("lsp_disabled") == "1"
-            val framework =
-                if (installed) {
-                    LsposedFramework.Installed(disabled = disabled)
-                } else {
-                    LsposedFramework.NotInstalled
-                }
-            VpnHideLog.i(TAG, "lsposed framework: $framework")
-            return framework
-        }
 
         // kmod
         val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))
@@ -264,7 +257,7 @@ class DashboardRepository(private val context: Context) {
         val kernelRaw = snapshot.get("uname")
         val kernelRecommendation =
             buildNativeInstallRecommendation(kernelRaw, androidMajorVersionLabel())
-        val kmodLoadStatus = readKmodLoadStatus(currentBootId.trim())
+        val kmodLoadStatus = readKmodLoadStatus(snapshot, currentBootId.trim())
         VpnHideLog.i(TAG, "kmodLoadStatus=$kmodLoadStatus")
 
         val recommendedKmi = kernelRecommendation?.recommendedGkiVariant
@@ -326,12 +319,12 @@ class DashboardRepository(private val context: Context) {
 
         // lsposed hook status
         val (_, hookStatusRaw) = suExec("$KMOD_CTL hook_status 2>/dev/null || true")
-        val hookProps = parseProps(hookStatusRaw)
+        val hookProps = parseKeyValue(hookStatusRaw)
         val hookVersion = hookProps["version"]
         val hookBootId = hookProps["boot_id"]
         val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
         val lsposedTargetCount = appsSync.count { it.lsposed }
-        val lsposedFramework = detectLsposedFramework()
+        val lsposedFramework = detectLsposedFramework(snapshot)
         val lsposedConfig =
             when (lsposedFramework) {
                 LsposedFramework.NotInstalled -> {
@@ -614,27 +607,9 @@ class DashboardRepository(private val context: Context) {
             """.trimIndent()
 
         val (_, out) = suExec(script)
-        val props =
-            out
-                .lines()
-                .mapNotNull {
-                    val parts = it.split("=", limit = 2)
-                    if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
-                }.toMap()
+        val props = parseKeyValue(out)
 
-        fun decodeBase64(key: String): String =
-            try {
-                val encoded = props[key] ?: ""
-                if (encoded.isBlank()) {
-                    ""
-                } else {
-                    String(Base64.decode(encoded, Base64.DEFAULT))
-                }
-            } catch (_: Exception) {
-                ""
-            }
-
-        val frameworkStatsRaw = decodeBase64("framework_stats")
+        val frameworkStatsRaw = decodeBase64String(props["framework_stats"] ?: "")
         val uidFrameworkMap = mutableMapOf<Int, MutableMap<String, Int>>()
         if (frameworkStatsRaw.isNotBlank()) {
             frameworkStatsRaw.lines().forEach { line ->
@@ -651,7 +626,7 @@ class DashboardRepository(private val context: Context) {
             }
         }
 
-        val nativeStatsRaw = decodeBase64("native_stats")
+        val nativeStatsRaw = decodeBase64String(props["native_stats"] ?: "")
         val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
         if (nativeStatsRaw.isNotBlank()) {
             nativeStatsRaw.lines().forEach { line ->

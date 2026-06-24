@@ -49,7 +49,7 @@ internal interface IfacePrefixDao {
 
 internal data class VpnHideConfig(
     val globalConfig: DbGlobalConfig = DbGlobalConfig(),
-    val apps: List<AppProtection> = emptyList(),
+    val apps: Map<Pair<String, Int>, AppProtection> = emptyMap(),
     val portRules: List<DbPortRule> = emptyList(),
     val massPortRules: List<DbMassPortRule> = emptyList(),
     val ifacePrefixes: List<String> = emptyList()
@@ -85,11 +85,12 @@ internal class AppDatabase private constructor(
                 val globalObj = root.optJSONObject("globalConfig")
                 val globalConfig = if (globalObj != null) globalObj.toDbGlobalConfig() else DbGlobalConfig()
 
-                val appsList = mutableListOf<AppProtection>()
+                val appsMap = mutableMapOf<Pair<String, Int>, AppProtection>()
                 val appsArray = root.optJSONArray("apps")
                 if (appsArray != null) {
                     for (i in 0 until appsArray.length()) {
-                        appsList.add(appsArray.getJSONObject(i).toAppProtection())
+                        val app = appsArray.getJSONObject(i).toAppProtection()
+                        appsMap[app.packageName to app.userId] = app
                     }
                 }
 
@@ -119,7 +120,7 @@ internal class AppDatabase private constructor(
 
                 config = VpnHideConfig(
                     globalConfig = globalConfig,
-                    apps = appsList,
+                    apps = appsMap,
                     portRules = portRulesList,
                     massPortRules = massRulesList,
                     ifacePrefixes = prefixesList
@@ -135,7 +136,7 @@ internal class AppDatabase private constructor(
         synchronized(lock) {
             val root = JSONObject().apply {
                 put("globalConfig", config.globalConfig.toJson())
-                put("apps", JSONArray().apply { config.apps.forEach { put(it.toJson()) } })
+                put("apps", JSONArray().apply { config.apps.values.forEach { put(it.toJson()) } })
                 put("portRules", JSONArray().apply { config.portRules.forEach { put(it.toJson()) } })
                 put("massPortRules", JSONArray().apply { config.massPortRules.forEach { put(it.toJson()) } })
                 put("ifacePrefixes", JSONArray().apply { config.ifacePrefixes.forEach { put(it) } })
@@ -208,15 +209,14 @@ internal class AppDatabase private constructor(
 
         override suspend fun getAppProtection(packageName: String, userId: Int): AppProtection? =
             synchronized(lock) {
-                config.apps.firstOrNull { it.packageName == packageName && it.userId == userId }
+                config.apps[packageName to userId]
             }
 
         override suspend fun insertAppProtection(app: AppProtection) {
             synchronized(lock) {
-                val list = config.apps.toMutableList()
-                list.removeAll { it.packageName == app.packageName && it.userId == app.userId }
-                list.add(app)
-                config = config.copy(apps = list)
+                val map = config.apps.toMutableMap()
+                map[app.packageName to app.userId] = app
+                config = config.copy(apps = map)
                 saveConfig()
             }
             DbNotifier.notifyChanged("app_protection")
@@ -224,12 +224,11 @@ internal class AppDatabase private constructor(
 
         override suspend fun insertAppProtections(apps: List<AppProtection>) {
             synchronized(lock) {
-                val list = config.apps.toMutableList()
+                val map = config.apps.toMutableMap()
                 for (app in apps) {
-                    list.removeAll { it.packageName == app.packageName && it.userId == app.userId }
-                    list.add(app)
+                    map[app.packageName to app.userId] = app
                 }
-                config = config.copy(apps = list)
+                config = config.copy(apps = map)
                 saveConfig()
             }
             DbNotifier.notifyChanged("app_protection")
@@ -237,9 +236,9 @@ internal class AppDatabase private constructor(
 
         override suspend fun deleteAppProtection(app: AppProtection) {
             synchronized(lock) {
-                val list = config.apps.toMutableList()
-                list.removeAll { it.packageName == app.packageName && it.userId == app.userId }
-                config = config.copy(apps = list)
+                val map = config.apps.toMutableMap()
+                map.remove(app.packageName to app.userId)
+                config = config.copy(apps = map)
                 saveConfig()
             }
             DbNotifier.notifyChanged("app_protection")
@@ -247,7 +246,7 @@ internal class AppDatabase private constructor(
 
         override suspend fun getAllAppProtectionSync(): List<AppProtection> =
             synchronized(lock) {
-                config.apps.toList()
+                config.apps.values.toList()
             }
     }
 
@@ -475,7 +474,7 @@ internal class AppDatabase private constructor(
                 )
 
                 // Read apps
-                val apps = mutableListOf<AppProtection>()
+                val apps = mutableMapOf<Pair<String, Int>, AppProtection>()
                 try {
                     sqliteDb.rawQuery("SELECT * FROM app_protection", null).use { cursor ->
                         val pkgIdx = cursor.getColumnIndex("packageName")
@@ -484,19 +483,18 @@ internal class AppDatabase private constructor(
                         val kmodIdx = cursor.getColumnIndex("kmod")
                         val lsposedIdx = cursor.getColumnIndex("lsposed")
                         val portHidingIdx = cursor.getColumnIndex("portHiding")
-
+ 
                         if (pkgIdx >= 0) {
                             while (cursor.moveToNext()) {
-                                apps.add(
-                                    AppProtection(
-                                        packageName = cursor.getString(pkgIdx),
-                                        userId = if (userIdx >= 0) cursor.getInt(userIdx) else 0,
-                                        uid = if (uidIdx >= 0) cursor.getInt(uidIdx) else 0,
-                                        kmod = if (kmodIdx >= 0) cursor.getInt(kmodIdx) == 1 else false,
-                                        lsposed = if (lsposedIdx >= 0) cursor.getInt(lsposedIdx) == 1 else false,
-                                        portHiding = if (portHidingIdx >= 0) cursor.getInt(portHidingIdx) == 1 else false
-                                    )
+                                val app = AppProtection(
+                                    packageName = cursor.getString(pkgIdx),
+                                    userId = if (userIdx >= 0) cursor.getInt(userIdx) else 0,
+                                    uid = if (uidIdx >= 0) cursor.getInt(uidIdx) else 0,
+                                    kmod = if (kmodIdx >= 0) cursor.getInt(kmodIdx) == 1 else false,
+                                    lsposed = if (lsposedIdx >= 0) cursor.getInt(lsposedIdx) == 1 else false,
+                                    portHiding = if (portHidingIdx >= 0) cursor.getInt(portHidingIdx) == 1 else false
                                 )
+                                apps[app.packageName to app.userId] = app
                             }
                         }
                     }

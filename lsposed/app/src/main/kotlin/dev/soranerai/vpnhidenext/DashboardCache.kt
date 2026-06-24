@@ -24,22 +24,16 @@ import kotlinx.coroutines.withContext
  * while a refresh is in flight so tab switches feel instant even when
  * data changes underneath.
  */
-internal object DashboardCache {
-    private val _state = MutableStateFlow<DashboardState?>(null)
-    val state: StateFlow<DashboardState?> = _state.asStateFlow()
-
-    private val _loading = MutableStateFlow(false)
-    val loading: StateFlow<Boolean> = _loading.asStateFlow()
-
-    private var inflight: Job? = null
-
+internal object DashboardCache : AsyncCache<DashboardState>() {
     fun ensureLoaded(
         scope: CoroutineScope,
         context: Context,
         selfNeedsRestart: Boolean,
     ) {
-        if (_state.value != null || inflight?.isActive == true) return
-        inflight = scope.launch { reload(context, selfNeedsRestart) }
+        launchEnsureLoaded(scope) {
+            val repository = DashboardRepository(context.applicationContext)
+            repository.loadDashboardState(selfNeedsRestart)
+        }
     }
 
     fun refresh(
@@ -47,33 +41,9 @@ internal object DashboardCache {
         context: Context,
         selfNeedsRestart: Boolean,
     ) {
-        inflight?.cancel()
-        inflight = scope.launch { reload(context, selfNeedsRestart) }
-    }
-
-    /** Invalidate so the next `ensureLoaded` call reloads. Used after
-     * a Save on a Protection screen changes target-file contents so
-     * that the next Dashboard open reflects the fresh counts without
-     * the user having to tap Refresh.
-     */
-    fun invalidate() {
-        _state.value = null
-    }
-
-    private suspend fun reload(
-        context: Context,
-        selfNeedsRestart: Boolean,
-    ) {
-        _loading.value = true
-        try {
-            val next =
-                withContext(Dispatchers.IO) {
-                    val repository = DashboardRepository(context.applicationContext)
-                    repository.loadDashboardState(selfNeedsRestart)
-                }
-            _state.value = next
-        } finally {
-            _loading.value = false
+        launchReload(scope) {
+            val repository = DashboardRepository(context.applicationContext)
+            repository.loadDashboardState(selfNeedsRestart)
         }
     }
 }

@@ -69,6 +69,8 @@ private sealed class RootState {
 
     data object Denied : RootState()
 
+    data object KmodMissing : RootState()
+
     data object Migrating : RootState()
 }
 
@@ -90,7 +92,11 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                 withContext(Dispatchers.IO) {
                     performStartupOptimized()
                 }
-            rootState = if (res.rootGranted) RootState.Granted(res) else RootState.Denied
+            rootState = when {
+                !res.rootGranted -> RootState.Denied
+                !res.kmodActive -> RootState.KmodMissing
+                else -> RootState.Granted(res)
+            }
         }
 
         when (rootState) {
@@ -108,6 +114,11 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                 // Drop splash — RootDeniedScreen has no async prerequisites.
                 LaunchedEffect(Unit) { onReady() }
                 RootDeniedScreen()
+            }
+
+            RootState.KmodMissing -> {
+                LaunchedEffect(Unit) { onReady() }
+                KmodMissingScreen()
             }
 
             is RootState.Granted -> {
@@ -777,6 +788,58 @@ private fun RootDeniedScreen() {
                     Spacer(Modifier.height(16.dp))
                     Text(
                         text = stringResource(R.string.root_error_message),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KmodMissingScreen() {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.app_name)) },
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+            )
+        },
+    ) { innerPadding ->
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Card(
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = stringResource(R.string.kmod_error_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.kmod_error_message),
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         textAlign = TextAlign.Center,

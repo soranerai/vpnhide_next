@@ -19,44 +19,35 @@ import kotlinx.coroutines.withContext
  * involves a 1.1s sleep (to wait for system_server dump), which would
  * otherwise delay the entire dashboard render.
  */
-internal object InterceptStatsCache {
-    private val _stats = MutableStateFlow<List<AppInterceptStats>?>(null)
-    val stats: StateFlow<List<AppInterceptStats>?> = _stats.asStateFlow()
-
-    private var inflight: Job? = null
+internal object InterceptStatsCache : AsyncCache<List<AppInterceptStats>>() {
+    val stats: StateFlow<List<AppInterceptStats>?> = state
 
     fun ensureLoaded(
         scope: CoroutineScope,
         context: Context,
     ) {
-        if (_stats.value != null || inflight?.isActive == true) return
-        inflight = scope.launch { reload(context) }
+        launchEnsureLoaded(scope) {
+            AppListCache.apps.first { it != null }
+            val repository = DashboardRepository(context.applicationContext)
+            repository.loadInterceptStats()
+        }
     }
 
     fun refresh(
         scope: CoroutineScope,
         context: Context,
     ) {
-        inflight?.cancel()
-        inflight = scope.launch { reload(context) }
-    }
-
-    fun invalidate() {
-        _stats.value = null
+        launchReload(scope) {
+            AppListCache.apps.first { it != null }
+            val repository = DashboardRepository(context.applicationContext)
+            repository.loadInterceptStats()
+        }
     }
 
     fun clearStats() {
-        _stats.value = emptyList()
-    }
-
-    private suspend fun reload(context: Context) {
-        AppListCache.apps.first { it != null }
-        val next =
-            withContext(Dispatchers.IO) {
-                val repository = DashboardRepository(context.applicationContext)
-                repository.loadInterceptStats()
-            }
-        _stats.value = next
+        synchronized(lock) {
+            _state.value = emptyList()
+        }
     }
 }
 

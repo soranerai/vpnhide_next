@@ -41,37 +41,25 @@ internal data class TargetsSnapshot(
     val uidToPkg: Map<Int, String>,
 )
 
-internal object TargetsCache {
-    private val _snapshot = MutableStateFlow<TargetsSnapshot?>(null)
-    val snapshot: StateFlow<TargetsSnapshot?> = _snapshot.asStateFlow()
-
-    private val _loading = MutableStateFlow(false)
-    val loading: StateFlow<Boolean> = _loading.asStateFlow()
-
-    private var inflight: Job? = null
+internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
+    val snapshot: StateFlow<TargetsSnapshot?> = state
 
     fun ensureLoaded(
         scope: CoroutineScope,
         context: Context,
     ) {
-        if (_snapshot.value != null || inflight?.isActive == true) return
-        inflight = scope.launch { reload(context.applicationContext) }
+        launchEnsureLoaded(scope) {
+            reload(context.applicationContext)
+        }
     }
 
     fun refresh(
         scope: CoroutineScope,
         context: Context,
     ) {
-        inflight?.cancel()
-        inflight = scope.launch { reload(context.applicationContext) }
-    }
-
-    /** Drop the cached snapshot so the next subscriber triggers a
-     * fresh load. Save handlers call this because they just mutated
-     * one of the files this cache mirrors.
-     */
-    fun invalidate() {
-        _snapshot.value = null
+        launchReload(scope) {
+            reload(context.applicationContext)
+        }
     }
 
     // Bundle every read into a single `suExec` call separated by
@@ -99,10 +87,8 @@ internal object TargetsCache {
         echo "$END"
         """.trimIndent()
 
-    internal suspend fun reload(appContext: Context) {
-        _loading.value = true
-        try {
-            val db = AppDatabase.getInstance(appContext)
+    internal suspend fun reload(appContext: Context): TargetsSnapshot {
+        val db = AppDatabase.getInstance(appContext)
             val appDao = db.appDao()
             val portRuleDao = db.portRuleDao()
             val massPortRuleDao = db.massPortRuleDao()
@@ -152,8 +138,6 @@ internal object TargetsCache {
                 // Migrate iface prefixes from file if DB is empty
                 val allPrefixesSync = ifacePrefixDao.getAllPrefixesSync()
                 if (allPrefixesSync.isEmpty()) {
-                    val (_, out) = withContext(Dispatchers.IO) { suExec(BATCH_SCRIPT) }
-                    val snapshot = parse(out)
                     ifacePrefixDao.insertPrefixes(
                         snapshot.ifacePrefixes.map {
                             dev.soranerai.vpnhidenext.db
@@ -254,7 +238,7 @@ internal object TargetsCache {
                 }
             }
 
-            _snapshot.value =
+            val snapshot =
                 TargetsSnapshot(
                     kmodModuleInstalled = statusSnapshot.kmodModuleInstalled,
                     kmodActive = statusSnapshot.kmodActive,
@@ -276,9 +260,8 @@ internal object TargetsCache {
                     ifacePrefixes = ifacePrefixes,
                     uidToPkg = statusSnapshot.uidToPkg,
                 )
-        } finally {
-            _loading.value = false
-        }
+            _state.value = snapshot
+            return snapshot
     }
 
     private fun parsePmList(raw: String): Map<String, List<Int>> {

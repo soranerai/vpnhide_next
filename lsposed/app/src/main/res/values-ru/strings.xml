@@ -66,6 +66,10 @@
     <string name="root_error_title">Требуется root-доступ</string>
     <string name="root_error_message">VPNHide Next необходим root-доступ для управления целевыми приложениями. Предоставьте root-права этому приложению в менеджере root (Magisk, KernelSU и т.д.) и откройте приложение заново.</string>
 
+    <!-- Kmod status -->
+    <string name="kmod_error_title">Требуется модуль ядра</string>
+    <string name="kmod_error_message">Для работы VPNHide Next необходим установленный и активный модуль ядра (kmod). Пожалуйста, установите модуль в вашем менеджере root (Magisk, KernelSU и т.д.), перезагрузите устройство и попробуйте снова.</string>
+
     <!-- Save feedback -->
     <string name="save_success">Сохранено целей: %d</string>
     <string name="save_failed_exit">Ошибка сохранения (код выхода %d)</string>
