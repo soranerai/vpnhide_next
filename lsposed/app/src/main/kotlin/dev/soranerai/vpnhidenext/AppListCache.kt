@@ -12,6 +12,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -26,6 +28,7 @@ internal data class AppSummary(
     val label: String,
     val icon: Drawable?,
     val isSystem: Boolean,
+    val apkPath: String? = null,
 )
 
 /**
@@ -74,7 +77,11 @@ internal object AppListCache {
     private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
+    private val _iconsLoading = MutableStateFlow(false)
+    val iconsLoading: StateFlow<Boolean> = _iconsLoading.asStateFlow()
+
     private var inflight: Job? = null
+    private val iconLoadMutex = Mutex()
 
     /** Kick off an initial load if not already loaded or loading. */
     fun ensureLoaded(
@@ -82,7 +89,23 @@ internal object AppListCache {
         context: Context,
     ) {
         if (_apps.value != null || inflight?.isActive == true) return
-        inflight = scope.launch { reload(context.applicationContext) }
+        inflight = scope.launch {
+            val appCtx = context.applicationContext
+            // Phase 1: disk cache
+            val cached = withContext(Dispatchers.IO) { AppListDiskCache.load(appCtx) }
+            if (cached != null) {
+                _apps.value = cached.map { c ->
+                    AppSummary(c.packageName, c.userId, c.uid, c.label, icon = null, isSystem = c.isSystem, apkPath = c.apkPath)
+                }
+                // Phase 2a: lazy load icons in the background
+                launch { loadIconsInBackground(appCtx) }
+                // Phase 2b: silent reload (pm list diff)
+                silentReload(appCtx)
+            } else {
+                // First launch: full reload without disk cache
+                reload(appCtx)
+            }
+        }
     }
 
     /** Force a reload and bump the refresh counter so screens re-read
@@ -93,70 +116,147 @@ internal object AppListCache {
         context: Context,
     ) {
         inflight?.cancel()
+        AppIconCache.evictAll()
         inflight = scope.launch { reload(context.applicationContext) }
     }
 
     private suspend fun reload(appContext: Context) {
         _loading.value = true
         try {
-            val loaded =
+            val (packages, users) = withContext(Dispatchers.IO) {
+                loadPackagesAndUsersViaRoot()
+            }
+            _userNames.value = users
+
+            val pm = appContext.packageManager
+            val metaList = if (packages.isNotEmpty()) {
                 withContext(Dispatchers.IO) {
-                    val pm = appContext.packageManager
-                    val (packages, users) = loadPackagesAndUsersViaRoot()
-                    _userNames.value = users
-                    if (packages.isNotEmpty()) {
-                        packages.entries
-                            .flatMap { (pkg, meta) ->
-                                val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull()
-                                val archiveInfo =
-                                    if (info == null) loadArchiveApplicationInfo(pm, meta.apkPath) else null
-                                val effectiveInfo = info ?: archiveInfo
-
-                                val isSystem =
-                                    if (info != null) {
-                                        (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-                                    } else {
-                                        !meta.apkPath.startsWith("/data/app/")
-                                    }
-
-                                val baseLabel = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg
-                                val icon = effectiveInfo?.let { runCatching { pm.getApplicationIcon(it) }.getOrNull() }
-
-                                meta.users.map { (userId, uid) ->
-                                    AppSummary(
-                                        packageName = pkg,
-                                        userId = userId,
-                                        uid = uid,
-                                        label = labelWithUser(baseLabel, userId, users),
-                                        icon = icon,
-                                        isSystem = isSystem,
-                                    )
-                                }
-                            }.sortedBy { it.label.lowercase() }
-                    } else {
-                        // Fallback: current-profile only (legacy behavior)
-                        val currentUser = Process.myUid() / 100000
-                        pm
-                            .getInstalledApplications(0)
-                            .map { info ->
-                                AppSummary(
-                                    packageName = info.packageName,
-                                    userId = currentUser,
-                                    uid = info.uid,
-                                    label = labelWithUser(info.loadLabel(pm).toString(), currentUser, _userNames.value),
-                                    icon = runCatching { pm.getApplicationIcon(info) }.getOrNull(),
-                                    isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                                )
-                            }.sortedBy { it.label.lowercase() }
-                    }
+                    buildMetaList(pm, packages, users)
                 }
+            } else {
+                withContext(Dispatchers.IO) {
+                    buildFallbackMetaList(pm, users)
+                }
+            }
 
-            _apps.value = loaded
+            _apps.value = metaList
+
+            // Save to disk cache
+            withContext(Dispatchers.IO) {
+                AppListDiskCache.save(appContext, metaList.map { it.toCached() })
+            }
+
+            // Phase 2: Load icons in background
+            loadIconsInBackground(appContext)
+
             _refreshCounter.value = _refreshCounter.value + 1
         } finally {
             _loading.value = false
         }
     }
+
+    private suspend fun silentReload(appContext: Context) {
+        val (packages, users) = withContext(Dispatchers.IO) {
+            loadPackagesAndUsersViaRoot()
+        }
+        val current = _apps.value ?: return
+        val pm = appContext.packageManager
+
+        val newMeta = withContext(Dispatchers.IO) {
+            if (packages.isNotEmpty()) {
+                buildMetaList(pm, packages, users)
+            } else {
+                buildFallbackMetaList(pm, users)
+            }
+        }
+
+        // Compare keys (packageName, userId)
+        val currentKeys = current.map { it.packageName to it.userId }.toSet()
+        val newKeys = newMeta.map { it.packageName to it.userId }.toSet()
+
+        if (currentKeys != newKeys) {
+            AppIconCache.evictAll()
+            _apps.value = newMeta
+            withContext(Dispatchers.IO) {
+                AppListDiskCache.save(appContext, newMeta.map { it.toCached() })
+            }
+            loadIconsInBackground(appContext)
+            _refreshCounter.value = _refreshCounter.value + 1
+        } else {
+            // Packages are the same - just ensure all icons are loaded
+            loadIconsInBackground(appContext)
+        }
+        _userNames.value = users
+    }
+
+    private suspend fun loadIconsInBackground(appContext: Context) {
+        iconLoadMutex.withLock {
+            val current = _apps.value ?: return
+            _iconsLoading.value = true
+            try {
+                val pm = appContext.packageManager
+                val pkgToApkPath = current.associate { it.packageName to it.apkPath }
+
+                val iconMap = withContext(Dispatchers.IO) {
+                    pkgToApkPath.mapValues { (pkg, apkPath) ->
+                        AppIconCache.getOrLoad(pm, pkg, apkPath)
+                    }
+                }
+
+                // Get current value again in case it changed while we were fetching icons
+                val latest = _apps.value ?: return
+                val updated = latest.map { app ->
+                    val icon = iconMap[app.packageName]
+                    if (icon != null && app.icon == null) app.copy(icon = icon) else app
+                }
+                _apps.value = updated
+            } finally {
+                _iconsLoading.value = false
+            }
+        }
+    }
+
+    private fun buildMetaList(
+        pm: PackageManager,
+        packages: Map<String, PkgMeta>,
+        users: Map<Int, String>,
+    ): List<AppSummary> = packages.entries.flatMap { (pkg, meta) ->
+        val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull()
+        val archiveInfo = if (info == null) loadArchiveApplicationInfo(pm, meta.apkPath) else null
+        val effectiveInfo = info ?: archiveInfo
+        val isSystem = if (info != null) {
+            (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+        } else {
+            !meta.apkPath.startsWith("/data/app/")
+        }
+        val baseLabel = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg
+        meta.users.map { (userId, uid) ->
+            AppSummary(pkg, userId, uid, labelWithUser(baseLabel, userId, users),
+                       icon = null, isSystem = isSystem, apkPath = meta.apkPath)
+        }
+    }.sortedBy { it.label.lowercase() }
+
+    private fun buildFallbackMetaList(
+        pm: PackageManager,
+        users: Map<Int, String>,
+    ): List<AppSummary> {
+        val currentUser = Process.myUid() / 100000
+        return pm.getInstalledApplications(0)
+            .map { info ->
+                AppSummary(
+                    packageName = info.packageName,
+                    userId = currentUser,
+                    uid = info.uid,
+                    label = labelWithUser(info.loadLabel(pm).toString(), currentUser, users),
+                    icon = null,
+                    isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
+                    apkPath = info.sourceDir
+                )
+            }.sortedBy { it.label.lowercase() }
+    }
+
+    private fun AppSummary.toCached() = CachedApp(packageName, userId, uid, label, isSystem, apkPath)
+
 
     private data class PkgMeta(
         val apkPath: String,
