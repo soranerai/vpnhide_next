@@ -133,7 +133,7 @@ jobs:
       # Build vpnhide-ctl and vpnhide-daemon
       - name: Build vpnhide-ctl and vpnhide-daemon
         run: |
-          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang -O2 -Wall -static kmod/vpnhide_ctl.c -o vpnhide-ctl
+          $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang -O2 -Wall -static kmod/vpnhide_ctl.c kmod/parson.c -o vpnhide-ctl
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip vpnhide-ctl
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang -O2 -Wall -static kmod/vpnhide_daemon.c -o vpnhide-daemon
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip vpnhide-daemon
