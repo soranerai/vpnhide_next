@@ -337,24 +337,30 @@ internal fun ProtectionScreen(
                             val allKeys = (vpnMap.keys + portMap.keys).distinct()
 
                             val protections =
-                                allKeys.map { key ->
+                                allKeys.mapNotNull { key ->
                                     val (pkg, userId) = key
                                     val vpnApp = vpnMap[key]
                                     val portApp = portMap[key]
+
+                                    val kmod = vpnApp?.kmod ?: false
+                                    val lsposed = vpnApp?.lsposed ?: false
+                                    val portHiding = portApp?.portHiding ?: false
+
+                                    if (!kmod && !lsposed && !portHiding) return@mapNotNull null
 
                                     dev.soranerai.vpnhidenext.db.AppProtection(
                                         packageName = pkg,
                                         userId = userId,
                                         uid = vpnApp?.uid ?: portApp?.uid ?: 0,
-                                        kmod = vpnApp?.kmod ?: false,
-                                        lsposed = vpnApp?.lsposed ?: false,
-                                        portHiding = portApp?.portHiding ?: false,
+                                        kmod = kmod,
+                                        lsposed = lsposed,
+                                        portHiding = portHiding,
                                     )
                                 }
                             appDao.insertAppProtections(protections)
 
                             val existingProtections = appDao.getAllAppProtectionSync()
-                            val keysToKeep = allKeys.toSet()
+                            val keysToKeep = protections.map { it.packageName to it.userId }.toSet()
                             for (existing in existingProtections) {
                                 val key = existing.packageName to existing.userId
                                 if (existing.packageName != selfPkg && key !in keysToKeep) {
