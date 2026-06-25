@@ -1,6 +1,20 @@
 {
   "history": [
     {
+      "version": "1.12.1",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Optimize JSON configuration storage to only persist apps with active protections",
+              "ru": "Оптимизация хранения конфигурации JSON: теперь сохраняются только приложения с активной защитой"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "1.12.0",
       "sections": [
         {

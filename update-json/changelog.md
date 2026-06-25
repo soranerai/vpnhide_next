@@ -1,3 +1,8 @@
+## v1.12.1
+
+### Changed
+- Optimize JSON configuration storage to only persist apps with active protections
+
 ## v1.12.0
 
 ### Changed
@@ -67,9 +72,3 @@
 
 ### Removed
 - Remove 'aikido' soft SO_BINDTODEVICE spoofing (zeroing out optlen)
-
-## v1.9.7
-
-### Fixed
-- Replaced eBPF map ops hijacking with direct syscall filtering, and add batch lookup support for statistics laundering
-- Prevent VPN apps from hiding themselves
