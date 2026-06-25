@@ -1,9 +1,9 @@
 package dev.soranerai.vpnhidenext.domain.usecase
 
-import dev.soranerai.vpnhidenext.domain.models.NativeInstallRecommendation
-import dev.soranerai.vpnhidenext.domain.models.NativeModuleKind
 import dev.soranerai.vpnhidenext.domain.models.ModuleMismatch
 import dev.soranerai.vpnhidenext.domain.models.ModuleState
+import dev.soranerai.vpnhidenext.domain.models.NativeInstallRecommendation
+import dev.soranerai.vpnhidenext.domain.models.NativeModuleKind
 import dev.soranerai.vpnhidenext.versionsMismatch
 
 internal fun parseKernelSeries(raw: String): String? = Regex("""\b(\d+\.\d+)""").find(raw)?.groupValues?.get(1)

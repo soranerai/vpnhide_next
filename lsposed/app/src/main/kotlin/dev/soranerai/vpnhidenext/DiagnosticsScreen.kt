@@ -107,7 +107,6 @@ fun DiagnosticsScreen(
     var debugZipFile by remember { mutableStateOf<File?>(null) }
     var showAllChecks by remember { mutableStateOf(false) }
 
-
     // Kick off the diagnostics run once per process. If selfNeedsRestart
     // is true we skip — hooks aren't applied to this app yet, results
     // would be meaningless. DiagnosticsCache.run is idempotent: no-op
@@ -137,7 +136,6 @@ fun DiagnosticsScreen(
     // permission" banner from everything else.
     val networkBlocked = results?.native?.any { it.passed == null } == true
     val hasFailed = results?.all?.any { it.passed == false } == true
-
 
     Column(
         modifier =
@@ -199,31 +197,33 @@ fun DiagnosticsScreen(
                     if (!hasFailed) {
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = TelGreen.copy(alpha = 0.15f),
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                TelGreen.copy(alpha = 0.4f),
-                            ),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = TelGreen.copy(alpha = 0.15f),
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    TelGreen.copy(alpha = 0.4f),
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.CheckCircle,
                                         contentDescription = null,
                                         tint = TelGreen,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(24.dp),
                                     )
                                     Text(
                                         text = stringResource(R.string.diag_all_good_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = TelGreen
+                                        color = TelGreen,
                                     )
                                 }
                                 Spacer(Modifier.height(8.dp))
@@ -236,17 +236,19 @@ fun DiagnosticsScreen(
                                 Button(
                                     onClick = { showAllChecks = !showAllChecks },
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = TelGreen,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    ),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = TelGreen,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
                                 ) {
                                     Text(
-                                        text = if (showAllChecks) {
-                                            stringResource(R.string.diag_btn_hide_details)
-                                        } else {
-                                            stringResource(R.string.diag_btn_show_details)
-                                        }
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
                                     )
                                 }
                             }
@@ -254,31 +256,33 @@ fun DiagnosticsScreen(
                     } else {
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.errorContainer,
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
-                            ),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                                 ) {
                                     Icon(
                                         imageVector = Icons.Default.Cancel,
                                         contentDescription = null,
                                         tint = TelRed,
-                                        modifier = Modifier.size(24.dp)
+                                        modifier = Modifier.size(24.dp),
                                     )
                                     Text(
                                         text = stringResource(R.string.diag_some_failed_title),
                                         style = MaterialTheme.typography.titleMedium,
                                         fontWeight = FontWeight.Bold,
-                                        color = TelRed
+                                        color = TelRed,
                                     )
                                 }
                                 Spacer(Modifier.height(8.dp))
@@ -291,17 +295,19 @@ fun DiagnosticsScreen(
                                 Button(
                                     onClick = { showAllChecks = !showAllChecks },
                                     modifier = Modifier.fillMaxWidth(),
-                                    colors = ButtonDefaults.buttonColors(
-                                        containerColor = TelGreen,
-                                        contentColor = MaterialTheme.colorScheme.onPrimary,
-                                    ),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = TelGreen,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
                                 ) {
                                     Text(
-                                        text = if (showAllChecks) {
-                                            stringResource(R.string.diag_btn_hide_details)
-                                        } else {
-                                            stringResource(R.string.diag_btn_show_details)
-                                        }
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
                                     )
                                 }
                             }
@@ -314,13 +320,15 @@ fun DiagnosticsScreen(
                         Spacer(Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                            ),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column {
@@ -328,9 +336,10 @@ fun DiagnosticsScreen(
                                     CheckRow(check)
                                     if (index < r.native.lastIndex) {
                                         HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.06f,
-                                            ),
+                                            color =
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = 0.06f,
+                                                ),
                                             thickness = 1.dp,
                                             modifier = Modifier.padding(horizontal = 14.dp),
                                         )
@@ -344,13 +353,15 @@ fun DiagnosticsScreen(
                         Spacer(Modifier.height(8.dp))
                         Card(
                             shape = RoundedCornerShape(16.dp),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                            ),
-                            border = BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                            ),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column {
@@ -358,9 +369,10 @@ fun DiagnosticsScreen(
                                     CheckRow(check)
                                     if (index < r.java.lastIndex) {
                                         HorizontalDivider(
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.06f,
-                                            ),
+                                            color =
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = 0.06f,
+                                                ),
                                             thickness = 1.dp,
                                             modifier = Modifier.padding(horizontal = 14.dp),
                                         )
@@ -375,13 +387,15 @@ fun DiagnosticsScreen(
                             Spacer(Modifier.height(8.dp))
                             Card(
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                ),
-                                border = BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                ),
+                                colors =
+                                    CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                    ),
+                                border =
+                                    BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                    ),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column {
@@ -389,9 +403,10 @@ fun DiagnosticsScreen(
                                         CheckRow(check)
                                         if (index < failedNative.lastIndex) {
                                             HorizontalDivider(
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = 0.06f,
-                                                ),
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                        alpha = 0.06f,
+                                                    ),
                                                 thickness = 1.dp,
                                                 modifier = Modifier.padding(horizontal = 14.dp),
                                             )
@@ -407,13 +422,15 @@ fun DiagnosticsScreen(
                             Spacer(Modifier.height(8.dp))
                             Card(
                                 shape = RoundedCornerShape(16.dp),
-                                colors = CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                ),
-                                border = BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                ),
+                                colors =
+                                    CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                    ),
+                                border =
+                                    BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                    ),
                                 modifier = Modifier.fillMaxWidth(),
                             ) {
                                 Column {
@@ -421,9 +438,10 @@ fun DiagnosticsScreen(
                                         CheckRow(check)
                                         if (index < failedJava.lastIndex) {
                                             HorizontalDivider(
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = 0.06f,
-                                                ),
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                        alpha = 0.06f,
+                                                    ),
                                                 thickness = 1.dp,
                                                 modifier = Modifier.padding(horizontal = 14.dp),
                                             )
@@ -444,8 +462,6 @@ fun DiagnosticsScreen(
         Spacer(Modifier.height(16.dp))
 
         DebugLoggingCard()
-
-
 
         Spacer(Modifier.height(16.dp))
 
@@ -1044,7 +1060,6 @@ private fun checkLinkPropertiesDns(
     return CheckResult(name, leaked.isEmpty(), detail)
 }
 
-
 private fun checkProcNetRouteJava(name: String): CheckResult =
     try {
         val allLines = mutableListOf<String>()
@@ -1167,7 +1182,6 @@ private fun checkNetworkCallback(
     return CheckResult(name, !failed, detail)
 }
 
-
 private fun checkVpnCallbackSuppression(
     cm: ConnectivityManager,
     name: String,
@@ -1208,7 +1222,6 @@ private fun checkVpnCallbackSuppression(
         }
     return CheckResult(name, passed, detail)
 }
-
 
 private fun checkGetNetworkForType(
     cm: ConnectivityManager,
@@ -1414,15 +1427,17 @@ private fun checkTrafficStatsDiscrepancy(
         val txDiff = rawSystemTx - visibleTx
         val rxDiff = rawSystemRx - visibleRx
         val threshold = 5 * 1024 * 1024L // 5 MB
-        
+
         // If there's no VPN traffic, discrepancies are natural (not from laundering failure) -> ignore
         val hasVpnTraffic = rawVpnTx > 0L
-        
-        val txSuspicious = hasVpnTraffic &&
-            txDiff > threshold &&
+
+        val txSuspicious =
+            hasVpnTraffic &&
+                txDiff > threshold &&
                 (rawSystemTx.toDouble() / visibleTx.coerceAtLeast(1L).toDouble() > 1.5)
-        val rxSuspicious = hasVpnTraffic &&
-            rxDiff > threshold &&
+        val rxSuspicious =
+            hasVpnTraffic &&
+                rxDiff > threshold &&
                 (rawSystemRx.toDouble() / visibleRx.coerceAtLeast(1L).toDouble() > 1.5)
 
         // ── Secondary check: verify VPN traffic was laundered into cover iface ──

@@ -11,7 +11,6 @@ import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
 
 object ConnectivityHook {
-
     fun hookConnectivityService(classLoader: ClassLoader) {
         val csClass =
             try {
@@ -214,11 +213,12 @@ object ConnectivityHook {
         sanitizer: (XC_MethodHook.MethodHookParam) -> Unit,
     ) {
         try {
-            val networkMethod = if (method == "getNetworkForType") {
-                findMethodInHierarchy(csClass, method, Integer.TYPE)
-            } else {
-                findMethodInHierarchy(csClass, method)
-            } ?: throw NoSuchMethodException(method)
+            val networkMethod =
+                if (method == "getNetworkForType") {
+                    findMethodInHierarchy(csClass, method, Integer.TYPE)
+                } else {
+                    findMethodInHierarchy(csClass, method)
+                } ?: throw NoSuchMethodException(method)
 
             XposedBridge.hookMethod(
                 networkMethod,
@@ -230,7 +230,7 @@ object ConnectivityHook {
                         if (!HookContext.loadTargetUids().contains(callingUid)) return
                         sanitizer(param)
                     }
-                }
+                },
             )
             HookLog.i("VpnHide: $method hook installed")
         } catch (t: Throwable) {
@@ -270,7 +270,10 @@ object ConnectivityHook {
         HookLog.i("VpnHide: suppressed getNetworkForType(TYPE_VPN) for uid=${Binder.getCallingUid()}")
     }
 
-    fun isVpnNetwork(cs: Any, network: android.net.Network): Boolean {
+    fun isVpnNetwork(
+        cs: Any,
+        network: android.net.Network,
+    ): Boolean {
         val nc = getNetworkCapabilitiesSafe(cs, network) ?: return false
         return nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
     }
@@ -281,7 +284,11 @@ object ConnectivityHook {
         return sanitizeLinkProperties(copy, cs, physicalLp)
     }
 
-    fun sanitizeLinkProperties(copy: LinkProperties, cs: Any?, physicalLp: LinkProperties?): Boolean {
+    fun sanitizeLinkProperties(
+        copy: LinkProperties,
+        cs: Any?,
+        physicalLp: LinkProperties?,
+    ): Boolean {
         var modified = false
         val targetIface = getActivePhysicalInterfaceName(cs, physicalLp)
 
@@ -300,13 +307,14 @@ object ConnectivityHook {
                     val routeIface = route.`interface`
                     if (routeIface != null && HookContext.isVpnInterfaceName(routeIface)) {
                         val parcel = android.os.Parcel.obtain()
-                        val clonedRoute = try {
-                            route.writeToParcel(parcel, 0)
-                            parcel.setDataPosition(0)
-                            RouteInfo.CREATOR.createFromParcel(parcel)
-                        } finally {
-                            parcel.recycle()
-                        }
+                        val clonedRoute =
+                            try {
+                                route.writeToParcel(parcel, 0)
+                                parcel.setDataPosition(0)
+                                RouteInfo.CREATOR.createFromParcel(parcel)
+                            } finally {
+                                parcel.recycle()
+                            }
                         XposedHelpers.setObjectField(clonedRoute, "mInterface", targetIface)
                         newRoutes.add(clonedRoute)
                         modified = true
@@ -350,13 +358,14 @@ object ConnectivityHook {
             if (stacked != null && stacked.isNotEmpty()) {
                 val filtered = LinkedHashMap<String, LinkProperties>()
                 for ((key, value) in stacked) {
-                    val stackedCopy = try {
-                        val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
-                        ctor.isAccessible = true
-                        ctor.newInstance(value) as LinkProperties
-                    } catch (_: Throwable) {
-                        value
-                    }
+                    val stackedCopy =
+                        try {
+                            val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
+                            ctor.isAccessible = true
+                            ctor.newInstance(value) as LinkProperties
+                        } catch (_: Throwable) {
+                            value
+                        }
                     val stackedModified = sanitizeLinkProperties(stackedCopy, cs, physicalLp)
                     val stackedIface = XposedHelpers.getObjectField(stackedCopy, "mIfaceName") as? String
                     if (stackedIface == null && stackedCopy.routes.isEmpty()) {
@@ -405,11 +414,12 @@ object ConnectivityHook {
         try {
             val domains = XposedHelpers.getObjectField(copy, "mDomains") as? String
             if (!domains.isNullOrEmpty()) {
-                val physicalDomains = if (physicalLp != null) {
-                    XposedHelpers.getObjectField(physicalLp, "mDomains") as? String
-                } else {
-                    null
-                }
+                val physicalDomains =
+                    if (physicalLp != null) {
+                        XposedHelpers.getObjectField(physicalLp, "mDomains") as? String
+                    } else {
+                        null
+                    }
                 XposedHelpers.setObjectField(copy, "mDomains", physicalDomains ?: "")
                 modified = true
             }
@@ -531,7 +541,10 @@ object ConnectivityHook {
         return null
     }
 
-    fun getActivePhysicalInterfaceName(cs: Any? = null, lp: LinkProperties? = null): String {
+    fun getActivePhysicalInterfaceName(
+        cs: Any? = null,
+        lp: LinkProperties? = null,
+    ): String {
         HookContext.cachedPhysicalIfaceName?.let { return it }
         val actualCs = cs ?: HookContext.getConnectivityService()
         if (actualCs != null) {

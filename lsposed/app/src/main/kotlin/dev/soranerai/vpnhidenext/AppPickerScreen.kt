@@ -120,7 +120,6 @@ internal fun AppPickerScreen(
                         items(displayApps, key = { "${it.packageName}:${it.userId}" }) { app ->
                             AppRow(
                                 app = app,
-                                userNames = emptyMap(),
                                 installed = installed,
                                 onToggle = { layer ->
                                     val newList =

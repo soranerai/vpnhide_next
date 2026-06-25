@@ -3,43 +3,51 @@ package dev.soranerai.vpnhidenext.data.repository
 import android.content.Context
 import android.os.Build
 import android.util.Base64
+import dev.soranerai.vpnhidenext.AppListCache
 import dev.soranerai.vpnhidenext.BuildConfig
 import dev.soranerai.vpnhidenext.DEV_NODE
+import dev.soranerai.vpnhidenext.DiagnosticsCache
 import dev.soranerai.vpnhidenext.KMOD_CTL
 import dev.soranerai.vpnhidenext.KMOD_LOAD_DMESG_FILE
 import dev.soranerai.vpnhidenext.KMOD_LOAD_STATUS_FILE
 import dev.soranerai.vpnhidenext.KMOD_MODULE_DIR
 import dev.soranerai.vpnhidenext.R
-import dev.soranerai.vpnhidenext.AppListCache
-import dev.soranerai.vpnhidenext.DiagnosticsCache
 import dev.soranerai.vpnhidenext.VpnHideLog
-import dev.soranerai.vpnhidenext.suExec
-import dev.soranerai.vpnhidenext.versionsMismatch
 import dev.soranerai.vpnhidenext.compareSemver
-import dev.soranerai.vpnhidenext.normalizeVersion
-import dev.soranerai.vpnhidenext.isEnabledInPrefs
 import dev.soranerai.vpnhidenext.domain.models.*
 import dev.soranerai.vpnhidenext.domain.usecase.buildNativeInstallRecommendation
+import dev.soranerai.vpnhidenext.isEnabledInPrefs
+import dev.soranerai.vpnhidenext.normalizeVersion
+import dev.soranerai.vpnhidenext.suExec
+import dev.soranerai.vpnhidenext.versionsMismatch
 
 private const val TAG = "VpnHide-Repository"
 
 private sealed interface LsposedRuntime {
     data object Inactive : LsposedRuntime
-    data class Active(val version: String?) : LsposedRuntime
+
+    data class Active(
+        val version: String?,
+    ) : LsposedRuntime
 }
 
 private sealed interface LsposedFramework {
     data object NotInstalled : LsposedFramework
-    data class Installed(val disabled: Boolean) : LsposedFramework
+
+    data class Installed(
+        val disabled: Boolean,
+    ) : LsposedFramework
 }
 
 private sealed interface LsposedConfig {
     data object ModuleNotConfigured : LsposedConfig
+
     data object Disabled : LsposedConfig
 }
 
 private fun parseKeyValue(text: String): Map<String, String> =
-    text.lines()
+    text
+        .lines()
         .mapNotNull {
             val parts = it.split("=", limit = 2)
             if (parts.size == 2) parts[0].trim() to parts[1].trim() else null
@@ -64,8 +72,9 @@ private data class RawDashboardSnapshot(
     fun decodeBase64(key: String): String = decodeBase64String(get(key))
 }
 
-class DashboardRepository(private val context: Context) {
-
+class DashboardRepository(
+    private val context: Context,
+) {
     private val res = context.resources
     private val selfPkg = context.packageName
 
@@ -78,7 +87,7 @@ class DashboardRepository(private val context: Context) {
             echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
             echo "load_dmesg=${'$'}(cat $KMOD_LOAD_DMESG_FILE 2>/dev/null | tail -n 50 | base64 | tr -d '\n')"
             [ -c $DEV_NODE ] && echo "lsmod=1" || echo "lsmod=0"
-    
+            
             # LSPosed framework
             LSP_INSTALLED=0
             LSP_DISABLED=0
@@ -178,7 +187,10 @@ class DashboardRepository(private val context: Context) {
         return "Android $release"
     }
 
-    private fun readKmodLoadStatus(snapshot: RawDashboardSnapshot, currentBootId: String): KmodLoadStatus? {
+    private fun readKmodLoadStatus(
+        snapshot: RawDashboardSnapshot,
+        currentBootId: String,
+    ): KmodLoadStatus? {
         val raw = snapshot.decodeBase64("load_status")
         if (raw.isBlank()) return null
         val props = parseKeyValue(raw)
@@ -229,7 +241,9 @@ class DashboardRepository(private val context: Context) {
         VpnHideLog.i(TAG, "=== Loading dashboard state ===")
         val snapshot = collectDashboardSnapshot()
         val currentBootId = snapshot.get("boot_id")
-        val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(context)
+        val db =
+            dev.soranerai.vpnhidenext.db.AppDatabase
+                .getInstance(context)
         val appsSync = db.appDao().getAllAppProtectionSync()
 
         // kmod
@@ -640,12 +654,13 @@ class DashboardRepository(private val context: Context) {
         }
 
         if (uidsToResolveRoot.isNotEmpty()) {
-            val batchScript = buildString {
-                for (uid in uidsToResolveRoot) {
-                    appendLine("echo \"UID:$uid\"")
-                    appendLine("pm list packages --uid $uid 2>/dev/null")
+            val batchScript =
+                buildString {
+                    for (uid in uidsToResolveRoot) {
+                        appendLine("echo \"UID:$uid\"")
+                        appendLine("pm list packages --uid $uid 2>/dev/null")
+                    }
                 }
-            }
             val (_, stdout) = suExec(batchScript)
             var currentUid = -1
             stdout.lineSequence().forEach { line ->
@@ -697,7 +712,7 @@ class DashboardRepository(private val context: Context) {
         context: Context,
         packageName: String,
         userId: Int,
-        labelLookup: Map<Pair<String, Int>, String> = emptyMap()
+        labelLookup: Map<Pair<String, Int>, String> = emptyMap(),
     ): String {
         val cachedLabel = labelLookup[packageName to userId]
         if (!cachedLabel.isNullOrEmpty()) return cachedLabel
@@ -709,28 +724,35 @@ class DashboardRepository(private val context: Context) {
         }
 
         val pm = context.packageManager
-        val label = try {
-            val appInfo = pm.getApplicationInfo(packageName, 0)
-            pm.getApplicationLabel(appInfo).toString().trim()
-        } catch (_: Throwable) {
-            null
-        }
+        val label =
+            try {
+                val appInfo = pm.getApplicationInfo(packageName, 0)
+                pm.getApplicationLabel(appInfo).toString().trim()
+            } catch (_: Throwable) {
+                null
+            }
 
         if (!label.isNullOrEmpty()) return label
 
         val (_, pathOut) = suExec("pm path $packageName 2>/dev/null")
         val pathLine = pathOut.lines().firstOrNull { it.startsWith("package:") }
         val apkPath = pathLine?.substringAfter("package:")?.trim()
-        val archiveInfo = if (!apkPath.isNullOrBlank()) {
-            runCatching { pm.getPackageArchiveInfo(apkPath, 0) }.getOrNull()?.applicationInfo?.apply {
-                sourceDir = apkPath
-                publicSourceDir = apkPath
+        val archiveInfo =
+            if (!apkPath.isNullOrBlank()) {
+                runCatching { pm.getPackageArchiveInfo(apkPath, 0) }.getOrNull()?.applicationInfo?.apply {
+                    sourceDir = apkPath
+                    publicSourceDir = apkPath
+                }
+            } else {
+                null
             }
-        } else null
 
-        val archiveLabel = if (archiveInfo != null) {
-            pm.getApplicationLabel(archiveInfo).toString().trim()
-        } else null
+        val archiveLabel =
+            if (archiveInfo != null) {
+                pm.getApplicationLabel(archiveInfo).toString().trim()
+            } else {
+                null
+            }
 
         return if (!archiveLabel.isNullOrEmpty()) archiveLabel else packageName
     }

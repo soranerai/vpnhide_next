@@ -6,8 +6,8 @@ import de.robv.android.xposed.XposedHelpers
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import java.io.File
-import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.atomic.AtomicBoolean
 
 object HookContext {
     @Volatile
@@ -71,11 +71,12 @@ object HookContext {
 
     fun recordIntercept(hookName: String) {
         val callingUid = Binder.getCallingUid()
-        val targetUid = if (callingUid == 1000) {
-            currentCallbackUid.get() ?: return
-        } else {
-            callingUid
-        }
+        val targetUid =
+            if (callingUid == 1000) {
+                currentCallbackUid.get() ?: return
+            } else {
+                callingUid
+            }
         if (!loadTargetUids().contains(targetUid)) return
         if (targetUid == selfUid) return
 

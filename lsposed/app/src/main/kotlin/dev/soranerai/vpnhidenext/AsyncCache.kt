@@ -10,10 +10,10 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal abstract class AsyncCache<T> {
-    protected val _state = MutableStateFlow<T?>(null)
+    private val _state = MutableStateFlow<T?>(null)
     val state: StateFlow<T?> = _state.asStateFlow()
 
-    protected val _loading = MutableStateFlow(false)
+    private val _loading = MutableStateFlow(false)
     val loading: StateFlow<Boolean> = _loading.asStateFlow()
 
     protected var inflight: Job? = null
@@ -25,33 +25,45 @@ internal abstract class AsyncCache<T> {
         }
     }
 
-    protected fun launchReload(scope: CoroutineScope, block: suspend () -> T) {
+    protected fun updateState(value: T?) {
+        _state.value = value
+    }
+
+    protected fun launchReload(
+        scope: CoroutineScope,
+        block: suspend () -> T,
+    ) {
         synchronized(lock) {
             inflight?.cancel()
             _loading.value = true
-            inflight = scope.launch {
-                try {
-                    val next = withContext(Dispatchers.IO) { block() }
-                    _state.value = next
-                } finally {
-                    _loading.value = false
+            inflight =
+                scope.launch {
+                    try {
+                        val next = withContext(Dispatchers.IO) { block() }
+                        _state.value = next
+                    } finally {
+                        _loading.value = false
+                    }
                 }
-            }
         }
     }
 
-    protected fun launchEnsureLoaded(scope: CoroutineScope, block: suspend () -> T) {
+    protected fun launchEnsureLoaded(
+        scope: CoroutineScope,
+        block: suspend () -> T,
+    ) {
         synchronized(lock) {
             if (_state.value != null || inflight?.isActive == true) return
             _loading.value = true
-            inflight = scope.launch {
-                try {
-                    val next = withContext(Dispatchers.IO) { block() }
-                    _state.value = next
-                } finally {
-                    _loading.value = false
+            inflight =
+                scope.launch {
+                    try {
+                        val next = withContext(Dispatchers.IO) { block() }
+                        _state.value = next
+                    } finally {
+                        _loading.value = false
+                    }
                 }
-            }
         }
     }
 }

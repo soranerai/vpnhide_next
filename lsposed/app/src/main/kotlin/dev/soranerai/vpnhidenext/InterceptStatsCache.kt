@@ -9,8 +9,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /**
@@ -46,8 +46,7 @@ internal object InterceptStatsCache : AsyncCache<List<AppInterceptStats>>() {
 
     fun clearStats() {
         synchronized(lock) {
-            _state.value = emptyList()
+            updateState(emptyList())
         }
     }
 }
-

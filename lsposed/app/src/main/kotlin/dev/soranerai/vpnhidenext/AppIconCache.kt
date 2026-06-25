@@ -14,35 +14,46 @@ internal object AppIconCache {
      * Retrieve icon from the LRU cache or load it using PackageManager.
      * Should be called on Dispatchers.IO.
      */
-    fun getOrLoad(pm: PackageManager, packageName: String, apkPath: String?): Drawable? {
-        val cached = synchronized(lru) {
-            lru.get(packageName)
-        }
+    fun getOrLoad(
+        pm: PackageManager,
+        packageName: String,
+        apkPath: String?,
+    ): Drawable? {
+        val cached =
+            synchronized(lru) {
+                lru.get(packageName)
+            }
         if (cached != null) return cached
 
         val lock = locks.computeIfAbsent(packageName) { Any() }
-        val icon = synchronized(lock) {
-            val doubleCheck = synchronized(lru) {
-                lru.get(packageName)
-            }
-            if (doubleCheck != null) return@synchronized doubleCheck
+        val icon =
+            synchronized(lock) {
+                val doubleCheck =
+                    synchronized(lru) {
+                        lru.get(packageName)
+                    }
+                if (doubleCheck != null) return@synchronized doubleCheck
 
-            val loaded = runCatching {
-                val info = runCatching { pm.getApplicationInfo(packageName, 0) }.getOrNull()
-                val archiveInfo = if (info == null && !apkPath.isNullOrBlank()) {
-                    loadArchiveApplicationInfo(pm, apkPath)
-                } else null
-                val effectiveInfo = info ?: archiveInfo
-                effectiveInfo?.let { pm.getApplicationIcon(it) }
-            }.getOrNull()
+                val loaded =
+                    runCatching {
+                        val info = runCatching { pm.getApplicationInfo(packageName, 0) }.getOrNull()
+                        val archiveInfo =
+                            if (info == null && !apkPath.isNullOrBlank()) {
+                                loadArchiveApplicationInfo(pm, apkPath)
+                            } else {
+                                null
+                            }
+                        val effectiveInfo = info ?: archiveInfo
+                        effectiveInfo?.let { pm.getApplicationIcon(it) }
+                    }.getOrNull()
 
-            if (loaded != null) {
-                synchronized(lru) {
-                    lru.put(packageName, loaded)
+                if (loaded != null) {
+                    synchronized(lru) {
+                        lru.put(packageName, loaded)
+                    }
                 }
+                loaded
             }
-            loaded
-        }
         locks.remove(packageName, lock)
         return icon
     }

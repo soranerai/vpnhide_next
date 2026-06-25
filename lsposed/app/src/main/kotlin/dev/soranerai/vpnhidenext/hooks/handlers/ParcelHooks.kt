@@ -9,7 +9,6 @@ import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
 
 object ParcelHooks {
-
     fun hookNCWriteToParcel() {
         val writingCopy = ThreadLocal<Boolean>()
         XposedHelpers.findAndHookMethod(
@@ -98,8 +97,16 @@ object ParcelHooks {
                                 val subtypeName = XposedHelpers.getObjectField(physicalNi, "mSubtypeName") as? String ?: ""
                                 val dummy = ctor.newInstance(type, subtype, typeName, subtypeName) as NetworkInfo
                                 XposedHelpers.setObjectField(dummy, "mState", XposedHelpers.getObjectField(physicalNi, "mState"))
-                                XposedHelpers.setObjectField(dummy, "mDetailedState", XposedHelpers.getObjectField(physicalNi, "mDetailedState"))
-                                XposedHelpers.setBooleanField(dummy, "mIsAvailable", XposedHelpers.getBooleanField(physicalNi, "mIsAvailable"))
+                                XposedHelpers.setObjectField(
+                                    dummy,
+                                    "mDetailedState",
+                                    XposedHelpers.getObjectField(physicalNi, "mDetailedState"),
+                                )
+                                XposedHelpers.setBooleanField(
+                                    dummy,
+                                    "mIsAvailable",
+                                    XposedHelpers.getBooleanField(physicalNi, "mIsAvailable"),
+                                )
                                 dummy
                             }
                         HookLog.i("VpnHide: NetworkInfo.writeToParcel – morphed VPN info into physical network info")
@@ -116,7 +123,9 @@ object ParcelHooks {
                         XposedHelpers.setObjectField(copy, "mState", NetworkInfo.State.DISCONNECTED)
                         XposedHelpers.setObjectField(copy, "mDetailedState", NetworkInfo.DetailedState.DISCONNECTED)
                         XposedHelpers.setBooleanField(copy, "mIsAvailable", false)
-                        HookLog.i("VpnHide: NetworkInfo.writeToParcel – morphed VPN info into disconnected MOBILE info (no physical network)")
+                        HookLog.i(
+                            "VpnHide: NetworkInfo.writeToParcel – morphed VPN info into disconnected MOBILE info (no physical network)",
+                        )
                     }
 
                     val parcel = param.args[0] as android.os.Parcel
@@ -226,11 +235,12 @@ object ParcelHooks {
 
     fun sanitizeNetworkCapabilities(copy: NetworkCapabilities): Boolean {
         val hasVpnTransport = copy.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-        val transportInfo = try {
-            XposedHelpers.callMethod(copy, "getTransportInfo")
-        } catch (_: Throwable) {
-            null
-        }
+        val transportInfo =
+            try {
+                XposedHelpers.callMethod(copy, "getTransportInfo")
+            } catch (_: Throwable) {
+                null
+            }
         val hasVpnInfo = transportInfo?.javaClass?.name == "android.net.VpnTransportInfo"
 
         if (!hasVpnTransport && !hasVpnInfo) return false
@@ -250,7 +260,8 @@ object ParcelHooks {
         } catch (_: Throwable) {
         }
 
-        val hasPhysical = copy.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
+        val hasPhysical =
+            copy.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
                 copy.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
                 copy.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET) ||
                 copy.hasTransport(NetworkCapabilities.TRANSPORT_BLUETOOTH)
@@ -267,11 +278,12 @@ object ParcelHooks {
         if (!hasPhysical) {
             if (physicalNc != null) {
                 var addedAny = false
-                val physicalTransports = try {
-                    XposedHelpers.callMethod(physicalNc, "getTransportTypes") as? IntArray
-                } catch (_: Throwable) {
-                    null
-                }
+                val physicalTransports =
+                    try {
+                        XposedHelpers.callMethod(physicalNc, "getTransportTypes") as? IntArray
+                    } catch (_: Throwable) {
+                        null
+                    }
                 if (physicalTransports != null) {
                     for (t in physicalTransports) {
                         if (t != NetworkCapabilities.TRANSPORT_VPN) {
@@ -284,7 +296,7 @@ object ParcelHooks {
                         NetworkCapabilities.TRANSPORT_WIFI,
                         NetworkCapabilities.TRANSPORT_CELLULAR,
                         NetworkCapabilities.TRANSPORT_ETHERNET,
-                        NetworkCapabilities.TRANSPORT_BLUETOOTH
+                        NetworkCapabilities.TRANSPORT_BLUETOOTH,
                     )) {
                         if (physicalNc.hasTransport(t)) {
                             XposedHelpers.callMethod(copy, "addTransportType", t)

@@ -2383,10 +2383,10 @@ static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
 					    "java_hook_mask: %u\n",
 					    READ_ONCE(java_hooks_mask));
 
-			offset += scnprintf(reader->buf + offset,
-					    65536 - offset,
-					    "java_stats_clear_gen: %d\n",
-					    atomic_read(&java_stats_clear_generation));
+			offset += scnprintf(
+				reader->buf + offset, 65536 - offset,
+				"java_stats_clear_gen: %d\n",
+				atomic_read(&java_stats_clear_generation));
 
 			offset += scnprintf(reader->buf + offset,
 					    65536 - offset,
@@ -2426,7 +2426,9 @@ static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
 			spin_lock(&cover_ifname_lock);
 			offset += scnprintf(reader->buf + offset,
 					    65536 - offset, "cover_iface: %s\n",
-					    global_cover_ifname[0] ? global_cover_ifname : "none");
+					    global_cover_ifname[0] ?
+						    global_cover_ifname :
+						    "none");
 			spin_unlock(&cover_ifname_lock);
 
 			offset += scnprintf(reader->buf + offset,

@@ -89,23 +89,25 @@ internal object AppListCache {
         context: Context,
     ) {
         if (_apps.value != null || inflight?.isActive == true) return
-        inflight = scope.launch {
-            val appCtx = context.applicationContext
-            // Phase 1: disk cache
-            val cached = withContext(Dispatchers.IO) { AppListDiskCache.load(appCtx) }
-            if (cached != null) {
-                _apps.value = cached.map { c ->
-                    AppSummary(c.packageName, c.userId, c.uid, c.label, icon = null, isSystem = c.isSystem, apkPath = c.apkPath)
+        inflight =
+            scope.launch {
+                val appCtx = context.applicationContext
+                // Phase 1: disk cache
+                val cached = withContext(Dispatchers.IO) { AppListDiskCache.load(appCtx) }
+                if (cached != null) {
+                    _apps.value =
+                        cached.map { c ->
+                            AppSummary(c.packageName, c.userId, c.uid, c.label, icon = null, isSystem = c.isSystem, apkPath = c.apkPath)
+                        }
+                    // Phase 2a: lazy load icons in the background
+                    launch { loadIconsInBackground(appCtx) }
+                    // Phase 2b: silent reload (pm list diff)
+                    silentReload(appCtx)
+                } else {
+                    // First launch: full reload without disk cache
+                    reload(appCtx)
                 }
-                // Phase 2a: lazy load icons in the background
-                launch { loadIconsInBackground(appCtx) }
-                // Phase 2b: silent reload (pm list diff)
-                silentReload(appCtx)
-            } else {
-                // First launch: full reload without disk cache
-                reload(appCtx)
             }
-        }
     }
 
     /** Force a reload and bump the refresh counter so screens re-read
@@ -123,21 +125,23 @@ internal object AppListCache {
     private suspend fun reload(appContext: Context) {
         _loading.value = true
         try {
-            val (packages, users) = withContext(Dispatchers.IO) {
-                loadPackagesAndUsersViaRoot()
-            }
+            val (packages, users) =
+                withContext(Dispatchers.IO) {
+                    loadPackagesAndUsersViaRoot()
+                }
             _userNames.value = users
 
             val pm = appContext.packageManager
-            val metaList = if (packages.isNotEmpty()) {
-                withContext(Dispatchers.IO) {
-                    buildMetaList(pm, packages, users)
+            val metaList =
+                if (packages.isNotEmpty()) {
+                    withContext(Dispatchers.IO) {
+                        buildMetaList(pm, packages, users)
+                    }
+                } else {
+                    withContext(Dispatchers.IO) {
+                        buildFallbackMetaList(pm, users)
+                    }
                 }
-            } else {
-                withContext(Dispatchers.IO) {
-                    buildFallbackMetaList(pm, users)
-                }
-            }
 
             _apps.value = metaList
 
@@ -156,19 +160,21 @@ internal object AppListCache {
     }
 
     private suspend fun silentReload(appContext: Context) {
-        val (packages, users) = withContext(Dispatchers.IO) {
-            loadPackagesAndUsersViaRoot()
-        }
+        val (packages, users) =
+            withContext(Dispatchers.IO) {
+                loadPackagesAndUsersViaRoot()
+            }
         val current = _apps.value ?: return
         val pm = appContext.packageManager
 
-        val newMeta = withContext(Dispatchers.IO) {
-            if (packages.isNotEmpty()) {
-                buildMetaList(pm, packages, users)
-            } else {
-                buildFallbackMetaList(pm, users)
+        val newMeta =
+            withContext(Dispatchers.IO) {
+                if (packages.isNotEmpty()) {
+                    buildMetaList(pm, packages, users)
+                } else {
+                    buildFallbackMetaList(pm, users)
+                }
             }
-        }
 
         // Compare keys (packageName, userId)
         val currentKeys = current.map { it.packageName to it.userId }.toSet()
@@ -197,18 +203,20 @@ internal object AppListCache {
                 val pm = appContext.packageManager
                 val pkgToApkPath = current.associate { it.packageName to it.apkPath }
 
-                val iconMap = withContext(Dispatchers.IO) {
-                    pkgToApkPath.mapValues { (pkg, apkPath) ->
-                        AppIconCache.getOrLoad(pm, pkg, apkPath)
+                val iconMap =
+                    withContext(Dispatchers.IO) {
+                        pkgToApkPath.mapValues { (pkg, apkPath) ->
+                            AppIconCache.getOrLoad(pm, pkg, apkPath)
+                        }
                     }
-                }
 
                 // Get current value again in case it changed while we were fetching icons
                 val latest = _apps.value ?: return
-                val updated = latest.map { app ->
-                    val icon = iconMap[app.packageName]
-                    if (icon != null && app.icon == null) app.copy(icon = icon) else app
-                }
+                val updated =
+                    latest.map { app ->
+                        val icon = iconMap[app.packageName]
+                        if (icon != null && app.icon == null) app.copy(icon = icon) else app
+                    }
                 _apps.value = updated
             } finally {
                 _iconsLoading.value = false
@@ -220,28 +228,39 @@ internal object AppListCache {
         pm: PackageManager,
         packages: Map<String, PkgMeta>,
         users: Map<Int, String>,
-    ): List<AppSummary> = packages.entries.flatMap { (pkg, meta) ->
-        val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull()
-        val archiveInfo = if (info == null) loadArchiveApplicationInfo(pm, meta.apkPath) else null
-        val effectiveInfo = info ?: archiveInfo
-        val isSystem = if (info != null) {
-            (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
-        } else {
-            !meta.apkPath.startsWith("/data/app/")
-        }
-        val baseLabel = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg
-        meta.users.map { (userId, uid) ->
-            AppSummary(pkg, userId, uid, labelWithUser(baseLabel, userId, users),
-                       icon = null, isSystem = isSystem, apkPath = meta.apkPath)
-        }
-    }.sortedBy { it.label.lowercase() }
+    ): List<AppSummary> =
+        packages.entries
+            .flatMap { (pkg, meta) ->
+                val info = runCatching { pm.getApplicationInfo(pkg, 0) }.getOrNull()
+                val archiveInfo = if (info == null) loadArchiveApplicationInfo(pm, meta.apkPath) else null
+                val effectiveInfo = info ?: archiveInfo
+                val isSystem =
+                    if (info != null) {
+                        (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+                    } else {
+                        !meta.apkPath.startsWith("/data/app/")
+                    }
+                val baseLabel = effectiveInfo?.loadLabel(pm)?.toString() ?: pkg
+                meta.users.map { (userId, uid) ->
+                    AppSummary(
+                        pkg,
+                        userId,
+                        uid,
+                        labelWithUser(baseLabel, userId, users),
+                        icon = null,
+                        isSystem = isSystem,
+                        apkPath = meta.apkPath,
+                    )
+                }
+            }.sortedBy { it.label.lowercase() }
 
     private fun buildFallbackMetaList(
         pm: PackageManager,
         users: Map<Int, String>,
     ): List<AppSummary> {
         val currentUser = Process.myUid() / 100000
-        return pm.getInstalledApplications(0)
+        return pm
+            .getInstalledApplications(0)
             .map { info ->
                 AppSummary(
                     packageName = info.packageName,
@@ -250,13 +269,12 @@ internal object AppListCache {
                     label = labelWithUser(info.loadLabel(pm).toString(), currentUser, users),
                     icon = null,
                     isSystem = (info.flags and ApplicationInfo.FLAG_SYSTEM) != 0,
-                    apkPath = info.sourceDir
+                    apkPath = info.sourceDir,
                 )
             }.sortedBy { it.label.lowercase() }
     }
 
     private fun AppSummary.toCached() = CachedApp(packageName, userId, uid, label, isSystem, apkPath)
-
 
     private data class PkgMeta(
         val apkPath: String,

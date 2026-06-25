@@ -92,11 +92,12 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                 withContext(Dispatchers.IO) {
                     performStartupOptimized()
                 }
-            rootState = when {
-                !res.rootGranted -> RootState.Denied
-                !res.kmodActive -> RootState.KmodMissing
-                else -> RootState.Granted(res)
-            }
+            rootState =
+                when {
+                    !res.rootGranted -> RootState.Denied
+                    !res.kmodActive -> RootState.KmodMissing
+                    else -> RootState.Granted(res)
+                }
         }
 
         when (rootState) {
@@ -218,8 +219,6 @@ private fun MainScreen(
             searchQuery = ""
         }
     }
-
-
 
     LaunchedEffect(searchActive) {
         if (searchActive) {
@@ -400,7 +399,7 @@ private fun MainScreen(
             },
         ) { innerPadding ->
             val restart = selfNeedsRestart
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier =
                         Modifier
@@ -897,26 +896,27 @@ private fun RefreshActionIcon(
 private fun MigrationScreen() {
     Scaffold { innerPadding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .background(MaterialTheme.colorScheme.background),
-            contentAlignment = Alignment.Center
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center,
         ) {
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
+                verticalArrangement = Arrangement.Center,
             ) {
                 CircularProgressIndicator(
                     color = MaterialTheme.colorScheme.primary,
-                    strokeWidth = 4.dp
+                    strokeWidth = 4.dp,
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Text(
                     text = stringResource(R.string.migrating_data),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onBackground
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
             }
         }

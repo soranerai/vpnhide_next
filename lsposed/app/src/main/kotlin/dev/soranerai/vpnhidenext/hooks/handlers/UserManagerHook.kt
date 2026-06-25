@@ -8,7 +8,6 @@ import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
 
 object UserManagerHook {
-
     fun hookUserManagerService(classLoader: ClassLoader) {
         val targetClass =
             try {

@@ -44,12 +44,12 @@ import kotlinx.coroutines.launch
 @Composable
 internal fun PortsHidingScreen(
     apps: List<AppEntry>,
-    searchQuery: String,
-    showSystem: Boolean,
-    showRussianOnly: Boolean,
-    showOnlySelected: Boolean,
-    showOnlyWorkProfile: Boolean,
-    sortOrder: AppSortOrder,
+    @Suppress("UNUSED_PARAMETER") searchQuery: String,
+    @Suppress("UNUSED_PARAMETER") showSystem: Boolean,
+    @Suppress("UNUSED_PARAMETER") showRussianOnly: Boolean,
+    @Suppress("UNUSED_PARAMETER") showOnlySelected: Boolean,
+    @Suppress("UNUSED_PARAMETER") showOnlyWorkProfile: Boolean,
+    @Suppress("UNUSED_PARAMETER") sortOrder: AppSortOrder,
     onUpdate: (List<AppEntry>) -> Unit,
     onConfigClick: (AppEntry) -> Unit,
     sortedIds: List<String>,
@@ -63,7 +63,6 @@ internal fun PortsHidingScreen(
 
     // Pull to Refresh state
     var refreshing by remember { mutableStateOf(false) }
-    var refreshTrigger by remember { mutableStateOf(0) }
 
     // Map current data to the stable order.
     // Key on BOTH apps and sortedIds:

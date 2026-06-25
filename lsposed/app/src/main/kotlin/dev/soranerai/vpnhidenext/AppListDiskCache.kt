@@ -18,22 +18,28 @@ internal object AppListDiskCache {
     private const val VERSION = 2
 
     /** Save the cached app list to filesDir. Should be called on Dispatchers.IO. */
-    fun save(context: Context, apps: List<CachedApp>) {
+    fun save(
+        context: Context,
+        apps: List<CachedApp>,
+    ) {
         val arr = JSONArray()
         for (a in apps) {
-            arr.put(JSONObject().apply {
-                put("p", a.packageName)
-                put("u", a.userId)
-                put("uid", a.uid)
-                put("l", a.label)
-                put("s", a.isSystem)
-                put("a", a.apkPath)
-            })
+            arr.put(
+                JSONObject().apply {
+                    put("p", a.packageName)
+                    put("u", a.userId)
+                    put("uid", a.uid)
+                    put("l", a.label)
+                    put("s", a.isSystem)
+                    put("a", a.apkPath)
+                },
+            )
         }
-        val root = JSONObject().apply {
-            put("version", VERSION)
-            put("apps", arr)
-        }
+        val root =
+            JSONObject().apply {
+                put("version", VERSION)
+                put("apps", arr)
+            }
         runCatching {
             context.filesDir.resolve(FILE).writeText(root.toString())
         }
@@ -59,7 +65,7 @@ internal object AppListDiskCache {
                     uid = o.getInt("uid"),
                     label = o.getString("l"),
                     isSystem = o.getBoolean("s"),
-                    apkPath = if (o.isNull("a")) null else o.optString("a").ifEmpty { null }
+                    apkPath = if (o.isNull("a")) null else o.optString("a").ifEmpty { null },
                 )
             }
         }.getOrNull()

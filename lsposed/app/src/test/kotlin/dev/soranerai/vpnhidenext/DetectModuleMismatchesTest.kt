@@ -1,8 +1,8 @@
 package dev.soranerai.vpnhidenext
 
+import dev.soranerai.vpnhidenext.domain.models.ModuleMismatch
 import dev.soranerai.vpnhidenext.domain.models.ModuleState
 import dev.soranerai.vpnhidenext.domain.models.NativeModuleKind
-import dev.soranerai.vpnhidenext.domain.models.ModuleMismatch
 import dev.soranerai.vpnhidenext.domain.usecase.detectModuleMismatches
 import org.junit.Assert.assertEquals
 import org.junit.Test

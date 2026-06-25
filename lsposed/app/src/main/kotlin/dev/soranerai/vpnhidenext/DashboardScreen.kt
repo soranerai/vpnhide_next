@@ -29,10 +29,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
-import dev.soranerai.vpnhidenext.ui.theme.*
+import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
 import dev.soranerai.vpnhidenext.domain.models.*
 import dev.soranerai.vpnhidenext.ui.dashboard.components.*
-import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
+import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
@@ -93,12 +93,12 @@ fun DashboardScreen(
 
                 val startTime = System.currentTimeMillis()
                 kotlinx.coroutines.delay(50) // Allow loading flags to transition to true
-                
+
                 combine(
                     AppListCache.loading,
                     DashboardCache.loading,
                     InterceptStatsCache.loading,
-                    DiagnosticsCache.state
+                    DiagnosticsCache.state,
                 ) { appList, dashboard, stats, diag ->
                     appList || dashboard || stats || (diag is DiagnosticsCache.State.Running)
                 }.first { !it }
@@ -326,8 +326,6 @@ private fun DashboardContent(
 }
 
 // ── UI Components ────────────────────────────────────────────────────────
-
-
 
 @Composable
 private fun StatusBanner(

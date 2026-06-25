@@ -15,8 +15,8 @@ import de.robv.android.xposed.callbacks.XC_LoadPackage
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
 import dev.soranerai.vpnhidenext.hooks.handlers.ConnectivityHook
-import dev.soranerai.vpnhidenext.hooks.handlers.ParcelHooks
 import dev.soranerai.vpnhidenext.hooks.handlers.PackageManagerHook
+import dev.soranerai.vpnhidenext.hooks.handlers.ParcelHooks
 import dev.soranerai.vpnhidenext.hooks.handlers.UserManagerHook
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean

@@ -10,9 +10,8 @@ import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
 
 object PackageManagerHook {
-
     private class CallerContext(
-        val callerPackages: Array<String>?
+        val callerPackages: Array<String>?,
     )
 
     private fun guardCheck(param: XC_MethodHook.MethodHookParam): CallerContext? {
@@ -25,9 +24,12 @@ object PackageManagerHook {
 
         val callingUid = Binder.getCallingUid()
         val targetUid = if (callingUid == 1000) HookContext.currentCallbackUid.get() else callingUid
-        val callerPackages = if (targetUid != null && targetUid > 0) {
-            HookContext.getPackagesForUid(param.thisObject, targetUid)
-        } else null
+        val callerPackages =
+            if (targetUid != null && targetUid > 0) {
+                HookContext.getPackagesForUid(param.thisObject, targetUid)
+            } else {
+                null
+            }
         return CallerContext(callerPackages)
     }
 
@@ -97,32 +99,34 @@ object PackageManagerHook {
         userId: Int,
         callerPackages: Array<String>?,
         logTag: String,
-        itemToPackageName: (Any) -> String?
+        itemToPackageName: (Any) -> String?,
     ) {
         val result = param.result ?: return
         val isParceledSlice = result.javaClass.name == "android.content.pm.ParceledListSlice"
-        val list = if (isParceledSlice) {
-            try {
-                XposedHelpers.callMethod(result, "getList") as? List<*>
-            } catch (e: Throwable) {
-                null
+        val list =
+            if (isParceledSlice) {
+                try {
+                    XposedHelpers.callMethod(result, "getList") as? List<*>
+                } catch (e: Throwable) {
+                    null
+                }
+            } else {
+                result as? List<*>
             }
-        } else {
-            result as? List<*>
-        }
 
         if (list.isNullOrEmpty()) return
 
-        val filteredList = list.filter { item ->
-            if (item == null) return@filter true
-            val packageName = itemToPackageName(item)
-            if (packageName != null) {
-                val isOwn = callerPackages?.contains(packageName) == true
-                isOwn || !isVpnApp(packageName, param.thisObject, userId)
-            } else {
-                true
+        val filteredList =
+            list.filter { item ->
+                if (item == null) return@filter true
+                val packageName = itemToPackageName(item)
+                if (packageName != null) {
+                    val isOwn = callerPackages?.contains(packageName) == true
+                    isOwn || !isVpnApp(packageName, param.thisObject, userId)
+                } else {
+                    true
+                }
             }
-        }
 
         if (filteredList.size != list.size) {
             HookContext.recordIntercept("PackageManager")
@@ -161,7 +165,9 @@ object PackageManagerHook {
 
             val hasMethod = baseClass.declaredMethods.any { it.name == "queryIntentServices" }
             val targetClass: Class<*> =
-                if (!hasMethod && baseClass.superclass != Any::class.java && baseClass.superclass != null && baseClass.superclass.name.contains("IPackageManager")) {
+                if (!hasMethod && baseClass.superclass != Any::class.java && baseClass.superclass != null &&
+                    baseClass.superclass.name.contains("IPackageManager")
+                ) {
                     baseClass.superclass
                 } else {
                     baseClass
@@ -188,7 +194,7 @@ object PackageManagerHook {
                                 sliceClass = sliceClass,
                                 userId = userId,
                                 callerPackages = callerCtx.callerPackages,
-                                logTag = "queryIntentServices"
+                                logTag = "queryIntentServices",
                             ) { item ->
                                 try {
                                     val serviceInfo = XposedHelpers.getObjectField(item, "serviceInfo")
@@ -246,7 +252,7 @@ object PackageManagerHook {
                                 sliceClass = sliceClass,
                                 userId = userId,
                                 callerPackages = callerCtx.callerPackages,
-                                logTag = methodName
+                                logTag = methodName,
                             ) { item ->
                                 try {
                                     XposedHelpers.getObjectField(item, "packageName") as? String
@@ -312,7 +318,7 @@ object PackageManagerHook {
                                 sliceClass = sliceClass,
                                 userId = userId,
                                 callerPackages = callerCtx.callerPackages,
-                                logTag = "queryIntentActivities"
+                                logTag = "queryIntentActivities",
                             ) { item ->
                                 try {
                                     val activityInfo = XposedHelpers.getObjectField(item, "activityInfo")

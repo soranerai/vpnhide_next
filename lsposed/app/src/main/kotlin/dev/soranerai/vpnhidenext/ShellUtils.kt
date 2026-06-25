@@ -140,11 +140,12 @@ internal fun isVpnActiveBlocking(customPrefixes: List<String> = emptyList()): Bo
         VpnHideLog.d(TAG, "isVpnActive: no VPN interfaces found")
         return false
     }
-    val script = buildString {
-        for (iface in vpnIfaces) {
-            appendLine("echo \"$iface=\$(cat /sys/class/net/$iface/operstate 2>/dev/null)\"")
+    val script =
+        buildString {
+            for (iface in vpnIfaces) {
+                appendLine("echo \"$iface=\$(cat /sys/class/net/$iface/operstate 2>/dev/null)\"")
+            }
         }
-    }
     val (_, statesOut) = suExec(script)
     return statesOut.lines().any { line ->
         val parts = line.split("=", limit = 2)

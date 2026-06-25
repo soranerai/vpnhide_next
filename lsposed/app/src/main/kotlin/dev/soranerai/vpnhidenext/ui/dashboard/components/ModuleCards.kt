@@ -15,8 +15,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.soranerai.vpnhidenext.BuildConfig
 import dev.soranerai.vpnhidenext.R
-import dev.soranerai.vpnhidenext.ui.theme.*
 import dev.soranerai.vpnhidenext.domain.models.*
+import dev.soranerai.vpnhidenext.ui.theme.*
 
 @Composable
 fun SkeletonModuleCard() {
@@ -33,32 +33,35 @@ fun SkeletonModuleCard() {
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 Box(
-                    modifier = Modifier
-                        .width(70.dp)
-                        .height(16.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(4.dp)
-                        )
+                    modifier =
+                        Modifier
+                            .width(70.dp)
+                            .height(16.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp),
+                            ),
                 )
                 Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(
-                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                            shape = CircleShape
-                        )
+                    modifier =
+                        Modifier
+                            .size(8.dp)
+                            .background(
+                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                                shape = CircleShape,
+                            ),
                 )
             }
             Spacer(Modifier.height(8.dp))
             Box(
-                modifier = Modifier
-                    .width(100.dp)
-                    .height(12.dp)
-                    .background(
-                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
-                        shape = RoundedCornerShape(4.dp)
-                    )
+                modifier =
+                    Modifier
+                        .width(100.dp)
+                        .height(12.dp)
+                        .background(
+                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.1f),
+                            shape = RoundedCornerShape(4.dp),
+                        ),
             )
         }
     }
@@ -112,36 +115,42 @@ fun ModuleCard(
                     when (nativeResult) {
                         is NativeResult.Ok -> {
                             val statusText = stringResource(R.string.dashboard_protection_ok)
-                            "\n" + stringResource(
-                                R.string.dashboard_protection_prefix,
-                                "$statusText (${nativeResult.passed}/${nativeResult.total})",
-                            )
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
+                                )
                         }
 
                         is NativeResult.Partial -> {
                             val statusText = stringResource(R.string.dashboard_protection_partial)
-                            "\n" + stringResource(
-                                R.string.dashboard_protection_prefix,
-                                "$statusText (${nativeResult.passed}/${nativeResult.total})",
-                            )
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
+                                )
                         }
 
                         is NativeResult.Fail -> {
                             val statusText = stringResource(R.string.dashboard_protection_fail)
-                            "\n" + stringResource(
-                                R.string.dashboard_protection_prefix,
-                                "$statusText (${nativeResult.passed}/${nativeResult.total})",
-                            )
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
+                                )
                         }
 
                         is NativeResult.NoModule -> {
-                            "\n" + stringResource(
-                                R.string.dashboard_protection_prefix,
-                                stringResource(R.string.dashboard_protection_no_module),
-                            )
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    stringResource(R.string.dashboard_protection_no_module),
+                                )
                         }
 
-                        null -> ""
+                        null -> {
+                            ""
+                        }
                     }
                 } else {
                     ""
@@ -153,13 +162,14 @@ fun ModuleCard(
             val isPartial = active && nativeResult is NativeResult.Partial
             val isOk = active && nativeResult is NativeResult.Ok
 
-            val (containerColor, contentColor, dotColor) = getCardColors(
-                isFail = isFail,
-                isPartial = isPartial,
-                isOk = isOk,
-                active = active,
-                darkTheme = darkTheme
-            )
+            val (containerColor, contentColor, dotColor) =
+                getCardColors(
+                    isFail = isFail,
+                    isPartial = isPartial,
+                    isOk = isOk,
+                    active = active,
+                    darkTheme = darkTheme,
+                )
 
             ModuleCardShell(
                 name = name,
@@ -215,36 +225,42 @@ fun LsposedCard(
                 when (javaResult) {
                     is JavaResult.Ok -> {
                         val statusText = stringResource(R.string.dashboard_protection_ok)
-                        "\n" + stringResource(
-                            R.string.dashboard_protection_prefix,
-                            "$statusText (${javaResult.passed}/${javaResult.total})",
-                        )
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                "$statusText (${javaResult.passed}/${javaResult.total})",
+                            )
                     }
 
                     is JavaResult.Partial -> {
                         val statusText = stringResource(R.string.dashboard_protection_partial)
-                        "\n" + stringResource(
-                            R.string.dashboard_protection_prefix,
-                            "$statusText (${javaResult.passed}/${javaResult.total})",
-                        )
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                "$statusText (${javaResult.passed}/${javaResult.total})",
+                            )
                     }
 
                     is JavaResult.Fail -> {
                         val statusText = stringResource(R.string.dashboard_protection_fail)
-                        "\n" + stringResource(
-                            R.string.dashboard_protection_prefix,
-                            "$statusText (${javaResult.passed}/${javaResult.total})",
-                        )
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                "$statusText (${javaResult.passed}/${javaResult.total})",
+                            )
                     }
 
                     is JavaResult.HooksInactive -> {
-                        "\n" + stringResource(
-                            R.string.dashboard_protection_prefix,
-                            stringResource(R.string.dashboard_protection_hooks_inactive),
-                        )
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                stringResource(R.string.dashboard_protection_hooks_inactive),
+                            )
                     }
 
-                    null -> ""
+                    null -> {
+                        ""
+                    }
                 }
 
             val subtitle = targetsText + protectionText
@@ -253,13 +269,14 @@ fun LsposedCard(
             val isPartial = javaResult is JavaResult.Partial
             val isOk = javaResult is JavaResult.Ok
 
-            val (containerColor, contentColor, dotColor) = getCardColors(
-                isFail = isFail,
-                isPartial = isPartial,
-                isOk = isOk,
-                active = true,
-                darkTheme = darkTheme
-            )
+            val (containerColor, contentColor, dotColor) =
+                getCardColors(
+                    isFail = isFail,
+                    isPartial = isPartial,
+                    isOk = isOk,
+                    active = true,
+                    darkTheme = darkTheme,
+                )
 
             ModuleCardShell(
                 name = moduleName,
@@ -305,9 +322,10 @@ fun ModuleCardShell(
                 )
 
                 Box(
-                    modifier = Modifier
-                        .size(8.dp)
-                        .background(color = dotColor, shape = CircleShape),
+                    modifier =
+                        Modifier
+                            .size(8.dp)
+                            .background(color = dotColor, shape = CircleShape),
                 )
             }
 
@@ -328,11 +346,12 @@ fun ModuleCardShell(
                     style = MaterialTheme.typography.labelSmall,
                     fontWeight = FontWeight.Medium,
                     color = contentColor,
-                    modifier = Modifier
-                        .background(
-                            color = contentColor.copy(alpha = 0.1f),
-                            shape = RoundedCornerShape(4.dp),
-                        ).padding(horizontal = 6.dp, vertical = 2.dp),
+                    modifier =
+                        Modifier
+                            .background(
+                                color = contentColor.copy(alpha = 0.1f),
+                                shape = RoundedCornerShape(4.dp),
+                            ).padding(horizontal = 6.dp, vertical = 2.dp),
                 )
             }
         }
@@ -345,9 +364,9 @@ private fun getCardColors(
     isPartial: Boolean,
     isOk: Boolean,
     active: Boolean,
-    darkTheme: Boolean
-): Triple<Color, Color, Color> {
-    return when {
+    darkTheme: Boolean,
+): Triple<Color, Color, Color> =
+    when {
         isFail -> {
             if (darkTheme) {
                 Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
@@ -377,8 +396,7 @@ private fun getCardColors(
             Triple(
                 MaterialTheme.colorScheme.surfaceVariant,
                 MaterialTheme.colorScheme.onSurface,
-                dot
+                dot,
             )
         }
     }
-}

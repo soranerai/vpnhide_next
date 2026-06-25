@@ -13,6 +13,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -28,7 +29,6 @@ import androidx.core.graphics.drawable.toBitmap
 @Composable
 internal fun AppRow(
     app: AppEntry,
-    userNames: Map<Int, String>,
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
@@ -55,21 +55,7 @@ internal fun AppRow(
                     )
                 } ?: Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface, CircleShape))
 
-                if (app.userId != 0) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp),
-                        shape = CircleShape,
-                        color = Color(0xFF2196F3),
-                        tonalElevation = 4.dp,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Work,
-                            contentDescription = null,
-                            modifier = Modifier.padding(3.dp).size(12.dp),
-                            tint = Color.White,
-                        )
-                    }
-                }
+                ProfileIconBadge(app.userId)
             }
 
             Spacer(Modifier.width(12.dp))
@@ -88,22 +74,7 @@ internal fun AppRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (app.userId != 0) {
-                        val profileName = userNames[app.userId] ?: app.userId.toString()
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFF2196F3).copy(alpha = 0.12f),
-                            contentColor = Color(0xFF2196F3),
-                        ) {
-                            Text(
-                                text = profileName,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                maxLines = 1,
-                            )
-                        }
-                    }
+                    ProfileNameChip(app.userId)
                 }
                 Text(
                     text = app.packageName,
@@ -160,7 +131,6 @@ internal fun PortAppRow(
     onToggle: () -> Unit,
     onConfigClick: () -> Unit,
 ) {
-    val userNames by AppListCache.userNames.collectAsState()
     Surface(
         modifier =
             Modifier
@@ -183,21 +153,7 @@ internal fun PortAppRow(
                     )
                 } ?: Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface, CircleShape))
 
-                if (app.userId != 0) {
-                    Surface(
-                        modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp),
-                        shape = CircleShape,
-                        color = Color(0xFF2196F3),
-                        tonalElevation = 4.dp,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Work,
-                            contentDescription = null,
-                            modifier = Modifier.padding(3.dp).size(12.dp),
-                            tint = Color.White,
-                        )
-                    }
-                }
+                ProfileIconBadge(app.userId)
             }
 
             Spacer(Modifier.width(12.dp))
@@ -216,22 +172,7 @@ internal fun PortAppRow(
                         overflow = TextOverflow.Ellipsis,
                         modifier = Modifier.weight(1f, fill = false),
                     )
-                    if (app.userId != 0) {
-                        val profileName = userNames[app.userId] ?: app.userId.toString()
-                        Surface(
-                            shape = RoundedCornerShape(4.dp),
-                            color = Color(0xFF2196F3).copy(alpha = 0.12f),
-                            contentColor = Color(0xFF2196F3),
-                        ) {
-                            Text(
-                                text = profileName,
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                                maxLines = 1,
-                            )
-                        }
-                    }
+                    ProfileNameChip(app.userId)
                 }
                 Text(
                     text = app.packageName,
@@ -290,6 +231,60 @@ internal fun SkeletonAppRow() {
             ShimmerPlaceholder(modifier = Modifier.width(120.dp).height(16.dp))
             Spacer(Modifier.height(4.dp))
             ShimmerPlaceholder(modifier = Modifier.width(180.dp).height(12.dp))
+        }
+    }
+}
+
+@Composable
+internal fun BoxScope.ProfileIconBadge(userId: Int) {
+    if (userId != 0) {
+        Surface(
+            modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp),
+            shape = CircleShape,
+            color = Color(0xFF2196F3),
+            tonalElevation = 4.dp,
+        ) {
+            Icon(
+                imageVector = Icons.Default.Work,
+                contentDescription = null,
+                modifier = Modifier.padding(3.dp).size(12.dp),
+                tint = Color.White,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun ProfileNameChip(userId: Int) {
+    if (userId != 0) {
+        val userNames by AppListCache.userNames.collectAsState()
+        val profileName =
+            remember(userId, userNames) {
+                val rawName = userNames[userId]
+                if (rawName == null) {
+                    userId.toString()
+                } else {
+                    val nameLower = rawName.lowercase().trim()
+                    val isDefault =
+                        nameLower == "work profile" ||
+                            nameLower == "work" ||
+                            nameLower == "рабочий профиль" ||
+                            nameLower == "рабочий"
+                    if (isDefault) userId.toString() else rawName
+                }
+            }
+        Surface(
+            shape = RoundedCornerShape(4.dp),
+            color = Color(0xFF2196F3).copy(alpha = 0.12f),
+            contentColor = Color(0xFF2196F3),
+        ) {
+            Text(
+                text = profileName,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                maxLines = 1,
+            )
         }
     }
 }

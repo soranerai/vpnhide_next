@@ -53,7 +53,7 @@ fun NativeInstallRecommendationCard(recommendation: NativeInstallRecommendation)
                     ),
                 style = MaterialTheme.typography.bodyMedium,
             )
-            
+
             val kmiBranch = recommendation.kernelBranch
             if (kmiBranch != null && kmiBranch != recommendation.androidVersion) {
                 Spacer(Modifier.height(4.dp))
