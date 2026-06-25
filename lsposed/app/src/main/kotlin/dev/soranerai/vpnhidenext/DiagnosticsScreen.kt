@@ -105,7 +105,7 @@ fun DiagnosticsScreen(
     val diagState by DiagnosticsCache.state.collectAsState()
     var exporting by remember { mutableStateOf(false) }
     var debugZipFile by remember { mutableStateOf<File?>(null) }
-    val summaryFmt = stringResource(R.string.summary_format)
+    var showAllChecks by remember { mutableStateOf(false) }
 
     // Kick off the diagnostics run once per process. If selfNeedsRestart
     // is true we skip — hooks aren't applied to this app yet, results
@@ -135,12 +135,7 @@ fun DiagnosticsScreen(
     // produce that state, so this test isolates the "app has no network
     // permission" banner from everything else.
     val networkBlocked = results?.native?.any { it.passed == null } == true
-    val summary =
-        results?.let { r ->
-            val scored = r.all.filter { it.passed != null }
-            val passed = scored.count { it.passed == true }
-            String.format(summaryFmt, passed, scored.size)
-        }
+    val hasFailed = results?.all?.any { it.passed == false } == true
 
     Column(
         modifier =
@@ -186,94 +181,272 @@ fun DiagnosticsScreen(
             }
 
             diagState is DiagnosticsCache.State.Ready -> {
-                StatusBanner(
-                    text = stringResource(R.string.banner_ready),
-                    containerColor = Color(0xFF1B5E20).copy(alpha = 0.15f),
-                    contentColor = MaterialTheme.colorScheme.onSurface,
-                )
-
                 if (networkBlocked) {
-                    Spacer(Modifier.height(6.dp))
                     StatusBanner(
                         text = stringResource(R.string.banner_network_blocked),
                         containerColor = MaterialTheme.colorScheme.errorContainer,
                         contentColor = MaterialTheme.colorScheme.onErrorContainer,
                     )
-                }
-
-                if (summary != null) {
                     Spacer(Modifier.height(12.dp))
-                    Text(
-                        text = summary,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
                 }
 
                 results?.let { r ->
-                    Spacer(Modifier.height(16.dp))
+                    val failedNative = r.native.filter { it.passed == false }
+                    val failedJava = r.java.filter { it.passed == false }
 
-                    SectionHeader(stringResource(R.string.section_native))
-                    Spacer(Modifier.height(8.dp))
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors =
-                            CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                            ),
-                        border =
-                            BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                            ),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column {
-                            r.native.forEachIndexed { index, check ->
-                                CheckRow(check)
-                                if (index < r.native.lastIndex) {
-                                    HorizontalDivider(
-                                        color =
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.06f,
-                                            ),
-                                        thickness = 1.dp,
-                                        modifier = Modifier.padding(horizontal = 14.dp),
+                    if (!hasFailed) {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = TelGreen.copy(alpha = 0.15f),
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    TelGreen.copy(alpha = 0.4f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = TelGreen,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.diag_all_good_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TelGreen,
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.diag_all_good_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                Button(
+                                    onClick = { showAllChecks = !showAllChecks },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = TelGreen,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
+                                ) {
+                                    Text(
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
+                                    )
+                                }
+                            }
+                        }
+                    } else {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Cancel,
+                                        contentDescription = null,
+                                        tint = TelRed,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.diag_some_failed_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TelRed,
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.diag_some_failed_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                Button(
+                                    onClick = { showAllChecks = !showAllChecks },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = TelGreen,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
+                                ) {
+                                    Text(
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
                                     )
                                 }
                             }
                         }
                     }
 
-                    Spacer(Modifier.height(16.dp))
+                    if (showAllChecks) {
+                        Spacer(Modifier.height(16.dp))
+                        SectionHeader(stringResource(R.string.section_native))
+                        Spacer(Modifier.height(8.dp))
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column {
+                                r.native.forEachIndexed { index, check ->
+                                    CheckRow(check)
+                                    if (index < r.native.lastIndex) {
+                                        HorizontalDivider(
+                                            color =
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = 0.06f,
+                                                ),
+                                            thickness = 1.dp,
+                                            modifier = Modifier.padding(horizontal = 14.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
 
-                    SectionHeader(stringResource(R.string.section_java))
-                    Spacer(Modifier.height(8.dp))
-                    Card(
-                        shape = RoundedCornerShape(16.dp),
-                        colors =
-                            CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surface,
-                            ),
-                        border =
-                            BorderStroke(
-                                1.dp,
-                                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                            ),
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Column {
-                            r.java.forEachIndexed { index, check ->
-                                CheckRow(check)
-                                if (index < r.java.lastIndex) {
-                                    HorizontalDivider(
-                                        color =
-                                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                alpha = 0.06f,
-                                            ),
-                                        thickness = 1.dp,
-                                        modifier = Modifier.padding(horizontal = 14.dp),
-                                    )
+                        Spacer(Modifier.height(16.dp))
+                        SectionHeader(stringResource(R.string.section_java))
+                        Spacer(Modifier.height(8.dp))
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column {
+                                r.java.forEachIndexed { index, check ->
+                                    CheckRow(check)
+                                    if (index < r.java.lastIndex) {
+                                        HorizontalDivider(
+                                            color =
+                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                    alpha = 0.06f,
+                                                ),
+                                            thickness = 1.dp,
+                                            modifier = Modifier.padding(horizontal = 14.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    } else if (hasFailed) {
+                        if (failedNative.isNotEmpty()) {
+                            Spacer(Modifier.height(16.dp))
+                            SectionHeader(stringResource(R.string.section_native))
+                            Spacer(Modifier.height(8.dp))
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors =
+                                    CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                    ),
+                                border =
+                                    BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column {
+                                    failedNative.forEachIndexed { index, check ->
+                                        CheckRow(check)
+                                        if (index < failedNative.lastIndex) {
+                                            HorizontalDivider(
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                        alpha = 0.06f,
+                                                    ),
+                                                thickness = 1.dp,
+                                                modifier = Modifier.padding(horizontal = 14.dp),
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (failedJava.isNotEmpty()) {
+                            Spacer(Modifier.height(16.dp))
+                            SectionHeader(stringResource(R.string.section_java))
+                            Spacer(Modifier.height(8.dp))
+                            Card(
+                                shape = RoundedCornerShape(16.dp),
+                                colors =
+                                    CardDefaults.cardColors(
+                                        containerColor = MaterialTheme.colorScheme.surface,
+                                    ),
+                                border =
+                                    BorderStroke(
+                                        1.dp,
+                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Column {
+                                    failedJava.forEachIndexed { index, check ->
+                                        CheckRow(check)
+                                        if (index < failedJava.lastIndex) {
+                                            HorizontalDivider(
+                                                color =
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                        alpha = 0.06f,
+                                                    ),
+                                                thickness = 1.dp,
+                                                modifier = Modifier.padding(horizontal = 14.dp),
+                                            )
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -289,10 +462,6 @@ fun DiagnosticsScreen(
         Spacer(Modifier.height(16.dp))
 
         DebugLoggingCard()
-
-        Spacer(Modifier.height(16.dp))
-
-        LogcatRecordCard()
 
         Spacer(Modifier.height(16.dp))
 
@@ -424,186 +593,6 @@ private fun DebugLoggingCard() {
             )
         }
     }
-}
-
-@Composable
-private fun LogcatRecordCard() {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    val state by LogcatRecorder.state.collectAsState()
-
-    // Tick every second while recording so the elapsed counter updates
-    // even when sizeBytes happens to hold steady.
-    var nowMs by remember { mutableStateOf(System.currentTimeMillis()) }
-    LaunchedEffect(state) {
-        if (state is LogcatRecorder.State.Recording) {
-            while (true) {
-                nowMs = System.currentTimeMillis()
-                kotlinx.coroutines.delay(1000)
-            }
-        }
-    }
-
-    val saveLauncher =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.CreateDocument("text/plain"),
-        ) { uri: Uri? ->
-            val src =
-                (state as? LogcatRecorder.State.Stopped)?.lastFile
-                    ?: return@rememberLauncherForActivityResult
-            if (uri != null) {
-                context.contentResolver.openOutputStream(uri)?.use { out ->
-                    src.inputStream().use { it.copyTo(out) }
-                }
-            }
-        }
-
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ),
-        border =
-            BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-            ),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                text = stringResource(R.string.logcat_card_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.logcat_card_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(16.dp))
-
-            when (val s = state) {
-                is LogcatRecorder.State.Recording -> {
-                    val elapsed = (nowMs - s.startMs).coerceAtLeast(0L) / 1000
-                    Text(
-                        text =
-                            stringResource(
-                                R.string.logcat_recording_status,
-                                formatElapsed(elapsed),
-                                formatSize(s.sizeBytes),
-                            ),
-                        style = MaterialTheme.typography.bodyMedium,
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = { scope.launch { LogcatRecorder.stop(context) } },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            Icons.Default.Stop,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.logcat_btn_stop))
-                    }
-                }
-
-                is LogcatRecorder.State.Stopped -> {
-                    val last = s.lastFile
-                    val hasLast = last != null && last.exists()
-                    if (hasLast) {
-                        Text(
-                            text =
-                                stringResource(
-                                    R.string.logcat_last_recording,
-                                    formatElapsed(s.lastDurationMs / 1000),
-                                    formatSize(last!!.length()),
-                                ),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            OutlinedButton(
-                                onClick = { saveLauncher.launch(last.name) },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(
-                                    Icons.Default.Save,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.btn_save))
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    val uri =
-                                        FileProvider.getUriForFile(
-                                            context,
-                                            "${context.packageName}.fileprovider",
-                                            last,
-                                        )
-                                    val intent =
-                                        Intent(Intent.ACTION_SEND).apply {
-                                            type = "text/plain"
-                                            putExtra(Intent.EXTRA_STREAM, uri)
-                                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                                        }
-                                    context.startActivity(Intent.createChooser(intent, null))
-                                },
-                                modifier = Modifier.weight(1f),
-                            ) {
-                                Icon(
-                                    Icons.Default.Share,
-                                    contentDescription = null,
-                                    modifier = Modifier.size(18.dp),
-                                )
-                                Spacer(Modifier.width(8.dp))
-                                Text(stringResource(R.string.btn_share_debug))
-                            }
-                        }
-                        Spacer(Modifier.height(12.dp))
-                    }
-                    Button(
-                        onClick = { scope.launch { LogcatRecorder.start(context) } },
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(
-                            Icons.Default.FiberManualRecord,
-                            contentDescription = null,
-                            modifier = Modifier.size(18.dp),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.logcat_btn_start))
-                    }
-                }
-            }
-        }
-    }
-}
-
-private fun formatElapsed(seconds: Long): String {
-    val m = seconds / 60
-    val s = seconds % 60
-    return "%d:%02d".format(m, s)
-}
-
-private fun formatSize(bytes: Long): String {
-    if (bytes < 1024) return "$bytes B"
-    val kb = bytes / 1024.0
-    if (kb < 1024.0) return "%.1f KB".format(kb)
-    val mb = kb / 1024.0
-    return "%.1f MB".format(mb)
 }
 
 @Composable
@@ -834,14 +823,11 @@ internal fun runAllChecks(
             checkActiveLinkProperties(cm, res.getString(R.string.check_active_properties)),
             checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)),
             checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)),
-            checkProxyHost(res.getString(R.string.check_proxy_host)),
             checkNetworkCallback(cm, res.getString(R.string.check_network_callback)),
-            checkUnderlyingNetworks(cm, res.getString(R.string.check_underlying_networks)),
             checkVpnCallbackSuppression(
                 cm,
                 res.getString(R.string.check_vpn_callback_suppression),
             ),
-            checkWifiInfoSpoof(context, res.getString(R.string.check_wifi_info_spoof)),
             checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)),
         )
 
@@ -1074,21 +1060,6 @@ private fun checkLinkPropertiesDns(
     return CheckResult(name, leaked.isEmpty(), detail)
 }
 
-private fun checkProxyHost(name: String): CheckResult {
-    val httpHost = System.getProperty("http.proxyHost")
-    val socksHost = System.getProperty("socksProxyHost")
-    val hasProxy = !httpHost.isNullOrEmpty() || !socksHost.isNullOrEmpty()
-    val detail =
-        if (!hasProxy) {
-            "no proxy (http=$httpHost, socks=$socksHost)"
-        } else {
-            val httpPort = System.getProperty("http.proxyPort")
-            val socksPort = System.getProperty("socksProxyPort")
-            "proxy found — http=$httpHost:$httpPort, socks=$socksHost:$socksPort"
-        }
-    return CheckResult(name, !hasProxy, detail)
-}
-
 private fun checkProcNetRouteJava(name: String): CheckResult =
     try {
         val allLines = mutableListOf<String>()
@@ -1211,47 +1182,6 @@ private fun checkNetworkCallback(
     return CheckResult(name, !failed, detail)
 }
 
-private fun checkUnderlyingNetworks(
-    cm: ConnectivityManager,
-    name: String,
-): CheckResult {
-    val net = cm.activeNetwork ?: return CheckResult(name, true, "no active network")
-    val caps = cm.getNetworkCapabilities(net) ?: return CheckResult(name, true, "no capabilities")
-
-    var underlying: Any? = null
-    var methodUsed = "none"
-    try {
-        val method = caps.javaClass.getMethod("getUnderlyingNetworks")
-        underlying = method.invoke(caps)
-        methodUsed = "getUnderlyingNetworks()"
-    } catch (e: Exception) {
-        try {
-            val field = caps.javaClass.getDeclaredField("mUnderlyingNetworks")
-            field.isAccessible = true
-            underlying = field.get(caps)
-            methodUsed = "mUnderlyingNetworks field"
-        } catch (t: Throwable) {
-            return CheckResult(name, true, "not supported on this platform")
-        }
-    }
-
-    val list =
-        when (underlying) {
-            is Array<*> -> underlying.toList()
-            is List<*> -> underlying
-            else -> null
-        }
-
-    val passed = list.isNullOrEmpty()
-    val detail =
-        if (passed) {
-            "underlyingNetworks is null or empty ($methodUsed)"
-        } else {
-            "leaked underlyingNetworks=[${list?.joinToString()}], method=$methodUsed"
-        }
-    return CheckResult(name, passed, detail)
-}
-
 private fun checkVpnCallbackSuppression(
     cm: ConnectivityManager,
     name: String,
@@ -1292,62 +1222,6 @@ private fun checkVpnCallbackSuppression(
         }
     return CheckResult(name, passed, detail)
 }
-
-private fun checkWifiInfoSpoof(
-    context: android.content.Context,
-    name: String,
-): CheckResult {
-    val wm =
-        context.getSystemService(android.content.Context.WIFI_SERVICE) as?
-            android.net.wifi.WifiManager
-            ?: return CheckResult(name, true, "WifiManager not available")
-    val wifiInfo =
-        try {
-            @Suppress("DEPRECATION")
-            wm.connectionInfo
-        } catch (e: Exception) {
-            return CheckResult(name, false, "failed to get connectionInfo: ${e.message}")
-        } ?: return CheckResult(name, true, "no active Wi-Fi connection info")
-
-    val cm = context.getSystemService(ConnectivityManager::class.java)
-    val net = cm.activeNetwork
-    val caps = if (net != null) cm.getNetworkCapabilities(net) else null
-    val isOnWifi = caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
-
-    if (!isOnWifi) {
-        return CheckResult(name, true, "not connected to Wi-Fi (bypass check skipped)")
-    }
-
-    val ssid = wifiInfo.ssid
-    val ip = wifiInfo.ipAddress
-
-    val redactedSSID = ssid == "<unknown ssid>" || ssid.isNullOrEmpty()
-    val redactedIP = ip == 0
-
-    val passed = !redactedIP
-    val detail =
-        buildString {
-            append("ssid=$ssid")
-            append(", ip=${ipAddressToString(ip)}")
-            if (redactedIP) {
-                append(" (issues: redacted IP)")
-            } else if (redactedSSID) {
-                append(" (SSID redacted - expected behavior without location permission)")
-            } else {
-                append(" (fully unredacted)")
-            }
-        }
-    return CheckResult(name, passed, detail)
-}
-
-private fun ipAddressToString(ip: Int): String =
-    String.format(
-        "%d.%d.%d.%d",
-        ip and 0xff,
-        (ip shr 8) and 0xff,
-        (ip shr 16) and 0xff,
-        (ip shr 24) and 0xff,
-    )
 
 private fun checkGetNetworkForType(
     cm: ConnectivityManager,
@@ -1502,16 +1376,24 @@ private fun checkTrafficStatsDiscrepancy(
             return CheckResult(name, true, "raw iface stats unavailable (no su, SELinux blocked)")
         }
 
+        // ── Get the active cover interface from the kernel module ──
+        var coverIfaceName = ""
+        val (ctrlExit, ctrlOut) = suExec("cat /dev/vpnhide_ctrl 2>/dev/null")
+        if (ctrlExit == 0) {
+            val match = Regex("cover_iface:\\s*(\\S+)").find(ctrlOut)
+            if (match != null) {
+                coverIfaceName = match.groupValues[1]
+            }
+        }
+
         // ── Enumerate visible interfaces (hook filters out tun0 etc.) ──
         // Only count UP interfaces — a wlan0 that just disconnected should not
-        // participate in the visible-sum or be selected as cover interface.
+        // participate in the visible-sum.
         var visibleTx = 0L
         var visibleRx = 0L
         val names = mutableListOf<String>()
-        var coverIfaceName = ""
         val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
         if (ifaces != null) {
-            var bestScore = -1
             for (iface in ifaces) {
                 val upStatus = if (iface.isUp) "up" else "down"
                 val t = android.net.TrafficStats.getTxBytes(iface.name)
@@ -1520,21 +1402,6 @@ private fun checkTrafficStatsDiscrepancy(
                 if (!iface.isUp) continue
                 if (t > 0) visibleTx += t
                 if (r > 0) visibleRx += r
-                val score =
-                    when {
-                        iface.name.startsWith("eth") -> 100000
-
-                        iface.name.startsWith("wlan") || iface.name.startsWith("ap") -> 50000
-
-                        iface.name.startsWith("rmnet") || iface.name.startsWith("ccmni") ||
-                            iface.name.startsWith("epdg") || iface.name.startsWith("r_net") -> 10000
-
-                        else -> 0
-                    }
-                if (score > bestScore && score > 0) {
-                    bestScore = score
-                    coverIfaceName = iface.name
-                }
             }
         }
 
@@ -1560,31 +1427,43 @@ private fun checkTrafficStatsDiscrepancy(
         val txDiff = rawSystemTx - visibleTx
         val rxDiff = rawSystemRx - visibleRx
         val threshold = 5 * 1024 * 1024L // 5 MB
+
+        // If there's no VPN traffic, discrepancies are natural (not from laundering failure) -> ignore
+        val hasVpnTraffic = rawVpnTx > 0L
+
         val txSuspicious =
-            txDiff > threshold &&
+            hasVpnTraffic &&
+                txDiff > threshold &&
                 (rawSystemTx.toDouble() / visibleTx.coerceAtLeast(1L).toDouble() > 1.5)
         val rxSuspicious =
-            rxDiff > threshold &&
+            hasVpnTraffic &&
+                rxDiff > threshold &&
                 (rawSystemRx.toDouble() / visibleRx.coerceAtLeast(1L).toDouble() > 1.5)
 
         // ── Secondary check: verify VPN traffic was laundered into cover iface ──
         val vpnTrafficSignificant = rawVpnTx > threshold
         var launderingOk = true
         var launderDetail: String
-        if (vpnTrafficSignificant && coverIfaceName.isNotEmpty()) {
-            val rawCoverTx = rawStats[coverIfaceName]?.first ?: 0L
-            val bpfCoverTx = android.net.TrafficStats.getTxBytes(coverIfaceName)
-            val expectedCoverTx = rawCoverTx + rawVpnTx
-            launderingOk = bpfCoverTx >= (expectedCoverTx * 0.7).toLong()
-            launderDetail =
-                if (launderingOk) {
-                    "Laundering OK: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
-                        "≈ raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K"
-                } else {
-                    "Laundering BROKEN: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
-                        "but expected ~${expectedCoverTx / 1024}K " +
-                        "(raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K)"
-                }
+        val hasCoverIface = coverIfaceName.isNotEmpty() && coverIfaceName != "none"
+        if (vpnTrafficSignificant) {
+            if (hasCoverIface) {
+                val rawCoverTx = rawStats[coverIfaceName]?.first ?: 0L
+                val bpfCoverTx = android.net.TrafficStats.getTxBytes(coverIfaceName)
+                val expectedCoverTx = rawCoverTx + rawVpnTx
+                launderingOk = bpfCoverTx >= (expectedCoverTx * 0.7).toLong()
+                launderDetail =
+                    if (launderingOk) {
+                        "Laundering OK: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
+                            "≈ raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K"
+                    } else {
+                        "Laundering BROKEN: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
+                            "but expected ~${expectedCoverTx / 1024}K " +
+                            "(raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K)"
+                    }
+            } else {
+                launderingOk = false
+                launderDetail = "Laundering UNKNOWN: VPN traffic active, but no cover interface set by kmod yet"
+            }
         } else if (rawVpnTx in 1..<threshold) {
             launderDetail = "Low VPN traffic (${rawVpnTx / 1024}K raw), skipping launder check"
         } else {
@@ -2102,7 +1981,7 @@ private fun BackupRestoreCard() {
                     },
                     enabled = !exporting && !importing,
                     contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.height(36.dp),
+                    modifier = Modifier.height(36.dp).width(110.dp),
                 ) {
                     if (exporting) {
                         CircularProgressIndicator(
@@ -2124,7 +2003,7 @@ private fun BackupRestoreCard() {
                     }
                 }
 
-                Button(
+                OutlinedButton(
                     onClick = {
                         importLauncher.launch(
                             arrayOf("application/json", "application/octet-stream"),
@@ -2132,13 +2011,13 @@ private fun BackupRestoreCard() {
                     },
                     enabled = !exporting && !importing,
                     contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.height(36.dp),
+                    modifier = Modifier.height(36.dp).width(110.dp),
                 ) {
                     if (importing) {
                         CircularProgressIndicator(
                             modifier = Modifier.size(16.dp),
                             strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.onPrimary,
+                            color = MaterialTheme.colorScheme.primary,
                         )
                     } else {
                         Icon(

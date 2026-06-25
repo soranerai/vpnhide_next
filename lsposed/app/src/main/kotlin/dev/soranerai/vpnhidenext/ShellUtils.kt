@@ -81,6 +81,7 @@ internal suspend fun suExecAsync(
 
 internal data class StartupResult(
     val rootGranted: Boolean,
+    val kmodActive: Boolean,
     val addedToTargets: Boolean,
     val currentBootId: String,
 )
@@ -95,6 +96,9 @@ internal fun performStartupOptimized(): StartupResult {
         # Check root
         id | grep -q "uid=0" || { echo "root=0"; exit 0; }
         echo "root=1"
+        
+        # Check kmod
+        [ -c $DEV_NODE ] && echo "kmod=1" || echo "kmod=0"
         
         echo "added=0"
         echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
@@ -111,6 +115,7 @@ internal fun performStartupOptimized(): StartupResult {
 
     return StartupResult(
         rootGranted = props["root"] == "1",
+        kmodActive = props["kmod"] == "1",
         addedToTargets = props["added"] == "1",
         currentBootId = props["boot_id"] ?: "",
     )
@@ -135,11 +140,24 @@ internal fun isVpnActiveBlocking(customPrefixes: List<String> = emptyList()): Bo
         VpnHideLog.d(TAG, "isVpnActive: no VPN interfaces found")
         return false
     }
-    return vpnIfaces.any { iface ->
-        val (_, state) = suExec("cat /sys/class/net/$iface/operstate 2>/dev/null")
-        val up = state.trim() == "unknown" || state.trim() == "up"
-        VpnHideLog.d(TAG, "isVpnActive: $iface operstate=${state.trim()} up=$up")
-        up
+    val script =
+        buildString {
+            for (iface in vpnIfaces) {
+                appendLine("echo \"$iface=\$(cat /sys/class/net/$iface/operstate 2>/dev/null)\"")
+            }
+        }
+    val (_, statesOut) = suExec(script)
+    return statesOut.lines().any { line ->
+        val parts = line.split("=", limit = 2)
+        if (parts.size == 2) {
+            val iface = parts[0].trim()
+            val state = parts[1].trim()
+            val up = state == "unknown" || state == "up"
+            VpnHideLog.d(TAG, "isVpnActive: $iface operstate=$state up=$up")
+            up
+        } else {
+            false
+        }
     }
 }
 

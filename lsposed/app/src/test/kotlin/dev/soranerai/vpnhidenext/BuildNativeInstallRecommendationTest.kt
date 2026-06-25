@@ -1,5 +1,8 @@
 package dev.soranerai.vpnhidenext
 
+import dev.soranerai.vpnhidenext.domain.usecase.buildNativeInstallRecommendation
+import dev.soranerai.vpnhidenext.domain.usecase.parseKernelAndroidBranch
+import dev.soranerai.vpnhidenext.domain.usecase.parseKernelSeries
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull

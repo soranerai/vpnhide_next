@@ -50,96 +50,66 @@ static bool is_interface_operstate_up(const char *ifname)
 
 #include <time.h>
 
-struct gateway_list {
-	char names[32][IFNAMSIZ];
-	int count;
-};
-
-static void load_gateway_list(struct gateway_list *list)
+static int test_interface_egress(const char *ifname, int af, char *out_ip, size_t max_len)
 {
-	list->count = 0;
+	int sock = socket(af, SOCK_DGRAM, 0);
+	if (sock < 0)
+		return 0;
 
-	FILE *f = fopen("/proc/net/route", "r");
-	if (f) {
-		char line[256];
-		if (fgets(line, sizeof(line), f)) { // Skip header
-			while (fgets(line, sizeof(line), f)) {
-				char iface[32];
-				unsigned int dest, gw, flags;
-				if (sscanf(line, "%31s %x %x %x", iface, &dest,
-					   &gw, &flags) == 4) {
-					if (flags & 0x0002) { // RTF_GATEWAY
-						bool dup = false;
-						for (int i = 0; i < list->count;
-						     i++) {
-							if (strcmp(list->names[i],
-								   iface) ==
-							    0) {
-								dup = true;
-								break;
-							}
-						}
-						if (!dup && list->count < 32) {
-							strncpy(list->names
-									[list->count],
-								iface,
-								IFNAMSIZ - 1);
-							list->names[list->count]
-								   [IFNAMSIZ -
-								    1] = '\0';
-							list->count++;
-						}
-					}
-				}
-			}
+	if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, ifname, strlen(ifname)) < 0) {
+		close(sock);
+		return 0;
+	}
+
+	if (af == AF_INET) {
+		struct sockaddr_in serv;
+		memset(&serv, 0, sizeof(serv));
+		serv.sin_family = AF_INET;
+		serv.sin_addr.s_addr = inet_addr("8.8.8.8");
+		serv.sin_port = htons(53);
+
+		if (connect(sock, (const struct sockaddr *)&serv, sizeof(serv)) < 0) {
+			close(sock);
+			return 0;
 		}
-		fclose(f);
-	}
 
-	f = fopen("/proc/net/ipv6_route", "r");
-	if (f) {
-		char line[256];
-		while (fgets(line, sizeof(line), f)) {
-			char dst_ip[33], src_ip[33], gw_ip[33], iface[32];
-			unsigned int dst_len, src_len, metric, refcnt, use,
-				flags;
-			if (sscanf(line,
-				   "%32s %x %32s %x %32s %x %x %x %x %31s",
-				   dst_ip, &dst_len, src_ip, &src_len, gw_ip,
-				   &metric, &refcnt, &use, &flags,
-				   iface) == 10) {
-				if (flags & 0x0002) { // RTF_GATEWAY
-					bool dup = false;
-					for (int i = 0; i < list->count; i++) {
-						if (strcmp(list->names[i],
-							   iface) == 0) {
-							dup = true;
-							break;
-						}
-					}
-					if (!dup && list->count < 32) {
-						strncpy(list->names[list->count],
-							iface, IFNAMSIZ - 1);
-						list->names[list->count]
-							   [IFNAMSIZ - 1] =
-							'\0';
-						list->count++;
-					}
-				}
-			}
+		struct sockaddr_in name;
+		socklen_t namelen = sizeof(name);
+		if (getsockname(sock, (struct sockaddr *)&name, &namelen) == 0) {
+			inet_ntop(AF_INET, &name.sin_addr, out_ip, max_len);
+			close(sock);
+			return 1;
 		}
-		fclose(f);
-	}
-}
+	} else if (af == AF_INET6) {
+		struct sockaddr_in6 serv;
+		memset(&serv, 0, sizeof(serv));
+		serv.sin6_family = AF_INET6;
+		if (inet_pton(AF_INET6, "2001:4860:4860::8888", &serv.sin6_addr) != 1) {
+			close(sock);
+			return 0;
+		}
+		serv.sin6_port = htons(53);
 
-static bool has_gateway_route(const struct gateway_list *list,
-			      const char *ifname)
-{
-	for (int i = 0; i < list->count; i++) {
-		if (strcmp(list->names[i], ifname) == 0)
-			return true;
+		if (connect(sock, (const struct sockaddr *)&serv, sizeof(serv)) < 0) {
+			close(sock);
+			return 0;
+		}
+
+		struct sockaddr_in6 name;
+		socklen_t namelen = sizeof(name);
+		if (getsockname(sock, (struct sockaddr *)&name, &namelen) == 0) {
+			if (IN6_IS_ADDR_LINKLOCAL(&(name.sin6_addr))) {
+				close(sock);
+				return 0;
+			}
+			inet_ntop(AF_INET6, &name.sin6_addr, out_ip, max_len);
+			close(sock);
+			return 1;
+		}
 	}
-	return false;
+
+	close(sock);
+	return 0;
 }
 
 static bool
@@ -167,8 +137,7 @@ daemon_is_vpn_ifname(const char *name,
 	return false;
 }
 
-static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
-			    char *last_ipv4, char *last_ipv6)
+static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 {
 	struct ifaddrs *ifaddr = NULL;
 	struct ifaddrs *ifa = NULL;
@@ -194,9 +163,10 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 	/* Helper structures to aggregate interface info */
 	struct iface_info {
 		char name[IFNAMSIZ];
+		char ipv4[64];
+		char ipv6[64];
 		bool has_ipv4;
 		bool has_ipv6;
-		bool has_gateway;
 		int score;
 	} interfaces[32];
 	int iface_count = 0;
@@ -249,27 +219,32 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 			idx = iface_count++;
 			memset(&interfaces[idx], 0, sizeof(struct iface_info));
 			strncpy(interfaces[idx].name, name, IFNAMSIZ - 1);
-			interfaces[idx].has_gateway =
-				has_gateway_route(gw_list, name);
-		}
 
-		if (idx != -1) {
-			int family = ifa->ifa_addr->sa_family;
-			if (family == AF_INET) {
+			// Test IPv4 egress route
+			char tmp_ipv4[64] = {0};
+			if (test_interface_egress(name, AF_INET, tmp_ipv4, sizeof(tmp_ipv4))) {
 				interfaces[idx].has_ipv4 = true;
-			} else if (family == AF_INET6) {
-				struct sockaddr_in6 *sa =
-					(struct sockaddr_in6 *)ifa->ifa_addr;
-				if (IN6_IS_ADDR_LINKLOCAL(&(sa->sin6_addr)))
-					continue;
+				strcpy(interfaces[idx].ipv4, tmp_ipv4);
+			}
+
+			// Test IPv6 egress route
+			char tmp_ipv6[64] = {0};
+			if (test_interface_egress(name, AF_INET6, tmp_ipv6, sizeof(tmp_ipv6))) {
 				interfaces[idx].has_ipv6 = true;
+				strcpy(interfaces[idx].ipv6, tmp_ipv6);
 			}
 		}
 	}
 
-	/* Score all aggregated interfaces */
+	freeifaddrs(ifaddr);
+
+	/* Score all aggregated interfaces that have at least one active egress route */
 	for (int i = 0; i < iface_count; i++) {
 		struct iface_info *info = &interfaces[i];
+		if (!info->has_ipv4 && !info->has_ipv6) {
+			continue; // No internet access, ignore completely
+		}
+
 		info->score = 1000;
 
 		if (strncmp(info->name, "eth", 3) == 0) {
@@ -285,10 +260,7 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 			info->score = 10000;
 		}
 
-		if (info->has_gateway)
-			info->score += 20000;
-
-		/* Add priority for dual-stack or having actual IP addresses */
+		/* Add priority for dual-stack or having active IPv4 / IPv6 */
 		if (info->has_ipv4)
 			info->score += 5000;
 		if (info->has_ipv6)
@@ -298,34 +270,18 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 			best_score = info->score;
 			strncpy(best_ifname, info->name, IFNAMSIZ - 1);
 			best_ifname[IFNAMSIZ - 1] = '\0';
-		}
-	}
-
-	if (best_score > 0) {
-		/* Find IPv4 and IPv6 for the best interface */
-		for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-			if (ifa->ifa_addr == NULL ||
-			    strcmp(ifa->ifa_name, best_ifname) != 0)
-				continue;
-
-			int family = ifa->ifa_addr->sa_family;
-			if (family == AF_INET) {
-				struct sockaddr_in *sa =
-					(struct sockaddr_in *)ifa->ifa_addr;
-				inet_ntop(AF_INET, &(sa->sin_addr), new_ipv4,
-					  sizeof(new_ipv4));
-			} else if (family == AF_INET6) {
-				struct sockaddr_in6 *sa =
-					(struct sockaddr_in6 *)ifa->ifa_addr;
-				if (IN6_IS_ADDR_LINKLOCAL(&(sa->sin6_addr)))
-					continue;
-				inet_ntop(AF_INET6, &(sa->sin6_addr), new_ipv6,
-					  sizeof(new_ipv6));
+			if (info->has_ipv4) {
+				strcpy(new_ipv4, info->ipv4);
+			} else {
+				strcpy(new_ipv4, "none");
+			}
+			if (info->has_ipv6) {
+				strcpy(new_ipv6, info->ipv6);
+			} else {
+				strcpy(new_ipv6, "none");
 			}
 		}
 	}
-
-	freeifaddrs(ifaddr);
 
 	if (strcmp(new_ipv4, last_ipv4) != 0 ||
 	    strcmp(new_ipv6, last_ipv6) != 0) {
@@ -356,8 +312,16 @@ static void update_spoof_ip(int fd, const struct gateway_list *gw_list,
 	if (best_ifname[0] != '\0') {
 		struct vpnhide_cover_iface ci;
 		ci.ifindex = if_nametoindex(best_ifname);
-		if (ci.ifindex > 0)
+		if (ci.ifindex > 0) {
 			ioctl(fd, VH_SET_COVER_IFACE, &ci);
+			char buf[64];
+			int len = snprintf(buf, sizeof(buf), "cover_iface:%s\n", best_ifname);
+			if (len > 0) {
+				write(fd, buf, len);
+			}
+		}
+	} else {
+		write(fd, "cover_iface:none\n", 17);
 	}
 
 	/* Send the list of active VPNs to the kernel module */
@@ -409,9 +373,7 @@ int main(int argc, char **argv)
 	}
 
 	// Initial update
-	struct gateway_list gw_list;
-	load_gateway_list(&gw_list);
-	update_spoof_ip(fd, &gw_list, last_ipv4, last_ipv6);
+	update_spoof_ip(fd, last_ipv4, last_ipv6);
 
 	unsigned long long next_update_time = 0;
 	bool update_pending = false;
@@ -457,8 +419,7 @@ int main(int argc, char **argv)
 		}
 
 		if (trigger_update) {
-			load_gateway_list(&gw_list);
-			update_spoof_ip(fd, &gw_list, last_ipv4, last_ipv6);
+			update_spoof_ip(fd, last_ipv4, last_ipv6);
 
 			if (ret > 0) {
 				// Netlink event occurred, schedule follow-ups

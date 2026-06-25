@@ -29,8 +29,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
+import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
+import dev.soranerai.vpnhidenext.domain.models.*
+import dev.soranerai.vpnhidenext.ui.dashboard.components.*
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -59,8 +64,6 @@ fun DashboardScreen(
         DashboardCache.ensureLoaded(scope, context, selfNeedsRestart)
         InterceptStatsCache.ensureLoaded(scope, context)
         UpdateCheckCache.ensureFresh(scope, BuildConfig.VERSION_NAME)
-    }
-    LaunchedEffect(Unit) {
         if (shouldShowChangelog(context)) {
             val data = withContext(Dispatchers.IO) { loadChangelog(context) }
             if (data != null) {
@@ -87,7 +90,23 @@ fun DashboardScreen(
                 DashboardCache.refresh(scope, context, selfNeedsRestart)
                 InterceptStatsCache.refresh(scope, context)
                 DiagnosticsCache.retry(scope, context)
-                kotlinx.coroutines.delay(500)
+
+                val startTime = System.currentTimeMillis()
+                kotlinx.coroutines.delay(50) // Allow loading flags to transition to true
+
+                combine(
+                    AppListCache.loading,
+                    DashboardCache.loading,
+                    InterceptStatsCache.loading,
+                    DiagnosticsCache.state,
+                ) { appList, dashboard, stats, diag ->
+                    appList || dashboard || stats || (diag is DiagnosticsCache.State.Running)
+                }.first { !it }
+
+                val elapsed = System.currentTimeMillis() - startTime
+                if (elapsed < 500) {
+                    kotlinx.coroutines.delay(500 - elapsed)
+                }
                 refreshing = false
             }
         },
@@ -259,8 +278,7 @@ private fun DashboardContent(
         }
 
         // Issues
-        val errors = s.issues.filter { it.severity == IssueSeverity.ERROR }
-        val warnings = s.issues.filter { it.severity == IssueSeverity.WARNING }
+        val (errors, warnings) = s.issues.partition { it.severity == IssueSeverity.ERROR }
 
         if (errors.isNotEmpty()) {
             Spacer(Modifier.height(24.dp))
@@ -308,495 +326,6 @@ private fun DashboardContent(
 }
 
 // ── UI Components ────────────────────────────────────────────────────────
-
-@Composable
-private fun ModuleCard(
-    name: String,
-    state: ModuleState,
-    nativeResult: NativeResult?,
-    selfNeedsRestart: Boolean = false,
-) {
-    val darkTheme = isSystemInDarkTheme()
-    when (state) {
-        is ModuleState.NotInstalled -> {
-            val containerColor = MaterialTheme.colorScheme.surfaceVariant
-            val contentColor = MaterialTheme.colorScheme.onSurface
-            ModuleCardShell(
-                name = name,
-                version = null,
-                subtitle = stringResource(R.string.dashboard_not_installed),
-                dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                containerColor = containerColor,
-                contentColor = contentColor,
-            )
-        }
-
-        is ModuleState.Installed -> {
-            val active = state.active
-            val broken = state.brokenReason
-            val brokenSubtitleRes =
-                when (broken) {
-                    KmodBrokenReason.WrongVariant -> {
-                        R.string.dashboard_kmod_broken_wrong_variant
-                    }
-
-                    KmodBrokenReason.UnsupportedKernel -> {
-                        R.string.dashboard_kmod_broken_unsupported_kernel
-                    }
-
-                    KmodBrokenReason.MissingKprobes -> {
-                        R.string.dashboard_kmod_broken_no_kprobes
-                    }
-
-                    KmodBrokenReason.UnknownVariantInactive -> {
-                        R.string.dashboard_kmod_broken_unknown_variant
-                    }
-
-                    KmodBrokenReason.AmbiguousLoadFailed -> {
-                        R.string.dashboard_kmod_broken_ambiguous
-                    }
-
-                    null -> {
-                        null
-                    }
-                }
-
-            val targetsText =
-                when {
-                    brokenSubtitleRes != null -> {
-                        stringResource(brokenSubtitleRes)
-                    }
-
-                    active -> {
-                        stringResource(R.string.dashboard_active_targets, state.targetCount)
-                    }
-
-                    selfNeedsRestart -> {
-                        stringResource(R.string.dashboard_installed_restart_app)
-                    }
-
-                    else -> {
-                        stringResource(R.string.dashboard_installed_inactive)
-                    }
-                }
-
-            val protectionText =
-                if (active) {
-                    when (nativeResult) {
-                        is NativeResult.Ok -> {
-                            val statusText = stringResource(R.string.dashboard_protection_ok)
-                            "\n" +
-                                stringResource(
-                                    R.string.dashboard_protection_prefix,
-                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
-                                )
-                        }
-
-                        is NativeResult.Partial -> {
-                            val statusText = stringResource(R.string.dashboard_protection_partial)
-                            "\n" +
-                                stringResource(
-                                    R.string.dashboard_protection_prefix,
-                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
-                                )
-                        }
-
-                        is NativeResult.Fail -> {
-                            val statusText = stringResource(R.string.dashboard_protection_fail)
-                            "\n" +
-                                stringResource(
-                                    R.string.dashboard_protection_prefix,
-                                    "$statusText (${nativeResult.passed}/${nativeResult.total})",
-                                )
-                        }
-
-                        is NativeResult.NoModule -> {
-                            "\n" +
-                                stringResource(
-                                    R.string.dashboard_protection_prefix,
-                                    stringResource(
-                                        R.string.dashboard_protection_no_module,
-                                    ),
-                                )
-                        }
-
-                        null -> {
-                            ""
-                        }
-                    }
-                } else {
-                    ""
-                }
-
-            val subtitle = targetsText + protectionText
-
-            val isFail = broken != null || (active && nativeResult is NativeResult.Fail)
-            val isPartial = active && nativeResult is NativeResult.Partial
-            val isOk = active && nativeResult is NativeResult.Ok
-
-            val (containerColor, contentColor, dotColor) =
-                when {
-                    isFail -> {
-                        if (darkTheme) {
-                            Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
-                        } else {
-                            Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
-                        }
-                    }
-
-                    isPartial -> {
-                        if (darkTheme) {
-                            Triple(Color(0xFF0D243A), Color(0xFF90CAF9), TelBlue)
-                        } else {
-                            Triple(Color(0xFFE3F2FD), Color(0xFF1565C0), TelBlue)
-                        }
-                    }
-
-                    isOk -> {
-                        if (darkTheme) {
-                            Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
-                        } else {
-                            Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
-                        }
-                    }
-
-                    else -> {
-                        val dot =
-                            when {
-                                active -> TelGreen
-                                else -> TelOrange
-                            }
-                        Triple(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            MaterialTheme.colorScheme.onSurface,
-                            dot,
-                        )
-                    }
-                }
-
-            ModuleCardShell(
-                name = name,
-                version = state.version,
-                subtitle = subtitle,
-                dotColor = dotColor,
-                containerColor = containerColor,
-                contentColor = contentColor,
-            )
-        }
-    }
-}
-
-@Composable
-private fun LsposedCard(
-    state: LsposedState,
-    javaResult: JavaResult?,
-    selfNeedsRestart: Boolean,
-) {
-    val darkTheme = isSystemInDarkTheme()
-    val moduleName = stringResource(R.string.dashboard_lsposed_module)
-    val installedVersion = BuildConfig.VERSION_NAME
-    when (state) {
-        is LsposedState.NotInstalled -> {
-            val containerColor = MaterialTheme.colorScheme.surfaceVariant
-            val contentColor = MaterialTheme.colorScheme.onSurface
-            ModuleCardShell(
-                name = moduleName,
-                version = installedVersion,
-                subtitle = stringResource(R.string.dashboard_not_installed),
-                dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
-                containerColor = containerColor,
-                contentColor = contentColor,
-            )
-        }
-
-        is LsposedState.InstalledInactive -> {
-            val containerColor = MaterialTheme.colorScheme.surfaceVariant
-            val contentColor = MaterialTheme.colorScheme.onSurface
-            ModuleCardShell(
-                name = moduleName,
-                version = installedVersion,
-                subtitle = stringResource(R.string.dashboard_installed_inactive),
-                dotColor = TelOrange,
-                containerColor = containerColor,
-                contentColor = contentColor,
-            )
-        }
-
-        is LsposedState.NeedsReboot -> {
-            val containerColor = MaterialTheme.colorScheme.surfaceVariant
-            val contentColor = MaterialTheme.colorScheme.onSurface
-            ModuleCardShell(
-                name = moduleName,
-                version = installedVersion,
-                subtitle = stringResource(R.string.dashboard_reboot_needed),
-                dotColor = TelOrange,
-                containerColor = containerColor,
-                contentColor = contentColor,
-            )
-        }
-
-        is LsposedState.Active -> {
-            val targetsText = stringResource(R.string.dashboard_active_targets, state.targetCount)
-            val protectionText =
-                when (javaResult) {
-                    is JavaResult.Ok -> {
-                        val statusText = stringResource(R.string.dashboard_protection_ok)
-                        "\n" +
-                            stringResource(
-                                R.string.dashboard_protection_prefix,
-                                "$statusText (${javaResult.passed}/${javaResult.total})",
-                            )
-                    }
-
-                    is JavaResult.Partial -> {
-                        val statusText = stringResource(R.string.dashboard_protection_partial)
-                        "\n" +
-                            stringResource(
-                                R.string.dashboard_protection_prefix,
-                                "$statusText (${javaResult.passed}/${javaResult.total})",
-                            )
-                    }
-
-                    is JavaResult.Fail -> {
-                        val statusText = stringResource(R.string.dashboard_protection_fail)
-                        "\n" +
-                            stringResource(
-                                R.string.dashboard_protection_prefix,
-                                "$statusText (${javaResult.passed}/${javaResult.total})",
-                            )
-                    }
-
-                    is JavaResult.HooksInactive -> {
-                        "\n" +
-                            stringResource(
-                                R.string.dashboard_protection_prefix,
-                                stringResource(
-                                    R.string.dashboard_protection_hooks_inactive,
-                                ),
-                            )
-                    }
-
-                    null -> {
-                        ""
-                    }
-                }
-
-            val subtitle = targetsText + protectionText
-
-            val isFail = javaResult is JavaResult.Fail
-            val isPartial = javaResult is JavaResult.Partial
-            val isOk = javaResult is JavaResult.Ok
-
-            val (containerColor, contentColor, dotColor) =
-                when {
-                    isFail -> {
-                        if (darkTheme) {
-                            Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
-                        } else {
-                            Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
-                        }
-                    }
-
-                    isPartial -> {
-                        if (darkTheme) {
-                            Triple(Color(0xFF0D243A), Color(0xFF90CAF9), TelBlue)
-                        } else {
-                            Triple(Color(0xFFE3F2FD), Color(0xFF1565C0), TelBlue)
-                        }
-                    }
-
-                    isOk -> {
-                        if (darkTheme) {
-                            Triple(Color(0xFF1E3E28), Color(0xFFA5D6A7), TelGreen)
-                        } else {
-                            Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
-                        }
-                    }
-
-                    else -> {
-                        Triple(
-                            MaterialTheme.colorScheme.surfaceVariant,
-                            MaterialTheme.colorScheme.onSurface,
-                            TelGreen,
-                        )
-                    }
-                }
-
-            ModuleCardShell(
-                name = moduleName,
-                version = installedVersion,
-                subtitle = subtitle,
-                dotColor = dotColor,
-                containerColor = containerColor,
-                contentColor = contentColor,
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModuleCardShell(
-    name: String,
-    version: String?,
-    subtitle: String,
-    dotColor: Color,
-    containerColor: Color,
-    contentColor: Color = MaterialTheme.colorScheme.onSurface,
-) {
-    ElevatedCard(
-        shape = RoundedCornerShape(16.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(
-            modifier = Modifier.padding(14.dp).fillMaxWidth(),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = name,
-                    style = MaterialTheme.typography.titleMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = contentColor,
-                    maxLines = 1,
-                    modifier = Modifier.weight(1f, fill = false),
-                )
-
-                Box(
-                    modifier =
-                        Modifier
-                            .size(8.dp)
-                            .background(color = dotColor, shape = CircleShape),
-                )
-            }
-
-            Spacer(Modifier.height(6.dp))
-
-            Text(
-                text = subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = contentColor.copy(alpha = 0.7f),
-                maxLines = 4,
-                lineHeight = MaterialTheme.typography.bodySmall.fontSize * 1.2f,
-            )
-
-            if (version != null) {
-                Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "v$version",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = contentColor,
-                    modifier =
-                        Modifier
-                            .background(
-                                color = contentColor.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(4.dp),
-                            ).padding(horizontal = 6.dp, vertical = 2.dp),
-                )
-            }
-        }
-    }
-}
-
-@Composable
-private fun NativeInstallRecommendationCard(recommendation: NativeInstallRecommendation) {
-    val darkTheme = isSystemInDarkTheme()
-    val containerColor =
-        if (recommendation.preferKmod) {
-            if (darkTheme) Color(0xFF0D47A1).copy(alpha = 0.28f) else Color(0xFFE3F2FD)
-        } else {
-            if (darkTheme) Color(0xFF4E342E).copy(alpha = 0.32f) else Color(0xFFFFF3E0)
-        }
-
-    ElevatedCard(
-        shape = RoundedCornerShape(8.dp),
-        colors =
-            CardDefaults.elevatedCardColors(
-                containerColor =
-                    if (recommendation.preferKmod) {
-                        MaterialTheme.colorScheme.primaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.secondaryContainer
-                    },
-            ),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(24.dp)) {
-            Text(
-                text = stringResource(R.string.dashboard_install_recommendation_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(8.dp))
-            Text(
-                text =
-                    stringResource(
-                        R.string.dashboard_install_recommendation_device,
-                        recommendation.androidVersion,
-                        recommendation.kernelVersion,
-                    ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            // ... (rest of the text logic remains same)
-            // Disambiguate the GKI KMI tag baked into uname -r (e.g.
-            // "android12-5.10") from the device's Android OS release on
-            // devices where they differ — common on old Pixels still on
-            // an android12 KMI kernel under an Android 14/15 ROM. Hide
-            // the note when both match (would just be noise) or when
-            // uname -r carries no KMI tag at all.
-            val kmiBranch = recommendation.kernelBranch
-            if (kmiBranch != null && kmiBranch != recommendation.androidVersion) {
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    text =
-                        stringResource(
-                            R.string.dashboard_install_recommendation_kmi_note,
-                            kmiBranch.replace(" ", "").lowercase(),
-                        ),
-                    style = MaterialTheme.typography.bodySmall,
-                    fontStyle = FontStyle.Italic,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
-            }
-            Spacer(Modifier.height(8.dp))
-            val alternative = recommendation.alternativeArtifact
-            Text(
-                text =
-                    when {
-                        !recommendation.preferKmod -> {
-                            stringResource(
-                                R.string
-                                    .dashboard_install_recommendation_kmod_unsupported,
-                                recommendation.recommendedArtifact,
-                            )
-                        }
-
-                        recommendation.variantAmbiguous && alternative != null -> {
-                            stringResource(
-                                R.string
-                                    .dashboard_install_recommendation_kmod_ambiguous,
-                                recommendation.recommendedArtifact,
-                                alternative,
-                            )
-                        }
-
-                        else -> {
-                            stringResource(
-                                R.string.dashboard_install_recommendation_kmod,
-                                recommendation.recommendedArtifact,
-                            )
-                        }
-                    },
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Medium,
-            )
-        }
-    }
-}
 
 @Composable
 private fun StatusBanner(
@@ -956,12 +485,13 @@ private fun InterceptStatisticsSection(
     stats: List<AppInterceptStats>?,
     appsList: List<AppSummary>?,
 ) {
-    var expandedApps by remember { mutableStateOf(setOf<String>()) }
+    var expandedApps by remember { mutableStateOf(setOf<Int>()) }
 
     Spacer(Modifier.height(24.dp))
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val repository = remember { DashboardRepository(context.applicationContext) }
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -989,7 +519,9 @@ private fun InterceptStatisticsSection(
                         // 1. Instantly clear the UI stats cache
                         InterceptStatsCache.clearStats()
                         // 2. Perform the actual backend reset
-                        withContext(Dispatchers.IO) { resetInterceptStats(context) }
+                        withContext(Dispatchers.IO) {
+                            repository.resetInterceptStats()
+                        }
                         // 3. Silently refresh to ensure absolute sync
                         InterceptStatsCache.refresh(scope, context)
                     }
@@ -1052,8 +584,8 @@ private fun InterceptStatisticsSection(
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (appStat in stats) {
-                val isExpanded = expandedApps.contains(appStat.packageName)
-                val appSummary = appsList?.find { it.packageName == appStat.packageName }
+                val isExpanded = expandedApps.contains(appStat.uid)
+                val appSummary = appsList?.find { it.uid == appStat.uid }
                 val icon = appSummary?.icon
 
                 ElevatedCard(
@@ -1066,9 +598,9 @@ private fun InterceptStatisticsSection(
                         Modifier.fillMaxWidth().clickable {
                             expandedApps =
                                 if (isExpanded) {
-                                    expandedApps - appStat.packageName
+                                    expandedApps - appStat.uid
                                 } else {
-                                    expandedApps + appStat.packageName
+                                    expandedApps + appStat.uid
                                 }
                         },
                 ) {
@@ -1081,7 +613,7 @@ private fun InterceptStatisticsSection(
                             Box(modifier = Modifier.size(40.dp)) {
                                 if (icon != null) {
                                     Image(
-                                        bitmap = icon.toBitmap(48, 48).asImageBitmap(),
+                                        bitmap = remember(icon) { icon.toBitmap(48, 48).asImageBitmap() },
                                         contentDescription = null,
                                         modifier = Modifier.fillMaxSize(),
                                     )

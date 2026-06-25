@@ -37,6 +37,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
@@ -67,18 +68,36 @@ private sealed class RootState {
     ) : RootState()
 
     data object Denied : RootState()
+
+    data object KmodMissing : RootState()
+
+    data object Migrating : RootState()
 }
 
 @Composable
 fun VpnHideApp(onReady: () -> Unit = {}) {
     VpnHideTheme {
         var rootState by remember { mutableStateOf<RootState?>(null) }
+        val context = LocalContext.current
         LaunchedEffect(Unit) {
+            val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
+            val hasLegacyDb = deContext.getDatabasePath("vpnhide_database").exists()
+            if (hasLegacyDb) {
+                rootState = RootState.Migrating
+                withContext(Dispatchers.IO) {
+                    AppDatabase.performMigrationIfRequired(context)
+                }
+            }
             val res =
                 withContext(Dispatchers.IO) {
                     performStartupOptimized()
                 }
-            rootState = if (res.rootGranted) RootState.Granted(res) else RootState.Denied
+            rootState =
+                when {
+                    !res.rootGranted -> RootState.Denied
+                    !res.kmodActive -> RootState.KmodMissing
+                    else -> RootState.Granted(res)
+                }
         }
 
         when (rootState) {
@@ -87,10 +106,20 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                 Unit
             }
 
+            RootState.Migrating -> {
+                LaunchedEffect(Unit) { onReady() }
+                MigrationScreen()
+            }
+
             RootState.Denied -> {
                 // Drop splash — RootDeniedScreen has no async prerequisites.
                 LaunchedEffect(Unit) { onReady() }
                 RootDeniedScreen()
+            }
+
+            RootState.KmodMissing -> {
+                LaunchedEffect(Unit) { onReady() }
+                KmodMissingScreen()
             }
 
             is RootState.Granted -> {
@@ -129,7 +158,6 @@ private fun MainScreen(
     var currentProtectionMode by remember { mutableStateOf(ProtectionMode.VpnTargets) }
     var dirtyProtectionModes by remember { mutableStateOf(setOf<ProtectionMode>()) }
     var saveTrigger by remember { mutableStateOf(0) }
-    var showFaq by remember { mutableStateOf(false) }
     var editingAppRules by remember { mutableStateOf<AppEntry?>(null) }
     var showBulkRules by remember { mutableStateOf(false) }
     var localMassRules by remember { mutableStateOf<List<PortRule>?>(null) }
@@ -192,11 +220,6 @@ private fun MainScreen(
         }
     }
 
-    val nestedScrollConnection =
-        remember {
-            object : NestedScrollConnection {}
-        }
-
     LaunchedEffect(searchActive) {
         if (searchActive) {
             searchFocusRequester.requestFocus()
@@ -205,31 +228,36 @@ private fun MainScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            modifier = Modifier.nestedScroll(nestedScrollConnection),
             topBar = {
                 if (searchActive && currentTab == Tab.Protection) {
                     SearchBar(
-                        query = searchQuery,
-                        onQueryChange = { searchQuery = it },
-                        onSearch = {},
-                        active = false,
-                        onActiveChange = {},
-                        placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                        leadingIcon = {
-                            IconButton(onClick = {
-                                searchActive = false
-                                searchQuery = ""
-                            }) {
-                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                            }
+                        inputField = {
+                            SearchBarDefaults.InputField(
+                                query = searchQuery,
+                                onQueryChange = { searchQuery = it },
+                                onSearch = {},
+                                expanded = false,
+                                onExpandedChange = {},
+                                placeholder = { Text(stringResource(R.string.search_placeholder)) },
+                                leadingIcon = {
+                                    IconButton(onClick = {
+                                        searchActive = false
+                                        searchQuery = ""
+                                    }) {
+                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                                    }
+                                },
+                                trailingIcon = {
+                                    if (searchQuery.isNotEmpty()) {
+                                        IconButton(onClick = { searchQuery = "" }) {
+                                            Icon(Icons.Default.Clear, contentDescription = null)
+                                        }
+                                    }
+                                },
+                            )
                         },
-                        trailingIcon = {
-                            if (searchQuery.isNotEmpty()) {
-                                IconButton(onClick = { searchQuery = "" }) {
-                                    Icon(Icons.Default.Clear, contentDescription = null)
-                                }
-                            }
-                        },
+                        expanded = false,
+                        onExpandedChange = {},
                         modifier =
                             Modifier
                                 .fillMaxWidth()
@@ -250,14 +278,6 @@ private fun MainScreen(
                                 scope = scope,
                                 context = context,
                             )
-                            IconButton(onClick = { showFaq = true }) {
-                                @Suppress("DEPRECATION")
-                                Icon(
-                                    Icons.Default.HelpOutline,
-                                    contentDescription = stringResource(R.string.faq_title),
-                                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                                )
-                            }
                             if (currentTab == Tab.Protection) {
                                 IconButton(onClick = { searchActive = true }) {
                                     Icon(
@@ -379,10 +399,7 @@ private fun MainScreen(
             },
         ) { innerPadding ->
             val restart = selfNeedsRestart
-            BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-                val screenWidth = maxWidth
-                val density = androidx.compose.ui.platform.LocalDensity.current
-
+            Box(modifier = Modifier.fillMaxSize()) {
                 Column(
                     modifier =
                         Modifier
@@ -626,14 +643,6 @@ private fun MainScreen(
             }
         }
 
-        if (showFaq) {
-            BackHandler { showFaq = false }
-            FaqScreen(
-                onBack = { showFaq = false },
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-            )
-        }
-
         androidx.compose.animation.AnimatedVisibility(
             visible = editingAppRules != null,
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
@@ -770,6 +779,58 @@ private fun RootDeniedScreen() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KmodMissingScreen() {
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text(stringResource(R.string.app_name)) },
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        titleContentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    ),
+            )
+        },
+    ) { innerPadding ->
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(32.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            Card(
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                    ),
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = stringResource(R.string.kmod_error_title),
+                        style = MaterialTheme.typography.headlineSmall,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Spacer(Modifier.height(16.dp))
+                    Text(
+                        text = stringResource(R.string.kmod_error_message),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun RefreshActionIcon(
     currentTab: Tab,
@@ -825,6 +886,37 @@ private fun RefreshActionIcon(
                     Icons.Default.Refresh,
                     contentDescription = stringResource(R.string.action_refresh_apps),
                     tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun MigrationScreen() {
+    Scaffold { innerPadding ->
+        Box(
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .background(MaterialTheme.colorScheme.background),
+            contentAlignment = Alignment.Center,
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center,
+            ) {
+                CircularProgressIndicator(
+                    color = MaterialTheme.colorScheme.primary,
+                    strokeWidth = 4.dp,
+                )
+                Spacer(modifier = Modifier.height(24.dp))
+                Text(
+                    text = stringResource(R.string.migrating_data),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onBackground,
                 )
             }
         }

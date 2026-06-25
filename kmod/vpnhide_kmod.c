@@ -247,6 +247,7 @@ static DEFINE_SPINLOCK(lsposed_targets_update_lock);
 
 static DECLARE_WAIT_QUEUE_HEAD(vpnhide_config_wait);
 static atomic_t vpnhide_config_generation = ATOMIC_INIT(1);
+static atomic_t java_stats_clear_generation = ATOMIC_INIT(1);
 static unsigned int java_hooks_mask = 0xFFFFFFFF;
 
 static struct vpnhide_port_targets __rcu *global_port_targets;
@@ -2307,6 +2308,9 @@ static DEFINE_MUTEX(java_stats_lock);
 static char java_status_buf[256];
 static DEFINE_MUTEX(java_status_lock);
 
+static char global_cover_ifname[IFNAMSIZ];
+static DEFINE_SPINLOCK(cover_ifname_lock);
+
 struct vpnhide_dev_reader {
 	unsigned long generation;
 	char *buf;
@@ -2349,6 +2353,8 @@ static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
 		unsigned long gen =
 			(unsigned long)atomic_read(&vpnhide_config_generation);
 		if (reader->generation >= gen) {
+			if (from_kuid(&init_user_ns, current_uid()) != 1000)
+				return 0; /* Return EOF for debug/one-off readers like cat */
 			if (file->f_flags & O_NONBLOCK)
 				return -EAGAIN;
 			if (wait_event_interruptible(
@@ -2376,6 +2382,11 @@ static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
 					    65536 - offset,
 					    "java_hook_mask: %u\n",
 					    READ_ONCE(java_hooks_mask));
+
+			offset += scnprintf(
+				reader->buf + offset, 65536 - offset,
+				"java_stats_clear_gen: %d\n",
+				atomic_read(&java_stats_clear_generation));
 
 			offset += scnprintf(reader->buf + offset,
 					    65536 - offset,
@@ -2409,8 +2420,19 @@ static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
 				}
 			}
 			offset += scnprintf(reader->buf + offset,
-					    65536 - offset, "\n\n");
+					    65536 - offset, "\n");
 			rcu_read_unlock();
+
+			spin_lock(&cover_ifname_lock);
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset, "cover_iface: %s\n",
+					    global_cover_ifname[0] ?
+						    global_cover_ifname :
+						    "none");
+			spin_unlock(&cover_ifname_lock);
+
+			offset += scnprintf(reader->buf + offset,
+					    65536 - offset, "\n");
 
 			reader->buf_len = offset;
 		}
@@ -2460,6 +2482,26 @@ static ssize_t vpnhide_dev_write(struct file *file, const char __user *buf,
 		mutex_lock(&java_stats_lock);
 		java_stats_buf[0] = '\0';
 		mutex_unlock(&java_stats_lock);
+		atomic_inc(&java_stats_clear_generation);
+		atomic_inc(&vpnhide_config_generation);
+		wake_up_interruptible(&vpnhide_config_wait);
+	} else if (strncmp(kbuf, "cover_iface:", 12) == 0) {
+		char *val = kbuf + 12;
+		size_t len = strlen(val);
+		if (len > 0 && val[len - 1] == '\n') {
+			val[len - 1] = '\0';
+			len--;
+		}
+		spin_lock(&cover_ifname_lock);
+		if (len == 0 || strcmp(val, "none") == 0) {
+			global_cover_ifname[0] = '\0';
+		} else {
+			strncpy(global_cover_ifname, val, IFNAMSIZ - 1);
+			global_cover_ifname[IFNAMSIZ - 1] = '\0';
+		}
+		spin_unlock(&cover_ifname_lock);
+		atomic_inc(&vpnhide_config_generation);
+		wake_up_interruptible(&vpnhide_config_wait);
 	}
 
 	kfree(kbuf);
