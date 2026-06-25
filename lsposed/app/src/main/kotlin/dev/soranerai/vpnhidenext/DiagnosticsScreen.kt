@@ -1363,16 +1363,24 @@ private fun checkTrafficStatsDiscrepancy(
             return CheckResult(name, true, "raw iface stats unavailable (no su, SELinux blocked)")
         }
 
+        // ── Get the active cover interface from the kernel module ──
+        var coverIfaceName = ""
+        val (ctrlExit, ctrlOut) = suExec("cat /dev/vpnhide_ctrl 2>/dev/null")
+        if (ctrlExit == 0) {
+            val match = Regex("cover_iface:\\s*(\\S+)").find(ctrlOut)
+            if (match != null) {
+                coverIfaceName = match.groupValues[1]
+            }
+        }
+
         // ── Enumerate visible interfaces (hook filters out tun0 etc.) ──
         // Only count UP interfaces — a wlan0 that just disconnected should not
-        // participate in the visible-sum or be selected as cover interface.
+        // participate in the visible-sum.
         var visibleTx = 0L
         var visibleRx = 0L
         val names = mutableListOf<String>()
-        var coverIfaceName = ""
         val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
         if (ifaces != null) {
-            var bestScore = -1
             for (iface in ifaces) {
                 val upStatus = if (iface.isUp) "up" else "down"
                 val t = android.net.TrafficStats.getTxBytes(iface.name)
@@ -1381,21 +1389,6 @@ private fun checkTrafficStatsDiscrepancy(
                 if (!iface.isUp) continue
                 if (t > 0) visibleTx += t
                 if (r > 0) visibleRx += r
-                val score =
-                    when {
-                        iface.name.startsWith("eth") -> 100000
-
-                        iface.name.startsWith("wlan") || iface.name.startsWith("ap") -> 50000
-
-                        iface.name.startsWith("rmnet") || iface.name.startsWith("ccmni") ||
-                            iface.name.startsWith("epdg") || iface.name.startsWith("r_net") -> 10000
-
-                        else -> 0
-                    }
-                if (score > bestScore && score > 0) {
-                    bestScore = score
-                    coverIfaceName = iface.name
-                }
             }
         }
 
@@ -1421,10 +1414,14 @@ private fun checkTrafficStatsDiscrepancy(
         val txDiff = rawSystemTx - visibleTx
         val rxDiff = rawSystemRx - visibleRx
         val threshold = 5 * 1024 * 1024L // 5 MB
-        val txSuspicious =
+        
+        // If there's no VPN traffic, discrepancies are natural (not from laundering failure) -> ignore
+        val hasVpnTraffic = rawVpnTx > 0L
+        
+        val txSuspicious = hasVpnTraffic &&
             txDiff > threshold &&
                 (rawSystemTx.toDouble() / visibleTx.coerceAtLeast(1L).toDouble() > 1.5)
-        val rxSuspicious =
+        val rxSuspicious = hasVpnTraffic &&
             rxDiff > threshold &&
                 (rawSystemRx.toDouble() / visibleRx.coerceAtLeast(1L).toDouble() > 1.5)
 
@@ -1432,20 +1429,26 @@ private fun checkTrafficStatsDiscrepancy(
         val vpnTrafficSignificant = rawVpnTx > threshold
         var launderingOk = true
         var launderDetail: String
-        if (vpnTrafficSignificant && coverIfaceName.isNotEmpty()) {
-            val rawCoverTx = rawStats[coverIfaceName]?.first ?: 0L
-            val bpfCoverTx = android.net.TrafficStats.getTxBytes(coverIfaceName)
-            val expectedCoverTx = rawCoverTx + rawVpnTx
-            launderingOk = bpfCoverTx >= (expectedCoverTx * 0.7).toLong()
-            launderDetail =
-                if (launderingOk) {
-                    "Laundering OK: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
-                        "≈ raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K"
-                } else {
-                    "Laundering BROKEN: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
-                        "but expected ~${expectedCoverTx / 1024}K " +
-                        "(raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K)"
-                }
+        val hasCoverIface = coverIfaceName.isNotEmpty() && coverIfaceName != "none"
+        if (vpnTrafficSignificant) {
+            if (hasCoverIface) {
+                val rawCoverTx = rawStats[coverIfaceName]?.first ?: 0L
+                val bpfCoverTx = android.net.TrafficStats.getTxBytes(coverIfaceName)
+                val expectedCoverTx = rawCoverTx + rawVpnTx
+                launderingOk = bpfCoverTx >= (expectedCoverTx * 0.7).toLong()
+                launderDetail =
+                    if (launderingOk) {
+                        "Laundering OK: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
+                            "≈ raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K"
+                    } else {
+                        "Laundering BROKEN: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
+                            "but expected ~${expectedCoverTx / 1024}K " +
+                            "(raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K)"
+                    }
+            } else {
+                launderingOk = false
+                launderDetail = "Laundering UNKNOWN: VPN traffic active, but no cover interface set by kmod yet"
+            }
         } else if (rawVpnTx in 1..<threshold) {
             launderDetail = "Low VPN traffic (${rawVpnTx / 1024}K raw), skipping launder check"
         } else {

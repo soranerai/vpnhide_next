@@ -2353,6 +2353,8 @@ static ssize_t vpnhide_dev_read(struct file *file, char __user *buf,
 		unsigned long gen =
 			(unsigned long)atomic_read(&vpnhide_config_generation);
 		if (reader->generation >= gen) {
+			if (from_kuid(&init_user_ns, current_uid()) != 1000)
+				return 0; /* Return EOF for debug/one-off readers like cat */
 			if (file->f_flags & O_NONBLOCK)
 				return -EAGAIN;
 			if (wait_event_interruptible(

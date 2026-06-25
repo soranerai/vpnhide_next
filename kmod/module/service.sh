@@ -26,6 +26,7 @@ chmod +x "$CTL"
 if [ -c "$DEV_NODE" ]; then
     chown root:system "$DEV_NODE"
     chmod 0660 "$DEV_NODE"
+    chcon u:object_r:null_device:s0 "$DEV_NODE"
 fi
 
 # Wait until PackageManager has actually indexed user-installed apps.
