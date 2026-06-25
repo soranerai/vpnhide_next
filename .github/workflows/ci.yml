@@ -16,11 +16,15 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       image: ${{ steps.img.outputs.image }}
+      ddkqemu: ${{ steps.img.outputs.ddkqemu }}
     steps:
       - id: img
         env:
           REPO: ${{ github.repository }}
-        run: echo "image=ghcr.io/${REPO,,}/ci:latest" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "image=ghcr.io/${REPO,,}/ci:latest" >> "$GITHUB_OUTPUT"
+          echo "ddkqemu=ghcr.io/${REPO,,}/ddk-qemu" >> "$GITHUB_OUTPUT"
+
 
   lint:
     needs: setup
@@ -103,7 +107,8 @@ jobs:
           fi
           shellcheck -x -e SC2034,SC3043 \
             kmod/module/customize.sh kmod/module/post-fs-data.sh kmod/module/service.sh \
-            scripts/clean-device.sh scripts/update-json.sh
+            scripts/clean-device.sh scripts/update-json.sh \
+            kmod/test/run.sh kmod/test/build-kernel.sh kmod/test/init.sh
 
       # C (kernel module)
       - name: clang-format
@@ -189,6 +194,64 @@ jobs:
           name: vpnhide-kmod-${{ matrix.kmi }}
           path: vpnhide-kmod-${{ matrix.kmi }}.zip
           if-no-files-found: error
+
+  # Runtime gate: boot a real GKI kernel for each KMI in QEMU and assert the
+  # module actually hides VPN state (per-vector A/B), not just that it compiled.
+  # Catches register/inlining bugs that source + build checks can't (e.g. the
+  # static-function rt_fill_info register issue). Runs in the per-KMI ddk-qemu
+  # image (built by qemu-image.yml) which bakes a bootable kernel + its build
+  # tree; the module is built here against that tree so it matches the kernel.
+  # QEMU runs under TCG (no KVM on hosted runners) — slow but fine. See kmod/test/.
+  kmod-qemu:
+    needs: [setup, lint]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        kmi:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+    container:
+      # Lowercased base from setup (GHCR names must be lowercase); credentials
+      # because it's a repo-owned (private) package, like the other jobs.
+      image: ${{ needs.setup.outputs.ddkqemu }}:${{ matrix.kmi }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    env:
+      KMI: ${{ matrix.kmi }}
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download host binaries
+        uses: actions/download-artifact@v7
+        with:
+          name: vpnhide-binaries
+          path: kmod/
+
+      - name: Rename binaries for run.sh
+        run: |
+          mv kmod/vpnhide-ctl kmod/vpnhide-ctl-host
+          mv kmod/vpnhide-daemon kmod/vpnhide-daemon-host
+
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Build module + QEMU runtime test
+        # Build the module against the BAKED kernel tree (VPNHIDE_QEMU_KSRC) so
+        # CFI/vermagic/struct layouts match the kernel run.sh boots — building
+        # against the GKI kdir mismatches and panics on some KMIs (e.g. 6.12).
+        # run.sh boots the baked kernel (VPNHIDE_QEMU_IMAGE/ROOTFS from ENV).
+        run: |
+          CLANG_BIN="$(ls -d /opt/ddk/clang/*/bin | head -1)"
+          make -C kmod KERNEL_SRC="$VPNHIDE_QEMU_KSRC" CLANG_DIR="$CLANG_BIN"
+          VPNHIDE_QEMU_KO="$PWD/kmod/vpnhide_kmod.ko" kmod/test/run.sh "$KMI"
 
 
   lsposed:

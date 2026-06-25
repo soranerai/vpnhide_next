@@ -146,6 +146,9 @@ def main() -> int:
             "kmod/module/service.sh",
             "scripts/clean-device.sh",
             "scripts/update-json.sh",
+            "kmod/test/run.sh",
+            "kmod/test/build-kernel.sh",
+            "kmod/test/init.sh",
         ]
         # Filter files that exist
         existing_shell_files = [f for f in shell_files if (ROOT_DIR / f).exists()]
