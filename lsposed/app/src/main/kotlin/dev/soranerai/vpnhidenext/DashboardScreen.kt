@@ -472,7 +472,7 @@ private fun InterceptStatisticsSection(
     stats: List<AppInterceptStats>?,
     appsList: List<AppSummary>?,
 ) {
-    var expandedApps by remember { mutableStateOf(setOf<String>()) }
+    var expandedApps by remember { mutableStateOf(setOf<Int>()) }
 
     Spacer(Modifier.height(24.dp))
 
@@ -571,8 +571,8 @@ private fun InterceptStatisticsSection(
     } else {
         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             for (appStat in stats) {
-                val isExpanded = expandedApps.contains(appStat.packageName)
-                val appSummary = appsList?.find { it.packageName == appStat.packageName }
+                val isExpanded = expandedApps.contains(appStat.uid)
+                val appSummary = appsList?.find { it.uid == appStat.uid }
                 val icon = appSummary?.icon
 
                 ElevatedCard(
@@ -585,9 +585,9 @@ private fun InterceptStatisticsSection(
                         Modifier.fillMaxWidth().clickable {
                             expandedApps =
                                 if (isExpanded) {
-                                    expandedApps - appStat.packageName
+                                    expandedApps - appStat.uid
                                 } else {
-                                    expandedApps + appStat.packageName
+                                    expandedApps + appStat.uid
                                 }
                         },
                 ) {

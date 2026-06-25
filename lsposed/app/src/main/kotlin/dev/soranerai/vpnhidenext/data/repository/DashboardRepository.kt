@@ -663,6 +663,7 @@ class DashboardRepository(private val context: Context) {
                     frameworkBreakdown = fBreakdown,
                     nativeBreakdown = nBreakdown,
                     userId = uid / 100000,
+                    uid = uid,
                 )
             }.filter { it.frameworkTotal > 0 || it.nativeTotal > 0 }
             .sortedByDescending { it.frameworkTotal + it.nativeTotal }

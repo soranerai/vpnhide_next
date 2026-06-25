@@ -100,6 +100,7 @@ data class AppInterceptStats(
     val frameworkBreakdown: Map<String, Int>,
     val nativeBreakdown: Map<String, Int>,
     val userId: Int = 0,
+    val uid: Int = 0,
 )
 
 data class DashboardState(
