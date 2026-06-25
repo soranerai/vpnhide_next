@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v1.12.0
+
+### Changed
+- Cache physical interface name from daemon and eliminate redundant ConnectivityService IPC calls
+- Migrate companion app local storage from SQLite to a single JSON configuration file in Device Protected Storage with a one-time startup migration screen
+- Migrate kernel module configuration load path to read vpnhide_config.json directly on boot via parson, removing the sqlite3 CLI binary and reducing module zip size
+- Optimize loadTargetUids by caching selfUid to prevent expensive reflection calls on every binder invocation
+- Refactor ConnectivityService Network-handle hooks into a shared helper to eliminate per-method boilerplate
+- App list loads instantly from disk cache on startup
+- Hide successful diagnostics checks by default and display a simplified status card; show only failed checks if any check fails
+- Require the kernel module (kmod) to be installed and active on app startup.
+- Switched daemon interface detection from /proc/net/route heuristics to Active Probing via SO_BINDTODEVICE.
+
+### Fixed
+- Android 17: migrate NetworkCapabilities sanitization to public API so NC hook is not skipped on renamed private fields
+- Bound netlink diagnostic recv loops and add SO_RCVTIMEO to prevent OOM crash when kmod suppresses NLMSG_DONE
+- Fix name resolution of Work Profile applications on the Intercept Statistics and Scope screen
+- Fix clearing of LSPosed framework hook statistics on dashboard reset
+- Fix dashboard expanding multiple statistics cards for apps with the same package name in different user profiles by keying on UID instead of package name
+
+### Removed
+- Remove FAQ screen and button from the main app interface
+
 ## v1.11.0
 
 ### Added
