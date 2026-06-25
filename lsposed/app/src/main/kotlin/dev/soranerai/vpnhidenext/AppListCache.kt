@@ -45,8 +45,8 @@ internal data class AppSummary(
  */
 internal fun labelWithUser(
     label: String,
-    userId: Int,
-    userNames: Map<Int, String> = emptyMap(),
+    @Suppress("UNUSED_PARAMETER") userId: Int,
+    @Suppress("UNUSED_PARAMETER") userNames: Map<Int, String> = emptyMap(),
 ): String = label
 
 /**

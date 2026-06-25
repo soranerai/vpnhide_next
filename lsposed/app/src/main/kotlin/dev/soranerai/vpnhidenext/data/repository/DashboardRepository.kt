@@ -564,39 +564,8 @@ class DashboardRepository(private val context: Context) {
     fun loadInterceptStats(): List<AppInterceptStats> {
         val pm = context.packageManager
         val uidToAppMap = mutableMapOf<Int, Pair<String, String>>()
-
-        fun getAppInfoForUid(uid: Int): Pair<String, String> {
-            uidToAppMap[uid]?.let {
-                return it
-            }
-            val pkgs =
-                try {
-                    pm.getPackagesForUid(uid)
-                } catch (_: SecurityException) {
-                    val (_, stdout) = suExec("pm list packages --uid $uid 2>/dev/null")
-                    val pkgLine = stdout.lines().firstOrNull { it.startsWith("package:") }
-                    if (pkgLine != null) {
-                        val pkgName = pkgLine.substringAfter("package:").substringBefore(" ").trim()
-                        if (pkgName.isNotEmpty()) arrayOf(pkgName) else null
-                    } else {
-                        null
-                    }
-                } catch (_: Throwable) {
-                    null
-                }
-
-            if (!pkgs.isNullOrEmpty()) {
-                val pkg = pkgs[0]
-                val userId = uid / 100000
-                val label = resolveAppLabelWithFallback(context, pkg, userId)
-                val res = Pair(pkg, label)
-                uidToAppMap[uid] = res
-                return res
-            }
-            val unknown = Pair("uid.$uid", "UID $uid")
-            uidToAppMap[uid] = unknown
-            return unknown
-        }
+        val appList = AppListCache.apps.value
+        val labelLookup = appList?.associate { (it.packageName to it.userId) to it.label } ?: emptyMap()
 
         val script =
             """
@@ -650,9 +619,59 @@ class DashboardRepository(private val context: Context) {
 
         val selfUid = context.applicationInfo.uid
         val allUids = (uidFrameworkMap.keys + uidNativeMap.keys).filter { it != selfUid }
+
+        val uidsToResolveRoot = mutableListOf<Int>()
+        for (uid in allUids) {
+            try {
+                val pkgs = pm.getPackagesForUid(uid)
+                if (!pkgs.isNullOrEmpty()) {
+                    val pkg = pkgs[0]
+                    val userId = uid / 100000
+                    val label = resolveAppLabelWithFallback(context, pkg, userId, labelLookup)
+                    uidToAppMap[uid] = Pair(pkg, label)
+                } else {
+                    uidToAppMap[uid] = Pair("uid.$uid", "UID $uid")
+                }
+            } catch (_: SecurityException) {
+                uidsToResolveRoot.add(uid)
+            } catch (_: Throwable) {
+                uidToAppMap[uid] = Pair("uid.$uid", "UID $uid")
+            }
+        }
+
+        if (uidsToResolveRoot.isNotEmpty()) {
+            val batchScript = buildString {
+                for (uid in uidsToResolveRoot) {
+                    appendLine("echo \"UID:$uid\"")
+                    appendLine("pm list packages --uid $uid 2>/dev/null")
+                }
+            }
+            val (_, stdout) = suExec(batchScript)
+            var currentUid = -1
+            stdout.lineSequence().forEach { line ->
+                if (line.startsWith("UID:")) {
+                    currentUid = line.substringAfter("UID:").trim().toIntOrNull() ?: -1
+                } else if (currentUid != -1 && line.startsWith("package:")) {
+                    val pkgName = line.substringAfter("package:").substringBefore(" ").trim()
+                    if (pkgName.isNotEmpty()) {
+                        val userId = currentUid / 100000
+                        val label = resolveAppLabelWithFallback(context, pkgName, userId, labelLookup)
+                        uidToAppMap[currentUid] = Pair(pkgName, label)
+                        currentUid = -1
+                    }
+                }
+            }
+        }
+
+        for (uid in allUids) {
+            if (!uidToAppMap.containsKey(uid)) {
+                uidToAppMap[uid] = Pair("uid.$uid", "UID $uid")
+            }
+        }
+
         return allUids
             .map { uid ->
-                val (pkg, label) = getAppInfoForUid(uid)
+                val (pkg, label) = uidToAppMap[uid] ?: Pair("uid.$uid", "UID $uid")
                 val fBreakdown = uidFrameworkMap[uid] ?: emptyMap()
                 val nBreakdown = uidNativeMap[uid] ?: emptyMap()
                 AppInterceptStats(
@@ -677,8 +696,12 @@ class DashboardRepository(private val context: Context) {
     private fun resolveAppLabelWithFallback(
         context: Context,
         packageName: String,
-        userId: Int
+        userId: Int,
+        labelLookup: Map<Pair<String, Int>, String> = emptyMap()
     ): String {
+        val cachedLabel = labelLookup[packageName to userId]
+        if (!cachedLabel.isNullOrEmpty()) return cachedLabel
+
         val cachedApp = AppListCache.apps.value?.find { it.packageName == packageName && it.userId == userId }
         if (cachedApp != null) {
             val label = cachedApp.label

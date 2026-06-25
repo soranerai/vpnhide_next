@@ -73,6 +73,7 @@
     <string name="save_failed_exit">Save failed (exit code %d)</string>
     <string name="save_failed_error">Save failed: %s</string>
     <string name="save_failed_root">Save failed: root access denied</string>
+    <string name="migrating_data">Migrating data&#8230;</string>
     <string name="save_header_comment" translatable="false"># Managed by VPNHide Next app</string>
 
     <!-- Diagnostics -->

@@ -70,6 +70,7 @@
     <string name="save_failed_exit">Ошибка сохранения (код выхода %d)</string>
     <string name="save_failed_error">Ошибка сохранения: %s</string>
     <string name="save_failed_root">Ошибка сохранения: root-доступ запрещён</string>
+    <string name="migrating_data">Мигрирую данные&#8230;</string>
 
     <!-- Dashboard -->
     <string name="dashboard_modules">Модули</string>

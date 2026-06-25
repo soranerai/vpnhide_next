@@ -4,29 +4,46 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.graphics.drawable.Drawable
 import android.util.LruCache
+import java.util.concurrent.ConcurrentHashMap
 
 internal object AppIconCache {
     private val lru = LruCache<String, Drawable>(120)
+    private val locks = ConcurrentHashMap<String, Any>()
 
     /**
      * Retrieve icon from the LRU cache or load it using PackageManager.
      * Should be called on Dispatchers.IO.
      */
     fun getOrLoad(pm: PackageManager, packageName: String, apkPath: String?): Drawable? {
-        synchronized(lru) {
-            lru.get(packageName)?.let { return it }
+        val cached = synchronized(lru) {
+            lru.get(packageName)
         }
-        val icon = runCatching {
-            val info = runCatching { pm.getApplicationInfo(packageName, 0) }.getOrNull()
-            val archiveInfo = if (info == null && !apkPath.isNullOrBlank()) {
-                loadArchiveApplicationInfo(pm, apkPath)
-            } else null
-            val effectiveInfo = info ?: archiveInfo
-            effectiveInfo?.let { pm.getApplicationIcon(it) }
-        }.getOrNull() ?: return null
-        synchronized(lru) {
-            lru.put(packageName, icon)
+        if (cached != null) return cached
+
+        val lock = locks.computeIfAbsent(packageName) { Any() }
+        val icon = synchronized(lock) {
+            val doubleCheck = synchronized(lru) {
+                lru.get(packageName)
+            }
+            if (doubleCheck != null) return@synchronized doubleCheck
+
+            val loaded = runCatching {
+                val info = runCatching { pm.getApplicationInfo(packageName, 0) }.getOrNull()
+                val archiveInfo = if (info == null && !apkPath.isNullOrBlank()) {
+                    loadArchiveApplicationInfo(pm, apkPath)
+                } else null
+                val effectiveInfo = info ?: archiveInfo
+                effectiveInfo?.let { pm.getApplicationIcon(it) }
+            }.getOrNull()
+
+            if (loaded != null) {
+                synchronized(lru) {
+                    lru.put(packageName, loaded)
+                }
+            }
+            loaded
         }
+        locks.remove(packageName, lock)
         return icon
     }
 

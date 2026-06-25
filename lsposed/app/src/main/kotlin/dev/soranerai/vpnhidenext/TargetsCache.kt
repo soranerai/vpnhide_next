@@ -103,13 +103,10 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                 val snapshot = parse(out)
 
                 // Populate DB
+                val pkgUserToUid = snapshot.uidToPkg.entries.associate { (uid, pkg) -> (pkg to (uid / 100000)) to uid }
                 for (entry in snapshot.kmodTargets + snapshot.lsposedTargets + snapshot.portsObservers) {
                     val (pkg, userId) = entry
-                    val uid =
-                        snapshot.uidToPkg
-                            .filterValues { it == pkg }
-                            .keys
-                            .firstOrNull() ?: 0
+                    val uid = pkgUserToUid[pkg to userId] ?: 0
                     appDao.insertAppProtection(
                         dev.soranerai.vpnhidenext.db.AppProtection(
                             packageName = pkg,
@@ -262,19 +259,6 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                 )
             _state.value = snapshot
             return snapshot
-    }
-
-    private fun parsePmList(raw: String): Map<String, List<Int>> {
-        val out = mutableMapOf<String, MutableList<Int>>()
-        raw.lineSequence().forEach { line ->
-            if (!line.startsWith("package:")) return@forEach
-            val parts = line.removePrefix("package:").split(" uid:")
-            if (parts.size < 2) return@forEach
-            val pkg = parts[0].trim()
-            val uids = parts[1].split(',').mapNotNull { it.trim().toIntOrNull() }
-            out.getOrPut(pkg) { mutableListOf() }.addAll(uids)
-        }
-        return out
     }
 
     private fun parse(out: String): TargetsSnapshot {

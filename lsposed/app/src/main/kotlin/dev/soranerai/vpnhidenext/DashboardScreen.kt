@@ -34,6 +34,8 @@ import dev.soranerai.vpnhidenext.domain.models.*
 import dev.soranerai.vpnhidenext.ui.dashboard.components.*
 import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -62,8 +64,6 @@ fun DashboardScreen(
         DashboardCache.ensureLoaded(scope, context, selfNeedsRestart)
         InterceptStatsCache.ensureLoaded(scope, context)
         UpdateCheckCache.ensureFresh(scope, BuildConfig.VERSION_NAME)
-    }
-    LaunchedEffect(Unit) {
         if (shouldShowChangelog(context)) {
             val data = withContext(Dispatchers.IO) { loadChangelog(context) }
             if (data != null) {
@@ -90,7 +90,23 @@ fun DashboardScreen(
                 DashboardCache.refresh(scope, context, selfNeedsRestart)
                 InterceptStatsCache.refresh(scope, context)
                 DiagnosticsCache.retry(scope, context)
-                kotlinx.coroutines.delay(500)
+
+                val startTime = System.currentTimeMillis()
+                kotlinx.coroutines.delay(50) // Allow loading flags to transition to true
+                
+                combine(
+                    AppListCache.loading,
+                    DashboardCache.loading,
+                    InterceptStatsCache.loading,
+                    DiagnosticsCache.state
+                ) { appList, dashboard, stats, diag ->
+                    appList || dashboard || stats || (diag is DiagnosticsCache.State.Running)
+                }.first { !it }
+
+                val elapsed = System.currentTimeMillis() - startTime
+                if (elapsed < 500) {
+                    kotlinx.coroutines.delay(500 - elapsed)
+                }
                 refreshing = false
             }
         },
@@ -262,8 +278,7 @@ private fun DashboardContent(
         }
 
         // Issues
-        val errors = s.issues.filter { it.severity == IssueSeverity.ERROR }
-        val warnings = s.issues.filter { it.severity == IssueSeverity.WARNING }
+        val (errors, warnings) = s.issues.partition { it.severity == IssueSeverity.ERROR }
 
         if (errors.isNotEmpty()) {
             Spacer(Modifier.height(24.dp))
@@ -478,6 +493,7 @@ private fun InterceptStatisticsSection(
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val repository = remember { DashboardRepository(context.applicationContext) }
 
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -506,7 +522,6 @@ private fun InterceptStatisticsSection(
                         InterceptStatsCache.clearStats()
                         // 2. Perform the actual backend reset
                         withContext(Dispatchers.IO) {
-                            val repository = DashboardRepository(context.applicationContext)
                             repository.resetInterceptStats()
                         }
                         // 3. Silently refresh to ensure absolute sync
@@ -600,7 +615,7 @@ private fun InterceptStatisticsSection(
                             Box(modifier = Modifier.size(40.dp)) {
                                 if (icon != null) {
                                     Image(
-                                        bitmap = icon.toBitmap(48, 48).asImageBitmap(),
+                                        bitmap = remember(icon) { icon.toBitmap(48, 48).asImageBitmap() },
                                         contentDescription = null,
                                         modifier = Modifier.fillMaxSize(),
                                     )

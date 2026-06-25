@@ -11,6 +11,8 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -18,6 +20,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -25,7 +28,7 @@ import androidx.core.graphics.drawable.toBitmap
 @Composable
 internal fun AppRow(
     app: AppEntry,
-    @Suppress("UNUSED_PARAMETER") userNames: Map<Int, String>,
+    userNames: Map<Int, String>,
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
@@ -72,13 +75,43 @@ internal fun AppRow(
             Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = app.label,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = if (app.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (app.userId != 0) {
+                        val profileName = userNames[app.userId] ?: app.userId.toString()
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF2196F3).copy(alpha = 0.12f),
+                            contentColor = Color(0xFF2196F3),
+                        ) {
+                            Text(
+                                text = profileName,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
                 Text(
-                    app.label,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = if (app.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
+                    text = app.packageName,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Text(app.packageName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -127,6 +160,7 @@ internal fun PortAppRow(
     onToggle: () -> Unit,
     onConfigClick: () -> Unit,
 ) {
+    val userNames by AppListCache.userNames.collectAsState()
     Surface(
         modifier =
             Modifier
@@ -169,13 +203,43 @@ internal fun PortAppRow(
             Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        text = app.label,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 16.sp,
+                        color = if (app.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false),
+                    )
+                    if (app.userId != 0) {
+                        val profileName = userNames[app.userId] ?: app.userId.toString()
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = Color(0xFF2196F3).copy(alpha = 0.12f),
+                            contentColor = Color(0xFF2196F3),
+                        ) {
+                            Text(
+                                text = profileName,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                maxLines = 1,
+                            )
+                        }
+                    }
+                }
                 Text(
-                    app.label,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 16.sp,
-                    color = if (app.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
+                    text = app.packageName,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                 )
-                Text(app.packageName, fontSize = 12.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
             IconButton(

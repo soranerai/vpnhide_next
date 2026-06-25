@@ -167,7 +167,7 @@ class HookEntry : IXposedHookLoadPackage {
                     "1.0.0"
                 }
             val sdk = Build.VERSION.SDK_INT
-            val sb = java.lang.StringBuilder()
+            val sb = StringBuilder()
             sb.append("version=").append(version).append('\n')
             sb.append("boot_id=").append(bootId).append('\n')
             sb.append("timestamp=").append(timestamp).append('\n')
@@ -196,7 +196,7 @@ class HookEntry : IXposedHookLoadPackage {
     private fun startConfigReader() {
         Thread({
             var lastJavaStatsClearGen = -1
-            while (true) {
+            while (!Thread.currentThread().isInterrupted) {
                 try {
                     val file = File("/dev/vpnhide_ctrl")
                     if (!file.exists()) {
@@ -259,10 +259,16 @@ class HookEntry : IXposedHookLoadPackage {
                             }
                         }
                     }
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
                 } catch (t: Throwable) {
                     HookLog.e("VpnHide: config reader error: ${t.message}")
                     try {
                         Thread.sleep(5000)
+                    } catch (_: InterruptedException) {
+                        Thread.currentThread().interrupt()
+                        break
                     } catch (_: Throwable) {
                     }
                 }
@@ -272,11 +278,11 @@ class HookEntry : IXposedHookLoadPackage {
 
     private fun startStatsWriter() {
         Thread({
-            while (true) {
+            while (!Thread.currentThread().isInterrupted) {
                 try {
                     Thread.sleep(2000)
                     if (HookContext.hookStatsChanged.compareAndSet(true, false)) {
-                        val sb = java.lang.StringBuilder()
+                        val sb = StringBuilder()
                         sb.append("stats:")
                         for ((uid, appStats) in HookContext.hookStats) {
                             for ((hook, rollingCounter) in appStats) {
@@ -299,6 +305,9 @@ class HookEntry : IXposedHookLoadPackage {
                             }
                         }
                     }
+                } catch (_: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    break
                 } catch (t: Throwable) {
                     HookLog.e("VpnHide: stats writer error: ${t.message}")
                 }
@@ -320,6 +329,7 @@ class HookEntry : IXposedHookLoadPackage {
             object : XC_MethodHook() {
                 override fun afterHookedMethod(param: MethodHookParam) {
                     val name = param.args.getOrNull(0) as? String ?: return
+                    if (name != "connectivity" && name != "package" && name != "user") return
                     val binder = param.args.getOrNull(1) as? android.os.IBinder ?: return
                     val classLoader =
                         binder.javaClass.classLoader
