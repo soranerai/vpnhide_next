@@ -56,6 +56,45 @@ fn is_vpn_iface(name: &str) -> bool {
     matches_vpn(name.as_bytes())
 }
 
+fn clean_iface_name(word: &str) -> String {
+    word.trim_matches(|c: char| !c.is_alphanumeric() && c != '-' && c != '_')
+        .to_string()
+}
+
+fn is_interface_up_with_fd(fd: libc::c_int, name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    unsafe {
+        let mut ifr: libc::ifreq = std::mem::zeroed();
+        let name_bytes = name.as_bytes();
+        let optlen = std::cmp::min(name_bytes.len(), ifr.ifr_name.len() - 1);
+        std::ptr::copy_nonoverlapping(
+            name_bytes.as_ptr(),
+            ifr.ifr_name.as_mut_ptr() as *mut u8,
+            optlen,
+        );
+        if libc::ioctl(fd, libc::SIOCGIFFLAGS as _, &ifr) < 0 {
+            false
+        } else {
+            let flags = ifr.ifr_ifru.ifru_flags as u32;
+            (flags & libc::IFF_UP as u32) != 0
+        }
+    }
+}
+
+fn is_interface_up(name: &str) -> bool {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return false;
+        }
+        let up = is_interface_up_with_fd(fd, name);
+        libc::close(fd);
+        up
+    }
+}
+
 fn is_selinux_denial(e: &std::io::Error) -> bool {
     e.kind() == ErrorKind::PermissionDenied
 }
@@ -200,11 +239,17 @@ fn check_ioctl_siocgifflags() -> CheckOutput {
                 }
             } else {
                 let flags = ifr.ifr_ifru.ifru_flags as u32;
-                CheckOutput::fail(format!(
-                    "tun0 is visible! flags=0x{flags:x} (IFF_UP={}, IFF_RUNNING={})",
-                    u8::from(flags & libc::IFF_UP as u32 != 0),
-                    u8::from(flags & libc::IFF_RUNNING as u32 != 0),
-                ))
+                if flags & libc::IFF_UP as u32 == 0 {
+                    CheckOutput::pass(format!(
+                        "ioctl(tun0, SIOCGIFFLAGS) returned flags=0x{flags:x} — interface is DOWN/inactive",
+                    ))
+                } else {
+                    CheckOutput::fail(format!(
+                        "tun0 is visible! flags=0x{flags:x} (IFF_UP={}, IFF_RUNNING={})",
+                        u8::from(flags & libc::IFF_UP as u32 != 0),
+                        u8::from(flags & libc::IFF_RUNNING as u32 != 0),
+                    ))
+                }
             }
         })
     }
@@ -230,6 +275,17 @@ fn check_ioctl_siocgifmtu() -> CheckOutput {
                     CheckOutput::fail(format!("ioctl returned error {err} ({})", last_os_error()))
                 }
             } else {
+                // Check if UP using SIOCGIFFLAGS
+                let mut flags_ifr: libc::ifreq = std::mem::zeroed();
+                flags_ifr.ifr_name[..name.len()].copy_from_slice(&name.map(|b| b as libc::c_char));
+                if libc::ioctl(fd, libc::SIOCGIFFLAGS as _, &mut flags_ifr) == 0 {
+                    let flags = flags_ifr.ifr_ifru.ifru_flags as u32;
+                    if flags & libc::IFF_UP as u32 == 0 {
+                        return CheckOutput::pass(format!(
+                            "ioctl(tun0, SIOCGIFMTU) succeeded, but interface is DOWN/inactive",
+                        ));
+                    }
+                }
                 let mtu = ifr.ifr_ifru.ifru_mtu;
                 CheckOutput::fail(format!("tun0 is visible! MTU={mtu}"))
             }
@@ -258,7 +314,7 @@ fn check_ioctl_siocgifconf() -> CheckOutput {
             let mut vpn = Vec::new();
             for req in reqs {
                 let name = cstr_to_str(req.ifr_name.as_ptr());
-                if is_vpn_iface(&name) {
+                if is_vpn_iface(&name) && is_interface_up_with_fd(fd, &name) {
                     vpn.push(name.clone());
                 }
                 all.push(name);
@@ -288,7 +344,10 @@ fn check_getifaddrs() -> CheckOutput {
                     all.push(name.clone());
                 }
                 if is_vpn_iface(&name) && !vpn.contains(&name) {
-                    vpn.push(name);
+                    let is_up = (entry.ifa_flags as u32 & libc::IFF_UP as u32) != 0;
+                    if is_up {
+                        vpn.push(name);
+                    }
                 }
             }
             ifa = entry.ifa_next;
@@ -317,7 +376,11 @@ fn check_proc_file(path: &str) -> CheckOutput {
                     continue;
                 }
                 total += 1;
-                if line.split_ascii_whitespace().any(is_vpn_iface) {
+                let has_active_vpn = line.split_ascii_whitespace().any(|word| {
+                    let cleaned = clean_iface_name(word);
+                    is_vpn_iface(&cleaned) && is_interface_up(&cleaned)
+                });
+                if has_active_vpn {
                     vpn_lines.push(line[..line.len().min(80)].to_string());
                 }
             }
@@ -512,13 +575,22 @@ pub fn check_netlink_getlink() -> CheckOutput {
                 |b, offset, msg_len| {
                     let data_start = offset + hdr_plus_ifinfo;
                     let msg_end = offset + msg_len;
+                    let ifi_ptr = b
+                        .as_ptr()
+                        .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                        as *const Ifinfomsg;
+                    let ifi = &*ifi_ptr;
+                    let is_up = (ifi.ifi_flags & libc::IFF_UP as u32) != 0;
+
                     for_each_rtattr(b, data_start, msg_end, |rta, payload| {
                         if rta.rta_type == IFLA_IFNAME && !payload.is_empty() {
                             // IFLA_IFNAME is a NUL-terminated string;
                             // payload was bounds-checked by for_each_rtattr.
                             let name = cstr_to_str(payload.as_ptr() as *const libc::c_char);
                             if is_vpn_iface(&name) {
-                                vpn.push(name.clone());
+                                if is_up {
+                                    vpn.push(name.clone());
+                                }
                             }
                             all.push(name);
                         }
@@ -606,7 +678,7 @@ fn check_netlink_getroute() -> CheckOutput {
                             );
                             if !ptr.is_null() {
                                 let name = cstr_to_str(ptr);
-                                if is_vpn_iface(&name) {
+                                if is_vpn_iface(&name) && is_interface_up(&name) {
                                     vpn.push(name);
                                 }
                             }
@@ -740,7 +812,7 @@ fn check_sys_class_net() -> CheckOutput {
             let mut vpn = Vec::new();
             for entry in entries.flatten() {
                 let name = entry.file_name().to_string_lossy().into_owned();
-                if is_vpn_iface(&name) {
+                if is_vpn_iface(&name) && is_interface_up(&name) {
                     vpn.push(name.clone());
                 }
                 all.push(name);
@@ -840,7 +912,7 @@ fn find_vpn_iface() -> String {
                 let entry = &*ifa;
                 if !entry.ifa_name.is_null() {
                     let name = cstr_to_str(entry.ifa_name);
-                    if is_vpn_iface(&name) {
+                    if is_vpn_iface(&name) && (entry.ifa_flags as u32 & libc::IFF_UP as u32) != 0 {
                         libc::freeifaddrs(addrs);
                         return name;
                     }
@@ -914,14 +986,15 @@ pub fn check_getsockopt_bind() -> CheckOutput {
             dev = bound_device
         );
 
-        if !bound_device.is_empty() && is_vpn_iface(&bound_device) {
+        if !bound_device.is_empty() && is_vpn_iface(&bound_device) && is_interface_up(&bound_device)
+        {
             CheckOutput::fail(format!(
                 "{detail} — leaked VPN interface binding! Kernel setsockopt hook bypassed or inactive!",
                 detail = detail
             ))
         } else {
             CheckOutput::pass(format!(
-                "{detail} — secure (setsockopt returned 0 but bind did not stick)",
+                "{detail} — secure (setsockopt returned 0 but bind did not stick or interface is inactive)",
                 detail = detail
             ))
         }
@@ -1016,7 +1089,9 @@ pub fn check_getsockname_spoof() -> CheckOutput {
                 if sin.sin_addr.s_addr == local.sin_addr.s_addr {
                     iface_name = cstr_to_str(entry.ifa_name);
                     found = true;
-                    if is_vpn_iface(&iface_name) {
+                    if is_vpn_iface(&iface_name)
+                        && (entry.ifa_flags as u32 & libc::IFF_UP as u32) != 0
+                    {
                         is_vpn = true;
                         break;
                     }
@@ -1138,8 +1213,10 @@ pub fn check_netlink_getrule() -> CheckOutput {
                         _ => {}
                     });
 
-                    let matches_vpn_iif = !iifname.is_empty() && is_vpn_iface(&iifname);
-                    let matches_vpn_oif = !oifname.is_empty() && is_vpn_iface(&oifname);
+                    let matches_vpn_iif =
+                        !iifname.is_empty() && is_vpn_iface(&iifname) && is_interface_up(&iifname);
+                    let matches_vpn_oif =
+                        !oifname.is_empty() && is_vpn_iface(&oifname) && is_interface_up(&oifname);
 
                     if matches_vpn_iif || matches_vpn_oif {
                         let iface = if matches_vpn_iif { &iifname } else { &oifname };
@@ -1618,7 +1695,7 @@ pub fn check_bpf_iface_map() -> CheckOutput {
             if lookup_ret == 0 {
                 let name = cstr_to_str(ifname_bytes.as_ptr().cast());
                 if !name.is_empty() {
-                    if is_vpn_iface(&name) {
+                    if is_vpn_iface(&name) && is_interface_up(&name) {
                         vpn_ifaces.push(name.clone());
                     }
                     all_ifaces.push(name);
