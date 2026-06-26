@@ -25,15 +25,19 @@ echo "KREL=$(uname -r)"
 echo "testuser:x:5555:5555:testuser:/home/testuser:/bin/sh" >> /etc/passwd
 
 # --- bring up user-mode networking so apk can fetch iproute2 ----------------
+ip link set lo up 2>/dev/null
 ip link set eth0 up 2>/dev/null
 ip addr add 10.0.2.15/24 dev eth0 2>/dev/null
+ip -6 addr add fd00:2::1/64 dev eth0 2>/dev/null
 ip route add default via 10.0.2.2 2>/dev/null
 echo "nameserver 10.0.2.3" > /etc/resolv.conf
 echo "https://dl-cdn.alpinelinux.org/alpine/v3.21/main" > /etc/apk/repositories
-if apk add --no-cache iproute2 >/dev/null 2>&1; then echo "IPROUTE2=ok"; else echo "IPROUTE2=FAIL"; fi
+if apk add --no-cache iproute2 python3 >/dev/null 2>&1; then echo "IPROUTE2=ok"; else echo "IPROUTE2=FAIL"; fi
 
 # --- load the module --------------------------------------------------------
 if insmod /vpnhide_kmod.ko; then echo "INSMOD=ok"; else echo "INSMOD=FAIL"; fi
+# Wait for the device node /dev/vpnhide_ctrl to populate
+sleep 1
 # Initialize interface prefixes so the module knows to hide "vpn" interfaces
 /vpnhide-ctl iface_prefixes vpn 2>/dev/null
 # Enable debug mode
@@ -41,7 +45,7 @@ if insmod /vpnhide_kmod.ko; then echo "INSMOD=ok"; else echo "INSMOD=FAIL"; fi
 REGISTERED=1
 echo "REGISTERED=$REGISTERED"
 # Start the event-driven C daemon in the background to automatically monitor interfaces and update ifindexes in the kmod
-/vpnhide-daemon >/dev/null 2>&1 &
+/vpnhide-daemon > /tmp/daemon.log 2>&1 &
 # Give the daemon a moment to register netlink events
 sleep 1
 
@@ -91,7 +95,30 @@ check netlink_route4  "ip route show table all"      "vpn0"   # fib_dump_info
 check netlink_route6  "ip -6 route show table all"   "vpn0"   # rt6_fill_node
 check policy_rule     "ip rule show"                 "199"    # fib_nl_fill_rule
 
+# --- execute programmatic socket and ioctl vector tests in Python ---
+# 1. Set targets and configure port rules for UID 5555
+/vpnhide-ctl targets 5555 2>/dev/null
+/vpnhide-ctl port_rules 5555 1 8080 8080 2 2>/dev/null
+
+# 2. Run vector_tests.py and process its output
+python3 /vector_tests.py > /tmp/py_res.log 2>&1
+cat /tmp/py_res.log
+
+while read -r line; do
+	case "$line" in
+		"RESULT "*=PASS*)
+			PASS=$((PASS + 1))
+			;;
+		"RESULT "*=FAIL*)
+			FAIL=$((FAIL + 1))
+			;;
+	esac
+done < /tmp/py_res.log
+
 PANIC=$(dmesg | grep -ci 'Unable to handle\|Internal error\|Oops\|BUG:\|Kernel panic')
+echo "=== DAEMON LOG ==="
+cat /tmp/daemon.log
+echo "=================="
 echo "PANIC=$PANIC"
 echo "SUMMARY pass=$PASS fail=$FAIL panic=$PANIC registered=$REGISTERED"
 echo "##### VPNHIDE-QEMU-TEST END #####"

@@ -58,8 +58,9 @@ fi
 cp "$KO" "$RFS/vpnhide_kmod.ko"
 cp "$CTL_BIN" "$RFS/vpnhide-ctl"
 cp "$DAEMON_BIN" "$RFS/vpnhide-daemon"
+cp "$HERE/vector_tests.py" "$RFS/vector_tests.py"
 cp "$HERE/init.sh" "$RFS/init"
-chmod +x "$RFS/init" "$RFS/vpnhide-ctl" "$RFS/vpnhide-daemon"
+chmod +x "$RFS/init" "$RFS/vpnhide-ctl" "$RFS/vpnhide-daemon" "$RFS/vector_tests.py"
 ( cd "$RFS" && find . | cpio -o -H newc 2>/dev/null | gzip > "$WORK/initramfs.cpio.gz" )
 
 LOG="$WORK/serial.log"
