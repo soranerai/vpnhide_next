@@ -26,7 +26,9 @@ def test_dev_ioctl(vpn0_idx):
     # 1. Non-target check (root)
     try:
         idx = socket.if_nametoindex("vpn0")
-        print(f"[dev_ioctl] Non-target if_nametoindex('vpn0') returned: {idx} (expected: {vpn0_idx})")
+        print(
+            f"[dev_ioctl] Non-target if_nametoindex('vpn0') returned: {idx} (expected: {vpn0_idx})"
+        )
         assert idx == vpn0_idx, f"Expected index {vpn0_idx}, got {idx}"
     except Exception as e:
         print(f"FAIL: dev_ioctl if_nametoindex non-target: {e}")
@@ -61,8 +63,10 @@ def test_dev_ioctl(vpn0_idx):
                 print("FAIL: dev_ioctl SIOCGIFFLAGS target succeeded but should have failed")
                 sys.exit(1)
             except OSError as e:
-                print(f"[dev_ioctl] Target ioctl(SIOCGIFFLAGS, 'vpn0') failed as expected: errno {e.errno} ({e.strerror})")
-                if e.errno != 19: # ENODEV
+                print(
+                    f"[dev_ioctl] Target ioctl(SIOCGIFFLAGS, 'vpn0') failed as expected: errno {e.errno} ({e.strerror})"
+                )
+                if e.errno != 19:  # ENODEV
                     print(f"FAIL: dev_ioctl SIOCGIFFLAGS target expected errno 19, got {e.errno}")
                     sys.exit(1)
 
@@ -93,7 +97,9 @@ def test_setsockopt(vpn0_idx):
     s2 = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         s2.setsockopt(socket.SOL_SOCKET, SO_BINDTOIFINDEX, struct.pack("i", vpn0_idx))
-        print(f"[setsockopt] Non-target setsockopt(SO_BINDTOIFINDEX, {vpn0_idx}) succeeded as expected")
+        print(
+            f"[setsockopt] Non-target setsockopt(SO_BINDTOIFINDEX, {vpn0_idx}) succeeded as expected"
+        )
     except Exception as e:
         print(f"FAIL: setsockopt SO_BINDTOIFINDEX non-target: {e}")
         return False
@@ -109,9 +115,13 @@ def test_setsockopt(vpn0_idx):
                 print("FAIL: setsockopt SO_BINDTODEVICE target succeeded but should have failed")
                 sys.exit(1)
             except OSError as e:
-                print(f"[setsockopt] Target setsockopt(SO_BINDTODEVICE, 'vpn0') failed as expected: errno {e.errno} ({e.strerror})")
+                print(
+                    f"[setsockopt] Target setsockopt(SO_BINDTODEVICE, 'vpn0') failed as expected: errno {e.errno} ({e.strerror})"
+                )
                 if e.errno != 19:
-                    print(f"FAIL: setsockopt SO_BINDTODEVICE target expected errno 19, got {e.errno}")
+                    print(
+                        f"FAIL: setsockopt SO_BINDTODEVICE target expected errno 19, got {e.errno}"
+                    )
                     sys.exit(1)
 
             try:
@@ -119,9 +129,13 @@ def test_setsockopt(vpn0_idx):
                 print("FAIL: setsockopt SO_BINDTOIFINDEX target succeeded but should have failed")
                 sys.exit(1)
             except OSError as e:
-                print(f"[setsockopt] Target setsockopt(SO_BINDTOIFINDEX, {vpn0_idx}) failed as expected: errno {e.errno} ({e.strerror})")
+                print(
+                    f"[setsockopt] Target setsockopt(SO_BINDTOIFINDEX, {vpn0_idx}) failed as expected: errno {e.errno} ({e.strerror})"
+                )
                 if e.errno != 19:
-                    print(f"FAIL: setsockopt SO_BINDTOIFINDEX target expected errno 19, got {e.errno}")
+                    print(
+                        f"FAIL: setsockopt SO_BINDTOIFINDEX target expected errno 19, got {e.errno}"
+                    )
                     sys.exit(1)
 
             sys.exit(0)
@@ -153,9 +167,13 @@ def test_getsockopt(vpn0_idx):
             # 1. getsockopt SO_BINDTODEVICE
             val = s_dev.getsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, 256)
             clean_val = val.strip(b"\x00")
-            print(f"[getsockopt] Target getsockopt(SO_BINDTODEVICE) returned: {clean_val!r} (expected: empty)")
+            print(
+                f"[getsockopt] Target getsockopt(SO_BINDTODEVICE) returned: {clean_val!r} (expected: empty)"
+            )
             if clean_val != b"":
-                print(f"FAIL: getsockopt SO_BINDTODEVICE target: expected empty string, got {clean_val}")
+                print(
+                    f"FAIL: getsockopt SO_BINDTODEVICE target: expected empty string, got {clean_val}"
+                )
                 sys.exit(1)
 
             # 2. getsockopt SO_BINDTOIFINDEX
@@ -185,7 +203,9 @@ def test_getsockname():
     try:
         s_v4.bind(("10.9.0.1", 0))
         ip4_nt, port4_nt = s_v4.getsockname()
-        print(f"[getsockname] Non-target getsockname IPv4: {ip4_nt}:{port4_nt} (expected: 10.9.0.1)")
+        print(
+            f"[getsockname] Non-target getsockname IPv4: {ip4_nt}:{port4_nt} (expected: 10.9.0.1)"
+        )
     except Exception as e:
         print(f"FAIL: getsockname IPv4 bind: {e}")
         return False
@@ -195,7 +215,9 @@ def test_getsockname():
     try:
         s_v6.bind(("fd00:9::1", 0))
         ip6_nt, port6_nt, _, _ = s_v6.getsockname()
-        print(f"[getsockname] Non-target getsockname IPv6: [{ip6_nt}]:{port6_nt} (expected: fd00:9::1)")
+        print(
+            f"[getsockname] Non-target getsockname IPv6: [{ip6_nt}]:{port6_nt} (expected: fd00:9::1)"
+        )
     except Exception as e:
         print(f"FAIL: getsockname IPv6 bind: {e}")
         return False
@@ -207,14 +229,18 @@ def test_getsockname():
             os.setuid(5555)
             # IPv4 getsockname
             ip4, port4 = s_v4.getsockname()
-            print(f"[getsockname] Target getsockname IPv4: {ip4}:{port4} (expected: spoofed/shielded from 10.9.0.1)")
+            print(
+                f"[getsockname] Target getsockname IPv4: {ip4}:{port4} (expected: spoofed/shielded from 10.9.0.1)"
+            )
             if ip4 == "10.9.0.1":
                 print(f"FAIL: getsockname IPv4 target: got unshielded VPN IP '{ip4}'")
                 sys.exit(1)
 
             # IPv6 getsockname
             ip6, port6, flow, scope = s_v6.getsockname()
-            print(f"[getsockname] Target getsockname IPv6: [{ip6}]:{port6} (expected: spoofed/shielded from fd00:9::1)")
+            print(
+                f"[getsockname] Target getsockname IPv6: [{ip6}]:{port6} (expected: spoofed/shielded from fd00:9::1)"
+            )
             if ip6 == "fd00:9::1":
                 print(f"FAIL: getsockname IPv6 target: got unshielded VPN IP '{ip6}'")
                 sys.exit(1)
@@ -249,7 +275,9 @@ def test_connect_port_block():
     try:
         s_nt.connect(("127.0.0.1", 8080))
         s_nt.close()
-        print("[connect_port_block] Non-target connected to 127.0.0.1:8080 successfully as expected")
+        print(
+            "[connect_port_block] Non-target connected to 127.0.0.1:8080 successfully as expected"
+        )
     except Exception as e:
         print(f"FAIL: connect port block non-target connection failed: {e}")
         listener.close()
@@ -267,7 +295,9 @@ def test_connect_port_block():
                 print("FAIL: connect port block target succeeded but should have failed")
                 sys.exit(1)
             except OSError as e:
-                print(f"[connect_port_block] Target connection to 127.0.0.1:8080 failed as expected: errno {e.errno} ({e.strerror})")
+                print(
+                    f"[connect_port_block] Target connection to 127.0.0.1:8080 failed as expected: errno {e.errno} ({e.strerror})"
+                )
                 if e.errno != 111:  # ECONNREFUSED is 111
                     print(f"FAIL: connect port block target expected errno 111, got {e.errno}")
                     sys.exit(1)
@@ -296,9 +326,13 @@ def test_bind_port_block():
             try:
                 s.bind(("127.0.0.1", 8080))
                 ip, port = s.getsockname()
-                print(f"[bind_port_block] Target bound to 127.0.0.1:8080. Redirected getsockname port: {port}")
+                print(
+                    f"[bind_port_block] Target bound to 127.0.0.1:8080. Redirected getsockname port: {port}"
+                )
                 if port == 8080:
-                    print("FAIL: bind port block target bound to 8080, expected redirection to ephemeral port")
+                    print(
+                        "FAIL: bind port block target bound to 8080, expected redirection to ephemeral port"
+                    )
                     sys.exit(1)
                 if port == 0:
                     print("FAIL: bind port block target getsockname returned 0")
