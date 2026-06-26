@@ -304,7 +304,7 @@ def emit_kmod(rules: list[Rule]) -> str:
             lines.append(f"\t/* {r.note} */")
         if r.needle == "tun" and r.kind == "prefix":
             lines.append(
-                """\tif (vpnhide_iface_starts_with_ci(name, "tun") &
+                """\tif (vpnhide_iface_starts_with_ci(name, "tun") &&
                  !vpnhide_iface_starts_with_ci(name, "tunl"))"""
             )
             lines.append("\t\treturn true;")

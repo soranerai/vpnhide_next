@@ -82,7 +82,7 @@ static inline bool vpnhide_iface_is_vpn(const char *name)
 	if (!name || !name[0])
 		return false;
 	/* OpenVPN, WireGuard userspace, Tailscale, generic tunneling */
-	if (vpnhide_iface_starts_with_ci(name, "tun") &
+	if (vpnhide_iface_starts_with_ci(name, "tun") &&
                  !vpnhide_iface_starts_with_ci(name, "tunl"))
 		return true;
 	/* OpenVPN bridged */
