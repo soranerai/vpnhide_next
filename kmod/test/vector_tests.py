@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
+import ctypes
 import fcntl
 import os
+import platform
 import socket
 import struct
 import sys
@@ -351,6 +353,198 @@ def test_bind_port_block():
     return True
 
 
+# BPF Constants and Structs for Laundering checks
+
+machine = platform.machine()
+if machine in ("aarch64", "arm64"):
+    __NR_bpf = 280
+elif machine in ("x86_64", "amd64"):
+    __NR_bpf = 321
+else:
+    __NR_bpf = 280
+
+BPF_MAP_CREATE = 0
+BPF_MAP_LOOKUP_ELEM = 1
+BPF_MAP_UPDATE_ELEM = 2
+BPF_MAP_TYPE_HASH = 2
+
+
+class VhStatsValue(ctypes.Structure):
+    _fields_ = [
+        ("rxBytes", ctypes.c_uint64),
+        ("rxPackets", ctypes.c_uint64),
+        ("txBytes", ctypes.c_uint64),
+        ("txPackets", ctypes.c_uint64),
+    ]
+
+
+class BpfAttrCreate(ctypes.Structure):
+    _fields_ = [
+        ("map_type", ctypes.c_uint32),
+        ("key_size", ctypes.c_uint32),
+        ("value_size", ctypes.c_uint32),
+        ("max_entries", ctypes.c_uint32),
+        ("map_flags", ctypes.c_uint32),
+        ("inner_map_fd", ctypes.c_uint32),
+        ("numa_node", ctypes.c_uint32),
+        ("map_name", ctypes.c_char * 16),
+        ("map_ifindex", ctypes.c_uint32),
+        ("btf_fd", ctypes.c_uint32),
+        ("btf_key_type_id", ctypes.c_uint32),
+        ("btf_value_type_id", ctypes.c_uint32),
+        ("btf_vmlinux_value_type_id", ctypes.c_uint32),
+        ("map_extra", ctypes.c_uint64),
+    ]
+
+
+class BpfAttrElem(ctypes.Structure):
+    _fields_ = [
+        ("map_fd", ctypes.c_uint32),
+        ("key", ctypes.c_uint64),
+        ("value", ctypes.c_uint64),
+        ("flags", ctypes.c_uint64),
+    ]
+
+
+class BpfAttrBatch(ctypes.Structure):
+    _fields_ = [
+        ("in_batch", ctypes.c_uint64),
+        ("out_batch", ctypes.c_uint64),
+        ("keys", ctypes.c_uint64),
+        ("values", ctypes.c_uint64),
+        ("count", ctypes.c_uint32),
+        ("map_fd", ctypes.c_uint32),
+        ("elem_flags", ctypes.c_uint64),
+        ("flags", ctypes.c_uint64),
+    ]
+
+
+class BpfAttr(ctypes.Union):
+    _fields_ = [
+        ("raw", ctypes.c_ubyte * 128),
+        ("create", BpfAttrCreate),
+        ("elem", BpfAttrElem),
+        ("batch", BpfAttrBatch),
+    ]
+
+
+libc = ctypes.CDLL(None, use_errno=True)
+
+
+def bpf_syscall(cmd, attr, size):
+    ret = libc.syscall(__NR_bpf, cmd, ctypes.byref(attr), size)
+    if ret < 0:
+        err = ctypes.get_errno()
+        raise OSError(err, os.strerror(err))
+    return ret
+
+
+def create_stats_map():
+    attr = BpfAttr()
+    attr.create.map_type = BPF_MAP_TYPE_HASH
+    attr.create.key_size = 4
+    attr.create.value_size = 32
+    attr.create.max_entries = 1000
+    attr.create.map_name = b"iface_stats"
+    return bpf_syscall(BPF_MAP_CREATE, attr, ctypes.sizeof(attr))
+
+
+def update_map_elem(map_fd, ifindex, rx, tx):
+    key = ctypes.c_uint32(ifindex)
+    val = VhStatsValue(
+        rxBytes=rx,
+        rxPackets=rx // 100 if rx >= 100 else 1,
+        txBytes=tx,
+        txPackets=tx // 100 if tx >= 100 else 1,
+    )
+    attr = BpfAttr()
+    attr.elem.map_fd = map_fd
+    attr.elem.key = ctypes.addressof(key)
+    attr.elem.value = ctypes.addressof(val)
+    bpf_syscall(BPF_MAP_UPDATE_ELEM, attr, ctypes.sizeof(attr))
+
+
+def lookup_map_elem(map_fd, ifindex):
+    key = ctypes.c_uint32(ifindex)
+    val = VhStatsValue()
+    attr = BpfAttr()
+    attr.elem.map_fd = map_fd
+    attr.elem.key = ctypes.addressof(key)
+    attr.elem.value = ctypes.addressof(val)
+    bpf_syscall(BPF_MAP_LOOKUP_ELEM, attr, ctypes.sizeof(attr))
+    return val
+
+
+def test_bpf_laundering(vpn0_idx):
+    print("\n--- BPF map laundering checks ---")
+
+    try:
+        eth0_idx = socket.if_nametoindex("eth0")
+    except Exception as e:
+        print(f"FAIL: BPF test cannot find eth0: {e}")
+        return False
+
+    # 1. Create BPF map as root
+    try:
+        map_fd = create_stats_map()
+        print(f"[BPF] Created map 'iface_stats' with fd: {map_fd}")
+    except Exception as e:
+        print(f"FAIL: BPF map creation: {e}")
+        return False
+
+    # 2. Populate stats
+    try:
+        update_map_elem(map_fd, vpn0_idx, 1000, 2000)
+        update_map_elem(map_fd, eth0_idx, 5000, 6000)
+    except Exception as e:
+        print(f"FAIL: BPF map update: {e}")
+        return False
+
+    # 3. Check under Non-target (root): laundering should occur
+    try:
+        # Check VPN: statistics must be hidden (zeroes)
+        vpn_val = lookup_map_elem(map_fd, vpn0_idx)
+        print(f"[BPF Non-Target] vpn0: rx={vpn_val.rxBytes}, tx={vpn_val.txBytes}")
+        assert vpn_val.rxBytes == 0 and vpn_val.txBytes == 0, "VPN stats not zeroed!"
+
+        # Check cover: statistics must absorb VPN traffic
+        eth_val = lookup_map_elem(map_fd, eth0_idx)
+        print(f"[BPF Non-Target] eth0: rx={eth_val.rxBytes}, tx={eth_val.txBytes}")
+        assert eth_val.rxBytes == 6000 and eth_val.txBytes == 8000, (
+            "Cover interface stats not laundered!"
+        )
+        print("[BPF Non-Target] Single lookup checks passed")
+    except Exception as e:
+        print(f"FAIL: BPF non-target lookup verification failed: {e}")
+        return False
+
+    # 4. Check under Target UID (5555): hook should be bypassed (raw stats visible)
+    pid = safe_fork()
+    if pid == 0:
+        try:
+            os.setuid(5555)
+            vpn_val = lookup_map_elem(map_fd, vpn0_idx)
+            eth_val = lookup_map_elem(map_fd, eth0_idx)
+            print(f"[BPF Target] vpn0: rx={vpn_val.rxBytes}, tx={vpn_val.txBytes}")
+            print(f"[BPF Target] eth0: rx={eth_val.rxBytes}, tx={eth_val.txBytes}")
+
+            if vpn_val.rxBytes != 1000 or eth_val.rxBytes != 5000:
+                print("FAIL: BPF target check expected raw values, got spoofed values")
+                sys.exit(1)
+
+            print("[BPF Target] Target bypass checks passed")
+            sys.exit(0)
+        except Exception as e:
+            print(f"FAIL: BPF child exception: {e}")
+            sys.exit(1)
+    else:
+        wpid, status = os.waitpid(pid, 0)
+        if status != 0:
+            return False
+
+    return True
+
+
 def main():
     try:
         vpn0_idx = socket.if_nametoindex("vpn0")
@@ -401,6 +595,13 @@ def main():
         success = False
     else:
         print("RESULT bind_port_block=PASS")
+
+    # Run BPF laundering checks
+    if not test_bpf_laundering(vpn0_idx):
+        print("RESULT bpf_laundering=FAIL")
+        success = False
+    else:
+        print("RESULT bpf_laundering=PASS")
 
     print("\n--- Verification Summary ---")
     if not success:
