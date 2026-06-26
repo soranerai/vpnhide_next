@@ -20,6 +20,7 @@
 #include <dirent.h>
 
 #include "include/vpnhide.h"
+#include "generated/iface_lists.h"
 
 static bool is_interface_operstate_up(const char *ifname)
 {
@@ -116,13 +117,9 @@ static bool
 daemon_is_vpn_ifname(const char *name,
 		     const struct vpnhide_iface_ioctl_data *prefixes)
 {
-	/* Built-in patterns */
-	if (strncmp(name, "tun", 3) == 0 || strncmp(name, "ppp", 3) == 0 ||
-	    strncmp(name, "wg", 2) == 0 || strncmp(name, "tap", 3) == 0 ||
-	    strncmp(name, "ipsec", 5) == 0 || strncmp(name, "dummy", 5) == 0 ||
-	    strncmp(name, "pdp", 3) == 0 || strncmp(name, "p2p", 3) == 0) {
+	/* Use auto-generated static patterns */
+	if (vpnhide_iface_is_vpn(name))
 		return true;
-	}
 
 	/* Configured prefixes */
 	if (prefixes) {
@@ -188,7 +185,7 @@ static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 			if (vpn_idx > 0) {
 				bool dup = false;
 				for (int i = 0; i < active_vpns.count; i++) {
-					if (active_vpns.ifindexes[i] ==
+					if (active_vpns.vpns[i].ifindex ==
 					    vpn_idx) {
 						dup = true;
 						break;
@@ -196,9 +193,10 @@ static void update_spoof_ip(int fd, char *last_ipv4, char *last_ipv6)
 				}
 				if (!dup &&
 				    active_vpns.count < MAX_ACTIVE_VPNS) {
-					active_vpns
-						.ifindexes[active_vpns.count++] =
-						vpn_idx;
+					active_vpns.vpns[active_vpns.count].ifindex = vpn_idx;
+					strncpy(active_vpns.vpns[active_vpns.count].name, name, MAX_IFACE_LEN - 1);
+					active_vpns.vpns[active_vpns.count].name[MAX_IFACE_LEN - 1] = '\0';
+					active_vpns.count++;
 				}
 			}
 			continue;

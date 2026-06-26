@@ -71,7 +71,6 @@
 #include <linux/bpf.h>
 #include <linux/file.h>
 
-#include "generated/iface_lists.h"
 #include "include/vpnhide.h"
 
 struct vh_stats_key {
@@ -320,7 +319,7 @@ static atomic_t global_cover_ifindex = ATOMIC_INIT(0);
 
 struct vpnhide_active_vpns {
 	int count;
-	u32 ifindexes[MAX_ACTIVE_VPNS];
+	struct vpnhide_active_vpn vpns[MAX_ACTIVE_VPNS];
 	struct rcu_head rcu;
 };
 static struct vpnhide_active_vpns __rcu *global_active_vpns;
@@ -336,7 +335,7 @@ static bool is_active_vpn_ifindex(u32 ifindex)
 	vpns = rcu_dereference(global_active_vpns);
 	if (vpns) {
 		for (i = 0; i < vpns->count; i++) {
-			if (vpns->ifindexes[i] == ifindex) {
+			if (vpns->vpns[i].ifindex == ifindex) {
 				found = true;
 				break;
 			}
@@ -346,21 +345,21 @@ static bool is_active_vpn_ifindex(u32 ifindex)
 	return found;
 }
 
-static bool vpnhide_is_vpn_ifname(const char *name)
+static bool is_active_vpn_ifname(const char *name)
 {
-	struct vpnhide_iface_prefixes *p;
-	int i;
+	struct vpnhide_active_vpns *vpns;
 	bool found = false;
+	int i;
 
-	if (vpnhide_iface_is_vpn(name))
-		return true;
+	if (!name || name[0] == '\0')
+		return false;
 
 	rcu_read_lock();
-	p = rcu_dereference(global_iface_prefixes);
-	if (p) {
-		for (i = 0; i < p->count; i++) {
-			if (vpnhide_iface_starts_with_ci(name,
-							 p->prefixes[i])) {
+	vpns = rcu_dereference(global_active_vpns);
+	if (vpns) {
+		for (i = 0; i < vpns->count; i++) {
+			if (strncmp(vpns->vpns[i].name, name, MAX_IFACE_LEN) ==
+			    0) {
 				found = true;
 				break;
 			}
@@ -371,7 +370,7 @@ static bool vpnhide_is_vpn_ifname(const char *name)
 }
 
 #undef is_vpn_ifname
-#define is_vpn_ifname(name) vpnhide_is_vpn_ifname(name)
+#define is_vpn_ifname(name) is_active_vpn_ifname(name)
 
 static bool is_target_uid_val(uid_t uid)
 {
@@ -804,12 +803,12 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 		if (optname == SO_BINDTODEVICE) {
 			if (optlen <= 0)
 				return 0;
-			if (optlen > IFNAMSIZ)
-				optlen = IFNAMSIZ;
+			if (optlen >= IFNAMSIZ)
+				optlen = IFNAMSIZ - 1;
 
 			if (copy_from_user(name, optval_ptr, optlen))
 				return 0;
-			name[optlen - 1] = '\0';
+			name[optlen] = '\0';
 
 			if (is_vpn_ifname(name)) {
 				vpnhide_dbg(
@@ -1118,12 +1117,12 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 		if (len <= 0)
 			return 0;
 
-		if (len > IFNAMSIZ)
-			len = IFNAMSIZ;
+		if (len >= IFNAMSIZ)
+			len = IFNAMSIZ - 1;
 
 		if (copy_from_user(name, data->optval, len))
 			return 0;
-		name[len - 1] = '\0';
+		name[len] = '\0';
 
 		if (is_vpn_ifname(name)) {
 			vpnhide_dbg(
@@ -2767,8 +2766,7 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		}
 
 		new_vpns->count = idata->count;
-		memcpy(new_vpns->ifindexes, idata->ifindexes,
-		       sizeof(new_vpns->ifindexes));
+		memcpy(new_vpns->vpns, idata->vpns, sizeof(new_vpns->vpns));
 
 		spin_lock(&active_vpns_lock);
 		old_vpns = rcu_dereference_protected(
@@ -3814,7 +3812,7 @@ static void collect_vpn_traffic_sum(struct bpf_map *map,
 	if (vpns) {
 		int idx;
 		for (idx = 0; idx < vpns->count; idx++) {
-			u32 vpn_idx = vpns->ifindexes[idx];
+			u32 vpn_idx = vpns->vpns[idx].ifindex;
 			void *map_val =
 				map->ops->map_lookup_elem(map, &vpn_idx);
 			if (map_val) {

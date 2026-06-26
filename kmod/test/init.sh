@@ -57,6 +57,8 @@ ip route add 10.9.9.0/24 dev vpn0 2>/dev/null
 ip -6 addr add fd00:9::1/64 dev vpn0 2>/dev/null
 ip -6 route add fd00:99::/64 dev vpn0 2>/dev/null
 ip rule add uidrange 5555-5555 table 199 2>/dev/null
+# Give the daemon a moment to process the interface events and update active_vpns in the kernel
+sleep 3
 
 PASS=0
 FAIL=0
