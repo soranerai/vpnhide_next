@@ -1,14 +1,15 @@
 #!/usr/bin/env python3
-import socket
-import os
-import sys
-import struct
 import fcntl
+import os
+import socket
+import struct
+import sys
 
 # Constants
-SO_BINDTODEVICE = getattr(socket, 'SO_BINDTODEVICE', 25)
+SO_BINDTODEVICE = getattr(socket, "SO_BINDTODEVICE", 25)
 SO_BINDTOIFINDEX = 62  # On Linux (asm-generic/socket.h), SO_BINDTOIFINDEX is 62
 SIOCGIFFLAGS = 0x8913
+
 
 def test_dev_ioctl(vpn0_idx):
     print("[vector_tests] Running dev_ioctl check...")
@@ -23,8 +24,8 @@ def test_dev_ioctl(vpn0_idx):
     # 2. Check SIOCGIFFLAGS
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
-        ifr = struct.pack('16sH', b'vpn0', 0)
-        res = fcntl.ioctl(s.fileno(), SIOCGIFFLAGS, ifr)
+        ifr = struct.pack("16sH", b"vpn0", 0)
+        fcntl.ioctl(s.fileno(), SIOCGIFFLAGS, ifr)
         # Succeeded
     except Exception as e:
         print(f"FAIL: dev_ioctl SIOCGIFFLAGS non-target: {e}")
@@ -46,7 +47,7 @@ def test_dev_ioctl(vpn0_idx):
                 pass
 
             try:
-                ifr = struct.pack('16sH', b'vpn0', 0)
+                ifr = struct.pack("16sH", b"vpn0", 0)
                 fcntl.ioctl(s.fileno(), SIOCGIFFLAGS, ifr)
                 print("FAIL: dev_ioctl SIOCGIFFLAGS target succeeded but should have failed")
                 sys.exit(1)
@@ -66,12 +67,13 @@ def test_dev_ioctl(vpn0_idx):
             return False
     return True
 
+
 def test_setsockopt(vpn0_idx):
     print("[vector_tests] Running setsockopt check...")
     # Non-target checks
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        s.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, b'vpn0')
+        s.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, b"vpn0")
     except Exception as e:
         print(f"FAIL: setsockopt SO_BINDTODEVICE non-target: {e}")
         return False
@@ -90,12 +92,14 @@ def test_setsockopt(vpn0_idx):
             os.setuid(5555)
             s_tgt = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             try:
-                s_tgt.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, b'vpn0')
+                s_tgt.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, b"vpn0")
                 print("FAIL: setsockopt SO_BINDTODEVICE target succeeded but should have failed")
                 sys.exit(1)
             except OSError as e:
                 if e.errno != 19:
-                    print(f"FAIL: setsockopt SO_BINDTODEVICE target expected errno 19, got {e.errno}")
+                    print(
+                        f"FAIL: setsockopt SO_BINDTODEVICE target expected errno 19, got {e.errno}"
+                    )
                     sys.exit(1)
 
             try:
@@ -104,7 +108,9 @@ def test_setsockopt(vpn0_idx):
                 sys.exit(1)
             except OSError as e:
                 if e.errno != 19:
-                    print(f"FAIL: setsockopt SO_BINDTOIFINDEX target expected errno 19, got {e.errno}")
+                    print(
+                        f"FAIL: setsockopt SO_BINDTOIFINDEX target expected errno 19, got {e.errno}"
+                    )
                     sys.exit(1)
 
             sys.exit(0)
@@ -117,11 +123,12 @@ def test_setsockopt(vpn0_idx):
             return False
     return True
 
+
 def test_getsockopt(vpn0_idx):
     print("[vector_tests] Running getsockopt check...")
     # Setup bound sockets as root
     s_dev = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s_dev.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, b'vpn0\x00')
+    s_dev.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, b"vpn0\x00")
 
     s_idx = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s_idx.setsockopt(socket.SOL_SOCKET, SO_BINDTOIFINDEX, struct.pack("i", vpn0_idx))
@@ -133,9 +140,12 @@ def test_getsockopt(vpn0_idx):
             os.setuid(5555)
             # 1. getsockopt SO_BINDTODEVICE
             val = s_dev.getsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, 256)
-            clean_val = val.strip(b'\x00')
-            if clean_val != b'':
-                print(f"FAIL: getsockopt SO_BINDTODEVICE target: expected empty string, got {clean_val}")
+            clean_val = val.strip(b"\x00")
+            if clean_val != b"":
+                print(
+                    f"""FAIL: getsockopt SO_BINDTODEVICE target
+                    : expected empty string, got {clean_val}"""
+                )
                 sys.exit(1)
 
             # 2. getsockopt SO_BINDTOIFINDEX
@@ -154,6 +164,7 @@ def test_getsockopt(vpn0_idx):
         if status != 0:
             return False
     return True
+
 
 def test_getsockname():
     print("[vector_tests] Running getsockname check...")
@@ -199,6 +210,7 @@ def test_getsockname():
         if status != 0:
             return False
     return True
+
 
 def test_connect_port_block():
     print("[vector_tests] Running connect port block check...")
@@ -249,6 +261,7 @@ def test_connect_port_block():
             return False
     return True
 
+
 def test_bind_port_block():
     print("[vector_tests] Running bind port block check...")
     # Drop privileges and verify that binding to port 8080 redirects to port 0 (ephemeral port)
@@ -262,7 +275,10 @@ def test_bind_port_block():
                 s.bind(("127.0.0.1", 8080))
                 ip, port = s.getsockname()
                 if port == 8080:
-                    print("FAIL: bind port block target bound to 8080, expected redirection to ephemeral port")
+                    print(
+                        """"FAIL: bind port block target bound to 80
+                        80, expected redirection to ephemeral port"""
+                    )
                     sys.exit(1)
                 if port == 0:
                     print("FAIL: bind port block target getsockname returned 0")
@@ -279,6 +295,7 @@ def test_bind_port_block():
         if status != 0:
             return False
     return True
+
 
 def main():
     try:
@@ -327,6 +344,7 @@ def main():
     if not success:
         sys.exit(1)
     sys.exit(0)
+
 
 if __name__ == "__main__":
     main()
