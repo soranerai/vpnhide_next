@@ -35,7 +35,7 @@ int main(void)
 	check("xfrm0", true);
 	check("utun3", true);
 	check("l2tp0", true);
-	check("gre0", true);
+	check("gre0", false);
 	check("TUN0", true);
 	check("Wg99", true);
 	check("MyVPN", true);
@@ -63,14 +63,16 @@ int main(void)
 	check("if", false);
 	check("if_inet6", false);
 	check("", false);
-	check("tunl", true);
+	check("tunl", false);
 	check("atun0", false);
 	check("VPN", true);
+	check("gretap0", false);
+	check("tunl0", false);
 
 	if (failures) {
 		fprintf(stderr, "%d test(s) failed\n", failures);
 		return 1;
 	}
-	printf("OK: 42 vectors passed\n");
+	printf("OK: 44 vectors passed\n");
 	return 0;
 }
