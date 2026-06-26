@@ -71,11 +71,12 @@ fn is_interface_up_with_fd(fd: libc::c_int, name: &str) -> bool {
         let optlen = std::cmp::min(name_bytes.len(), ifr.ifr_name.len() - 1);
         std::ptr::copy_nonoverlapping(
             name_bytes.as_ptr(),
-            ifr.ifr_name.as_mut_ptr() as *mut u8,
+            ifr.ifr_name.as_mut_ptr().cast(),
             optlen,
         );
         if libc::ioctl(fd, libc::SIOCGIFFLAGS as _, &ifr) < 0 {
-            false
+            let err = last_os_errno();
+            err == libc::ENODEV || err == libc::ENXIO
         } else {
             let flags = ifr.ifr_ifru.ifru_flags as u32;
             (flags & libc::IFF_UP as u32) != 0
@@ -131,6 +132,32 @@ fn format_iface_result(all: &[String], vpn: &[String], context: &str) -> CheckOu
             vpn = join_list(vpn),
             all = join_list(all),
         ))
+    }
+}
+
+fn path_exists_oracle(path: &str) -> bool {
+    unsafe {
+        let c_path = match std::ffi::CString::new(path) {
+            Ok(s) => s,
+            Err(_) => return false,
+        };
+        let ret = libc::access(c_path.as_ptr(), libc::F_OK);
+        if ret == 0 {
+            true
+        } else {
+            let err = last_os_errno();
+            err != libc::ENOENT
+        }
+    }
+}
+
+fn check_path_via_oracle(base_dir: &str, iface: &str) -> Option<bool> {
+    let nonexistent_path = format!("{base_dir}/nonexistent_iface_probe_123");
+    if path_exists_oracle(&nonexistent_path) {
+        None
+    } else {
+        let actual_path = format!("{base_dir}/{iface}");
+        Some(path_exists_oracle(&actual_path))
     }
 }
 
@@ -281,9 +308,9 @@ fn check_ioctl_siocgifmtu() -> CheckOutput {
                 if libc::ioctl(fd, libc::SIOCGIFFLAGS as _, &mut flags_ifr) == 0 {
                     let flags = flags_ifr.ifr_ifru.ifru_flags as u32;
                     if flags & libc::IFF_UP as u32 == 0 {
-                        return CheckOutput::pass(format!(
+                        return CheckOutput::pass(
                             "ioctl(tun0, SIOCGIFMTU) succeeded, but interface is DOWN/inactive",
-                        ));
+                        );
                     }
                 }
                 let mtu = ifr.ifr_ifru.ifru_mtu;
@@ -587,10 +614,8 @@ pub fn check_netlink_getlink() -> CheckOutput {
                             // IFLA_IFNAME is a NUL-terminated string;
                             // payload was bounds-checked by for_each_rtattr.
                             let name = cstr_to_str(payload.as_ptr() as *const libc::c_char);
-                            if is_vpn_iface(&name) {
-                                if is_up {
-                                    vpn.push(name.clone());
-                                }
+                            if is_vpn_iface(&name) && is_up {
+                                vpn.push(name.clone());
                             }
                             all.push(name);
                         }
@@ -799,26 +824,74 @@ fn check_netlink_anonymous_route() -> CheckOutput {
 
 #[uniffi::export]
 fn check_sys_class_net() -> CheckOutput {
-    match std::fs::read_dir("/sys/class/net") {
-        Err(e) => {
-            if is_selinux_denial(&e) {
-                CheckOutput::pass(format!("access denied by SELinux ({e})"))
-            } else {
-                CheckOutput::fail(format!("cannot open /sys/class/net: {e}"))
+    let sysfs_bases = ["/sys/class/net", "/sys/devices/virtual/net"];
+    let test_ifaces = ["tun0", "tun1", "wg0", "wg1", "ppp0", "ppp1"];
+
+    let mut path_results = Vec::new();
+    let mut any_failed = false;
+    let mut leaked_interfaces = Vec::new();
+
+    for &base in &sysfs_bases {
+        let mut leaked_here = Vec::new();
+        let mut readdir_denied = false;
+
+        // 1. Try readdir
+        match std::fs::read_dir(base) {
+            Err(_) => {
+                readdir_denied = true;
             }
-        }
-        Ok(entries) => {
-            let mut all = Vec::new();
-            let mut vpn = Vec::new();
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().into_owned();
-                if is_vpn_iface(&name) && is_interface_up(&name) {
-                    vpn.push(name.clone());
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if is_vpn_iface(&name) && is_interface_up(&name) {
+                        leaked_here.push(name);
+                    }
                 }
-                all.push(name);
             }
-            format_iface_result(&all, &vpn, &format!("[{}]:", all.len()))
         }
+
+        // 2. Try Path Existence Oracle
+        let mut oracle_denied = false;
+        for &iface in &test_ifaces {
+            match check_path_via_oracle(base, iface) {
+                Some(true) => {
+                    if is_interface_up(iface) && !leaked_here.contains(&iface.to_string()) {
+                        leaked_here.push(iface.to_string());
+                    }
+                }
+                Some(false) => {}
+                None => {
+                    oracle_denied = true;
+                }
+            }
+        }
+
+        // Format result for this path
+        if !leaked_here.is_empty() {
+            any_failed = true;
+            for iface in &leaked_here {
+                if !leaked_interfaces.contains(iface) {
+                    leaked_interfaces.push(iface.clone());
+                }
+            }
+            path_results.push(format!("{base}: НЕ ОК (leaked {})", leaked_here.join(",")));
+        } else if readdir_denied && oracle_denied {
+            path_results.push(format!("{base}: OK (blocked)"));
+        } else {
+            path_results.push(format!("{base}: OK"));
+        }
+    }
+
+    let details = path_results.join(", ");
+
+    if any_failed {
+        CheckOutput::fail(format!(
+            "VPN leaked: [{}] — Details: {}",
+            leaked_interfaces.join(", "),
+            details
+        ))
+    } else {
+        CheckOutput::pass(format!("All paths secure — Details: {}", details))
     }
 }
 
@@ -1716,6 +1789,478 @@ pub fn check_bpf_iface_map() -> CheckOutput {
                 vpn_ifaces.join(", "),
                 all_ifaces.join(", ")
             ))
+        }
+    }
+}
+
+#[cfg(target_os = "android")]
+unsafe extern "C" {
+    fn __system_property_get(name: *const libc::c_char, value: *mut libc::c_char) -> libc::c_int;
+}
+
+#[cfg(not(target_os = "android"))]
+unsafe extern "C" fn __system_property_get(
+    _name: *const libc::c_char,
+    _value: *mut libc::c_char,
+) -> libc::c_int {
+    0
+}
+
+#[uniffi::export]
+pub fn check_system_properties() -> CheckOutput {
+    unsafe {
+        let keys = [
+            "net.dns1",
+            "net.dns2",
+            "net.dns3",
+            "net.dns4",
+            "net.vpn.dns1",
+            "net.vpn.dns2",
+            "dhcp.tun0.dns1",
+            "dhcp.tun0.dns2",
+            "net.interfaces.default.type",
+            "net.interfaces.default.name",
+        ];
+        let mut found = Vec::new();
+        let mut value_buf = [0 as libc::c_char; 96]; // PROP_VALUE_MAX is 92
+        for &key in &keys {
+            let c_key = std::ffi::CString::new(key).unwrap();
+            let len = __system_property_get(c_key.as_ptr(), value_buf.as_mut_ptr());
+            if len > 0 {
+                let val_str = cstr_to_str(value_buf.as_ptr());
+                if !val_str.is_empty() {
+                    let is_vpn_val = is_vpn_iface(&val_str)
+                        || val_str == "4"
+                        || key.contains("tun")
+                        || key.contains("vpn");
+                    if is_vpn_val {
+                        found.push(format!("{key}={val_str}"));
+                    }
+                }
+            }
+        }
+        if found.is_empty() {
+            CheckOutput::pass("no VPN properties found via __system_property_get")
+        } else {
+            CheckOutput::fail(format!("VPN properties leaked: [{}]", found.join(", ")))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_proc_sys_net_conf() -> CheckOutput {
+    let paths = [
+        "/proc/sys/net/ipv4/conf",
+        "/proc/sys/net/ipv6/conf",
+        "/sys/class/net",
+        "/sys/devices/virtual/net",
+        "/proc/sys/net/ipv4/neigh",
+        "/proc/sys/net/ipv6/neigh",
+    ];
+    let test_ifaces = ["tun0", "tun1", "wg0", "wg1", "ppp0", "ppp1"];
+
+    let mut path_results = Vec::new();
+    let mut any_failed = false;
+    let mut leaked_interfaces = Vec::new();
+
+    for path in &paths {
+        let mut leaked_here = Vec::new();
+        let mut readdir_denied = false;
+
+        // 1. Try readdir
+        match std::fs::read_dir(path) {
+            Err(_) => {
+                readdir_denied = true;
+            }
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    let name = entry.file_name().to_string_lossy().into_owned();
+                    if is_vpn_iface(&name) && is_interface_up(&name) {
+                        leaked_here.push(name);
+                    }
+                }
+            }
+        }
+
+        // 2. Try Path Existence Oracle
+        let mut oracle_denied = false;
+        for &iface in &test_ifaces {
+            match check_path_via_oracle(path, iface) {
+                Some(true) => {
+                    if is_interface_up(iface) && !leaked_here.contains(&iface.to_string()) {
+                        leaked_here.push(iface.to_string());
+                    }
+                }
+                Some(false) => {}
+                None => {
+                    oracle_denied = true;
+                }
+            }
+        }
+
+        // Format result for this path
+        if !leaked_here.is_empty() {
+            any_failed = true;
+            for iface in &leaked_here {
+                if !leaked_interfaces.contains(iface) {
+                    leaked_interfaces.push(iface.clone());
+                }
+            }
+            path_results.push(format!("{path}: NOT OK (leaked {})", leaked_here.join(",")));
+        } else if readdir_denied && oracle_denied {
+            path_results.push(format!("{path}: OK (blocked)"));
+        } else {
+            path_results.push(format!("{path}: OK"));
+        }
+    }
+
+    let details = path_results.join(", ");
+
+    if any_failed {
+        CheckOutput::fail(format!(
+            "VPN leaked: [{}] — Details: {}",
+            leaked_interfaces.join(", "),
+            details
+        ))
+    } else {
+        CheckOutput::pass(format!("All paths secure — Details: {}", details))
+    }
+}
+
+#[uniffi::export]
+pub fn check_ioctl_alternative() -> CheckOutput {
+    unsafe {
+        with_inet_dgram_socket(|fd| {
+            let vpn_iface = find_vpn_iface();
+            let vpn_bytes = vpn_iface.as_bytes();
+
+            let mut ifr: libc::ifreq = std::mem::zeroed();
+            let optlen = std::cmp::min(vpn_bytes.len(), ifr.ifr_name.len() - 1);
+            std::ptr::copy_nonoverlapping(
+                vpn_bytes.as_ptr(),
+                ifr.ifr_name.as_mut_ptr().cast(),
+                optlen,
+            );
+
+            let mut leaked = Vec::new();
+
+            // 1. SIOCGIFINDEX
+            if libc::ioctl(fd, libc::SIOCGIFINDEX as _, &ifr) == 0 {
+                let index = *(std::ptr::from_ref(&ifr.ifr_ifru) as *const libc::c_int);
+                if index > 0 && is_interface_up(&vpn_iface) {
+                    leaked.push(format!("SIOCGIFINDEX={index}"));
+                }
+            }
+
+            // Helper to extract IPv4 from sockaddr inside union
+            let get_ip_from_union = |ifr_ifru: &libc::__c_anonymous_ifr_ifru| -> Option<String> {
+                let addr_ptr = std::ptr::from_ref(ifr_ifru) as *const libc::sockaddr;
+                if (*addr_ptr).sa_family == libc::AF_INET as libc::sa_family_t {
+                    let sin = &*(addr_ptr as *const libc::sockaddr_in);
+                    let ip = u32::from_be(sin.sin_addr.s_addr);
+                    Some(format!(
+                        "{}.{}.{}.{}",
+                        (ip >> 24) & 0xff,
+                        (ip >> 16) & 0xff,
+                        (ip >> 8) & 0xff,
+                        ip & 0xff
+                    ))
+                } else {
+                    None
+                }
+            };
+
+            // 2. SIOCGIFADDR
+            std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
+            if libc::ioctl(fd, libc::SIOCGIFADDR as _, &ifr) == 0 {
+                if is_interface_up(&vpn_iface) {
+                    if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
+                        leaked.push(format!("SIOCGIFADDR={ip}"));
+                    }
+                }
+            }
+
+            // 3. SIOCGIFDSTADDR
+            std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
+            if libc::ioctl(fd, libc::SIOCGIFDSTADDR as _, &ifr) == 0 {
+                if is_interface_up(&vpn_iface) {
+                    if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
+                        leaked.push(format!("SIOCGIFDSTADDR={ip}"));
+                    }
+                }
+            }
+
+            // 4. SIOCGIFNETMASK
+            std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
+            if libc::ioctl(fd, libc::SIOCGIFNETMASK as _, &ifr) == 0 {
+                if is_interface_up(&vpn_iface) {
+                    if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
+                        leaked.push(format!("SIOCGIFNETMASK={ip}"));
+                    }
+                }
+            }
+
+            // 5. SIOCGIFHWADDR
+            std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
+            if libc::ioctl(fd, libc::SIOCGIFHWADDR as _, &ifr) == 0 {
+                if is_interface_up(&vpn_iface) {
+                    let hwaddr_ptr = std::ptr::from_ref(&ifr.ifr_ifru) as *const libc::sockaddr;
+                    let hw = &(*hwaddr_ptr).sa_data;
+                    let mac = format!(
+                        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                        hw[0] as u8,
+                        hw[1] as u8,
+                        hw[2] as u8,
+                        hw[3] as u8,
+                        hw[4] as u8,
+                        hw[5] as u8
+                    );
+                    leaked.push(format!("SIOCGIFHWADDR={mac}"));
+                }
+            }
+
+            if leaked.is_empty() {
+                CheckOutput::pass(format!(
+                    "alternative ioctl checks for '{vpn_iface}' passed",
+                    vpn_iface = vpn_iface
+                ))
+            } else {
+                CheckOutput::fail(format!(
+                    "alternative ioctl leaked '{vpn_iface}' details: [{}]",
+                    leaked.join(", ")
+                ))
+            }
+        })
+    }
+}
+
+#[uniffi::export]
+pub fn check_direct_syscall() -> CheckOutput {
+    unsafe {
+        let fd = libc::syscall(libc::SYS_socket, libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            let e = std::io::Error::last_os_error();
+            if is_selinux_denial(&e) {
+                return CheckOutput::pass(format!(
+                    "direct SYS_socket denied by SELinux ({e}) — secure"
+                ));
+            } else {
+                return CheckOutput::fail(format!("direct SYS_socket failed: {e}"));
+            }
+        }
+        let fd = fd as libc::c_int;
+
+        let vpn_iface = find_vpn_iface();
+        let mut ifr: libc::ifreq = std::mem::zeroed();
+        let name_bytes = vpn_iface.as_bytes();
+        let optlen = std::cmp::min(name_bytes.len(), ifr.ifr_name.len() - 1);
+        std::ptr::copy_nonoverlapping(
+            name_bytes.as_ptr(),
+            ifr.ifr_name.as_mut_ptr().cast(),
+            optlen,
+        );
+
+        let ret = libc::syscall(
+            libc::SYS_ioctl,
+            fd,
+            libc::SIOCGIFFLAGS as libc::c_long,
+            std::ptr::from_mut(&mut ifr) as u64,
+        );
+        let err = last_os_errno();
+        libc::close(fd);
+
+        if ret < 0 {
+            if err == libc::ENODEV || err == libc::ENXIO {
+                CheckOutput::pass(format!(
+                    "direct SYS_ioctl for '{vpn}' returned ENODEV/ENXIO — interface hidden",
+                    vpn = vpn_iface
+                ))
+            } else {
+                CheckOutput::fail(format!(
+                    "direct SYS_ioctl returned error {err} ({})",
+                    last_os_error()
+                ))
+            }
+        } else {
+            let flags_ptr = std::ptr::from_ref(&ifr.ifr_ifru) as *const libc::c_short;
+            let flags = *flags_ptr as u32;
+            if flags & libc::IFF_UP as u32 == 0 {
+                CheckOutput::pass(format!(
+                    "direct SYS_ioctl returned flags=0x{flags:x} — interface is DOWN/inactive"
+                ))
+            } else {
+                CheckOutput::fail(format!(
+                    "direct SYS_ioctl: '{vpn}' is visible! flags=0x{flags:x}",
+                    vpn = vpn_iface
+                ))
+            }
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_traceroute_rtt() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create UDP socket: {}", last_os_error()));
+        }
+
+        let on: libc::c_int = 1;
+        if libc::setsockopt(
+            fd,
+            libc::IPPROTO_IP,
+            11, // IP_RECVERR
+            std::ptr::from_ref(&on).cast(),
+            std::mem::size_of_val(&on) as libc::socklen_t,
+        ) < 0
+        {
+            let err = last_os_error();
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "setsockopt(IP_RECVERR) not supported or denied: {err}"
+            ));
+        }
+
+        let ttl: libc::c_int = 1;
+        libc::setsockopt(
+            fd,
+            libc::IPPROTO_IP,
+            4, // IP_TTL
+            std::ptr::from_ref(&ttl).cast(),
+            std::mem::size_of_val(&ttl) as libc::socklen_t,
+        );
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        if libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        ) < 0
+        {
+            let err = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("connect() failed: {err}"));
+        }
+
+        let start = std::time::Instant::now();
+        let payload = b"ping";
+        if libc::send(fd, payload.as_ptr().cast(), payload.len(), 0) < 0 {
+            libc::close(fd);
+            return CheckOutput::pass("UDP send failed (normal if no internet connection)");
+        }
+
+        let mut fds = libc::pollfd {
+            fd,
+            events: libc::POLLERR,
+            revents: 0,
+        };
+        let poll_ret = libc::poll(&mut fds, 1, 100); // 100ms timeout
+        let rtt = start.elapsed();
+
+        if poll_ret <= 0 {
+            libc::close(fd);
+            return CheckOutput::pass(format!("no traceroute response within 100ms (timeout)"));
+        }
+
+        let mut msg: libc::msghdr = std::mem::zeroed();
+        let mut sender_addr: libc::sockaddr_in = std::mem::zeroed();
+        let mut iov = libc::iovec {
+            iov_base: [0u8; 512].as_mut_ptr().cast(),
+            iov_len: 512,
+        };
+        let mut control_buf = [0u8; 512];
+
+        msg.msg_name = std::ptr::from_mut(&mut sender_addr).cast();
+        msg.msg_namelen = std::mem::size_of_val(&sender_addr) as libc::socklen_t;
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = control_buf.as_mut_ptr().cast();
+        msg.msg_controllen = control_buf.len();
+
+        let recv_ret = libc::recvmsg(fd, &mut msg, 64); // MSG_ERRQUEUE is 64
+        libc::close(fd);
+
+        if recv_ret < 0 {
+            return CheckOutput::pass(format!(
+                "poll triggered but recvmsg(MSG_ERRQUEUE) failed: {}",
+                last_os_error()
+            ));
+        }
+
+        let mut gateway_ip = String::new();
+        if !msg.msg_control.is_null() && msg.msg_controllen >= 16 {
+            let control_ptr = msg.msg_control as *const u8;
+            let mut offset = 0;
+            while offset + 16 <= msg.msg_controllen {
+                let (cmsg_len, cmsg_level, cmsg_type, data_offset) =
+                    if std::mem::size_of::<usize>() == 8 {
+                        let len = *(control_ptr.add(offset) as *const usize);
+                        let level = *(control_ptr.add(offset + 8) as *const libc::c_int);
+                        let ty = *(control_ptr.add(offset + 12) as *const libc::c_int);
+                        (len, level, ty, 16)
+                    } else {
+                        let len = *(control_ptr.add(offset) as *const u32) as usize;
+                        let level = *(control_ptr.add(offset + 4) as *const libc::c_int);
+                        let ty = *(control_ptr.add(offset + 8) as *const libc::c_int);
+                        (len, level, ty, 12)
+                    };
+
+                if cmsg_len < data_offset || offset + cmsg_len > msg.msg_controllen {
+                    break;
+                }
+
+                if cmsg_level == libc::IPPROTO_IP && cmsg_type == 11 {
+                    // IP_RECVERR is 11
+                    if cmsg_len >= data_offset + 16 + 16 {
+                        let sin_ptr =
+                            control_ptr.add(offset + data_offset + 16) as *const libc::sockaddr_in;
+                        if (*sin_ptr).sin_family == libc::AF_INET as libc::sa_family_t {
+                            let ip = u32::from_be((*sin_ptr).sin_addr.s_addr);
+                            gateway_ip = format!(
+                                "{}.{}.{}.{}",
+                                (ip >> 24) & 0xff,
+                                (ip >> 16) & 0xff,
+                                (ip >> 8) & 0xff,
+                                ip & 0xff
+                            );
+                            break;
+                        }
+                    }
+                }
+
+                let aligned_len = (cmsg_len + std::mem::size_of::<usize>() - 1)
+                    & !(std::mem::size_of::<usize>() - 1);
+                if aligned_len == 0 {
+                    break;
+                }
+                offset += aligned_len;
+            }
+        }
+
+        if gateway_ip.is_empty() {
+            return CheckOutput::pass(format!(
+                "traceroute hop 1 RTT={:?}, but gateway IP not found in CMSG",
+                rtt
+            ));
+        }
+
+        let is_suspicious = gateway_ip.starts_with("10.8.")
+            || gateway_ip.starts_with("10.0.")
+            || gateway_ip.starts_with("172.16.")
+            || gateway_ip == "127.0.0.1";
+
+        let details = format!("traceroute hop 1: gateway={gateway_ip} RTT={:?}", rtt);
+        if is_suspicious {
+            CheckOutput::fail(format!(
+                "{details} — suspicious first hop (VPN gateway-like IP)"
+            ))
+        } else {
+            CheckOutput::pass(format!("{details} — secure (normal first hop gateway)"))
         }
     }
 }

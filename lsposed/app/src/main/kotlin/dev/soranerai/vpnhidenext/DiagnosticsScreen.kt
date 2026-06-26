@@ -33,10 +33,12 @@ import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
 import dev.soranerai.vpnhidenext.checks.CheckStatus
 import dev.soranerai.vpnhidenext.checks.checkBpfIfaceMap
+import dev.soranerai.vpnhidenext.checks.checkDirectSyscall
 import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkGetsocknameSpoof
 import dev.soranerai.vpnhidenext.checks.checkGetsockoptBind
 import dev.soranerai.vpnhidenext.checks.checkInetDiag
+import dev.soranerai.vpnhidenext.checks.checkIoctlAlternative
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
@@ -54,8 +56,11 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetTcp
 import dev.soranerai.vpnhidenext.checks.checkProcNetTcp6
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
+import dev.soranerai.vpnhidenext.checks.checkProcSysNetConf
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
+import dev.soranerai.vpnhidenext.checks.checkSystemProperties
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
+import dev.soranerai.vpnhidenext.checks.checkTracerouteRtt
 import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
@@ -806,6 +811,21 @@ internal fun runAllChecks(
             nativeCheck(res.getString(R.string.check_udp_pmtu)) { checkUdpPmtu() },
             nativeCheck(res.getString(R.string.check_netlink_getneigh)) {
                 checkNetlinkGetneigh()
+            },
+            nativeCheck(res.getString(R.string.check_system_properties)) {
+                checkSystemProperties()
+            },
+            nativeCheck(res.getString(R.string.check_proc_sys_net_conf)) {
+                checkProcSysNetConf()
+            },
+            nativeCheck(res.getString(R.string.check_ioctl_alternative)) {
+                checkIoctlAlternative()
+            },
+            nativeCheck(res.getString(R.string.check_direct_syscall)) {
+                checkDirectSyscall()
+            },
+            nativeCheck(res.getString(R.string.check_traceroute_rtt)) {
+                checkTracerouteRtt()
             },
             checkTrafficStatsDiscrepancy(
                 cm,
