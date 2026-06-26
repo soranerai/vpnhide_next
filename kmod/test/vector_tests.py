@@ -5,6 +5,8 @@ import socket
 import struct
 import sys
 
+# ruff: noqa: E501
+
 # Constants
 SO_BINDTODEVICE = getattr(socket, "SO_BINDTODEVICE", 25)
 SO_BINDTOIFINDEX = 62  # On Linux (asm-generic/socket.h), SO_BINDTOIFINDEX is 62
@@ -20,7 +22,7 @@ def safe_fork():
 
 def test_dev_ioctl(vpn0_idx):
     print("\n--- dev_ioctl checks ---")
-    
+
     # 1. Non-target check (root)
     try:
         idx = socket.if_nametoindex("vpn0")
@@ -78,7 +80,7 @@ def test_dev_ioctl(vpn0_idx):
 
 def test_setsockopt(vpn0_idx):
     print("\n--- setsockopt checks ---")
-    
+
     # 1. Non-target checks (root)
     s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
@@ -135,7 +137,7 @@ def test_setsockopt(vpn0_idx):
 
 def test_getsockopt(vpn0_idx):
     print("\n--- getsockopt checks ---")
-    
+
     # Setup bound sockets as root
     s_dev = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     s_dev.setsockopt(socket.SOL_SOCKET, SO_BINDTODEVICE, b"vpn0\x00")
@@ -177,7 +179,7 @@ def test_getsockopt(vpn0_idx):
 
 def test_getsockname():
     print("\n--- getsockname spoofing checks ---")
-    
+
     # Bind IPv4 UDP socket to 10.9.0.1
     s_v4 = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
@@ -230,7 +232,7 @@ def test_getsockname():
 
 def test_connect_port_block():
     print("\n--- connect port block checks ---")
-    
+
     # Start a TCP listener on loopback port 8080 (as root)
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -283,7 +285,7 @@ def test_connect_port_block():
 
 def test_bind_port_block():
     print("\n--- bind port block checks ---")
-    
+
     # Drop privileges and verify that binding to port 8080 redirects to port 0 (ephemeral port)
     pid = safe_fork()
     if pid == 0:
@@ -323,7 +325,7 @@ def main():
         sys.exit(1)
 
     success = True
-    
+
     # Run dev_ioctl
     if not test_dev_ioctl(vpn0_idx):
         print("RESULT dev_ioctl=FAIL")
