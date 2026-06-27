@@ -96,6 +96,10 @@ check proc_route_v6   "cat /proc/net/ipv6_route"     "vpn0"   # ipv6_route_seq_s
 check netlink_route4  "ip route show table all"      "vpn0"   # fib_dump_info
 check netlink_route6  "ip -6 route show table all"   "vpn0"   # rt6_fill_node
 check policy_rule     "ip rule show"                 "199"    # fib_nl_fill_rule
+check sysfs_ipv4_conf "ls /proc/sys/net/ipv4/conf"   "vpn0"   # getdents64 /proc/sys/net/ipv4/conf
+check sysfs_ipv6_neig "ls /proc/sys/net/ipv6/neigh"  "vpn0"   # getdents64 /proc/sys/net/ipv6/neigh
+check proc_net_dev    "cat /proc/net/dev"            "vpn0"   # dev_seq_show
+check proc_net_if_in6 "cat /proc/net/if_inet6"       "vpn0"   # if6_seq_show
 
 # --- execute programmatic socket and ioctl vector tests in Python ---
 # 1. Set targets and configure port rules for UID 5555

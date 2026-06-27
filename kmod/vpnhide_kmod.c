@@ -201,11 +201,20 @@ enum vpnhide_hook_idx {
 	HOOK_GETNAME_INET6 = 15,
 	HOOK_BIND = 16,
 	HOOK_BPF = 17,
+	HOOK_GETDENTS64 = 18,
+	HOOK_DEV_SEQ = 19,
+	HOOK_IF6_SEQ = 20,
+	HOOK_FACCESSAT = 21,
+	HOOK_FACCESSAT2 = 22,
+	HOOK_NEWFSTATAT = 23,
+	HOOK_OPENAT = 24,
+	HOOK_OPENAT2 = 25,
+	HOOK_READLINKAT = 26,
 };
 
 static inline bool is_hook_active(enum vpnhide_hook_idx index)
 {
-	return (READ_ONCE(active_hooks_mask) & (1 << index)) != 0;
+	return (READ_ONCE(active_hooks_mask) & (1u << index)) != 0;
 }
 
 /*
@@ -324,6 +333,89 @@ struct vpnhide_active_vpns {
 };
 static struct vpnhide_active_vpns __rcu *global_active_vpns;
 static DEFINE_SPINLOCK(active_vpns_lock);
+
+static inline u32 fnv1a_name(const char *s, int maxlen)
+{
+	u32 hash = 2166136261u;
+	int i;
+	for (i = 0; i < maxlen && s[i] != '\0'; i++) {
+		hash ^= (u8)s[i];
+		hash *= 16777619u;
+	}
+	return hash;
+}
+
+struct vh_vpn_name_cache {
+	int count;
+	u32 hashes[MAX_ACTIVE_VPNS];
+	char names[MAX_ACTIVE_VPNS][MAX_IFACE_LEN];
+	struct rcu_head rcu;
+};
+
+static struct vh_vpn_name_cache __rcu *g_vpn_name_cache;
+static DEFINE_SPINLOCK(g_vpn_name_cache_lock);
+
+static void free_vpn_name_cache_rcu(struct rcu_head *head)
+{
+	struct vh_vpn_name_cache *p =
+		container_of(head, struct vh_vpn_name_cache, rcu);
+	kfree(p);
+}
+
+static void vh_rebuild_name_cache(const struct vpnhide_vpn_ifindexes *idata)
+{
+	struct vh_vpn_name_cache *new_c, *old_c;
+	int i;
+
+	new_c = kzalloc(sizeof(*new_c), GFP_KERNEL);
+	if (!new_c)
+		return;
+
+	new_c->count = (idata->count < MAX_ACTIVE_VPNS) ? idata->count :
+							  MAX_ACTIVE_VPNS;
+	for (i = 0; i < new_c->count; i++) {
+		strncpy(new_c->names[i], idata->vpns[i].name,
+			MAX_IFACE_LEN - 1);
+		new_c->names[i][MAX_IFACE_LEN - 1] = '\0';
+		new_c->hashes[i] = fnv1a_name(new_c->names[i], MAX_IFACE_LEN);
+	}
+
+	spin_lock(&g_vpn_name_cache_lock);
+	old_c = rcu_dereference_protected(
+		g_vpn_name_cache, lockdep_is_held(&g_vpn_name_cache_lock));
+	rcu_assign_pointer(g_vpn_name_cache, new_c);
+	spin_unlock(&g_vpn_name_cache_lock);
+
+	if (old_c)
+		call_rcu(&old_c->rcu, free_vpn_name_cache_rcu);
+}
+
+static bool __always_inline vh_is_vpn_name_cached(const char *name, size_t len)
+{
+	struct vh_vpn_name_cache *c;
+	u32 h;
+	int i;
+	bool found = false;
+
+	if (unlikely(!name || len == 0))
+		return false;
+
+	h = fnv1a_name(name, len);
+
+	rcu_read_lock();
+	c = rcu_dereference(g_vpn_name_cache);
+	if (likely(c)) {
+		for (i = 0; i < c->count; i++) {
+			if (c->hashes[i] == h &&
+			    strncmp(c->names[i], name, MAX_IFACE_LEN) == 0) {
+				found = true;
+				break;
+			}
+		}
+	}
+	rcu_read_unlock();
+	return found;
+}
 
 static bool is_active_vpn_ifindex(u32 ifindex)
 {
@@ -2774,6 +2866,8 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 		rcu_assign_pointer(global_active_vpns, new_vpns);
 		spin_unlock(&active_vpns_lock);
 
+		vh_rebuild_name_cache(idata);
+
 		if (old_vpns) {
 			synchronize_rcu();
 			kfree(old_vpns);
@@ -4107,6 +4201,626 @@ static struct kretprobe sys_bpf_krp = {
 	.kp.symbol_name = "__arm64_sys_bpf",
 };
 
+static const char *const vh_guarded_dir_prefixes[] = {
+	"/proc/sys/net/ipv4/conf",  "/proc/sys/net/ipv6/conf",
+	"/proc/sys/net/ipv4/neigh", "/proc/sys/net/ipv6/neigh",
+	"/proc/net/dev_snmp6",	    "/sys/class/net",
+};
+
+static bool vh_is_path_guarded(struct file *file, char *buf, int buflen)
+{
+	char *path_ptr;
+	int i;
+
+	if (!file)
+		return false;
+
+	path_ptr = d_path(&file->f_path, buf, buflen);
+	if (IS_ERR(path_ptr))
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(vh_guarded_dir_prefixes); i++) {
+		size_t len = strlen(vh_guarded_dir_prefixes[i]);
+		if (strncmp(path_ptr, vh_guarded_dir_prefixes[i], len) == 0) {
+			if (path_ptr[len] == '\0' || path_ptr[len] == '/')
+				return true;
+		}
+	}
+
+	return false;
+}
+
+struct vh_linux_dirent64 {
+	u64 d_ino;
+	s64 d_off;
+	unsigned short d_reclen;
+	unsigned char d_type;
+	char d_name[];
+};
+
+struct getdents64_data {
+	void __user *dirp;
+	unsigned int count;
+	bool should_filter;
+};
+
+static bool sys_getdents64_uses_wrapper = false;
+
+static int sys_getdents64_entry(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	struct getdents64_data *data;
+	int fd;
+	void __user *dirp;
+	unsigned int count;
+	struct fd f;
+	struct file *file_ptr;
+	char path_buf[256];
+	bool is_guarded = false;
+
+	if (!is_hook_active(HOOK_GETDENTS64))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	data = (void *)ri->data;
+	data->should_filter = false;
+
+	if (sys_getdents64_uses_wrapper) {
+		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs &&
+		    (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
+			fd = (int)user_regs->regs[0];
+			dirp = (void __user *)user_regs->regs[1];
+			count = (unsigned int)user_regs->regs[2];
+		} else {
+			return 1;
+		}
+	} else {
+		fd = (int)regs->regs[0];
+		dirp = (void __user *)regs->regs[1];
+		count = (unsigned int)regs->regs[2];
+	}
+
+	data->dirp = dirp;
+	data->count = count;
+
+	f = fdget(fd);
+	file_ptr = vh_fd_file(f);
+	if (file_ptr) {
+		is_guarded = vh_is_path_guarded(file_ptr, path_buf,
+						sizeof(path_buf));
+	}
+	fdput(f);
+
+	if (is_guarded) {
+		data->should_filter = true;
+		vpnhide_dbg("getdents64_entry: guarding fd=%d\n", fd);
+		return 0;
+	}
+
+	return 1;
+}
+
+static int sys_getdents64_ret(struct kretprobe_instance *ri,
+			      struct pt_regs *regs)
+{
+	struct getdents64_data *data = (void *)ri->data;
+	int retval = (int)regs_return_value(regs);
+	u8 *buf = NULL;
+
+	if (!data->should_filter || retval <= 0)
+		return 0;
+
+	buf = kvmalloc(retval, GFP_ATOMIC);
+	if (!buf)
+		return 0;
+
+	if (copy_from_user(buf, data->dirp, retval) == 0) {
+		u8 *p = buf;
+		u8 *end = buf + retval;
+		u8 *dst = buf;
+		int modified = 0;
+
+		while (p < end) {
+			struct vh_linux_dirent64 *de =
+				(struct vh_linux_dirent64 *)p;
+			if (de->d_reclen < sizeof(struct vh_linux_dirent64) ||
+			    p + de->d_reclen > end)
+				break;
+
+			if (vh_is_vpn_name_cached(de->d_name,
+						  strlen(de->d_name))) {
+				vpnhide_dbg(
+					"sys_getdents64_ret: filtering out entry '%s'\n",
+					de->d_name);
+				record_kmod_intercept(from_kuid(&init_user_ns,
+								current_uid()),
+						      2);
+				modified = 1;
+			} else {
+				if (dst != p) {
+					memmove(dst, p, de->d_reclen);
+				}
+				dst += de->d_reclen;
+			}
+			p += de->d_reclen;
+		}
+
+		if (modified) {
+			int new_len = dst - buf;
+			if (copy_to_user(data->dirp, buf, new_len) == 0) {
+				regs_set_return_value(regs, new_len);
+			}
+		}
+	}
+
+	kvfree(buf);
+	return 0;
+}
+
+static struct kretprobe sys_getdents64_krp = {
+	.entry_handler = sys_getdents64_entry,
+	.handler = sys_getdents64_ret,
+	.data_size = sizeof(struct getdents64_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_getdents64",
+};
+
+static int dev_seq_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data;
+	if (!is_hook_active(HOOK_DEV_SEQ))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	data = (void *)ri->data;
+	data->seq = (struct seq_file *)regs->regs[0];
+	data->start_count = data->seq ? data->seq->count : 0;
+
+	vpnhide_dbg("dev_seq_entry: uid=%u target=1\n",
+		    from_kuid(&init_user_ns, current_uid()));
+
+	return 0;
+}
+
+static int dev_seq_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data = (void *)ri->data;
+	struct seq_file *seq = data->seq;
+	char *buf, *src, *dst, *end;
+	char ifname[IFNAMSIZ];
+	int j;
+
+	if (!seq || !seq->buf)
+		return 0;
+
+	if (seq->count <= data->start_count)
+		return 0;
+
+	buf = seq->buf;
+	src = buf + data->start_count;
+	dst = src;
+	end = buf + seq->count;
+
+	while (src < end) {
+		char *nl = memchr(src, '\n', end - src);
+		char *line_end = nl ? nl + 1 : end;
+		size_t line_len = line_end - src;
+		char *p = src;
+
+		while (p < line_end && (*p == ' ' || *p == '\t'))
+			p++;
+
+		j = 0;
+		while (p < line_end && *p != ':' && *p != ' ' && *p != '\t' &&
+		       *p != '\n' && j < IFNAMSIZ - 1) {
+			ifname[j++] = *p++;
+		}
+		ifname[j] = '\0';
+
+		if (j > 0 && is_vpn_ifname(ifname)) {
+			vpnhide_dbg("dev_seq_ret: hiding statistics for %s\n",
+				    ifname);
+			record_kmod_intercept(
+				from_kuid(&init_user_ns, current_uid()), 2);
+			src = line_end;
+			continue;
+		}
+
+		if (dst != src)
+			memmove(dst, src, line_len);
+		dst += line_len;
+		src = line_end;
+	}
+
+	seq->count = dst - buf;
+	return 0;
+}
+
+static struct kretprobe dev_seq_krp = {
+	.handler = dev_seq_ret,
+	.entry_handler = dev_seq_entry,
+	.data_size = sizeof(struct fib_route_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "dev_seq_show",
+};
+
+static int if6_seq_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data;
+	if (!is_hook_active(HOOK_IF6_SEQ))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	data = (void *)ri->data;
+	data->seq = (struct seq_file *)regs->regs[0];
+	data->start_count = data->seq ? data->seq->count : 0;
+
+	vpnhide_dbg("if6_seq_entry: uid=%u target=1\n",
+		    from_kuid(&init_user_ns, current_uid()));
+
+	return 0;
+}
+
+static int if6_seq_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data = (void *)ri->data;
+	struct seq_file *seq = data->seq;
+	char *buf, *src, *dst, *end;
+	char ifname[IFNAMSIZ];
+	int j;
+
+	if (!seq || !seq->buf)
+		return 0;
+
+	if (seq->count <= data->start_count)
+		return 0;
+
+	buf = seq->buf;
+	src = buf + data->start_count;
+	dst = src;
+	end = buf + seq->count;
+
+	while (src < end) {
+		char *nl = memchr(src, '\n', end - src);
+		char *line_end = nl ? nl + 1 : end;
+		size_t line_len = line_end - src;
+		char *p;
+
+		p = line_end - 1;
+		while (p >= src &&
+		       (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t'))
+			p--;
+
+		j = 0;
+		while (p >= src && *p != ' ' && *p != '\t' &&
+		       j < IFNAMSIZ - 1) {
+			j++;
+			p--;
+		}
+		p++;
+
+		for (j = 0; j < IFNAMSIZ - 1 && (p + j) < line_end &&
+			    p[j] != ' ' && p[j] != '\t' && p[j] != '\n';
+		     j++)
+			ifname[j] = p[j];
+		ifname[j] = '\0';
+
+		if (is_vpn_ifname(ifname)) {
+			vpnhide_dbg("if6_seq_ret: hiding interface %s\n",
+				    ifname);
+			record_kmod_intercept(
+				from_kuid(&init_user_ns, current_uid()), 2);
+			src = line_end;
+			continue;
+		}
+
+		if (dst != src)
+			memmove(dst, src, line_len);
+		dst += line_len;
+		src = line_end;
+	}
+
+	seq->count = dst - buf;
+	return 0;
+}
+
+static struct kretprobe if6_seq_krp = {
+	.handler = if6_seq_ret,
+	.entry_handler = if6_seq_entry,
+	.data_size = sizeof(struct fib_route_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "if6_seq_show",
+};
+
+static int get_path_from_dfd_and_name(int dfd, const char __user *filename,
+				      char *buf, int buflen)
+{
+	char name[256];
+	struct fd f;
+	struct file *file_ptr;
+	char path_buf[256];
+	char *path_ptr;
+	int len;
+	int name_len;
+
+	if (!filename)
+		return -EINVAL;
+
+	name_len = strncpy_from_user(name, filename, sizeof(name) - 1);
+	if (name_len < 0)
+		return name_len;
+	name[name_len] = '\0';
+
+	if (name[0] == '/') {
+		len = snprintf(buf, buflen, "%s", name);
+		return (len >= buflen) ? -ENAMETOOLONG : 0;
+	}
+
+	if (dfd == AT_FDCWD) {
+		/* Resolving AT_FDCWD (cwd of process) is possible via pwd path,
+		 * but in Android apps, relative lookups to /sys or /proc are extremely rare.
+		 * Usually they do absolute path access like access("/sys/class/net/tun0", F_OK).
+		 * Thus, we check if the filename contains "tun", "wg", "ppp", etc. and matches.
+		 * To be absolutely robust, we can copy name to buf. */
+		len = snprintf(buf, buflen, "%s", name);
+		return (len >= buflen) ? -ENAMETOOLONG : 0;
+	}
+
+	f = fdget(dfd);
+	file_ptr = vh_fd_file(f);
+	if (!file_ptr) {
+		fdput(f);
+		return -EBADF;
+	}
+
+	path_ptr = d_path(&file_ptr->f_path, path_buf, sizeof(path_buf));
+	if (IS_ERR(path_ptr)) {
+		fdput(f);
+		return PTR_ERR(path_ptr);
+	}
+
+	len = snprintf(buf, buflen, "%s/%s", path_ptr, name);
+	fdput(f);
+
+	return (len >= buflen) ? -ENAMETOOLONG : 0;
+}
+
+static bool vh_is_resolved_path_guarded_vpn(const char *path)
+{
+	int i;
+	const char *last_slash;
+	const char *iface_name;
+	size_t iface_len;
+
+	if (!path)
+		return false;
+
+	for (i = 0; i < ARRAY_SIZE(vh_guarded_dir_prefixes); i++) {
+		size_t prefix_len = strlen(vh_guarded_dir_prefixes[i]);
+		if (strncmp(path, vh_guarded_dir_prefixes[i], prefix_len) ==
+		    0) {
+			if (path[prefix_len] == '/') {
+				last_slash = strrchr(path, '/');
+				if (last_slash) {
+					iface_name = last_slash + 1;
+					iface_len = strlen(iface_name);
+					if (vh_is_vpn_name_cached(iface_name,
+								  iface_len)) {
+						return true;
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+static bool sys_openat_uses_wrapper = false;
+static bool sys_openat2_uses_wrapper = false;
+static bool sys_faccessat_uses_wrapper = false;
+static bool sys_faccessat2_uses_wrapper = false;
+static bool sys_newfstatat_uses_wrapper = false;
+static bool sys_readlinkat_uses_wrapper = false;
+
+struct path_oracle_data {
+	bool should_deny;
+};
+
+static int path_oracle_entry(struct kretprobe_instance *ri,
+			     struct pt_regs *regs, int dfd_idx,
+			     int filename_idx, enum vpnhide_hook_idx hook_idx)
+{
+	struct path_oracle_data *data;
+	int dfd;
+	const char __user *filename;
+	char path_buf[512];
+	bool uses_wrapper = false;
+
+	if (!is_hook_active(hook_idx))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	data = (void *)ri->data;
+	data->should_deny = false;
+
+	switch (hook_idx) {
+	case HOOK_OPENAT:
+		uses_wrapper = sys_openat_uses_wrapper;
+		break;
+	case HOOK_OPENAT2:
+		uses_wrapper = sys_openat2_uses_wrapper;
+		break;
+	case HOOK_FACCESSAT:
+		uses_wrapper = sys_faccessat_uses_wrapper;
+		break;
+	case HOOK_FACCESSAT2:
+		uses_wrapper = sys_faccessat2_uses_wrapper;
+		break;
+	case HOOK_NEWFSTATAT:
+		uses_wrapper = sys_newfstatat_uses_wrapper;
+		break;
+	case HOOK_READLINKAT:
+		uses_wrapper = sys_readlinkat_uses_wrapper;
+		break;
+	default:
+		break;
+	}
+
+	/* To be safe on ARM64, we check regs->regs[0] for wrapper since all syscall wrappers pack pt_regs */
+	if (uses_wrapper) {
+		struct pt_regs *user_regs = (struct pt_regs *)regs->regs[0];
+		if (user_regs &&
+		    (unsigned long)user_regs >= 0xFFFF000000000000ULL) {
+			dfd = (int)user_regs->regs[dfd_idx];
+			filename = (const char __user *)
+					   user_regs->regs[filename_idx];
+		} else {
+			return 1;
+		}
+	} else {
+		dfd = (int)regs->regs[dfd_idx];
+		filename = (const char __user *)regs->regs[filename_idx];
+	}
+
+	if (get_path_from_dfd_and_name(dfd, filename, path_buf,
+				       sizeof(path_buf)) == 0) {
+		if (vh_is_resolved_path_guarded_vpn(path_buf)) {
+			data->should_deny = true;
+			vpnhide_dbg(
+				"path_oracle_entry: matched guarded vpn path '%s', denying\n",
+				path_buf);
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+static int path_oracle_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct path_oracle_data *data = (void *)ri->data;
+	if (data->should_deny) {
+		regs_set_return_value(regs, -ENOENT);
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      2);
+	}
+	return 0;
+}
+
+static int sys_openat_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	return path_oracle_entry(ri, regs, 0, 1, HOOK_OPENAT);
+}
+static int sys_openat_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	return path_oracle_ret(ri, regs);
+}
+static struct kretprobe sys_openat_krp = {
+	.entry_handler = sys_openat_entry,
+	.handler = sys_openat_ret,
+	.data_size = sizeof(struct path_oracle_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_openat",
+};
+
+static int sys_openat2_entry(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
+{
+	return path_oracle_entry(ri, regs, 0, 1, HOOK_OPENAT2);
+}
+static int sys_openat2_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	return path_oracle_ret(ri, regs);
+}
+static struct kretprobe sys_openat2_krp = {
+	.entry_handler = sys_openat2_entry,
+	.handler = sys_openat2_ret,
+	.data_size = sizeof(struct path_oracle_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_openat2",
+};
+
+static int sys_faccessat_entry(struct kretprobe_instance *ri,
+			       struct pt_regs *regs)
+{
+	return path_oracle_entry(ri, regs, 0, 1, HOOK_FACCESSAT);
+}
+static int sys_faccessat_ret(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
+{
+	return path_oracle_ret(ri, regs);
+}
+static struct kretprobe sys_faccessat_krp = {
+	.entry_handler = sys_faccessat_entry,
+	.handler = sys_faccessat_ret,
+	.data_size = sizeof(struct path_oracle_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_faccessat",
+};
+
+static int sys_faccessat2_entry(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	return path_oracle_entry(ri, regs, 0, 1, HOOK_FACCESSAT2);
+}
+static int sys_faccessat2_ret(struct kretprobe_instance *ri,
+			      struct pt_regs *regs)
+{
+	return path_oracle_ret(ri, regs);
+}
+static struct kretprobe sys_faccessat2_krp = {
+	.entry_handler = sys_faccessat2_entry,
+	.handler = sys_faccessat2_ret,
+	.data_size = sizeof(struct path_oracle_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_faccessat2",
+};
+
+static int sys_newfstatat_entry(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	return path_oracle_entry(ri, regs, 0, 1, HOOK_NEWFSTATAT);
+}
+static int sys_newfstatat_ret(struct kretprobe_instance *ri,
+			      struct pt_regs *regs)
+{
+	return path_oracle_ret(ri, regs);
+}
+static struct kretprobe sys_newfstatat_krp = {
+	.entry_handler = sys_newfstatat_entry,
+	.handler = sys_newfstatat_ret,
+	.data_size = sizeof(struct path_oracle_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_newfstatat",
+};
+
+static int sys_readlinkat_entry(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	return path_oracle_entry(ri, regs, 0, 1, HOOK_READLINKAT);
+}
+static int sys_readlinkat_ret(struct kretprobe_instance *ri,
+			      struct pt_regs *regs)
+{
+	return path_oracle_ret(ri, regs);
+}
+static struct kretprobe sys_readlinkat_krp = {
+	.entry_handler = sys_readlinkat_entry,
+	.handler = sys_readlinkat_ret,
+	.data_size = sizeof(struct path_oracle_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "__arm64_sys_readlinkat",
+};
+
 /* ================================================================== */
 /*  Module init / exit                                                */
 /* ================================================================== */
@@ -4155,6 +4869,15 @@ static struct kretprobe_reg probes[] = {
 	{ &inet_getname_krp, "inet_getname", NULL, false, 20 },
 	{ &inet6_getname_krp, "inet6_getname", NULL, false, 20 },
 	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false, -1 },
+	{ &sys_getdents64_krp, "__arm64_sys_getdents64", NULL, false, -1 },
+	{ &dev_seq_krp, "dev_seq_show", NULL, false, -1 },
+	{ &if6_seq_krp, "if6_seq_show", NULL, false, -1 },
+	{ &sys_openat_krp, "__arm64_sys_openat", NULL, false, -1 },
+	{ &sys_openat2_krp, "__arm64_sys_openat2", NULL, false, -1 },
+	{ &sys_faccessat_krp, "__arm64_sys_faccessat", NULL, false, -1 },
+	{ &sys_faccessat2_krp, "__arm64_sys_faccessat2", NULL, false, -1 },
+	{ &sys_newfstatat_krp, "__arm64_sys_newfstatat", NULL, false, -1 },
+	{ &sys_readlinkat_krp, "__arm64_sys_readlinkat", NULL, false, -1 },
 };
 
 static int __init vpnhide_init(void)
@@ -4188,6 +4911,40 @@ static int __init vpnhide_init(void)
 	    strcmp(sys_getsockname_krp.kp.symbol_name,
 		   "__arm64_sys_getsockname") == 0) {
 		sys_getsockname_uses_wrapper = true;
+	}
+	if (sys_getdents64_krp.kp.symbol_name &&
+	    strcmp(sys_getdents64_krp.kp.symbol_name,
+		   "__arm64_sys_getdents64") == 0) {
+		sys_getdents64_uses_wrapper = true;
+	}
+	if (sys_openat_krp.kp.symbol_name &&
+	    strcmp(sys_openat_krp.kp.symbol_name, "__arm64_sys_openat") == 0) {
+		sys_openat_uses_wrapper = true;
+	}
+	if (sys_openat2_krp.kp.symbol_name &&
+	    strcmp(sys_openat2_krp.kp.symbol_name, "__arm64_sys_openat2") ==
+		    0) {
+		sys_openat2_uses_wrapper = true;
+	}
+	if (sys_faccessat_krp.kp.symbol_name &&
+	    strcmp(sys_faccessat_krp.kp.symbol_name, "__arm64_sys_faccessat") ==
+		    0) {
+		sys_faccessat_uses_wrapper = true;
+	}
+	if (sys_faccessat2_krp.kp.symbol_name &&
+	    strcmp(sys_faccessat2_krp.kp.symbol_name,
+		   "__arm64_sys_faccessat2") == 0) {
+		sys_faccessat2_uses_wrapper = true;
+	}
+	if (sys_newfstatat_krp.kp.symbol_name &&
+	    strcmp(sys_newfstatat_krp.kp.symbol_name,
+		   "__arm64_sys_newfstatat") == 0) {
+		sys_newfstatat_uses_wrapper = true;
+	}
+	if (sys_readlinkat_krp.kp.symbol_name &&
+	    strcmp(sys_readlinkat_krp.kp.symbol_name,
+		   "__arm64_sys_readlinkat") == 0) {
+		sys_readlinkat_uses_wrapper = true;
 	}
 
 	/* Initialize RCU targets pointers */
@@ -4311,6 +5068,22 @@ static void __exit vpnhide_exit(void)
 	if (vpns) {
 		synchronize_rcu();
 		kfree(vpns);
+	}
+
+	/* Cleanup RCU name cache */
+	{
+		struct vh_vpn_name_cache *old_c;
+		spin_lock(&g_vpn_name_cache_lock);
+		old_c = rcu_dereference_protected(
+			g_vpn_name_cache,
+			lockdep_is_held(&g_vpn_name_cache_lock));
+		rcu_assign_pointer(g_vpn_name_cache, NULL);
+		spin_unlock(&g_vpn_name_cache_lock);
+
+		if (old_c) {
+			synchronize_rcu();
+			kfree(old_c);
+		}
 	}
 
 	/* Cleanup RCU spoof IP */

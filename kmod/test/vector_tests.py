@@ -545,6 +545,65 @@ def test_bpf_laundering(vpn0_idx):
     return True
 
 
+def test_proc_sys_net():
+    print("\n--- proc / sysfs net checks ---")
+
+    # 1. Non-target check (root)
+    try:
+        ipv4_conf = os.listdir("/proc/sys/net/ipv4/conf")
+        ipv6_neigh = os.listdir("/proc/sys/net/ipv6/neigh")
+        with open("/proc/net/dev") as f:
+            proc_net_dev = f.read()
+        with open("/proc/net/if_inet6") as f:
+            proc_net_if_inet6 = f.read()
+
+        assert "vpn0" in ipv4_conf, "vpn0 not in /proc/sys/net/ipv4/conf under root"
+        assert "vpn0" in ipv6_neigh, "vpn0 not in /proc/sys/net/ipv6/neigh under root"
+        assert "vpn0" in proc_net_dev, "vpn0 not in /proc/net/dev under root"
+        assert "vpn0" in proc_net_if_inet6, "vpn0 not in /proc/net/if_inet6 under root"
+        print("[proc/sysfs net] Non-target checks passed")
+    except Exception as e:
+        print(f"FAIL: proc/sysfs net non-target check failed: {e}")
+        return False
+
+    # 2. Target check (UID 5555)
+    pid = safe_fork()
+    if pid == 0:
+        try:
+            os.setuid(5555)
+            ipv4_conf = os.listdir("/proc/sys/net/ipv4/conf")
+            ipv6_neigh = os.listdir("/proc/sys/net/ipv6/neigh")
+            with open("/proc/net/dev") as f:
+                proc_net_dev = f.read()
+            with open("/proc/net/if_inet6") as f:
+                proc_net_if_inet6 = f.read()
+
+            if "vpn0" in ipv4_conf:
+                print("FAIL: vpn0 visible in /proc/sys/net/ipv4/conf for target UID")
+                sys.exit(1)
+            if "vpn0" in ipv6_neigh:
+                print("FAIL: vpn0 visible in /proc/sys/net/ipv6/neigh for target UID")
+                sys.exit(1)
+            if "vpn0" in proc_net_dev:
+                print("FAIL: vpn0 visible in /proc/net/dev for target UID")
+                sys.exit(1)
+            if "vpn0" in proc_net_if_inet6:
+                print("FAIL: vpn0 visible in /proc/net/if_inet6 for target UID")
+                sys.exit(1)
+
+            print("[proc/sysfs net] Target checks passed")
+            sys.exit(0)
+        except Exception as e:
+            print(f"FAIL: proc/sysfs net child exception: {e}")
+            sys.exit(1)
+    else:
+        wpid, status = os.waitpid(pid, 0)
+        if status != 0:
+            return False
+
+    return True
+
+
 def main():
     try:
         vpn0_idx = socket.if_nametoindex("vpn0")
@@ -602,6 +661,13 @@ def main():
         success = False
     else:
         print("RESULT bpf_laundering=PASS")
+
+    # Run proc/sysfs net checks
+    if not test_proc_sys_net():
+        print("RESULT proc_sys_net=FAIL")
+        success = False
+    else:
+        print("RESULT proc_sys_net=PASS")
 
     print("\n--- Verification Summary ---")
     if not success:
