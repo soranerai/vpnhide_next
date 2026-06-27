@@ -17,13 +17,17 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -62,6 +66,10 @@ import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
 import dev.soranerai.vpnhidenext.checks.checkArpTimeoutIllusion
 import dev.soranerai.vpnhidenext.checks.checkBroadcastBlackhole
 import dev.soranerai.vpnhidenext.checks.checkGsoAsymmetry
+import dev.soranerai.vpnhidenext.checks.checkIpv6LinkLocalBruteforce
+import dev.soranerai.vpnhidenext.checks.checkUidRouteRulesLeak
+import dev.soranerai.vpnhidenext.checks.checkPmtuCachePoisoning
+import dev.soranerai.vpnhidenext.checks.checkUnderlayPortConflict
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
 import dev.soranerai.vpnhidenext.generated.IfaceLists
@@ -630,6 +638,7 @@ private fun SectionHeader(title: String) {
     )
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CheckRow(r: CheckResult) {
     var expanded by remember { mutableStateOf(false) }
@@ -663,13 +672,32 @@ private fun CheckRow(r: CheckResult) {
             Color.Transparent
         }
 
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val toastMsg = stringResource(R.string.toast_copied_to_clipboard)
+
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(rowBgColor)
-                .clickable(enabled = r.detail.isNotBlank()) { expanded = !expanded }
+                .combinedClickable(
+                    onClick = {
+                        if (r.detail.isNotBlank()) {
+                            expanded = !expanded
+                        }
+                    },
+                    onLongClick = {
+                        val textToCopy = if (r.detail.isNotBlank()) {
+                            "${r.name}: $badgeText\n${r.detail}"
+                        } else {
+                            "${r.name}: $badgeText"
+                        }
+                        clipboardManager.setText(AnnotatedString(textToCopy))
+                        Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
+                    }
+                )
                 .padding(vertical = 10.dp, horizontal = 14.dp),
     ) {
         Row(
@@ -826,6 +854,9 @@ internal fun runAllChecks(
             },
             nativeCheck(res.getString(R.string.check_gso_asymmetry)) {
                 checkGsoAsymmetry()
+            },
+            nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) {
+                checkIpv6LinkLocalBruteforce()
             },
             checkTrafficStatsDiscrepancy(
                 cm,

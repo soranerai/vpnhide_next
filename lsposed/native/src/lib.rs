@@ -2690,5 +2690,457 @@ pub fn check_gso_asymmetry() -> CheckOutput {
     }
 }
 
+#[uniffi::export]
+pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
+    unsafe {
+        let mut active_indices: Vec<u32> = Vec::new();
+        let mut named_vpn: Vec<String> = Vec::new();
+        // Indices found by bind probe but invisible to if_indextoname → name hidden by kmod.
+        let mut anonymous_indices: Vec<u32> = Vec::new();
+
+        // Pass 1: blind bind probe — discover active interface indices without enumerating them.
+        // A fresh socket per iteration avoids the "already bound" problem and keeps each probe
+        // independent.  ENODEV means no interface at this index; any other outcome (EADDRNOTAVAIL,
+        // EACCES, EPERM, or success) means the kernel acknowledges the interface exists.
+        for i in 1u32..=64 {
+            let sock = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
+            if sock < 0 {
+                continue;
+            }
+            let mut addr: libc::sockaddr_in6 = std::mem::zeroed();
+            addr.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+            addr.sin6_port = 0u16.to_be();
+            addr.sin6_addr.s6_addr = [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+            addr.sin6_scope_id = i;
+            let ret = libc::bind(
+                sock,
+                std::ptr::from_ref(&addr).cast(),
+                std::mem::size_of_val(&addr) as libc::socklen_t,
+            );
+            let err_no = if ret < 0 { last_os_errno() } else { 0 };
+            libc::close(sock);
+
+            if ret < 0 && err_no == libc::ENODEV {
+                continue;
+            }
+            active_indices.push(i);
+
+            // Step 1: if_indextoname — succeeds even when netlink RTM_GETLINK is filtered.
+            // Physical interfaces (wlan0, rmnet0, lo) are fine; a VPN name here is a direct hit.
+            let mut ifname_buf = [0u8; libc::IF_NAMESIZE];
+            let ptr = libc::if_indextoname(i, ifname_buf.as_mut_ptr().cast());
+            if !ptr.is_null() {
+                let name = cstr_to_str(ptr);
+                if is_vpn_iface(&name) && is_interface_up(&name) {
+                    named_vpn.push(format!("idx={i}({name})"));
+                }
+            } else {
+                // if_indextoname failed for a confirmed-active index → name hidden by kmod.
+                anonymous_indices.push(i);
+            }
+        }
+
+        // Passes 2-4 target anonymous_indices only: physical interfaces are already identified by
+        // name above; deeper probing is only needed for nameless (kmod-hidden) entries.
+
+        // Pass 2: Multicast Capability Oracle (synchronous, no sleep).
+        // Physical wlan0/rmnet carry IFF_MULTICAST — mandatory for IPv6 NDP and Router Advertisements.
+        // Android VpnService tun0 lacks IFF_MULTICAST; joining ff02::1 on it returns EINVAL.
+        let mut multicast_denied: Vec<u32> = Vec::new();
+        for &idx in &anonymous_indices {
+            let sock6 = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
+            if sock6 < 0 {
+                continue;
+            }
+            let mut mreq: libc::ipv6_mreq = std::mem::zeroed();
+            // ff02::1 = All-Nodes Link-Local Multicast
+            mreq.ipv6mr_multiaddr.s6_addr =
+                [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+            mreq.ipv6mr_interface = idx as i32;
+            // IPV6_ADD_MEMBERSHIP = 20
+            let ret = libc::setsockopt(
+                sock6,
+                libc::IPPROTO_IPV6,
+                20,
+                std::ptr::from_ref(&mreq).cast(),
+                std::mem::size_of_val(&mreq) as libc::socklen_t,
+            );
+            let err_no = if ret < 0 { last_os_errno() } else { 0 };
+            libc::close(sock6);
+            if ret < 0 && (err_no == libc::EINVAL || err_no == libc::ENODEV) {
+                multicast_denied.push(idx);
+            }
+        }
+
+        // Pass 3: NDP Timeout Oracle (3.5 s per candidate, at most 2 anonymous indices).
+        // On a physical interface the kernel sends NDP "who has fe80::dead:beef:cafe:1234?" and
+        // waits.  After ~3 retransmissions with no reply it posts EHOSTUNREACH to MSG_ERRQUEUE.
+        // A tunnel (NOARP + POINTOPOINT) skips NDP entirely: the packet enters the pipe silently,
+        // no error is posted, and the error queue stays empty after the wait.
+        let mut ndp_tunnel: Vec<u32> = Vec::new();
+        let ndp_candidates: Vec<u32> = anonymous_indices
+            .iter()
+            .copied()
+            .rev() // highest index first — tun0 typically has the largest ifindex
+            .take(2)
+            .collect();
+        for idx in ndp_candidates {
+            let sock6 = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
+            if sock6 < 0 {
+                continue;
+            }
+            let val: libc::c_int = 1;
+            // IPV6_RECVERR = 25
+            libc::setsockopt(
+                sock6,
+                libc::IPPROTO_IPV6,
+                25,
+                std::ptr::from_ref(&val).cast(),
+                std::mem::size_of_val(&val) as libc::socklen_t,
+            );
+            let mut dest: libc::sockaddr_in6 = std::mem::zeroed();
+            dest.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+            dest.sin6_port = 53u16.to_be();
+            // "dead" link-local — guaranteed non-existent, so NDP never gets a reply
+            dest.sin6_addr.s6_addr = [
+                0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x12, 0x34,
+            ];
+            dest.sin6_scope_id = idx;
+            libc::sendto(
+                sock6,
+                b"ping".as_ptr().cast(),
+                4,
+                0,
+                std::ptr::from_ref(&dest).cast(),
+                std::mem::size_of_val(&dest) as libc::socklen_t,
+            );
+            // Wait for NDP retransmission timeout (3 x default RETRANS_TIMER ≈ 3 s)
+            std::thread::sleep(std::time::Duration::from_millis(3500));
+            let mut iov_buf = [0u8; 512];
+            let mut iov = libc::iovec {
+                iov_base: iov_buf.as_mut_ptr().cast(),
+                iov_len: iov_buf.len(),
+            };
+            let mut cmsg_buf = [0u8; 512];
+            let mut msg: libc::msghdr = std::mem::zeroed();
+            msg.msg_iov = &mut iov;
+            msg.msg_iovlen = 1;
+            msg.msg_control = cmsg_buf.as_mut_ptr().cast();
+            msg.msg_controllen = cmsg_buf.len() as _;
+            let ret = libc::recvmsg(sock6, &mut msg, libc::MSG_ERRQUEUE | libc::MSG_DONTWAIT);
+            libc::close(sock6);
+            if ret < 0 {
+                let e = last_os_errno();
+                if e == libc::EAGAIN || e == libc::EWOULDBLOCK {
+                    // Error queue empty → no NDP timeout → NOARP/P2P interface → tunnel
+                    ndp_tunnel.push(idx);
+                }
+            }
+            // ret >= 0: EHOSTUNREACH from NDP received → L2-capable interface, not a tunnel
+        }
+
+        // Pass 4: Hardware Qdisc Flood (non-blocking, no sleep).
+        // Physical wlan0/rmnet are backed by hardware TX ring buffers (txqueuelen ≈ 1000).
+        // Non-blocking sends fill them in < 1 ms; the kernel stalls with ENOBUFS/EAGAIN.
+        // tun0 has no radio: the kernel RAM queue absorbs far more sends before back-pressure.
+        // Threshold: > 5000 successful sends before any stall → RAM-backed queue → tunnel.
+        let flood_buf = [0u8; 64];
+        let mut qdisc_tunnel: Vec<u32> = Vec::new();
+        for &idx in &anonymous_indices {
+            let sock6 = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
+            if sock6 < 0 {
+                continue;
+            }
+            let flags = libc::fcntl(sock6, libc::F_GETFL, 0);
+            libc::fcntl(sock6, libc::F_SETFL, flags | libc::O_NONBLOCK);
+            let mut dest: libc::sockaddr_in6 = std::mem::zeroed();
+            dest.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+            dest.sin6_port = 53u16.to_be();
+            dest.sin6_addr.s6_addr =
+                [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
+            dest.sin6_scope_id = idx;
+            let mut successful_sends = 0u32;
+            for _ in 0..10000u32 {
+                let ret = libc::sendto(
+                    sock6,
+                    flood_buf.as_ptr().cast(),
+                    flood_buf.len(),
+                    0,
+                    std::ptr::from_ref(&dest).cast(),
+                    std::mem::size_of_val(&dest) as libc::socklen_t,
+                );
+                if ret > 0 {
+                    successful_sends += 1;
+                } else {
+                    let e = last_os_errno();
+                    if e == libc::ENOBUFS || e == libc::EAGAIN || e == libc::EWOULDBLOCK {
+                        break;
+                    }
+                }
+            }
+            libc::close(sock6);
+            if successful_sends > 5000 {
+                qdisc_tunnel.push(idx);
+            }
+        }
+
+        let details = format!(
+            "{} active {:?}; anonymous {:?}; \
+             multicast_denied {:?}; ndp_tunnel {:?}; qdisc_tunnel {:?}",
+            active_indices.len(),
+            active_indices,
+            anonymous_indices,
+            multicast_denied,
+            ndp_tunnel,
+            qdisc_tunnel,
+        );
+
+        if !named_vpn.is_empty() {
+            CheckOutput::fail(format!(
+                "VPN interfaces exposed via if_indextoname: [{}] — {}",
+                named_vpn.join(", "),
+                details,
+            ))
+        } else if !ndp_tunnel.is_empty() {
+            CheckOutput::fail(format!(
+                "Hidden VPN tunnel detected by NDP timeout oracle (NOARP on {:?}) — {}",
+                ndp_tunnel,
+                details,
+            ))
+        } else if !qdisc_tunnel.is_empty() {
+            CheckOutput::fail(format!(
+                "Hidden VPN tunnel detected by hardware qdisc flood (deep queue on {:?}) — {}",
+                qdisc_tunnel,
+                details,
+            ))
+        } else if !multicast_denied.is_empty() {
+            CheckOutput::fail(format!(
+                "Hidden VPN tunnel detected by multicast capability oracle \
+                 (IFF_MULTICAST denied on {:?}) — {}",
+                multicast_denied,
+                details,
+            ))
+        } else {
+            CheckOutput::pass(format!("No VPN detected — {}", details))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_uid_route_rules_leak() -> CheckOutput {
+    let fd = match open_netlink() {
+        Ok(fd) => fd,
+        Err(out) => return out,
+    };
+
+    unsafe {
+        #[repr(C)]
+        struct Req {
+            nlh: libc::nlmsghdr,
+            frh: FibRuleHdr,
+        }
+        let mut req: Req = std::mem::zeroed();
+        req.nlh.nlmsg_len = std::mem::size_of::<Req>() as u32;
+        req.nlh.nlmsg_type = libc::RTM_GETRULE;
+        req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
+        req.nlh.nlmsg_seq = 1;
+
+        let mut dest_addr: libc::sockaddr_nl = std::mem::zeroed();
+        dest_addr.nl_family = libc::AF_NETLINK as u16;
+        if libc::sendto(
+            fd,
+            std::ptr::from_ref(&req).cast(),
+            req.nlh.nlmsg_len as usize,
+            0,
+            std::ptr::from_ref(&dest_addr).cast(),
+            std::mem::size_of_val(&dest_addr) as libc::socklen_t,
+        ) < 0
+        {
+            let e = std::io::Error::last_os_error();
+            libc::close(fd);
+            return if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("netlink RTM_GETRULE denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("send error: {e}"))
+            };
+        }
+
+        let mut buf = [0u8; 32768];
+        let mut uid_rules = Vec::new();
+        let hdr_plus_frh =
+            std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<FibRuleHdr>();
+
+        const FRA_TABLE: u16 = 15;
+        const FRA_UID_RANGE: u16 = 20;
+
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
+            let len = netlink_recv(fd, &mut buf);
+            if len <= 0 {
+                break;
+            }
+            let cont = parse_netlink_msgs(
+                &buf,
+                len as usize,
+                libc::RTM_NEWRULE,
+                |b, offset, msg_len| {
+                    let data_start = offset + hdr_plus_frh;
+                    let msg_end = offset + msg_len;
+
+                    let frh_ptr = b
+                        .as_ptr()
+                        .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                        as *const FibRuleHdr;
+                    let frh = &*frh_ptr;
+                    let mut table_id = frh.table as u32;
+
+                    let mut has_uid_range = false;
+                    let mut uid_start = 0u32;
+                    let mut uid_end = 0u32;
+
+                    for_each_rtattr(b, data_start, msg_end, |rta, payload| match rta.rta_type {
+                        FRA_TABLE if payload.len() >= 4 => {
+                            table_id = u32::from_ne_bytes(payload[..4].try_into().unwrap());
+                        }
+                        FRA_UID_RANGE if payload.len() >= 8 => {
+                            uid_start = u32::from_ne_bytes(payload[..4].try_into().unwrap());
+                            uid_end = u32::from_ne_bytes(payload[4..8].try_into().unwrap());
+                            has_uid_range = true;
+                        }
+                        _ => {}
+                    });
+
+                    if has_uid_range {
+                        if uid_start >= 10000 {
+                            uid_rules.push(format!("table={table_id} range={}-{}", uid_start, uid_end));
+                        }
+                    }
+                },
+            );
+            if !cont {
+                break;
+            }
+        }
+        libc::close(fd);
+
+        if uid_rules.is_empty() {
+            CheckOutput::pass("No dynamic UID split routing rules found — physical network behavior".to_string())
+        } else {
+            CheckOutput::fail(format!(
+                "Split Tunneling routing rules detected (found {} UID range rules): {:?}",
+                uid_rules.len(),
+                uid_rules
+            ))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_pmtu_cache_poisoning() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        if libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        ) < 0 {
+            let err = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("connect to 8.8.8.8 failed: {}", err));
+        }
+
+        let mut mtu: libc::c_int = 0;
+        let mut len = std::mem::size_of_val(&mut mtu) as libc::socklen_t;
+        
+        let ret = libc::getsockopt(
+            fd,
+            libc::IPPROTO_IP,
+            14, // IP_MTU
+            std::ptr::from_mut(&mut mtu).cast(),
+            &mut len,
+        );
+
+        libc::close(fd);
+
+        if ret < 0 {
+            return CheckOutput::fail(format!("getsockopt IP_MTU failed: {}", last_os_error()));
+        }
+
+        if mtu > 0 && mtu < 1450 {
+            CheckOutput::fail(format!(
+                "Path MTU cache leak detected: MTU to 8.8.8.8 is reduced to {} (expected >= 1480) — VPN detected",
+                mtu
+            ))
+        } else {
+            CheckOutput::pass(format!("Normal Path MTU: {} bytes", mtu))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_underlay_port_conflict() -> CheckOutput {
+    unsafe {
+        let ip = match find_active_physical_ip_and_mask() {
+            Some((ip, _)) => ip,
+            None => {
+                return CheckOutput::pass("No active physical IPv4 interface found to scan".to_string());
+            }
+        };
+
+        let ip_be = ip.to_be();
+        let ip_bytes = ip_be.to_ne_bytes();
+        let ip_str = format!("{}.{}.{}.{}", ip_bytes[0], ip_bytes[1], ip_bytes[2], ip_bytes[3]);
+
+        let ports: [u16; 5] = [500, 4500, 1194, 1701, 51820];
+        let mut conflicted_ports = Vec::new();
+
+        for &port in &ports {
+            let sock = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+            if sock < 0 {
+                continue;
+            }
+
+            let mut addr: libc::sockaddr_in = std::mem::zeroed();
+            addr.sin_family = libc::AF_INET as libc::sa_family_t;
+            addr.sin_port = port.to_be();
+            addr.sin_addr.s_addr = ip.to_be();
+
+            let ret = libc::bind(
+                sock,
+                std::ptr::from_ref(&addr).cast(),
+                std::mem::size_of_val(&addr) as libc::socklen_t,
+            );
+
+            if ret < 0 {
+                let err_no = last_os_errno();
+                if err_no == libc::EADDRINUSE {
+                    conflicted_ports.push(port);
+                }
+            }
+            libc::close(sock);
+        }
+
+        if conflicted_ports.is_empty() {
+            CheckOutput::pass(format!(
+                "No UDP port conflicts on physical interface IP {} (checked ports: {:?})",
+                ip_str, ports
+            ))
+        } else {
+            CheckOutput::fail(format!(
+                "UDP Port exhaustion leak: ports {:?} are already bound on physical IP {} — active VPN tunnel underlay socket detected",
+                conflicted_ports, ip_str
+            ))
+        }
+    }
+}
+
 
 

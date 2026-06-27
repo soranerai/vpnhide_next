@@ -146,6 +146,7 @@
     <string name="changelog_section_changed">Изменено</string>
     <string name="changelog_section_fixed">Исправлено</string>
     <string name="changelog_section_notes">Заметки</string>
+    <string name="toast_copied_to_clipboard">Скопировано в буфер обмена</string>
 
     <!-- Diagnostics -->
     <string name="btn_export_debug">Собрать отладочный лог</string>
@@ -161,6 +162,13 @@
     <string name="check_arp_timeout_illusion" translatable="false">Оракул L2-отсутствия (ARP таймаут)</string>
     <string name="check_broadcast_blackhole" translatable="false">Отторжение широковещательного домена</string>
     <string name="check_gso_asymmetry" translatable="false">Аномалия аппаратной разгрузки (GSO)</string>
+    <string name="check_ipv6_link_local_bruteforce" translatable="false">Зондирование интерфейсов IPv6 Link-Local</string>
+    <string name="check_ipv6_multicast_denied" translatable="false">Оракул мультикаст-возможностей IPv6</string>
+    <string name="check_ipv6_ndp_tunnel" translatable="false">Оракул NDP-таймаута IPv6</string>
+    <string name="check_ipv6_qdisc_tunnel" translatable="false">Давление аппаратной очереди IPv6</string>
+    <string name="check_uid_route_rules_leak" translatable="false">Утечка правил маршрутизации Split Tunneling</string>
+    <string name="check_pmtu_cache_poisoning" translatable="false">Утечка глобального кэша Path MTU (PMTU)</string>
+    <string name="check_underlay_port_conflict" translatable="false">Конфликт портов Underlay-сокета UDP</string>
     <string name="summary_format">%1$d/%2$d пройдено</string>
     <string name="badge_pass">ОК</string>
     <string name="badge_fail">ПРОВАЛ</string>
