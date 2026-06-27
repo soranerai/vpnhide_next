@@ -1972,51 +1972,40 @@ pub fn check_ioctl_alternative() -> CheckOutput {
 
             // 2. SIOCGIFADDR
             std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
-            if libc::ioctl(fd, libc::SIOCGIFADDR as _, &ifr) == 0 {
-                if is_interface_up(&vpn_iface) {
-                    if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
-                        leaked.push(format!("SIOCGIFADDR={ip}"));
-                    }
+            if libc::ioctl(fd, libc::SIOCGIFADDR as _, &ifr) == 0 && is_interface_up(&vpn_iface) {
+                if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
+                    leaked.push(format!("SIOCGIFADDR={ip}"));
                 }
             }
 
             // 3. SIOCGIFDSTADDR
             std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
-            if libc::ioctl(fd, libc::SIOCGIFDSTADDR as _, &ifr) == 0 {
-                if is_interface_up(&vpn_iface) {
-                    if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
-                        leaked.push(format!("SIOCGIFDSTADDR={ip}"));
-                    }
+            if libc::ioctl(fd, libc::SIOCGIFDSTADDR as _, &ifr) == 0 && is_interface_up(&vpn_iface)
+            {
+                if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
+                    leaked.push(format!("SIOCGIFDSTADDR={ip}"));
                 }
             }
 
             // 4. SIOCGIFNETMASK
             std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
-            if libc::ioctl(fd, libc::SIOCGIFNETMASK as _, &ifr) == 0 {
-                if is_interface_up(&vpn_iface) {
-                    if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
-                        leaked.push(format!("SIOCGIFNETMASK={ip}"));
-                    }
+            if libc::ioctl(fd, libc::SIOCGIFNETMASK as _, &ifr) == 0 && is_interface_up(&vpn_iface)
+            {
+                if let Some(ip) = get_ip_from_union(&ifr.ifr_ifru) {
+                    leaked.push(format!("SIOCGIFNETMASK={ip}"));
                 }
             }
 
             // 5. SIOCGIFHWADDR
             std::ptr::write_bytes(&mut ifr.ifr_ifru, 0, 1);
-            if libc::ioctl(fd, libc::SIOCGIFHWADDR as _, &ifr) == 0 {
-                if is_interface_up(&vpn_iface) {
-                    let hwaddr_ptr = std::ptr::from_ref(&ifr.ifr_ifru) as *const libc::sockaddr;
-                    let hw = &(*hwaddr_ptr).sa_data;
-                    let mac = format!(
-                        "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
-                        hw[0] as u8,
-                        hw[1] as u8,
-                        hw[2] as u8,
-                        hw[3] as u8,
-                        hw[4] as u8,
-                        hw[5] as u8
-                    );
-                    leaked.push(format!("SIOCGIFHWADDR={mac}"));
-                }
+            if libc::ioctl(fd, libc::SIOCGIFHWADDR as _, &ifr) == 0 && is_interface_up(&vpn_iface) {
+                let hwaddr_ptr = std::ptr::from_ref(&ifr.ifr_ifru) as *const libc::sockaddr;
+                let hw = &(*hwaddr_ptr).sa_data;
+                let mac = format!(
+                    "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+                    hw[0] as u8, hw[1] as u8, hw[2] as u8, hw[3] as u8, hw[4] as u8, hw[5] as u8
+                );
+                leaked.push(format!("SIOCGIFHWADDR={mac}"));
             }
 
             if leaked.is_empty() {
@@ -2164,7 +2153,7 @@ pub fn check_traceroute_rtt() -> CheckOutput {
 
         if poll_ret <= 0 {
             libc::close(fd);
-            return CheckOutput::pass(format!("no traceroute response within 100ms (timeout)"));
+            return CheckOutput::pass("no traceroute response within 100ms (timeout)");
         }
 
         let mut msg: libc::msghdr = std::mem::zeroed();
@@ -2264,3 +2253,442 @@ pub fn check_traceroute_rtt() -> CheckOutput {
         }
     }
 }
+
+#[inline(always)]
+fn read_cntvct() -> u64 {
+    let mut val: u64 = 0;
+    #[cfg(target_arch = "aarch64")]
+    unsafe {
+        std::arch::asm!("mrs {}, cntvct_el0", out(reg) val, options(nomem, nostack, preserves_flags));
+    }
+    #[cfg(not(target_arch = "aarch64"))]
+    {
+        val = std::time::SystemTime::now().duration_since(std::time::SystemTime::UNIX_EPOCH).unwrap().as_nanos() as u64;
+    }
+    val
+}
+
+#[uniffi::export]
+pub fn check_arm_timing() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_NONBLOCK, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create UDP socket: {}", last_os_error()));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        let payload = [0u8; 32];
+        let mut min_cycles = u64::MAX;
+        let mut max_cycles = 0;
+        let mut sum_cycles = 0u64;
+        let iterations = 100;
+        let mut success_count = 0;
+
+        for _ in 0..iterations {
+            let start = read_cntvct();
+            let ret = libc::sendto(
+                fd,
+                payload.as_ptr().cast(),
+                payload.len(),
+                0,
+                std::ptr::from_ref(&dest).cast(),
+                std::mem::size_of_val(&dest) as libc::socklen_t,
+            );
+            let end = read_cntvct();
+
+            if ret >= 0 {
+                let diff = end.saturating_sub(start);
+                if diff < min_cycles {
+                    min_cycles = diff;
+                }
+                if diff > max_cycles {
+                    max_cycles = diff;
+                }
+                sum_cycles += diff;
+                success_count += 1;
+            }
+        }
+
+        libc::close(fd);
+
+        if success_count == 0 {
+            return CheckOutput::pass("UDP sendto failed (normal if no network route)");
+        }
+
+        let avg_cycles = sum_cycles / success_count;
+        CheckOutput::pass(format!(
+            "ARM CNTVCT cycles for sendto: min={}, max={}, avg={}",
+            min_cycles, max_cycles, avg_cycles
+        ))
+    }
+}
+
+#[uniffi::export]
+pub fn check_udp_queue_pressure() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_NONBLOCK, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create UDP socket: {}", last_os_error()));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        let payload = [0u8; 32];
+        let mut min_cycles = u64::MAX;
+        let mut max_cycles = 0;
+        let mut sum_cycles = 0u64;
+        let iterations = 1000;
+        let mut success_count = 0;
+
+        for _ in 0..iterations {
+            let start = read_cntvct();
+            let ret = libc::sendto(
+                fd,
+                payload.as_ptr().cast(),
+                payload.len(),
+                0,
+                std::ptr::from_ref(&dest).cast(),
+                std::mem::size_of_val(&dest) as libc::socklen_t,
+            );
+            let end = read_cntvct();
+
+            if ret >= 0 {
+                let diff = end.saturating_sub(start);
+                if diff < min_cycles {
+                    min_cycles = diff;
+                }
+                if diff > max_cycles {
+                    max_cycles = diff;
+                }
+                sum_cycles += diff;
+                success_count += 1;
+            }
+        }
+
+        libc::close(fd);
+
+        let details = format!(
+            "Success rate: {}/1000 sends, cycles: min={}, max={}, avg={}",
+            success_count,
+            if min_cycles == u64::MAX { 0 } else { min_cycles },
+            max_cycles,
+            if success_count > 0 { sum_cycles / success_count } else { 0 }
+        );
+
+        if success_count >= 980 {
+            CheckOutput::fail(format!("VPN detected: {details}"))
+        } else {
+            CheckOutput::pass(format!("No VPN detected: {details}"))
+        }
+    }
+}
+
+#[repr(C)]
+struct sock_extended_err {
+    ee_errno: u32,
+    ee_origin: u8,
+    ee_type: u8,
+    ee_code: u8,
+    ee_pad: u8,
+    ee_info: u32,
+    ee_data: u32,
+}
+
+fn find_active_physical_ip_and_mask() -> Option<(u32, u32)> {
+    unsafe {
+        let mut addrs: *mut libc::ifaddrs = std::ptr::null_mut();
+        if libc::getifaddrs(&mut addrs) == 0 {
+            let mut ifa = addrs;
+            while !ifa.is_null() {
+                let entry = &*ifa;
+                if !entry.ifa_name.is_null() && !entry.ifa_addr.is_null() {
+                    let name = cstr_to_str(entry.ifa_name);
+                    let is_up = (entry.ifa_flags as u32 & libc::IFF_UP as u32) != 0;
+                    let is_loopback = (entry.ifa_flags as u32 & libc::IFF_LOOPBACK as u32) != 0;
+                    let is_vpn = is_vpn_iface(&name) || name.starts_with("tun") || name.starts_with("ppp");
+                    
+                    if is_up && !is_loopback && !is_vpn && (*entry.ifa_addr).sa_family == libc::AF_INET as libc::sa_family_t {
+                        let sin = &*(entry.ifa_addr as *const libc::sockaddr_in);
+                        let ip = u32::from_be(sin.sin_addr.s_addr);
+                        let mask = if !entry.ifa_netmask.is_null() {
+                            let sin_mask = &*(entry.ifa_netmask as *const libc::sockaddr_in);
+                            u32::from_be(sin_mask.sin_addr.s_addr)
+                        } else {
+                            0xFFFFFF00
+                        };
+                        libc::freeifaddrs(addrs);
+                        return Some((ip, mask));
+                    }
+                }
+                ifa = entry.ifa_next;
+            }
+            libc::freeifaddrs(addrs);
+        }
+    }
+    None
+}
+
+fn get_ip_recverr(msg: &libc::msghdr) -> Option<u32> {
+    unsafe {
+        if msg.msg_control.is_null() || msg.msg_controllen < std::mem::size_of::<libc::cmsghdr>() as _ {
+            return None;
+        }
+        let mut cmsg = msg.msg_control as *const libc::cmsghdr;
+        let control_end = (msg.msg_control as usize).checked_add(msg.msg_controllen as usize)?;
+        while !cmsg.is_null() && (cmsg as usize).checked_add(std::mem::size_of::<libc::cmsghdr>())? <= control_end {
+            let entry = &*cmsg;
+            if entry.cmsg_level == libc::IPPROTO_IP && entry.cmsg_type == libc::IP_RECVERR {
+                let data_ptr = (cmsg as usize + cmsg_align(std::mem::size_of::<libc::cmsghdr>())) as *const sock_extended_err;
+                if (data_ptr as usize).checked_add(std::mem::size_of::<sock_extended_err>())? <= control_end {
+                    return Some((*data_ptr).ee_errno);
+                }
+            }
+            let next_ptr = cmsg as usize + cmsg_align(entry.cmsg_len as usize);
+            if next_ptr == cmsg as usize || next_ptr >= control_end {
+                break;
+            }
+            cmsg = next_ptr as *const libc::cmsghdr;
+        }
+    }
+    None
+}
+
+fn cmsg_align(len: usize) -> usize {
+    let align = std::mem::size_of::<usize>();
+    (len + align - 1) & !(align - 1)
+}
+
+#[uniffi::export]
+pub fn check_arp_timeout_illusion() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
+        }
+
+        let flags = libc::fcntl(fd, libc::F_GETFL, 0);
+        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
+
+        let val: libc::c_int = 1;
+        if libc::setsockopt(
+            fd,
+            libc::IPPROTO_IP,
+            libc::IP_RECVERR,
+            std::ptr::from_ref(&val).cast(),
+            std::mem::size_of_val(&val) as libc::socklen_t,
+        ) < 0 {
+            let err = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("cannot set IP_RECVERR: {}", err));
+        }
+
+        let mut dest_ip = 0xC0A8FEFE; // 192.168.254.254
+        if let Some((ip, mask)) = find_active_physical_ip_and_mask() {
+            let subnet = ip & mask;
+            let host = ip & !mask;
+            let dead_host = if host == !mask - 1 { !mask - 2 } else { !mask - 1 };
+            dest_ip = subnet | dead_host;
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = dest_ip.to_be();
+
+        let payload = b"test";
+        let send_ret = libc::sendto(
+            fd,
+            payload.as_ptr().cast(),
+            payload.len(),
+            0,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        );
+
+        if send_ret < 0 {
+            let err = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("sendto failed: {}", err));
+        }
+
+        std::thread::sleep(std::time::Duration::from_millis(3500));
+
+        let mut iov = libc::iovec {
+            iov_base: std::ptr::null_mut(),
+            iov_len: 0,
+        };
+        let mut msg: libc::msghdr = std::mem::zeroed();
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+
+        let mut cmsg_buf = [0u8; 1024];
+        msg.msg_control = cmsg_buf.as_mut_ptr().cast();
+        msg.msg_controllen = cmsg_buf.len() as _;
+
+        let recv_ret = libc::recvmsg(fd, &mut msg, libc::MSG_ERRQUEUE | libc::MSG_DONTWAIT);
+        libc::close(fd);
+
+        if recv_ret < 0 {
+            let err_no = last_os_errno();
+            if err_no == libc::EAGAIN || err_no == libc::EWOULDBLOCK {
+                return CheckOutput::fail(
+                    "Error queue is empty (no L2 ARP timeout error) — VPN detected (L2 bypassed)".to_string()
+                );
+            } else {
+                return CheckOutput::fail(format!("recvmsg(MSG_ERRQUEUE) failed: {}", last_os_error()));
+            }
+        }
+
+        if let Some(err_code) = get_ip_recverr(&msg) {
+            CheckOutput::pass(format!(
+                "L2 ARP timeout error received: ee_errno = {} — no VPN detected",
+                err_code
+            ))
+        } else {
+            CheckOutput::pass("ARP timeout error received (details generic) — no VPN detected".to_string())
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_broadcast_blackhole() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
+        }
+
+        let val: libc::c_int = 1;
+        if libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_BROADCAST,
+            std::ptr::from_ref(&val).cast(),
+            std::mem::size_of_val(&val) as libc::socklen_t,
+        ) < 0 {
+            let err = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("cannot set SO_BROADCAST: {}", err));
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0xFFFFFFFF; // 255.255.255.255
+
+        let payload = b"test";
+        let send_ret = libc::sendto(
+            fd,
+            payload.as_ptr().cast(),
+            payload.len(),
+            0,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        );
+
+        let err_no = if send_ret < 0 { last_os_errno() } else { 0 };
+        let err_str = if send_ret < 0 { last_os_error() } else { String::new() };
+        libc::close(fd);
+
+        if send_ret < 0 {
+            if err_no == libc::EACCES || err_no == libc::ENETUNREACH {
+                CheckOutput::fail(format!(
+                    "Broadcast send failed with expected VPN blackhole error: {err_str} (errno {err_no}) — VPN detected"
+                ))
+            } else {
+                CheckOutput::fail(format!("Broadcast send failed with unexpected error: {err_str}"))
+            }
+        } else {
+            CheckOutput::pass("Broadcast send succeeded — no broadcast blackhole (physical network interface behavior)".to_string())
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_gso_asymmetry() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
+        }
+
+        let gso_size: libc::c_int = 1200;
+        let opt_ret = libc::setsockopt(
+            fd,
+            libc::IPPROTO_UDP,
+            103, // UDP_SEGMENT
+            std::ptr::from_ref(&gso_size).cast(),
+            std::mem::size_of_val(&gso_size) as libc::socklen_t,
+        );
+
+        if opt_ret < 0 {
+            let err_no = last_os_errno();
+            libc::close(fd);
+            if err_no == libc::ENOPROTOOPT || err_no == libc::EOPNOTSUPP {
+                return CheckOutput::fail(
+                    "UDP_SEGMENT GSO offload option not supported by the kernel/socket — VPN/virtual interface asymmetry detected".to_string()
+                );
+            } else {
+                return CheckOutput::fail(format!("setsockopt UDP_SEGMENT failed: {}", last_os_error()));
+            }
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        if libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        ) < 0 {
+            let err = last_os_error();
+            libc::close(fd);
+            return CheckOutput::fail(format!("connect failed: {}", err));
+        }
+
+        let large_buffer = vec![0u8; 10000];
+
+        let start = std::time::Instant::now();
+        let send_ret = libc::send(fd, large_buffer.as_ptr().cast(), large_buffer.len(), 0);
+        let duration = start.elapsed();
+
+        let err_no = if send_ret < 0 { last_os_errno() } else { 0 };
+        let err_str = if send_ret < 0 { last_os_error() } else { String::new() };
+        libc::close(fd);
+
+        if send_ret < 0 {
+            if err_no == libc::EOPNOTSUPP || err_no == libc::EIO || err_no == libc::EMSGSIZE || err_no == libc::EINVAL {
+                CheckOutput::fail(format!(
+                    "GSO large send failed: {err_str} (errno {err_no}) — Virtual interface GSO unsupported / VPN detected"
+                ))
+            } else {
+                CheckOutput::fail(format!("GSO send failed with error: {err_str}"))
+            }
+        } else {
+            let duration_us = duration.as_micros();
+            if duration_us > 1500 {
+                CheckOutput::fail(format!(
+                    "GSO send succeeded but with software-fallback latency ({} us) — VPN detected",
+                    duration_us
+                ))
+            } else {
+                CheckOutput::pass(format!(
+                    "GSO send succeeded with hardware offload latency ({} us) — physical interface",
+                    duration_us
+                ))
+            }
+        }
+    }
+}
+
+
+

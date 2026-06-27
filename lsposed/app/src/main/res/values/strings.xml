@@ -206,6 +206,11 @@
     <string name="check_ioctl_alternative" translatable="false">ioctl alternative queries</string>
     <string name="check_direct_syscall" translatable="false">direct syscall (socket/ioctl)</string>
     <string name="check_traceroute_rtt" translatable="false">traceroute RTT / IP_RECVERR</string>
+    <string name="check_arm_timing" translatable="false">ARM CNTVCT timing check</string>
+    <string name="check_udp_queue_pressure" translatable="false">UDP queue pressure timing check</string>
+    <string name="check_arp_timeout_illusion" translatable="false">Oracle of L2 Absence (ARP timeout)</string>
+    <string name="check_broadcast_blackhole" translatable="false">Broadcast Domain Rejection</string>
+    <string name="check_gso_asymmetry" translatable="false">Hardware GSO Asymmetry</string>
 
     <!-- Java/LSPosed check names (technical, not translatable) -->
     <string name="check_active_capabilities" translatable="false">Active Network Capabilities</string>
@@ -299,6 +304,8 @@
     <string name="hook_name_sys_getsockname_ipv6">Local address IPv6 (getsockname)</string>
     <string name="hook_name_sys_bind">Loopback port binding (bind)</string>
     <string name="hook_name_bpf_stats_spoof">Traffic statistics (BPF)</string>
+    <string name="hook_name_enoent_file_hiding">File hiding (ENOENT)</string>
+    <string name="hook_name_udp_sendmsg">UDP queue speed (udp_sendmsg)</string>
 
     <!-- Kernel Hook Symbols -->
     <string name="hook_symbol_dev_ioctl" translatable="false">dev_ioctl</string>
@@ -319,6 +326,8 @@
     <string name="hook_symbol_sys_getsockname_ipv6" translatable="false">__arm64_sys_getsockname + inet6_getname</string>
     <string name="hook_symbol_sys_bind" translatable="false">__arm64_sys_bind</string>
     <string name="hook_symbol_bpf_stats_spoof" translatable="false">__arm64_sys_bpf</string>
+    <string name="hook_symbol_enoent_file_hiding" translatable="false">openat, faccessat, newfstatat, getdents64...</string>
+    <string name="hook_symbol_udp_sendmsg" translatable="false">udp_sendmsg</string>
 
     <!-- Kernel Hook Descriptions -->
     <string name="hook_desc_dev_ioctl">Intercepts general interface IOCTLs (e.g., SIOCGIFFLAGS, SIOCGIFMTU) to hide VPN interface states.</string>
@@ -339,6 +348,8 @@
     <string name="hook_desc_sys_getsockname_ipv6">Spoofs getsockname for IPv6 sockets, masking the local VPN interface IP with the cover interface IP.</string>
     <string name="hook_desc_sys_bind">Intercepts bind() on loopback: redirects protected ports to random free ephemeral ports (0) to bypass conflict checks.</string>
     <string name="hook_desc_bpf_stats_spoof">Intercepts BPF map lookups via sys_bpf syscall to return zero traffic counters on stats maps (iface_stats, tether_stats, stats_map_) for VPN interfaces and target UIDs.</string>
+    <string name="hook_desc_enoent_file_hiding">Denies access to, hides, and filters out VPN-related paths in /sys/class/net, /proc/net, and /proc/sys/net (returns ENOENT or removes from directory listings).</string>
+    <string name="hook_desc_udp_sendmsg">Emulates physical network queue limits (EAGAIN) and timing delays on non-blocking UDP sockets to hide virtual TUN speeds.</string>
 
     <!-- Java Hook Names -->
     <string name="hook_name_link_properties">Link properties</string>

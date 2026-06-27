@@ -368,11 +368,11 @@ private fun getCardColors(
 ): Triple<Color, Color, Color> =
     when {
         isFail -> {
-            if (darkTheme) {
-                Triple(Color(0xFF421C1C), Color(0xFFEF9A9A), TelRed)
-            } else {
-                Triple(Color(0xFFFFEBEE), Color(0xFFC62828), TelRed)
-            }
+            Triple(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.onSurface,
+                TelRed,
+            )
         }
 
         isPartial -> {

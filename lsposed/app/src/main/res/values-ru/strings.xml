@@ -156,6 +156,11 @@
     <string name="diag_debug_logging_description">Подробное логирование в logcat и dmesg. Не включать без необходимости.</string>
 
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
+    <string name="check_arm_timing" translatable="false">Измерение таймингов ARM CNTVCT</string>
+    <string name="check_udp_queue_pressure" translatable="false">Анализ пропускной способности UDP-очереди</string>
+    <string name="check_arp_timeout_illusion" translatable="false">Оракул L2-отсутствия (ARP таймаут)</string>
+    <string name="check_broadcast_blackhole" translatable="false">Отторжение широковещательного домена</string>
+    <string name="check_gso_asymmetry" translatable="false">Аномалия аппаратной разгрузки (GSO)</string>
     <string name="summary_format">%1$d/%2$d пройдено</string>
     <string name="badge_pass">ОК</string>
     <string name="badge_fail">ПРОВАЛ</string>
@@ -267,6 +272,8 @@
     <string name="hook_name_sys_getsockname_ipv6">Локальный адрес IPv6 (getsockname)</string>
     <string name="hook_name_sys_bind">Привязка портов loopback (bind)</string>
     <string name="hook_name_bpf_stats_spoof">Статистика трафика (BPF)</string>
+    <string name="hook_name_enoent_file_hiding">Сокрытие файлов (ENOENT)</string>
+    <string name="hook_name_udp_sendmsg">Скорость UDP-очереди (udp_sendmsg)</string>
 
     <!-- Java Hook Names -->
     <string name="hook_name_link_properties">Свойства соединения</string>

@@ -128,7 +128,21 @@ def main() -> int:
             except subprocess.CalledProcessError:
                 failed = True
         else:
-            print("Warning: 'cargo-ndk' not found. Skipping cargo clippy.")
+            print("Warning: 'cargo-ndk' not found. Falling back to host cargo clippy.")
+            try:
+                run_command(
+                    [
+                        "cargo",
+                        "clippy",
+                        "--tests",
+                        "--",
+                        "-D",
+                        "warnings",
+                    ],
+                    cwd=rust_dir,
+                )
+            except subprocess.CalledProcessError:
+                failed = True
 
         # test
         try:

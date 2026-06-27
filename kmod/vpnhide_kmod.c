@@ -70,6 +70,7 @@
 #include <net/ipv6.h>
 #include <linux/bpf.h>
 #include <linux/file.h>
+#include <linux/delay.h>
 
 #include "include/vpnhide.h"
 
@@ -202,14 +203,13 @@ enum vpnhide_hook_idx {
 	HOOK_BIND = 16,
 	HOOK_BPF = 17,
 	HOOK_GETDENTS64 = 18,
-	HOOK_DEV_SEQ = 19,
-	HOOK_IF6_SEQ = 20,
-	HOOK_FACCESSAT = 21,
-	HOOK_FACCESSAT2 = 22,
-	HOOK_NEWFSTATAT = 23,
-	HOOK_OPENAT = 24,
-	HOOK_OPENAT2 = 25,
-	HOOK_READLINKAT = 26,
+	HOOK_FACCESSAT = 19,
+	HOOK_FACCESSAT2 = 20,
+	HOOK_NEWFSTATAT = 21,
+	HOOK_OPENAT = 22,
+	HOOK_OPENAT2 = 23,
+	HOOK_READLINKAT = 24,
+	HOOK_UDP_SENDMSG = 25,
 };
 
 static inline bool is_hook_active(enum vpnhide_hook_idx index)
@@ -4368,176 +4368,7 @@ static struct kretprobe sys_getdents64_krp = {
 	.kp.symbol_name = "__arm64_sys_getdents64",
 };
 
-static int dev_seq_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
-{
-	struct fib_route_data *data;
-	if (!is_hook_active(HOOK_DEV_SEQ))
-		return 1;
 
-	if (!is_target_uid())
-		return 1;
-
-	data = (void *)ri->data;
-	data->seq = (struct seq_file *)regs->regs[0];
-	data->start_count = data->seq ? data->seq->count : 0;
-
-	vpnhide_dbg("dev_seq_entry: uid=%u target=1\n",
-		    from_kuid(&init_user_ns, current_uid()));
-
-	return 0;
-}
-
-static int dev_seq_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
-{
-	struct fib_route_data *data = (void *)ri->data;
-	struct seq_file *seq = data->seq;
-	char *buf, *src, *dst, *end;
-	char ifname[IFNAMSIZ];
-	int j;
-
-	if (!seq || !seq->buf)
-		return 0;
-
-	if (seq->count <= data->start_count)
-		return 0;
-
-	buf = seq->buf;
-	src = buf + data->start_count;
-	dst = src;
-	end = buf + seq->count;
-
-	while (src < end) {
-		char *nl = memchr(src, '\n', end - src);
-		char *line_end = nl ? nl + 1 : end;
-		size_t line_len = line_end - src;
-		char *p = src;
-
-		while (p < line_end && (*p == ' ' || *p == '\t'))
-			p++;
-
-		j = 0;
-		while (p < line_end && *p != ':' && *p != ' ' && *p != '\t' &&
-		       *p != '\n' && j < IFNAMSIZ - 1) {
-			ifname[j++] = *p++;
-		}
-		ifname[j] = '\0';
-
-		if (j > 0 && is_vpn_ifname(ifname)) {
-			vpnhide_dbg("dev_seq_ret: hiding statistics for %s\n",
-				    ifname);
-			record_kmod_intercept(
-				from_kuid(&init_user_ns, current_uid()), 2);
-			src = line_end;
-			continue;
-		}
-
-		if (dst != src)
-			memmove(dst, src, line_len);
-		dst += line_len;
-		src = line_end;
-	}
-
-	seq->count = dst - buf;
-	return 0;
-}
-
-static struct kretprobe dev_seq_krp = {
-	.handler = dev_seq_ret,
-	.entry_handler = dev_seq_entry,
-	.data_size = sizeof(struct fib_route_data),
-	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "dev_seq_show",
-};
-
-static int if6_seq_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
-{
-	struct fib_route_data *data;
-	if (!is_hook_active(HOOK_IF6_SEQ))
-		return 1;
-
-	if (!is_target_uid())
-		return 1;
-
-	data = (void *)ri->data;
-	data->seq = (struct seq_file *)regs->regs[0];
-	data->start_count = data->seq ? data->seq->count : 0;
-
-	vpnhide_dbg("if6_seq_entry: uid=%u target=1\n",
-		    from_kuid(&init_user_ns, current_uid()));
-
-	return 0;
-}
-
-static int if6_seq_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
-{
-	struct fib_route_data *data = (void *)ri->data;
-	struct seq_file *seq = data->seq;
-	char *buf, *src, *dst, *end;
-	char ifname[IFNAMSIZ];
-	int j;
-
-	if (!seq || !seq->buf)
-		return 0;
-
-	if (seq->count <= data->start_count)
-		return 0;
-
-	buf = seq->buf;
-	src = buf + data->start_count;
-	dst = src;
-	end = buf + seq->count;
-
-	while (src < end) {
-		char *nl = memchr(src, '\n', end - src);
-		char *line_end = nl ? nl + 1 : end;
-		size_t line_len = line_end - src;
-		char *p;
-
-		p = line_end - 1;
-		while (p >= src &&
-		       (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t'))
-			p--;
-
-		j = 0;
-		while (p >= src && *p != ' ' && *p != '\t' &&
-		       j < IFNAMSIZ - 1) {
-			j++;
-			p--;
-		}
-		p++;
-
-		for (j = 0; j < IFNAMSIZ - 1 && (p + j) < line_end &&
-			    p[j] != ' ' && p[j] != '\t' && p[j] != '\n';
-		     j++)
-			ifname[j] = p[j];
-		ifname[j] = '\0';
-
-		if (is_vpn_ifname(ifname)) {
-			vpnhide_dbg("if6_seq_ret: hiding interface %s\n",
-				    ifname);
-			record_kmod_intercept(
-				from_kuid(&init_user_ns, current_uid()), 2);
-			src = line_end;
-			continue;
-		}
-
-		if (dst != src)
-			memmove(dst, src, line_len);
-		dst += line_len;
-		src = line_end;
-	}
-
-	seq->count = dst - buf;
-	return 0;
-}
-
-static struct kretprobe if6_seq_krp = {
-	.handler = if6_seq_ret,
-	.entry_handler = if6_seq_entry,
-	.data_size = sizeof(struct fib_route_data),
-	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
-	.kp.symbol_name = "if6_seq_show",
-};
 
 static int get_path_from_dfd_and_name(int dfd, const char __user *filename,
 				      char *buf, int buflen)
@@ -4822,6 +4653,131 @@ static struct kretprobe sys_readlinkat_krp = {
 };
 
 /* ================================================================== */
+/*  Hook 27: udp_sendmsg — non-blocking UDP queue pressure emul.      */
+/* ================================================================== */
+
+struct udp_sendmsg_data {
+	struct sock *sk;
+	int orig_sndbuf;
+	bool spoofed;
+};
+
+#define BUCKET_CAPACITY 20
+#define TOKEN_REGEN_NS 200000ULL /* 200 microseconds per token (5000 pkts/s) */
+
+struct udp_uid_rate {
+	uid_t uid;
+	u64 last_time_ns;
+	u32 tokens; /* Fixed-point: 1000 = 1 token */
+};
+
+static struct udp_uid_rate udp_rates[MAX_TARGET_UIDS];
+static DEFINE_SPINLOCK(udp_rates_lock);
+
+static bool udp_rate_limit_exceeded(uid_t uid)
+{
+	u64 now = ktime_get_ns();
+	int i;
+	bool limit_exceeded = false;
+	unsigned long flags;
+
+	spin_lock_irqsave(&udp_rates_lock, flags);
+	for (i = 0; i < MAX_TARGET_UIDS; i++) {
+		if (udp_rates[i].uid == uid) {
+			if (now > udp_rates[i].last_time_ns) {
+				u64 elapsed = now - udp_rates[i].last_time_ns;
+				u64 reg_tokens = (elapsed * 1000ULL) / TOKEN_REGEN_NS;
+				if (reg_tokens > 0) {
+					udp_rates[i].tokens += (u32)reg_tokens;
+					if (udp_rates[i].tokens >= BUCKET_CAPACITY * 1000) {
+						udp_rates[i].tokens = BUCKET_CAPACITY * 1000;
+						udp_rates[i].last_time_ns = now;
+					} else {
+						udp_rates[i].last_time_ns += (reg_tokens * TOKEN_REGEN_NS) / 1000ULL;
+					}
+				}
+			}
+
+			if (udp_rates[i].tokens >= 1000) {
+				udp_rates[i].tokens -= 1000;
+				limit_exceeded = false;
+			} else {
+				limit_exceeded = true;
+			}
+			break;
+		}
+	}
+	if (i == MAX_TARGET_UIDS) {
+		for (i = 0; i < MAX_TARGET_UIDS; i++) {
+			if (udp_rates[i].uid == 0) {
+				udp_rates[i].uid = uid;
+				udp_rates[i].last_time_ns = now;
+				udp_rates[i].tokens = (BUCKET_CAPACITY - 1) * 1000;
+				limit_exceeded = false;
+				break;
+			}
+		}
+	}
+	spin_unlock_irqrestore(&udp_rates_lock, flags);
+	return limit_exceeded;
+}
+
+static int udp_sendmsg_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct udp_sendmsg_data *data;
+	struct sock *sk;
+	struct msghdr *msg;
+	uid_t uid;
+
+	if (!is_hook_active(HOOK_UDP_SENDMSG))
+		return 1;
+
+	uid = from_kuid(&init_user_ns, current_uid());
+	if (!is_target_uid_val(uid))
+		return 1;
+
+	sk = (struct sock *)regs->regs[0];
+	msg = (struct msghdr *)regs->regs[1];
+
+	if (!sk || !msg)
+		return 1;
+
+	data = (void *)ri->data;
+	data->sk = sk;
+	data->orig_sndbuf = sk->sk_sndbuf;
+	data->spoofed = false;
+
+	if (msg->msg_flags & MSG_DONTWAIT) {
+		if (udp_rate_limit_exceeded(uid)) {
+			sk->sk_sndbuf = 0;
+			data->spoofed = true;
+			udelay(50);
+		}
+	}
+
+	return 0;
+}
+
+static int udp_sendmsg_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct udp_sendmsg_data *data = (void *)ri->data;
+
+	if (data->spoofed && data->sk) {
+		data->sk->sk_sndbuf = data->orig_sndbuf;
+	}
+
+	return 0;
+}
+
+static struct kretprobe udp_sendmsg_krp = {
+	.entry_handler = udp_sendmsg_entry,
+	.handler = udp_sendmsg_ret,
+	.data_size = sizeof(struct udp_sendmsg_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "udp_sendmsg",
+};
+
+/* ================================================================== */
 /*  Module init / exit                                                */
 /* ================================================================== */
 
@@ -4870,14 +4826,13 @@ static struct kretprobe_reg probes[] = {
 	{ &inet6_getname_krp, "inet6_getname", NULL, false, 20 },
 	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false, -1 },
 	{ &sys_getdents64_krp, "__arm64_sys_getdents64", NULL, false, -1 },
-	{ &dev_seq_krp, "dev_seq_show", NULL, false, -1 },
-	{ &if6_seq_krp, "if6_seq_show", NULL, false, -1 },
 	{ &sys_openat_krp, "__arm64_sys_openat", NULL, false, -1 },
 	{ &sys_openat2_krp, "__arm64_sys_openat2", NULL, false, -1 },
 	{ &sys_faccessat_krp, "__arm64_sys_faccessat", NULL, false, -1 },
 	{ &sys_faccessat2_krp, "__arm64_sys_faccessat2", NULL, false, -1 },
 	{ &sys_newfstatat_krp, "__arm64_sys_newfstatat", NULL, false, -1 },
 	{ &sys_readlinkat_krp, "__arm64_sys_readlinkat", NULL, false, -1 },
+	{ &udp_sendmsg_krp, "udp_sendmsg", NULL, false, -1 },
 };
 
 static int __init vpnhide_init(void)
