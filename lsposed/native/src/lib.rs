@@ -2808,19 +2808,63 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             }
             active_indices.push(i);
 
-            // Step 1: if_indextoname — succeeds even when netlink RTM_GETLINK is filtered.
-            // Physical interfaces (wlan0, rmnet0, lo) are fine; a VPN name here is a direct hit.
+            // Step 1a: if_indextoname (bionic reads /sys/class/net; kmod may block this path).
             let mut ifname_buf = [0u8; libc::IF_NAMESIZE];
             let ptr = libc::if_indextoname(i, ifname_buf.as_mut_ptr().cast());
-            if !ptr.is_null() {
-                let name = cstr_to_str(ptr);
-                if is_vpn_iface(&name) && is_interface_up(&name) {
-                    named_vpn.push(format!("idx={i}({name})"));
+            // Step 1b: if if_indextoname failed, try raw SIOCGIFNAME ioctl.
+            // bionic reads /sys/class/net; SIOCGIFNAME goes through dev_ioctl() which kmod
+            // may not hook even when it hides the sysfs/netlink entry.
+            let opt_name: Option<String> = if !ptr.is_null() {
+                Some(cstr_to_str(ptr))
+            } else {
+                let sock_n = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+                if sock_n < 0 {
+                    None
+                } else {
+                    // sizeof(ifreq) = IFNAMSIZ(16) + union(16); ifr_ifindex is at offset 16.
+                    let mut ifr = [0u8; 32];
+                    ifr[16..20].copy_from_slice(&(i as i32).to_ne_bytes());
+                    let r = libc::ioctl(
+                        sock_n,
+                        libc::SIOCGIFNAME as _,
+                        ifr.as_mut_ptr() as *mut libc::c_void,
+                    );
+                    libc::close(sock_n);
+                    if r >= 0 { Some(cstr_to_str(ifr.as_ptr().cast())) } else { None }
+                }
+            };
+            match opt_name.as_deref() {
+                Some(name) => {
+                    // Step 1c: SIOCGIFHWADDR — hardware type is kernel-controlled and cannot be
+                    // faked by renaming.  ARPHRD_NONE (65534) = tun/WireGuard/GRE (no MAC, no L2).
+                    // ARPHRD_PPP (512) = PPP tunnel.  Both prove conclusively it is a tunnel.
+                    let sock_hw = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+                    let arphrd: Option<u16> = if sock_hw >= 0 {
+                        let mut ifr_hw = [0u8; 32];
+                        let nb = name.as_bytes();
+                        ifr_hw[..nb.len().min(15)].copy_from_slice(&nb[..nb.len().min(15)]);
+                        let r = libc::ioctl(
+                            sock_hw,
+                            libc::SIOCGIFHWADDR as _,
+                            ifr_hw.as_mut_ptr() as *mut libc::c_void,
+                        );
+                        libc::close(sock_hw);
+                        if r >= 0 { Some(u16::from_ne_bytes([ifr_hw[16], ifr_hw[17]])) } else { None }
+                    } else {
+                        None
+                    };
+                    // ARPHRD_NONE = 65534, ARPHRD_PPP = 512
+                    let is_hw_tunnel = arphrd.map_or(false, |t| t == 65534 || t == 512);
+                    let arphrd_note = arphrd.map_or(String::new(), |t| format!(",arphrd={t}"));
+                    if is_hw_tunnel || (is_vpn_iface(name) && is_interface_up(name)) {
+                        named_vpn.push(format!("idx={i}({name}{arphrd_note})"));
+                        probably_tunnel_indices.push(i);
+                    }
+                }
+                None => {
+                    // Both if_indextoname and SIOCGIFNAME failed → name truly hidden by kmod.
                     probably_tunnel_indices.push(i);
                 }
-            } else {
-                // if_indextoname failed for a confirmed-active index → name hidden by kmod.
-                probably_tunnel_indices.push(i);
             }
         }
 
@@ -2878,7 +2922,7 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x12, 0x34,
             ];
             dest.sin6_scope_id = idx;
-            libc::sendto(
+            let send_ret = libc::sendto(
                 sock6,
                 b"ping".as_ptr().cast(),
                 4,
@@ -2886,6 +2930,12 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 std::ptr::from_ref(&dest).cast(),
                 std::mem::size_of_val(&dest) as libc::socklen_t,
             );
+            if send_ret < 0 {
+                // Synchronous failure (ENODEV, ENETUNREACH, …): no interface or no L3 path.
+                // MSG_ERRQUEUE stays empty for a non-async reason — skip to avoid false positive.
+                libc::close(sock6);
+                continue;
+            }
             // Wait for NDP retransmission timeout (3 x default RETRANS_TIMER ≈ 3 s)
             std::thread::sleep(std::time::Duration::from_millis(3500));
             let mut iov_buf = [0u8; 512];
