@@ -121,7 +121,6 @@ internal fun performStartupOptimized(): StartupResult {
     )
 }
 
-
 internal fun buildUidResolver(
     uids: List<Int>,
     outputFile: String,

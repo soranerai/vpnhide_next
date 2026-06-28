@@ -636,11 +636,15 @@ def test_udp_queue_pressure():
                     s_tgt.sendto(b"test_payload_32_bytes_long_here", ("127.0.0.1", 12345))
                     success_count += 1
                 except OSError as e:
-                    if e.errno == 11: # EAGAIN is 11
+                    if e.errno == 11:  # EAGAIN is 11
                         eagain_count += 1
-            print(f"[UDP Queue Pressure] Target success rate: {success_count}/100, EAGAIN: {eagain_count}/100")
+            print(
+                f"[UDP Queue Pressure] Target success rate: {success_count}/100, EAGAIN: {eagain_count}/100"
+            )
             if success_count > 20:
-                print(f"FAIL: UDP queue pressure target succeeded too many times: {success_count}/100 (should be <= 20)")
+                print(
+                    f"FAIL: UDP queue pressure target succeeded too many times: {success_count}/100 (should be <= 20)"
+                )
                 sys.exit(1)
             if eagain_count == 0:
                 print("FAIL: UDP queue pressure target did not receive any EAGAIN errors")

@@ -542,11 +542,12 @@ fun HookTestingScreen(
                                                 SuggestionChip(
                                                     onClick = {},
                                                     label = {
-                                                        val idxText = if (hook.allIndices.size == 1) {
-                                                            stringResource(R.string.hook_testing_idx_format, hook.allIndices.first())
-                                                        } else {
-                                                            "Idx 18, 19-24"
-                                                        }
+                                                        val idxText =
+                                                            if (hook.allIndices.size == 1) {
+                                                                stringResource(R.string.hook_testing_idx_format, hook.allIndices.first())
+                                                            } else {
+                                                                "Idx 18, 19-24"
+                                                            }
                                                         Text(idxText)
                                                     },
                                                     modifier = Modifier.padding(end = 8.dp),
@@ -612,11 +613,12 @@ fun HookTestingScreen(
                                             onCheckedChange = { checked ->
                                                 var newMask = currentMask
                                                 for (idx in hook.allIndices) {
-                                                    newMask = if (checked) {
-                                                        newMask or (1u shl idx)
-                                                    } else {
-                                                        newMask and (1u shl idx).inv()
-                                                    }
+                                                    newMask =
+                                                        if (checked) {
+                                                            newMask or (1u shl idx)
+                                                        } else {
+                                                            newMask and (1u shl idx).inv()
+                                                        }
                                                 }
                                                 applyNewMask(newMask)
                                             },

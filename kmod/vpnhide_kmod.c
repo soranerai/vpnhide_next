@@ -4368,8 +4368,6 @@ static struct kretprobe sys_getdents64_krp = {
 	.kp.symbol_name = "__arm64_sys_getdents64",
 };
 
-
-
 static int get_path_from_dfd_and_name(int dfd, const char __user *filename,
 				      char *buf, int buflen)
 {
@@ -4686,14 +4684,20 @@ static bool udp_rate_limit_exceeded(uid_t uid)
 		if (udp_rates[i].uid == uid) {
 			if (now > udp_rates[i].last_time_ns) {
 				u64 elapsed = now - udp_rates[i].last_time_ns;
-				u64 reg_tokens = (elapsed * 1000ULL) / TOKEN_REGEN_NS;
+				u64 reg_tokens =
+					(elapsed * 1000ULL) / TOKEN_REGEN_NS;
 				if (reg_tokens > 0) {
 					udp_rates[i].tokens += (u32)reg_tokens;
-					if (udp_rates[i].tokens >= BUCKET_CAPACITY * 1000) {
-						udp_rates[i].tokens = BUCKET_CAPACITY * 1000;
+					if (udp_rates[i].tokens >=
+					    BUCKET_CAPACITY * 1000) {
+						udp_rates[i].tokens =
+							BUCKET_CAPACITY * 1000;
 						udp_rates[i].last_time_ns = now;
 					} else {
-						udp_rates[i].last_time_ns += (reg_tokens * TOKEN_REGEN_NS) / 1000ULL;
+						udp_rates[i].last_time_ns +=
+							(reg_tokens *
+							 TOKEN_REGEN_NS) /
+							1000ULL;
 					}
 				}
 			}
@@ -4712,7 +4716,8 @@ static bool udp_rate_limit_exceeded(uid_t uid)
 			if (udp_rates[i].uid == 0) {
 				udp_rates[i].uid = uid;
 				udp_rates[i].last_time_ns = now;
-				udp_rates[i].tokens = (BUCKET_CAPACITY - 1) * 1000;
+				udp_rates[i].tokens =
+					(BUCKET_CAPACITY - 1) * 1000;
 				limit_exceeded = false;
 				break;
 			}
@@ -4722,7 +4727,8 @@ static bool udp_rate_limit_exceeded(uid_t uid)
 	return limit_exceeded;
 }
 
-static int udp_sendmsg_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+static int udp_sendmsg_entry(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
 {
 	struct udp_sendmsg_data *data;
 	struct sock *sk;

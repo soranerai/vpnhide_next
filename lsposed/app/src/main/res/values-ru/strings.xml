@@ -259,6 +259,9 @@
     <string name="hook_desc_sys_getsockname_ipv6">Подменяет getsockname для IPv6 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия.</string>
     <string name="hook_desc_sys_bind">Перехватывает bind() на loopback: перенаправляет порты на случайные свободные порты (0) для обхода проверок занятости.</string>
     <string name="hook_desc_bpf_stats_spoof">Перехватывает BPF-запросы через sys_bpf, возвращая нулевые счетчики трафика на BPF-картах (iface_stats, tether_stats, stats_map_) для VPN-интерфейсов и целевых UID.</string>
+    <string name="hook_desc_enoent_file_hiding">Блокирует доступ, скрывает и фильтрует пути, связанные с VPN, в /sys/class/net, /proc/net и /proc/sys/net (возвращает ENOENT или удаляет из списков файлов).</string>
+    <string name="hook_desc_udp_sendmsg">Эмулирует ограничения очереди физической сети (EAGAIN) и временные задержки на неблокирующих UDP-сокетах для сокрытия скоростей виртуального интерфейса TUN.</string>
+
 
     <!-- Kernel Hook Names -->
     <string name="hook_name_dev_ioctl">Сетевые интерфейсы (ioctl)</string>

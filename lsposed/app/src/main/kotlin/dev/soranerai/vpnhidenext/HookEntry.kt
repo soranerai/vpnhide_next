@@ -1,4 +1,5 @@
 @file:Suppress("DEPRECATION")
+
 package dev.soranerai.vpnhidenext
 
 import android.database.sqlite.SQLiteDatabase

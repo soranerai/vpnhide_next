@@ -1,13 +1,18 @@
 #!/usr/bin/env python3
-import os
-import sys
-import subprocess
 import argparse
+import os
+import subprocess
+import sys
+
 
 def main():
-    parser = argparse.ArgumentParser(description="Compile, push, and run Rust VPN hide checks on an Android device.")
+    parser = argparse.ArgumentParser(
+        description="Compile, push, and run Rust VPN hide checks on an Android device."
+    )
     parser.add_argument("-r", "--root", action="store_true", help="Run the checks as root (su)")
-    parser.add_argument("-u", "--uid", type=str, help="Run the checks under a specific UID (requires root)")
+    parser.add_argument(
+        "-u", "--uid", type=str, help="Run the checks under a specific UID (requires root)"
+    )
     args = parser.parse_args()
 
     # 1. Resolve paths
@@ -26,10 +31,16 @@ def main():
                     # Sort versions to get the highest
                     versions.sort()
                     ndk_home = os.path.join(ndk_dir, versions[-1])
-        
+
     if not ndk_home or not os.path.isdir(ndk_home):
-        print("Error: ANDROID_NDK_HOME or ANDROID_HOME environment variables are not set or invalid.", file=sys.stderr)
-        print("Please configure ANDROID_NDK_HOME to point to your Android NDK installation.", file=sys.stderr)
+        print(
+            "Error: ANDROID_NDK_HOME or ANDROID_HOME environment variables are not set or invalid.",
+            file=sys.stderr,
+        )
+        print(
+            "Please configure ANDROID_NDK_HOME to point to your Android NDK installation.",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     # Find the prebuilt toolchain bin directory
@@ -44,7 +55,9 @@ def main():
                 break
 
     if not os.path.isdir(toolchain_bin):
-        print(f"Error: Could not find prebuilt toolchain bin directory in {ndk_home}", file=sys.stderr)
+        print(
+            f"Error: Could not find prebuilt toolchain bin directory in {ndk_home}", file=sys.stderr
+        )
         sys.exit(1)
 
     # Find aarch64-linux-androidXX-clang compiler
@@ -65,7 +78,10 @@ def main():
                 break
 
     if not linker_path:
-        print(f"Error: Could not find aarch64-linux-android-clang compiler in {toolchain_bin}", file=sys.stderr)
+        print(
+            f"Error: Could not find aarch64-linux-android-clang compiler in {toolchain_bin}",
+            file=sys.stderr,
+        )
         sys.exit(1)
 
     print(f"Using NDK linker: {linker_path}")
@@ -74,15 +90,25 @@ def main():
     print("Compiling Rust binary for Android (aarch64)...")
     env = os.environ.copy()
     env["CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER"] = linker_path
-    
-    cargo_cmd = ["cargo", "build", "--target", "aarch64-linux-android", "--bin", "vpnhide_checks", "--release"]
+
+    cargo_cmd = [
+        "cargo",
+        "build",
+        "--target",
+        "aarch64-linux-android",
+        "--bin",
+        "vpnhide_checks",
+        "--release",
+    ]
     res = subprocess.run(cargo_cmd, cwd=native_dir, env=env)
     if res.returncode != 0:
         print("Error: Cargo build failed.", file=sys.stderr)
         sys.exit(1)
 
     # 3. Locate compiled binary
-    binary_path = os.path.join(native_dir, "target", "aarch64-linux-android", "release", "vpnhide_checks")
+    binary_path = os.path.join(
+        native_dir, "target", "aarch64-linux-android", "release", "vpnhide_checks"
+    )
     if not os.path.isfile(binary_path):
         print(f"Error: Compiled binary not found at {binary_path}", file=sys.stderr)
         sys.exit(1)
@@ -112,6 +138,7 @@ def main():
     # Run and stream output
     res = subprocess.run(run_cmd)
     sys.exit(res.returncode)
+
 
 if __name__ == "__main__":
     main()

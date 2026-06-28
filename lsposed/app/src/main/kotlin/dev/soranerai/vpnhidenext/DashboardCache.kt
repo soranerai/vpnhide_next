@@ -58,16 +58,17 @@ internal object DashboardCache : AsyncCache<DashboardState>() {
     ) {
         synchronized(lock) {
             if (diagnosticsJob?.isActive == true) return
-            diagnosticsJob = scope.launch {
-                DiagnosticsCache.state.collect { diagState ->
-                    val current = state.value
-                    if (current != null && diagState is DiagnosticsCache.State.Ready) {
-                        val repository = DashboardRepository(context.applicationContext)
-                        val next = repository.loadDashboardState(selfNeedsRestart)
-                        updateState(next)
+            diagnosticsJob =
+                scope.launch {
+                    DiagnosticsCache.state.collect { diagState ->
+                        val current = state.value
+                        if (current != null && diagState is DiagnosticsCache.State.Ready) {
+                            val repository = DashboardRepository(context.applicationContext)
+                            val next = repository.loadDashboardState(selfNeedsRestart)
+                            updateState(next)
+                        }
                     }
                 }
-            }
         }
     }
 }

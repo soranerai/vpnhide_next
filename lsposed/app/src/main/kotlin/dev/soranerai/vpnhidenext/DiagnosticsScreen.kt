@@ -9,8 +9,10 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
@@ -20,8 +22,6 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -31,8 +31,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -40,19 +40,24 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
 import dev.soranerai.vpnhidenext.checks.CheckStatus
+import dev.soranerai.vpnhidenext.checks.checkArpTimeoutIllusion
 import dev.soranerai.vpnhidenext.checks.checkBpfIfaceMap
+import dev.soranerai.vpnhidenext.checks.checkBroadcastBlackhole
 import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkGetsocknameSpoof
 import dev.soranerai.vpnhidenext.checks.checkGetsockoptBind
+import dev.soranerai.vpnhidenext.checks.checkGsoAsymmetry
 import dev.soranerai.vpnhidenext.checks.checkInetDiag
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
+import dev.soranerai.vpnhidenext.checks.checkIpv6LinkLocalBruteforce
 import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetlink
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetneigh
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetroute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetrule
+import dev.soranerai.vpnhidenext.checks.checkPmtuCachePoisoning
 import dev.soranerai.vpnhidenext.checks.checkProcNetDev
 import dev.soranerai.vpnhidenext.checks.checkProcNetFibTrie
 import dev.soranerai.vpnhidenext.checks.checkProcNetIfInet6
@@ -65,25 +70,20 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
 import dev.soranerai.vpnhidenext.checks.checkProcSysNetConf
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
-import dev.soranerai.vpnhidenext.checks.checkUdpQueuePressure
 import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
-import dev.soranerai.vpnhidenext.checks.checkArpTimeoutIllusion
-import dev.soranerai.vpnhidenext.checks.checkBroadcastBlackhole
-import dev.soranerai.vpnhidenext.checks.checkGsoAsymmetry
-import dev.soranerai.vpnhidenext.checks.checkIpv6LinkLocalBruteforce
+import dev.soranerai.vpnhidenext.checks.checkUdpQueuePressure
 import dev.soranerai.vpnhidenext.checks.checkUidRouteRulesLeak
-import dev.soranerai.vpnhidenext.checks.checkPmtuCachePoisoning
 import dev.soranerai.vpnhidenext.checks.checkUnderlayPortConflict
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
@@ -112,7 +112,6 @@ internal data class CheckResults(
     val all
         get() = native + java
 }
-
 
 @Composable
 fun DiagnosticsScreen(
@@ -152,11 +151,12 @@ fun DiagnosticsScreen(
         }
 
     val stateVal = diagState
-    val results = when (stateVal) {
-        is DiagnosticsCache.State.Ready -> stateVal.results
-        is DiagnosticsCache.State.Running -> stateVal.results
-        else -> null
-    }
+    val results =
+        when (stateVal) {
+            is DiagnosticsCache.State.Ready -> stateVal.results
+            is DiagnosticsCache.State.Running -> stateVal.results
+            else -> null
+        }
     // Native probes that couldn't run (ECONNREFUSED from socket()) are
     // represented as passed=null by nativeCheck. Java-level checks never
     // produce that state, so this test isolates the "app has no network
@@ -200,216 +200,216 @@ fun DiagnosticsScreen(
                 ) { CircularProgressIndicator() }
             }
         } else if (diagState is DiagnosticsCache.State.Running || diagState is DiagnosticsCache.State.Ready) {
-                if (networkBlocked) {
-                    item(key = "banner_network_blocked") {
-                        StatusBanner(
-                            text = stringResource(R.string.banner_network_blocked),
-                            containerColor = MaterialTheme.colorScheme.errorContainer,
-                            contentColor = MaterialTheme.colorScheme.onErrorContainer,
-                        )
-                        Spacer(Modifier.height(12.dp))
+            if (networkBlocked) {
+                item(key = "banner_network_blocked") {
+                    StatusBanner(
+                        text = stringResource(R.string.banner_network_blocked),
+                        containerColor = MaterialTheme.colorScheme.errorContainer,
+                        contentColor = MaterialTheme.colorScheme.onErrorContainer,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                }
+            }
+
+            results?.let { r ->
+
+                if (isChecking) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.5.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.diag_running_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.diag_running_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                Button(
+                                    onClick = { showAllChecks = !showAllChecks },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
+                                ) {
+                                    Text(
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else if (!hasFailed) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = TelGreen.copy(alpha = 0.15f),
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    TelGreen.copy(alpha = 0.4f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.CheckCircle,
+                                        contentDescription = null,
+                                        tint = TelGreen,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.diag_all_good_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TelGreen,
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.diag_all_good_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurface,
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                Button(
+                                    onClick = { showAllChecks = !showAllChecks },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = TelGreen,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
+                                ) {
+                                    Text(
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surface,
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Cancel,
+                                        contentDescription = null,
+                                        tint = TelRed,
+                                        modifier = Modifier.size(24.dp),
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.diag_some_failed_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TelRed,
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.diag_some_failed_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                Button(
+                                    onClick = { showAllChecks = !showAllChecks },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = TelGreen,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
+                                ) {
+                                    Text(
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
-                results?.let { r ->
-
-                    if (isChecking) {
-                        item {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column(modifier = Modifier.padding(20.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.5.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.diag_running_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        text = stringResource(R.string.diag_running_desc),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        onClick = { showAllChecks = !showAllChecks },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors =
-                                            ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                            ),
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (showAllChecks) {
-                                                    stringResource(R.string.diag_btn_hide_details)
-                                                } else {
-                                                    stringResource(R.string.diag_btn_show_details)
-                                                },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else if (!hasFailed) {
-                        item {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = TelGreen.copy(alpha = 0.15f),
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        TelGreen.copy(alpha = 0.4f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column(modifier = Modifier.padding(20.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = TelGreen,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.diag_all_good_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TelGreen,
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        text = stringResource(R.string.diag_all_good_desc),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                    )
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        onClick = { showAllChecks = !showAllChecks },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors =
-                                            ButtonDefaults.buttonColors(
-                                                containerColor = TelGreen,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                            ),
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (showAllChecks) {
-                                                    stringResource(R.string.diag_btn_hide_details)
-                                                } else {
-                                                    stringResource(R.string.diag_btn_show_details)
-                                                },
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else {
-                        item {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column(modifier = Modifier.padding(20.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Cancel,
-                                            contentDescription = null,
-                                            tint = TelRed,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.diag_some_failed_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TelRed,
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
-                                    Text(
-                                        text = stringResource(R.string.diag_some_failed_desc),
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    )
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        onClick = { showAllChecks = !showAllChecks },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors =
-                                            ButtonDefaults.buttonColors(
-                                                containerColor = TelGreen,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                            ),
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (showAllChecks) {
-                                                    stringResource(R.string.diag_btn_hide_details)
-                                                } else {
-                                                    stringResource(R.string.diag_btn_show_details)
-                                                },
-                                        )
-                                    }
-                                }
-                            }
-                        }
+                if (showAllChecks) {
+                    checksListCard(r.native)
+                    checksListCard(r.java)
+                } else if (hasFailed && !isChecking) {
+                    if (failedNative.isNotEmpty()) {
+                        checksListCard(failedNative)
                     }
-
-                    if (showAllChecks) {
-                        checksListCard(r.native)
-                        checksListCard(r.java)
-                    } else if (hasFailed && !isChecking) {
-                        if (failedNative.isNotEmpty()) {
-                            checksListCard(failedNative)
-                        }
-                        if (failedJava.isNotEmpty()) {
-                            checksListCard(failedJava)
-                        }
+                    if (failedJava.isNotEmpty()) {
+                        checksListCard(failedJava)
                     }
                 }
             }
+        }
 
         item { Spacer(Modifier.height(16.dp)) }
 
@@ -584,23 +584,25 @@ private fun SectionHeader(title: String) {
         color = MaterialTheme.colorScheme.primary,
     )
 }
+
 private fun LazyListScope.checksListCard(checks: List<CheckResult>) {
     itemsIndexed(checks, key = { _, c -> c.name }) { index, check ->
         val isFirst = index == 0
         val isLast = index == checks.lastIndex
-        
-        val shape = when {
-            isFirst && isLast -> RoundedCornerShape(16.dp)
-            isFirst -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-            isLast -> RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
-            else -> RectangleShape
-        }
-        
+
+        val shape =
+            when {
+                isFirst && isLast -> RoundedCornerShape(16.dp)
+                isFirst -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                isLast -> RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                else -> RectangleShape
+            }
+
         Surface(
             shape = shape,
             color = MaterialTheme.colorScheme.surface,
             border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
         ) {
             Column {
                 CheckRow(check)
@@ -608,7 +610,7 @@ private fun LazyListScope.checksListCard(checks: List<CheckResult>) {
                     HorizontalDivider(
                         color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.06f),
                         thickness = 1.dp,
-                        modifier = Modifier.padding(horizontal = 14.dp)
+                        modifier = Modifier.padding(horizontal = 14.dp),
                     )
                 }
             }
@@ -675,16 +677,16 @@ private fun CheckRow(r: CheckResult) {
                         }
                     },
                     onLongClick = {
-                        val textToCopy = if (r.detail.isNotBlank()) {
-                            "${r.name}: $badgeText\n${r.detail}"
-                        } else {
-                            "${r.name}: $badgeText"
-                        }
+                        val textToCopy =
+                            if (r.detail.isNotBlank()) {
+                                "${r.name}: $badgeText\n${r.detail}"
+                            } else {
+                                "${r.name}: $badgeText"
+                            }
                         clipboardManager.setText(AnnotatedString(textToCopy))
                         Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
-                    }
-                )
-                .padding(vertical = 10.dp, horizontal = 14.dp),
+                    },
+                ).padding(vertical = 10.dp, horizontal = 14.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -775,141 +777,148 @@ private fun CheckRow(r: CheckResult) {
 
 internal fun getPlaceholderResults(context: android.content.Context): CheckResults {
     val res = context.resources
-    val nativeNames = listOf(
-        R.string.check_ioctl_flags,
-        R.string.check_ioctl_mtu,
-        R.string.check_ioctl_conf,
-        R.string.check_getifaddrs,
-        R.string.check_netlink_getlink,
-        R.string.check_netlink_getroute,
-        R.string.check_netlink_anonymous_route,
-        R.string.check_proc_route,
-        R.string.check_proc_ipv6_route,
-        R.string.check_proc_if_inet6,
-        R.string.check_proc_tcp,
-        R.string.check_proc_tcp6,
-        R.string.check_proc_udp,
-        R.string.check_proc_udp6,
-        R.string.check_proc_dev,
-        R.string.check_proc_fib_trie,
-        R.string.check_bpf_iface_map,
-        R.string.check_sys_class_net,
-        R.string.check_net_iface_enum,
-        R.string.check_proc_route_java,
-        R.string.check_getsockopt_bind,
-        R.string.check_inet_diag,
-        R.string.check_getsockname_spoof,
-        R.string.check_netlink_getrule,
-        R.string.check_tcp_mss,
-        R.string.check_udp_pmtu,
-        R.string.check_netlink_getneigh,
-        R.string.check_proc_sys_net_conf,
-        R.string.check_udp_queue_pressure,
-        R.string.check_arp_timeout_illusion,
-        R.string.check_broadcast_blackhole,
-        R.string.check_gso_asymmetry,
-        R.string.check_ipv6_link_local_bruteforce,
-        R.string.check_traffic_stats
-    )
-    val javaNames = listOf(
-        R.string.check_active_capabilities,
-        R.string.check_active_properties,
-        R.string.check_all_networks_vpn,
-        R.string.check_link_properties_dns,
-        R.string.check_network_callback,
-        R.string.check_vpn_callback_suppression,
-        R.string.check_get_network_for_type
-    )
+    val nativeNames =
+        listOf(
+            R.string.check_ioctl_flags,
+            R.string.check_ioctl_mtu,
+            R.string.check_ioctl_conf,
+            R.string.check_getifaddrs,
+            R.string.check_netlink_getlink,
+            R.string.check_netlink_getroute,
+            R.string.check_netlink_anonymous_route,
+            R.string.check_proc_route,
+            R.string.check_proc_ipv6_route,
+            R.string.check_proc_if_inet6,
+            R.string.check_proc_tcp,
+            R.string.check_proc_tcp6,
+            R.string.check_proc_udp,
+            R.string.check_proc_udp6,
+            R.string.check_proc_dev,
+            R.string.check_proc_fib_trie,
+            R.string.check_bpf_iface_map,
+            R.string.check_sys_class_net,
+            R.string.check_net_iface_enum,
+            R.string.check_proc_route_java,
+            R.string.check_getsockopt_bind,
+            R.string.check_inet_diag,
+            R.string.check_getsockname_spoof,
+            R.string.check_netlink_getrule,
+            R.string.check_tcp_mss,
+            R.string.check_udp_pmtu,
+            R.string.check_netlink_getneigh,
+            R.string.check_proc_sys_net_conf,
+            R.string.check_udp_queue_pressure,
+            R.string.check_arp_timeout_illusion,
+            R.string.check_broadcast_blackhole,
+            R.string.check_gso_asymmetry,
+            R.string.check_ipv6_link_local_bruteforce,
+            R.string.check_traffic_stats,
+        )
+    val javaNames =
+        listOf(
+            R.string.check_active_capabilities,
+            R.string.check_active_properties,
+            R.string.check_all_networks_vpn,
+            R.string.check_link_properties_dns,
+            R.string.check_network_callback,
+            R.string.check_vpn_callback_suppression,
+            R.string.check_get_network_for_type,
+        )
     return CheckResults(
         native = nativeNames.map { CheckResult(res.getString(it), null, "", isRunning = true) },
-        java = javaNames.map { CheckResult(res.getString(it), null, "", isRunning = true) }
+        java = javaNames.map { CheckResult(res.getString(it), null, "", isRunning = true) },
     )
 }
 
 internal suspend fun runAllChecks(
     cm: ConnectivityManager,
     context: android.content.Context,
-    onResult: ((CheckResult, isJava: Boolean) -> Unit)? = null
-): CheckResults = coroutineScope {
-    VpnHideLog.i(TAG, "========================================")
-    VpnHideLog.i(TAG, "=== VPNHide — starting all checks (parallel) ===")
-    VpnHideLog.i(TAG, "========================================")
+    onResult: ((CheckResult, isJava: Boolean) -> Unit)? = null,
+): CheckResults =
+    coroutineScope {
+        VpnHideLog.i(TAG, "========================================")
+        VpnHideLog.i(TAG, "=== VPNHide — starting all checks (parallel) ===")
+        VpnHideLog.i(TAG, "========================================")
 
-    val res = context.resources
+        val res = context.resources
 
-    val nativeDefs = listOf<suspend () -> CheckResult>(
-        { nativeCheck(res.getString(R.string.check_ioctl_flags)) { checkIoctlSiocgifflags() } },
-        { nativeCheck(res.getString(R.string.check_ioctl_mtu)) { checkIoctlSiocgifmtu() } },
-        { nativeCheck(res.getString(R.string.check_ioctl_conf)) { checkIoctlSiocgifconf() } },
-        { nativeCheck(res.getString(R.string.check_getifaddrs)) { checkGetifaddrs() } },
-        { nativeCheck(res.getString(R.string.check_netlink_getlink)) { checkNetlinkGetlink() } },
-        { nativeCheck(res.getString(R.string.check_netlink_getroute)) { checkNetlinkGetroute() } },
-        { nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) { checkNetlinkAnonymousRoute() } },
-        { nativeCheck(res.getString(R.string.check_proc_route)) { checkProcNetRoute() } },
-        { nativeCheck(res.getString(R.string.check_proc_ipv6_route)) { checkProcNetIpv6Route() } },
-        { nativeCheck(res.getString(R.string.check_proc_if_inet6)) { checkProcNetIfInet6() } },
-        { nativeCheck(res.getString(R.string.check_proc_tcp)) { checkProcNetTcp() } },
-        { nativeCheck(res.getString(R.string.check_proc_tcp6)) { checkProcNetTcp6() } },
-        { nativeCheck(res.getString(R.string.check_proc_udp)) { checkProcNetUdp() } },
-        { nativeCheck(res.getString(R.string.check_proc_udp6)) { checkProcNetUdp6() } },
-        { nativeCheck(res.getString(R.string.check_proc_dev)) { checkProcNetDev() } },
-        { nativeCheck(res.getString(R.string.check_proc_fib_trie)) { checkProcNetFibTrie() } },
-        { nativeCheck(res.getString(R.string.check_bpf_iface_map)) { checkBpfIfaceMap() } },
-        { nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() } },
-        { checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)) },
-        { checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)) },
-        { nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() } },
-        { nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() } },
-        { nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() } },
-        { nativeCheck(res.getString(R.string.check_netlink_getrule)) { checkNetlinkGetrule() } },
-        { nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() } },
-        { nativeCheck(res.getString(R.string.check_udp_pmtu)) { checkUdpPmtu() } },
-        { nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() } },
-        { nativeCheck(res.getString(R.string.check_proc_sys_net_conf)) { checkProcSysNetConf() } },
-        { nativeCheck(res.getString(R.string.check_udp_queue_pressure)) { checkUdpQueuePressure() } },
-        { nativeCheck(res.getString(R.string.check_arp_timeout_illusion)) { checkArpTimeoutIllusion() } },
-        { nativeCheck(res.getString(R.string.check_broadcast_blackhole)) { checkBroadcastBlackhole() } },
-        { nativeCheck(res.getString(R.string.check_gso_asymmetry)) { checkGsoAsymmetry() } },
-        { nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) { checkIpv6LinkLocalBruteforce() } },
-        { checkTrafficStatsDiscrepancy(cm, context, res.getString(R.string.check_traffic_stats)) }
-    )
+        val nativeDefs =
+            listOf<suspend () -> CheckResult>(
+                { nativeCheck(res.getString(R.string.check_ioctl_flags)) { checkIoctlSiocgifflags() } },
+                { nativeCheck(res.getString(R.string.check_ioctl_mtu)) { checkIoctlSiocgifmtu() } },
+                { nativeCheck(res.getString(R.string.check_ioctl_conf)) { checkIoctlSiocgifconf() } },
+                { nativeCheck(res.getString(R.string.check_getifaddrs)) { checkGetifaddrs() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getlink)) { checkNetlinkGetlink() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getroute)) { checkNetlinkGetroute() } },
+                { nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) { checkNetlinkAnonymousRoute() } },
+                { nativeCheck(res.getString(R.string.check_proc_route)) { checkProcNetRoute() } },
+                { nativeCheck(res.getString(R.string.check_proc_ipv6_route)) { checkProcNetIpv6Route() } },
+                { nativeCheck(res.getString(R.string.check_proc_if_inet6)) { checkProcNetIfInet6() } },
+                { nativeCheck(res.getString(R.string.check_proc_tcp)) { checkProcNetTcp() } },
+                { nativeCheck(res.getString(R.string.check_proc_tcp6)) { checkProcNetTcp6() } },
+                { nativeCheck(res.getString(R.string.check_proc_udp)) { checkProcNetUdp() } },
+                { nativeCheck(res.getString(R.string.check_proc_udp6)) { checkProcNetUdp6() } },
+                { nativeCheck(res.getString(R.string.check_proc_dev)) { checkProcNetDev() } },
+                { nativeCheck(res.getString(R.string.check_proc_fib_trie)) { checkProcNetFibTrie() } },
+                { nativeCheck(res.getString(R.string.check_bpf_iface_map)) { checkBpfIfaceMap() } },
+                { nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() } },
+                { checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)) },
+                { checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)) },
+                { nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() } },
+                { nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() } },
+                { nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getrule)) { checkNetlinkGetrule() } },
+                { nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() } },
+                { nativeCheck(res.getString(R.string.check_udp_pmtu)) { checkUdpPmtu() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() } },
+                { nativeCheck(res.getString(R.string.check_proc_sys_net_conf)) { checkProcSysNetConf() } },
+                { nativeCheck(res.getString(R.string.check_udp_queue_pressure)) { checkUdpQueuePressure() } },
+                { nativeCheck(res.getString(R.string.check_arp_timeout_illusion)) { checkArpTimeoutIllusion() } },
+                { nativeCheck(res.getString(R.string.check_broadcast_blackhole)) { checkBroadcastBlackhole() } },
+                { nativeCheck(res.getString(R.string.check_gso_asymmetry)) { checkGsoAsymmetry() } },
+                { nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) { checkIpv6LinkLocalBruteforce() } },
+                { checkTrafficStatsDiscrepancy(cm, context, res.getString(R.string.check_traffic_stats)) },
+            )
 
-    val javaDefs = listOf<suspend () -> CheckResult>(
-        { checkActiveNetworkCapabilities(cm, res.getString(R.string.check_active_capabilities)) },
-        { checkActiveLinkProperties(cm, res.getString(R.string.check_active_properties)) },
-        { checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)) },
-        { checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)) },
-        { checkNetworkCallback(cm, res.getString(R.string.check_network_callback)) },
-        { checkVpnCallbackSuppression(cm, res.getString(R.string.check_vpn_callback_suppression)) },
-        { checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)) }
-    )
+        val javaDefs =
+            listOf<suspend () -> CheckResult>(
+                { checkActiveNetworkCapabilities(cm, res.getString(R.string.check_active_capabilities)) },
+                { checkActiveLinkProperties(cm, res.getString(R.string.check_active_properties)) },
+                { checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)) },
+                { checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)) },
+                { checkNetworkCallback(cm, res.getString(R.string.check_network_callback)) },
+                { checkVpnCallbackSuppression(cm, res.getString(R.string.check_vpn_callback_suppression)) },
+                { checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)) },
+            )
 
-    val nativeDeferred = nativeDefs.map { def ->
-        async(Dispatchers.IO) {
-            val r = def()
-            onResult?.invoke(r, false)
-            r
-        }
+        val nativeDeferred =
+            nativeDefs.map { def ->
+                async(Dispatchers.IO) {
+                    val r = def()
+                    onResult?.invoke(r, false)
+                    r
+                }
+            }
+
+        val javaDeferred =
+            javaDefs.map { def ->
+                async(Dispatchers.IO) {
+                    val r = def()
+                    onResult?.invoke(r, true)
+                    r
+                }
+            }
+
+        val native = nativeDeferred.awaitAll()
+        val java = javaDeferred.awaitAll()
+
+        val all = native + java
+        val scored = all.filter { it.passed != null }
+        val passed = scored.count { it.passed == true }
+        VpnHideLog.i(TAG, "=== SUMMARY: $passed/${scored.size} passed ===")
+
+        CheckResults(native = native, java = java)
     }
-
-    val javaDeferred = javaDefs.map { def ->
-        async(Dispatchers.IO) {
-            val r = def()
-            onResult?.invoke(r, true)
-            r
-        }
-    }
-
-    val native = nativeDeferred.awaitAll()
-    val java = javaDeferred.awaitAll()
-
-    val all = native + java
-    val scored = all.filter { it.passed != null }
-    val passed = scored.count { it.passed == true }
-    VpnHideLog.i(TAG, "=== SUMMARY: $passed/${scored.size} passed ===")
-
-    CheckResults(native = native, java = java)
-}
 
 private fun nativeCheck(
     name: String,
