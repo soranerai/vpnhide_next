@@ -159,6 +159,10 @@
     <string name="check_udp_queue_pressure" translatable="false">Анализ пропускной способности UDP-очереди</string>
     <string name="check_gso_asymmetry" translatable="false">Аномалия аппаратной разгрузки (GSO)</string>
     <string name="check_ipv6_link_local_bruteforce" translatable="false">Зондирование интерфейсов IPv6 Link-Local</string>
+    <string name="check_tcp_info_mss" translatable="false">getsockopt TCP_INFO MSS</string>
+    <string name="check_qdisc_by_ifindex" translatable="false">Зондирование RTM_GETQDISC по ifindex</string>
+    <string name="check_timestamping_hw" translatable="false">Аппаратные метки времени (SO_TIMESTAMPING)</string>
+    <string name="check_rtm_getlink_trim_oracle" translatable="false">Оракул усечения RTM_GETLINK</string>
     <string name="check_ipv6_multicast_denied" translatable="false">Оракул мультикаст-возможностей IPv6</string>
     <string name="check_ipv6_ndp_tunnel" translatable="false">Оракул NDP-таймаута IPv6</string>
     <string name="check_ipv6_qdisc_tunnel" translatable="false">Давление аппаратной очереди IPv6</string>
@@ -259,6 +263,8 @@
     <string name="hook_desc_bpf_stats_spoof">Перехватывает BPF-запросы через sys_bpf, возвращая нулевые счетчики трафика на BPF-картах (iface_stats, tether_stats, stats_map_) для VPN-интерфейсов и целевых UID.</string>
     <string name="hook_desc_enoent_file_hiding">Блокирует доступ, скрывает и фильтрует пути, связанные с VPN, в /sys/class/net, /proc/net и /proc/sys/net (возвращает ENOENT или удаляет из списков файлов).</string>
     <string name="hook_desc_udp_sendmsg">Эмулирует ограничения очереди физической сети (EAGAIN) и временные задержки на неблокирующих UDP-сокетах для сокрытия скоростей виртуального интерфейса TUN.</string>
+    <string name="hook_desc_fib_trie_seq_show">Фильтрует упоминания VPN-интерфейсов в выводе /proc/net/fib_trie (дерево FIB).</string>
+    <string name="hook_desc_tc_fill_qdisc">Фильтрует записи о дисциплинах очереди (qdisc) VPN-интерфейсов из ответов netlink RTM_GETQDISC.</string>
 
 
     <!-- Kernel Hook Names -->
@@ -282,6 +288,8 @@
     <string name="hook_name_bpf_stats_spoof">Статистика трафика (BPF)</string>
     <string name="hook_name_enoent_file_hiding">Сокрытие файлов (ENOENT)</string>
     <string name="hook_name_udp_sendmsg">Скорость UDP-очереди (udp_sendmsg)</string>
+    <string name="hook_name_fib_trie_seq_show">Фильтр FIB trie в /proc (fib_trie_seq_show)</string>
+    <string name="hook_name_tc_fill_qdisc">Фильтр очереди TC (tc_fill_qdisc)</string>
 
     <!-- Java Hook Names -->
     <string name="hook_name_link_properties">Свойства соединения</string>

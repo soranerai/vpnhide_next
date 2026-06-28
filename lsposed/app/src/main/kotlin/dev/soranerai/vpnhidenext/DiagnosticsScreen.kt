@@ -66,8 +66,12 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetTcp6
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
 import dev.soranerai.vpnhidenext.checks.checkProcSysNetConf
+import dev.soranerai.vpnhidenext.checks.checkQdiscByIfindex
+import dev.soranerai.vpnhidenext.checks.checkRtmGetlinkTrimOracle
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
+import dev.soranerai.vpnhidenext.checks.checkTcpInfoMss
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
+import dev.soranerai.vpnhidenext.checks.checkTimestampingHw
 import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
 import dev.soranerai.vpnhidenext.checks.checkUdpQueuePressure
 import dev.soranerai.vpnhidenext.checks.checkUidRouteRulesLeak
@@ -807,6 +811,10 @@ internal fun getPlaceholderResults(context: android.content.Context): CheckResul
             R.string.check_udp_queue_pressure,
             R.string.check_gso_asymmetry,
             R.string.check_ipv6_link_local_bruteforce,
+            R.string.check_tcp_info_mss,
+            R.string.check_qdisc_by_ifindex,
+            R.string.check_timestamping_hw,
+            R.string.check_rtm_getlink_trim_oracle,
             R.string.check_traffic_stats,
         )
     val javaNames =
@@ -871,6 +879,10 @@ internal suspend fun runAllChecks(
                 { nativeCheck(res.getString(R.string.check_gso_asymmetry)) { checkGsoAsymmetry() } },
                 { nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) { checkIpv6LinkLocalBruteforce() } },
                 { nativeCheck(res.getString(R.string.check_uid_route_rules_leak)) { checkUidRouteRulesLeak() } },
+                { nativeCheck(res.getString(R.string.check_tcp_info_mss)) { checkTcpInfoMss() } },
+                { nativeCheck(res.getString(R.string.check_qdisc_by_ifindex)) { checkQdiscByIfindex() } },
+                { nativeCheck(res.getString(R.string.check_timestamping_hw)) { checkTimestampingHw() } },
+                { nativeCheck(res.getString(R.string.check_rtm_getlink_trim_oracle)) { checkRtmGetlinkTrimOracle() } },
                 { checkTrafficStatsDiscrepancy(cm, context, res.getString(R.string.check_traffic_stats)) },
             )
 
