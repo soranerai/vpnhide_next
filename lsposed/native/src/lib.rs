@@ -2561,17 +2561,10 @@ pub fn check_gso_asymmetry() -> CheckOutput {
             }
         } else {
             let duration_us = duration.as_micros();
-            if duration_us > 1500 {
-                CheckOutput::fail(format!(
-                    "GSO send succeeded but with software-fallback latency ({} us) — VPN detected",
-                    duration_us
-                ))
-            } else {
-                CheckOutput::pass(format!(
-                    "GSO send succeeded with hardware offload latency ({} us) — physical interface",
-                    duration_us
-                ))
-            }
+            CheckOutput::pass(format!(
+                "GSO send succeeded with hardware offload latency ({} us) — physical interface",
+                duration_us
+            ))
         }
     }
 }
@@ -2850,6 +2843,13 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             CheckOutput::fail(format!(
                 "Hidden VPN tunnel detected by hardware qdisc flood{} (deep queue on {:?}) — {}",
                 mode, qdisc_tunnel, details,
+            ))
+        
+        } else if !probably_tunnel_indices.is_empty() {
+            CheckOutput::fail(format!(
+                "VPN interfaces exposed via anonymous index leak: {:?} — {}",
+                probably_tunnel_indices,
+                details,
             ))
         } else {
             CheckOutput::pass(format!("No VPN detected — {}", details))

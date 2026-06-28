@@ -71,7 +71,6 @@ import dev.soranerai.vpnhidenext.checks.checkTcpMss
 import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
 import dev.soranerai.vpnhidenext.checks.checkUdpQueuePressure
 import dev.soranerai.vpnhidenext.checks.checkUidRouteRulesLeak
-import dev.soranerai.vpnhidenext.checks.checkUnderlayPortConflict
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
 import dev.soranerai.vpnhidenext.generated.IfaceLists
@@ -871,6 +870,7 @@ internal suspend fun runAllChecks(
                 { nativeCheck(res.getString(R.string.check_udp_queue_pressure)) { checkUdpQueuePressure() } },
                 { nativeCheck(res.getString(R.string.check_gso_asymmetry)) { checkGsoAsymmetry() } },
                 { nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) { checkIpv6LinkLocalBruteforce() } },
+                { nativeCheck(res.getString(R.string.check_uid_route_rules_leak)) { checkUidRouteRulesLeak() } },
                 { checkTrafficStatsDiscrepancy(cm, context, res.getString(R.string.check_traffic_stats)) },
             )
 
