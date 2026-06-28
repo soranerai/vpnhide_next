@@ -156,6 +156,18 @@ val ALL_HOOKS =
             R.string.hook_desc_udp_sendmsg,
         ),
         HookInfo(
+            28,
+            R.string.hook_name_inet6_bind_ll,
+            R.string.hook_symbol_inet6_bind_ll,
+            R.string.hook_desc_inet6_bind_ll,
+        ),
+        HookInfo(
+            29,
+            R.string.hook_name_udpv6_sendmsg_ll,
+            R.string.hook_symbol_udpv6_sendmsg_ll,
+            R.string.hook_desc_udpv6_sendmsg_ll,
+        ),
+        HookInfo(
             30,
             R.string.hook_name_fib_trie_seq_show,
             R.string.hook_symbol_fib_trie_seq_show,
@@ -558,7 +570,7 @@ fun HookTestingScreen(
                                                             if (hook.allIndices.size == 1) {
                                                                 stringResource(R.string.hook_testing_idx_format, hook.allIndices.first())
                                                             } else {
-                                                                "Idx 18, 19-24"
+                                                                "Idx 18-24, 26-27"
                                                             }
                                                         Text(idxText)
                                                     },
