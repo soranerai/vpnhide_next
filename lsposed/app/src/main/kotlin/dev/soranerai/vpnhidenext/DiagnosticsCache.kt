@@ -5,10 +5,13 @@ import android.net.ConnectivityManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -25,8 +28,6 @@ import kotlinx.coroutines.withContext
  * State machine:
  * - [State.NotRun] — fresh, nothing attempted yet.
  * - [State.Running] — a run is in flight.
- * - [State.VpnOff] — last run aborted because no active VPN was
- *   detected. User gets a "turn on VPN, then retry" banner.
  * - [State.Ready] — results captured; exposed to both the Dashboard
  *   protection panel and the Diagnostics screen.
  *
@@ -41,9 +42,9 @@ internal object DiagnosticsCache {
     sealed interface State {
         data object NotRun : State
 
-        data object Running : State
-
-        data object VpnOff : State
+        data class Running(
+            val results: CheckResults,
+        ) : State
 
         data class Ready(
             val results: CheckResults,
@@ -54,6 +55,7 @@ internal object DiagnosticsCache {
     val state: StateFlow<State> = _state.asStateFlow()
 
     private var inflight: Job? = null
+    private val lock = Any()
 
     /** Start a run if one isn't already in flight and we don't have a
      * completed result yet. Idempotent — safe to call from both
@@ -87,9 +89,9 @@ internal object DiagnosticsCache {
             }
         }
 
-        // Wait for it to become Ready or VpnOff
+        // Wait for it to become Ready
         state.first {
-            it is State.Ready || it is State.VpnOff
+            it is State.Ready
         }
 
         return (_state.value as? State.Ready)?.results
@@ -121,21 +123,64 @@ internal object DiagnosticsCache {
     }
 
     private suspend fun doRun(appContext: Context) {
-        _state.value = State.Running
-        try {
-            val results =
-                withContext(Dispatchers.IO) {
-                    val cm = appContext.getSystemService(ConnectivityManager::class.java)
-                    runAllChecks(cm, appContext)
+        val initialResults = getPlaceholderResults(appContext)
+        _state.value = State.Running(initialResults)
+
+        var currentResults = initialResults
+
+        coroutineScope {
+            val tickerJob =
+                launch(Dispatchers.Default) {
+                    while (isActive) {
+                        delay(100)
+                        synchronized(lock) {
+                            val current = _state.value
+                            if (current is State.Running && current.results != currentResults) {
+                                _state.value = State.Running(currentResults)
+                            }
+                        }
+                    }
                 }
-            _state.value = State.Ready(results)
-        } catch (e: Exception) {
-            // Failures leave us in VpnOff so the user sees the retry UI
-            // rather than a frozen spinner. Real-world causes here are
-            // transient (root dropped, shell exec failure) and a retry
-            // usually works.
-            _state.value = State.VpnOff
-            VpnHideLog.w("VpnHide-Diag", "runAllChecks failed: ${e.message}")
+
+            try {
+                val cm = appContext.getSystemService(ConnectivityManager::class.java)
+                val results =
+                    runAllChecks(cm, appContext) { updatedResult, isJava ->
+                        synchronized(lock) {
+                            val newNative =
+                                if (isJava) {
+                                    currentResults.native
+                                } else {
+                                    currentResults.native.map {
+                                        if (it.name == updatedResult.name) updatedResult else it
+                                    }
+                                }
+                            val newJava =
+                                if (!isJava) {
+                                    currentResults.java
+                                } else {
+                                    currentResults.java.map {
+                                        if (it.name == updatedResult.name) updatedResult else it
+                                    }
+                                }
+                            currentResults = CheckResults(newNative, newJava)
+                        }
+                    }
+                tickerJob.cancel()
+                _state.value = State.Ready(results)
+            } catch (e: Exception) {
+                tickerJob.cancel()
+                val failedNative =
+                    currentResults.native.map {
+                        if (it.isRunning) it.copy(passed = false, isRunning = false) else it
+                    }
+                val failedJava =
+                    currentResults.java.map {
+                        if (it.isRunning) it.copy(passed = false, isRunning = false) else it
+                    }
+                _state.value = State.Ready(CheckResults(failedNative, failedJava))
+                VpnHideLog.w("VpnHide-Diag", "runAllChecks failed: ${e.message}")
+            }
         }
     }
 }

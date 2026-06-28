@@ -1,3 +1,5 @@
+@file:Suppress("DEPRECATION")
+
 package dev.soranerai.vpnhidenext
 
 import android.database.sqlite.SQLiteDatabase
@@ -21,7 +23,6 @@ import dev.soranerai.vpnhidenext.hooks.handlers.UserManagerHook
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
 
-@Suppress("DEPRECATION")
 class HookEntry : IXposedHookLoadPackage {
     private val hookInstalled = AtomicBoolean(false)
 

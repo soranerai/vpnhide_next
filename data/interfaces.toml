@@ -54,10 +54,6 @@ match = { prefix = "l2tp" }
 note = "L2TP"
 
 [[vpn]]
-match = { prefix = "gre" }
-note = "GRE tunnels"
-
-[[vpn]]
 match = { contains = "vpn" }
 note = "catch-all for renamed clients (myvpn0, vpn-client, xvpn1, ...)"
 
@@ -119,7 +115,7 @@ is_vpn = true
 
 [[test]]
 name = "gre0"
-is_vpn = true
+is_vpn = false
 
 # Case-insensitivity
 
@@ -246,8 +242,8 @@ name = ""             # empty
 is_vpn = false
 
 [[test]]
-name = "tunl"         # 'tun' prefix matches even with non-digit suffix
-is_vpn = true
+name = "tunl"         # 'tunl' (IP-in-IP tunnel) should NOT be classified as VPN
+is_vpn = false
 
 [[test]]
 name = "atun0"        # prefix only matches at start of name
@@ -256,3 +252,11 @@ is_vpn = false
 [[test]]
 name = "VPN"          # full name is the substring
 is_vpn = true
+
+[[test]]
+name = "gretap0"
+is_vpn = false
+
+[[test]]
+name = "tunl0"
+is_vpn = false

@@ -34,8 +34,6 @@ sealed interface LsposedState {
 }
 
 sealed interface ProtectionCheck {
-    data object NoVpn : ProtectionCheck
-
     data object NeedsRestart : ProtectionCheck
 
     data class Checked(
@@ -45,6 +43,8 @@ sealed interface ProtectionCheck {
 }
 
 sealed interface NativeResult {
+    data object Checking : NativeResult
+
     data class Ok(
         val passed: Int,
         val total: Int,
@@ -64,6 +64,8 @@ sealed interface NativeResult {
 }
 
 sealed interface JavaResult {
+    data object Checking : JavaResult
+
     data class Ok(
         val passed: Int,
         val total: Int,

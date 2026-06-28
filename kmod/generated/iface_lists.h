@@ -82,7 +82,8 @@ static inline bool vpnhide_iface_is_vpn(const char *name)
 	if (!name || !name[0])
 		return false;
 	/* OpenVPN, WireGuard userspace, Tailscale, generic tunneling */
-	if (vpnhide_iface_starts_with_ci(name, "tun"))
+	if (vpnhide_iface_starts_with_ci(name, "tun") &&
+                 !vpnhide_iface_starts_with_ci(name, "tunl"))
 		return true;
 	/* OpenVPN bridged */
 	if (vpnhide_iface_starts_with_ci(name, "tap"))
@@ -104,9 +105,6 @@ static inline bool vpnhide_iface_is_vpn(const char *name)
 		return true;
 	/* L2TP */
 	if (vpnhide_iface_starts_with_ci(name, "l2tp"))
-		return true;
-	/* GRE tunnels */
-	if (vpnhide_iface_starts_with_ci(name, "gre"))
 		return true;
 	/* catch-all for renamed clients (myvpn0, vpn-client, xvpn1, ...) */
 	if (vpnhide_iface_contains_ci(name, "vpn"))

@@ -246,16 +246,6 @@ private fun DashboardContent(
         }
 
         when (val p = s.protection) {
-            is ProtectionCheck.NoVpn -> {
-                Spacer(Modifier.height(12.dp))
-                VpnOffPrompt(
-                    onRetry = {
-                        DashboardCache.refresh(scope, context, selfNeedsRestart)
-                        DiagnosticsCache.retry(scope, context)
-                    },
-                )
-            }
-
             is ProtectionCheck.NeedsRestart -> {
                 Spacer(Modifier.height(12.dp))
                 StatusBanner(

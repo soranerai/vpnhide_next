@@ -130,7 +130,22 @@ jobs:
       - name: Android lint + Kotlin unit tests
         run: cd lsposed && ./gradlew :app:lintDebug :app:testDebugUnitTest
 
-      # Build vpnhide-ctl and vpnhide-daemon
+  build-binaries:
+    needs: setup
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.setup.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
       - name: Build vpnhide-ctl and vpnhide-daemon
         run: |
           $ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang -O2 -Wall -static kmod/vpnhide_ctl.c kmod/parson.c -o vpnhide-ctl
@@ -147,7 +162,7 @@ jobs:
             vpnhide-daemon
 
   kmod:
-    needs: [setup, lint]
+    needs: [setup, build-binaries]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -203,7 +218,7 @@ jobs:
   # tree; the module is built here against that tree so it matches the kernel.
   # QEMU runs under TCG (no KVM on hosted runners) — slow but fine. See kmod/test/.
   kmod-qemu:
-    needs: [setup, lint]
+    needs: [setup, build-binaries]
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -344,7 +359,7 @@ jobs:
 
 
   release:
-    needs: [kmod, lsposed]
+    needs: [lint, kmod, lsposed]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # Only the release job needs write — used by softprops/action-gh-release

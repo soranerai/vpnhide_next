@@ -302,6 +302,13 @@ def emit_kmod(rules: list[Rule]) -> str:
     for r in rules:
         if r.note:
             lines.append(f"\t/* {r.note} */")
+        if r.needle == "tun" and r.kind == "prefix":
+            lines.append(
+                """\tif (vpnhide_iface_starts_with_ci(name, "tun") &&
+                 !vpnhide_iface_starts_with_ci(name, "tunl"))"""
+            )
+            lines.append("\t\treturn true;")
+            continue
         if r.kind == "exact":
             fn = "vpnhide_iface_equals_ci"
         elif r.kind == "prefix":
@@ -437,6 +444,11 @@ def emit_rust(rules: list[Rule], tests: list[TestVector]) -> str:
     for r in rules:
         if r.note:
             lines.append(f"    // {r.note}")
+        if r.needle == "tun" and r.kind == "prefix":
+            lines.append('    if starts_with_ci(name, b"tun") && !starts_with_ci(name, b"tunl") {')
+            lines.append("        return true;")
+            lines.append("    }")
+            continue
         if r.kind == "exact":
             fn = "equals_ci"
         elif r.kind == "prefix":
@@ -495,6 +507,9 @@ def emit_kotlin(rules: list[Rule]) -> str:
     for r in rules:
         if r.note:
             lines.append(f"        // {r.note}")
+        if r.needle == "tun" and r.kind == "prefix":
+            lines.append('        if (n.startsWith("tun") && !n.startsWith("tunl")) return true')
+            continue
         if r.kind == "exact":
             cond = f"n == {kt_str_lit(r.needle)}"
         elif r.kind == "prefix":

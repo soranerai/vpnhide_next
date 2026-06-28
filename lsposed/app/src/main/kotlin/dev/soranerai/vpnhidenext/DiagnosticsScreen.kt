@@ -9,9 +9,14 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -23,8 +28,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -32,19 +40,24 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
 import dev.soranerai.vpnhidenext.checks.CheckStatus
+import dev.soranerai.vpnhidenext.checks.checkArpTimeoutIllusion
 import dev.soranerai.vpnhidenext.checks.checkBpfIfaceMap
+import dev.soranerai.vpnhidenext.checks.checkBroadcastBlackhole
 import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkGetsocknameSpoof
 import dev.soranerai.vpnhidenext.checks.checkGetsockoptBind
+import dev.soranerai.vpnhidenext.checks.checkGsoAsymmetry
 import dev.soranerai.vpnhidenext.checks.checkInetDiag
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifconf
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifflags
 import dev.soranerai.vpnhidenext.checks.checkIoctlSiocgifmtu
+import dev.soranerai.vpnhidenext.checks.checkIpv6LinkLocalBruteforce
 import dev.soranerai.vpnhidenext.checks.checkNetlinkAnonymousRoute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetlink
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetneigh
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetroute
 import dev.soranerai.vpnhidenext.checks.checkNetlinkGetrule
+import dev.soranerai.vpnhidenext.checks.checkPmtuCachePoisoning
 import dev.soranerai.vpnhidenext.checks.checkProcNetDev
 import dev.soranerai.vpnhidenext.checks.checkProcNetFibTrie
 import dev.soranerai.vpnhidenext.checks.checkProcNetIfInet6
@@ -54,14 +67,21 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetTcp
 import dev.soranerai.vpnhidenext.checks.checkProcNetTcp6
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
+import dev.soranerai.vpnhidenext.checks.checkProcSysNetConf
 import dev.soranerai.vpnhidenext.checks.checkSysClassNet
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
 import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
+import dev.soranerai.vpnhidenext.checks.checkUdpQueuePressure
+import dev.soranerai.vpnhidenext.checks.checkUidRouteRulesLeak
+import dev.soranerai.vpnhidenext.checks.checkUnderlayPortConflict
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -76,12 +96,15 @@ import java.util.zip.ZipOutputStream
 
 private const val TAG = "VPNHideTest"
 
+@androidx.compose.runtime.Immutable
 data class CheckResult(
     val name: String,
     val passed: Boolean?,
     val detail: String,
+    val isRunning: Boolean = false,
 )
 
+@androidx.compose.runtime.Immutable
 internal data class CheckResults(
     val native: List<CheckResult>,
     val java: List<CheckResult>,
@@ -89,8 +112,6 @@ internal data class CheckResults(
     val all
         get() = native + java
 }
-
-internal suspend fun isVpnActive(): Boolean = withContext(Dispatchers.IO) { isVpnActiveBlocking() }
 
 @Composable
 fun DiagnosticsScreen(
@@ -129,59 +150,58 @@ fun DiagnosticsScreen(
             }
         }
 
-    val results = (diagState as? DiagnosticsCache.State.Ready)?.results
+    val stateVal = diagState
+    val results =
+        when (stateVal) {
+            is DiagnosticsCache.State.Ready -> stateVal.results
+            is DiagnosticsCache.State.Running -> stateVal.results
+            else -> null
+        }
     // Native probes that couldn't run (ECONNREFUSED from socket()) are
     // represented as passed=null by nativeCheck. Java-level checks never
     // produce that state, so this test isolates the "app has no network
     // permission" banner from everything else.
-    val networkBlocked = results?.native?.any { it.passed == null } == true
+    val networkBlocked = results?.native?.any { it.passed == null && !it.isRunning } == true
     val hasFailed = results?.all?.any { it.passed == false } == true
 
-    Column(
+    val failedNative = remember(results) { results?.native?.filter { it.passed == false } ?: emptyList() }
+    val failedJava = remember(results) { results?.java?.filter { it.passed == false } ?: emptyList() }
+    val isChecking = remember(results) { results?.all?.any { it.isRunning } == true }
+
+    LazyColumn(
         modifier =
             modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
-                .verticalScroll(rememberScrollState()),
+                .padding(horizontal = 16.dp),
     ) {
-        Spacer(Modifier.height(8.dp))
+        item(key = "spacer_top") { Spacer(Modifier.height(8.dp)) }
 
-        BackupRestoreCard()
+        item(key = "backup_restore_card") { BackupRestoreCard() }
 
-        Spacer(Modifier.height(16.dp))
+        item(key = "spacer_middle") { Spacer(Modifier.height(16.dp)) }
 
         // Protection check section — its content depends on cache state,
         // but the bottom debug-tools section always renders below so
         // users can collect logs / toggle verbose logging even when
         // VPN is off or a run is in flight.
-        when {
-            selfNeedsRestart -> {
+        if (selfNeedsRestart) {
+            item(key = "banner_restart") {
                 StatusBanner(
                     text = stringResource(R.string.banner_added_self),
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
                 )
             }
-
-            diagState is DiagnosticsCache.State.VpnOff -> {
-                VpnOffPrompt(
-                    onRetry = {
-                        DiagnosticsCache.retry(scope, context)
-                        DashboardCache.refresh(scope, context, selfNeedsRestart)
-                    },
-                )
-            }
-
-            diagState is DiagnosticsCache.State.Running ||
-                diagState is DiagnosticsCache.State.NotRun -> {
+        } else if (diagState is DiagnosticsCache.State.NotRun) {
+            item(key = "progress_indicator") {
                 Box(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator() }
             }
-
-            diagState is DiagnosticsCache.State.Ready -> {
-                if (networkBlocked) {
+        } else if (diagState is DiagnosticsCache.State.Running || diagState is DiagnosticsCache.State.Ready) {
+            if (networkBlocked) {
+                item(key = "banner_network_blocked") {
                     StatusBanner(
                         text = stringResource(R.string.banner_network_blocked),
                         containerColor = MaterialTheme.colorScheme.errorContainer,
@@ -189,12 +209,72 @@ fun DiagnosticsScreen(
                     )
                     Spacer(Modifier.height(12.dp))
                 }
+            }
 
-                results?.let { r ->
-                    val failedNative = r.native.filter { it.passed == false }
-                    val failedJava = r.java.filter { it.passed == false }
+            results?.let { r ->
 
-                    if (!hasFailed) {
+                if (isChecking) {
+                    item {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                ),
+                            border =
+                                BorderStroke(
+                                    1.dp,
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.padding(20.dp)) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                ) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.5.dp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                    )
+                                    Text(
+                                        text = stringResource(R.string.diag_running_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                                Spacer(Modifier.height(8.dp))
+                                Text(
+                                    text = stringResource(R.string.diag_running_desc),
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                                Spacer(Modifier.height(14.dp))
+                                Button(
+                                    onClick = { showAllChecks = !showAllChecks },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    colors =
+                                        ButtonDefaults.buttonColors(
+                                            containerColor = MaterialTheme.colorScheme.primary,
+                                            contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        ),
+                                ) {
+                                    Text(
+                                        text =
+                                            if (showAllChecks) {
+                                                stringResource(R.string.diag_btn_hide_details)
+                                            } else {
+                                                stringResource(R.string.diag_btn_show_details)
+                                            },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                } else if (!hasFailed) {
+                    item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
                             colors =
@@ -253,17 +333,19 @@ fun DiagnosticsScreen(
                                 }
                             }
                         }
-                    } else {
+                    }
+                } else {
+                    item {
                         Card(
                             shape = RoundedCornerShape(16.dp),
                             colors =
                                 CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.errorContainer,
+                                    containerColor = MaterialTheme.colorScheme.surface,
                                 ),
                             border =
                                 BorderStroke(
                                     1.dp,
-                                    MaterialTheme.colorScheme.error.copy(alpha = 0.4f),
+                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
                                 ),
                             modifier = Modifier.fillMaxWidth(),
                         ) {
@@ -289,7 +371,7 @@ fun DiagnosticsScreen(
                                 Text(
                                     text = stringResource(R.string.diag_some_failed_desc),
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
                                 Spacer(Modifier.height(14.dp))
                                 Button(
@@ -313,237 +395,115 @@ fun DiagnosticsScreen(
                             }
                         }
                     }
+                }
 
-                    if (showAllChecks) {
-                        Spacer(Modifier.height(16.dp))
-                        SectionHeader(stringResource(R.string.section_native))
-                        Spacer(Modifier.height(8.dp))
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors =
-                                CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                ),
-                            border =
-                                BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                ),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column {
-                                r.native.forEachIndexed { index, check ->
-                                    CheckRow(check)
-                                    if (index < r.native.lastIndex) {
-                                        HorizontalDivider(
-                                            color =
-                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = 0.06f,
-                                                ),
-                                            thickness = 1.dp,
-                                            modifier = Modifier.padding(horizontal = 14.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-
-                        Spacer(Modifier.height(16.dp))
-                        SectionHeader(stringResource(R.string.section_java))
-                        Spacer(Modifier.height(8.dp))
-                        Card(
-                            shape = RoundedCornerShape(16.dp),
-                            colors =
-                                CardDefaults.cardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
-                                ),
-                            border =
-                                BorderStroke(
-                                    1.dp,
-                                    MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                ),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
-                            Column {
-                                r.java.forEachIndexed { index, check ->
-                                    CheckRow(check)
-                                    if (index < r.java.lastIndex) {
-                                        HorizontalDivider(
-                                            color =
-                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = 0.06f,
-                                                ),
-                                            thickness = 1.dp,
-                                            modifier = Modifier.padding(horizontal = 14.dp),
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    } else if (hasFailed) {
-                        if (failedNative.isNotEmpty()) {
-                            Spacer(Modifier.height(16.dp))
-                            SectionHeader(stringResource(R.string.section_native))
-                            Spacer(Modifier.height(8.dp))
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column {
-                                    failedNative.forEachIndexed { index, check ->
-                                        CheckRow(check)
-                                        if (index < failedNative.lastIndex) {
-                                            HorizontalDivider(
-                                                color =
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                        alpha = 0.06f,
-                                                    ),
-                                                thickness = 1.dp,
-                                                modifier = Modifier.padding(horizontal = 14.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
-
-                        if (failedJava.isNotEmpty()) {
-                            Spacer(Modifier.height(16.dp))
-                            SectionHeader(stringResource(R.string.section_java))
-                            Spacer(Modifier.height(8.dp))
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Column {
-                                    failedJava.forEachIndexed { index, check ->
-                                        CheckRow(check)
-                                        if (index < failedJava.lastIndex) {
-                                            HorizontalDivider(
-                                                color =
-                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                        alpha = 0.06f,
-                                                    ),
-                                                thickness = 1.dp,
-                                                modifier = Modifier.padding(horizontal = 14.dp),
-                                            )
-                                        }
-                                    }
-                                }
-                            }
-                        }
+                if (showAllChecks) {
+                    checksListCard(r.native)
+                    checksListCard(r.java)
+                } else if (hasFailed && !isChecking) {
+                    if (failedNative.isNotEmpty()) {
+                        checksListCard(failedNative)
+                    }
+                    if (failedJava.isNotEmpty()) {
+                        checksListCard(failedJava)
                     }
                 }
             }
         }
 
-        Spacer(Modifier.height(16.dp))
+        item { Spacer(Modifier.height(16.dp)) }
 
-        KernelHooksTestingCard(onOpenHookTesting)
+        item { KernelHooksTestingCard(onOpenHookTesting) }
 
-        Spacer(Modifier.height(16.dp))
+        item { Spacer(Modifier.height(16.dp)) }
 
-        DebugLoggingCard()
+        item { DebugLoggingCard() }
 
-        Spacer(Modifier.height(16.dp))
+        item { Spacer(Modifier.height(16.dp)) }
 
-        // Collect button
-        if (debugZipFile == null) {
-            Button(
-                onClick = {
-                    exporting = true
-                    scope.launch {
-                        debugZipFile = exportDebugZip(cm, context, selfNeedsRestart)
-                        exporting = false
-                    }
-                },
-                enabled = !exporting,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                if (exporting) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(18.dp),
-                        strokeWidth = 2.dp,
-                        color = MaterialTheme.colorScheme.onPrimary,
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                Text(
-                    if (exporting) {
-                        stringResource(R.string.btn_export_debug_running)
-                    } else {
-                        stringResource(R.string.btn_export_debug)
-                    },
-                )
-            }
-        } else {
-            // Save / Share buttons
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                OutlinedButton(
-                    onClick = { saveLauncher.launch(debugZipFile!!.name) },
-                    modifier = Modifier.weight(1f),
-                ) {
-                    Icon(
-                        Icons.Default.Save,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
-                    )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.btn_save_debug))
-                }
+        item {
+            // Collect button
+            if (debugZipFile == null) {
                 Button(
                     onClick = {
-                        val uri =
-                            FileProvider.getUriForFile(
-                                context,
-                                "${context.packageName}.fileprovider",
-                                debugZipFile!!,
-                            )
-                        val intent =
-                            Intent(Intent.ACTION_SEND).apply {
-                                type = "application/zip"
-                                putExtra(Intent.EXTRA_STREAM, uri)
-                                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                            }
-                        context.startActivity(Intent.createChooser(intent, null))
+                        exporting = true
+                        scope.launch {
+                            debugZipFile = exportDebugZip(cm, context, selfNeedsRestart)
+                            exporting = false
+                        }
                     },
-                    modifier = Modifier.weight(1f),
+                    enabled = !exporting,
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
-                    Icon(
-                        Icons.Default.Share,
-                        contentDescription = null,
-                        modifier = Modifier.size(18.dp),
+                    if (exporting) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(18.dp),
+                            strokeWidth = 2.dp,
+                            color = MaterialTheme.colorScheme.onPrimary,
+                        )
+                        Spacer(Modifier.width(8.dp))
+                    }
+                    Text(
+                        if (exporting) {
+                            stringResource(R.string.btn_export_debug_running)
+                        } else {
+                            stringResource(R.string.btn_export_debug)
+                        },
                     )
-                    Spacer(Modifier.width(8.dp))
-                    Text(stringResource(R.string.btn_share_debug))
+                }
+            } else {
+                // Save / Share buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedButton(
+                        onClick = { saveLauncher.launch(debugZipFile!!.name) },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            Icons.Default.Save,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.btn_save_debug))
+                    }
+                    Button(
+                        onClick = {
+                            val uri =
+                                FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    debugZipFile!!,
+                                )
+                            val intent =
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/zip"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                            context.startActivity(Intent.createChooser(intent, null))
+                        },
+                        modifier = Modifier.weight(1f),
+                    ) {
+                        Icon(
+                            Icons.Default.Share,
+                            contentDescription = null,
+                            modifier = Modifier.size(18.dp),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(stringResource(R.string.btn_share_debug))
+                    }
                 }
             }
         }
 
-        val bottomNavPadding =
-            WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-        Spacer(Modifier.height(bottomNavPadding + 100.dp))
+        item {
+            val bottomNavPadding =
+                WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+            Spacer(Modifier.height(bottomNavPadding + 100.dp))
+        }
     }
 }
 
@@ -625,31 +585,72 @@ private fun SectionHeader(title: String) {
     )
 }
 
+private fun LazyListScope.checksListCard(checks: List<CheckResult>) {
+    itemsIndexed(checks, key = { _, c -> c.name }) { index, check ->
+        val isFirst = index == 0
+        val isLast = index == checks.lastIndex
+
+        val shape =
+            when {
+                isFirst && isLast -> RoundedCornerShape(16.dp)
+                isFirst -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
+                isLast -> RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
+                else -> RectangleShape
+            }
+
+        Surface(
+            shape = shape,
+            color = MaterialTheme.colorScheme.surface,
+            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column {
+                CheckRow(check)
+                if (!isLast) {
+                    HorizontalDivider(
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.06f),
+                        thickness = 1.dp,
+                        modifier = Modifier.padding(horizontal = 14.dp),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun CheckRow(r: CheckResult) {
-    var expanded by remember { mutableStateOf(false) }
+    var userExpanded by remember { mutableStateOf<Boolean?>(null) }
+    val expanded = userExpanded ?: (r.passed == false)
 
     val statusIcon =
-        when (r.passed) {
-            true -> Icons.Default.CheckCircle
-            false -> Icons.Default.Cancel
-            null -> Icons.Default.Info
+        when {
+            r.isRunning -> null
+            r.passed == true -> Icons.Default.CheckCircle
+            r.passed == false -> Icons.Default.Cancel
+            else -> Icons.Default.Info
         }
     val statusColor =
-        when (r.passed) {
-            true -> TelGreen
-            false -> TelRed
-            null -> MaterialTheme.colorScheme.onSurfaceVariant
+        when {
+            r.isRunning -> MaterialTheme.colorScheme.primary
+            r.passed == true -> TelGreen
+            r.passed == false -> TelRed
+            else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
 
     val badgeText =
-        stringResource(
-            when (r.passed) {
-                true -> R.string.badge_pass
-                false -> R.string.badge_fail
-                null -> R.string.badge_info
-            },
-        )
+        if (r.isRunning) {
+            stringResource(R.string.badge_running)
+        } else {
+            stringResource(
+                when (r.passed) {
+                    true -> R.string.badge_pass
+                    false -> R.string.badge_fail
+                    else -> R.string.badge_info
+                },
+            )
+        }
 
     val rowBgColor =
         if (expanded) {
@@ -658,26 +659,56 @@ private fun CheckRow(r: CheckResult) {
             Color.Transparent
         }
 
+    val clipboardManager = LocalClipboardManager.current
+    val context = LocalContext.current
+    val toastMsg = stringResource(R.string.toast_copied_to_clipboard)
+
     Column(
         modifier =
             Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(12.dp))
                 .background(rowBgColor)
-                .clickable(enabled = r.detail.isNotBlank()) { expanded = !expanded }
-                .padding(vertical = 10.dp, horizontal = 14.dp),
+                .combinedClickable(
+                    enabled = !r.isRunning,
+                    onClick = {
+                        if (r.detail.isNotBlank()) {
+                            userExpanded = !expanded
+                        }
+                    },
+                    onLongClick = {
+                        val textToCopy =
+                            if (r.detail.isNotBlank()) {
+                                "${r.name}: $badgeText\n${r.detail}"
+                            } else {
+                                "${r.name}: $badgeText"
+                            }
+                        clipboardManager.setText(AnnotatedString(textToCopy))
+                        Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
+                    },
+                ).padding(vertical = 10.dp, horizontal = 14.dp),
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Icon(
-                imageVector = statusIcon,
-                contentDescription = null,
-                tint = statusColor,
-                modifier = Modifier.size(20.dp),
-            )
+            if (r.isRunning) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(20.dp),
+                    strokeWidth = 2.dp,
+                    color = statusColor,
+                )
+            } else {
+                statusIcon?.let { icon ->
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
             Text(
                 text = r.name,
                 style = MaterialTheme.typography.bodyMedium,
@@ -694,7 +725,7 @@ private fun CheckRow(r: CheckResult) {
                     fontSize = 12.sp,
                     color = statusColor,
                 )
-                if (r.detail.isNotBlank()) {
+                if (!r.isRunning && r.detail.isNotBlank()) {
                     Icon(
                         imageVector =
                             if (expanded) {
@@ -744,100 +775,150 @@ private fun CheckRow(r: CheckResult) {
 //  Check runner — runs directly in the main process
 // ==========================================================================
 
-internal fun runAllChecks(
+internal fun getPlaceholderResults(context: android.content.Context): CheckResults {
+    val res = context.resources
+    val nativeNames =
+        listOf(
+            R.string.check_ioctl_flags,
+            R.string.check_ioctl_mtu,
+            R.string.check_ioctl_conf,
+            R.string.check_getifaddrs,
+            R.string.check_netlink_getlink,
+            R.string.check_netlink_getroute,
+            R.string.check_netlink_anonymous_route,
+            R.string.check_proc_route,
+            R.string.check_proc_ipv6_route,
+            R.string.check_proc_if_inet6,
+            R.string.check_proc_tcp,
+            R.string.check_proc_tcp6,
+            R.string.check_proc_udp,
+            R.string.check_proc_udp6,
+            R.string.check_proc_dev,
+            R.string.check_proc_fib_trie,
+            R.string.check_bpf_iface_map,
+            R.string.check_sys_class_net,
+            R.string.check_net_iface_enum,
+            R.string.check_proc_route_java,
+            R.string.check_getsockopt_bind,
+            R.string.check_inet_diag,
+            R.string.check_getsockname_spoof,
+            R.string.check_netlink_getrule,
+            R.string.check_tcp_mss,
+            R.string.check_udp_pmtu,
+            R.string.check_netlink_getneigh,
+            R.string.check_proc_sys_net_conf,
+            R.string.check_udp_queue_pressure,
+            R.string.check_arp_timeout_illusion,
+            R.string.check_broadcast_blackhole,
+            R.string.check_gso_asymmetry,
+            R.string.check_ipv6_link_local_bruteforce,
+            R.string.check_traffic_stats,
+        )
+    val javaNames =
+        listOf(
+            R.string.check_active_capabilities,
+            R.string.check_active_properties,
+            R.string.check_all_networks_vpn,
+            R.string.check_link_properties_dns,
+            R.string.check_network_callback,
+            R.string.check_vpn_callback_suppression,
+            R.string.check_get_network_for_type,
+        )
+    return CheckResults(
+        native = nativeNames.map { CheckResult(res.getString(it), null, "", isRunning = true) },
+        java = javaNames.map { CheckResult(res.getString(it), null, "", isRunning = true) },
+    )
+}
+
+internal suspend fun runAllChecks(
     cm: ConnectivityManager,
     context: android.content.Context,
-): CheckResults {
-    VpnHideLog.i(TAG, "========================================")
-    VpnHideLog.i(TAG, "=== VPNHide — starting all checks ===")
-    VpnHideLog.i(TAG, "========================================")
+    onResult: ((CheckResult, isJava: Boolean) -> Unit)? = null,
+): CheckResults =
+    coroutineScope {
+        VpnHideLog.i(TAG, "========================================")
+        VpnHideLog.i(TAG, "=== VPNHide — starting all checks (parallel) ===")
+        VpnHideLog.i(TAG, "========================================")
 
-    val res = context.resources
+        val res = context.resources
 
-    val native =
-        listOf(
-            nativeCheck(res.getString(R.string.check_ioctl_flags)) {
-                checkIoctlSiocgifflags()
-            },
-            nativeCheck(res.getString(R.string.check_ioctl_mtu)) { checkIoctlSiocgifmtu() },
-            nativeCheck(res.getString(R.string.check_ioctl_conf)) {
-                checkIoctlSiocgifconf()
-            },
-            nativeCheck(res.getString(R.string.check_getifaddrs)) { checkGetifaddrs() },
-            nativeCheck(res.getString(R.string.check_netlink_getlink)) {
-                checkNetlinkGetlink()
-            },
-            nativeCheck(res.getString(R.string.check_netlink_getroute)) {
-                checkNetlinkGetroute()
-            },
-            nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) {
-                checkNetlinkAnonymousRoute()
-            },
-            nativeCheck(res.getString(R.string.check_proc_route)) { checkProcNetRoute() },
-            nativeCheck(res.getString(R.string.check_proc_ipv6_route)) {
-                checkProcNetIpv6Route()
-            },
-            nativeCheck(res.getString(R.string.check_proc_if_inet6)) {
-                checkProcNetIfInet6()
-            },
-            nativeCheck(res.getString(R.string.check_proc_tcp)) { checkProcNetTcp() },
-            nativeCheck(res.getString(R.string.check_proc_tcp6)) { checkProcNetTcp6() },
-            nativeCheck(res.getString(R.string.check_proc_udp)) { checkProcNetUdp() },
-            nativeCheck(res.getString(R.string.check_proc_udp6)) { checkProcNetUdp6() },
-            nativeCheck(res.getString(R.string.check_proc_dev)) { checkProcNetDev() },
-            nativeCheck(res.getString(R.string.check_proc_fib_trie)) {
-                checkProcNetFibTrie()
-            },
-            nativeCheck(res.getString(R.string.check_bpf_iface_map)) { checkBpfIfaceMap() },
-            nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() },
-            checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)),
-            checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)),
-            nativeCheck(res.getString(R.string.check_getsockopt_bind)) {
-                checkGetsockoptBind()
-            },
-            nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() },
-            nativeCheck(res.getString(R.string.check_getsockname_spoof)) {
-                checkGetsocknameSpoof()
-            },
-            nativeCheck(res.getString(R.string.check_netlink_getrule)) {
-                checkNetlinkGetrule()
-            },
-            nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() },
-            nativeCheck(res.getString(R.string.check_udp_pmtu)) { checkUdpPmtu() },
-            nativeCheck(res.getString(R.string.check_netlink_getneigh)) {
-                checkNetlinkGetneigh()
-            },
-            checkTrafficStatsDiscrepancy(
-                cm,
-                context,
-                res.getString(R.string.check_traffic_stats),
-            ),
-        )
+        val nativeDefs =
+            listOf<suspend () -> CheckResult>(
+                { nativeCheck(res.getString(R.string.check_ioctl_flags)) { checkIoctlSiocgifflags() } },
+                { nativeCheck(res.getString(R.string.check_ioctl_mtu)) { checkIoctlSiocgifmtu() } },
+                { nativeCheck(res.getString(R.string.check_ioctl_conf)) { checkIoctlSiocgifconf() } },
+                { nativeCheck(res.getString(R.string.check_getifaddrs)) { checkGetifaddrs() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getlink)) { checkNetlinkGetlink() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getroute)) { checkNetlinkGetroute() } },
+                { nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) { checkNetlinkAnonymousRoute() } },
+                { nativeCheck(res.getString(R.string.check_proc_route)) { checkProcNetRoute() } },
+                { nativeCheck(res.getString(R.string.check_proc_ipv6_route)) { checkProcNetIpv6Route() } },
+                { nativeCheck(res.getString(R.string.check_proc_if_inet6)) { checkProcNetIfInet6() } },
+                { nativeCheck(res.getString(R.string.check_proc_tcp)) { checkProcNetTcp() } },
+                { nativeCheck(res.getString(R.string.check_proc_tcp6)) { checkProcNetTcp6() } },
+                { nativeCheck(res.getString(R.string.check_proc_udp)) { checkProcNetUdp() } },
+                { nativeCheck(res.getString(R.string.check_proc_udp6)) { checkProcNetUdp6() } },
+                { nativeCheck(res.getString(R.string.check_proc_dev)) { checkProcNetDev() } },
+                { nativeCheck(res.getString(R.string.check_proc_fib_trie)) { checkProcNetFibTrie() } },
+                { nativeCheck(res.getString(R.string.check_bpf_iface_map)) { checkBpfIfaceMap() } },
+                { nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() } },
+                { checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)) },
+                { checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)) },
+                { nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() } },
+                { nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() } },
+                { nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getrule)) { checkNetlinkGetrule() } },
+                { nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() } },
+                { nativeCheck(res.getString(R.string.check_udp_pmtu)) { checkUdpPmtu() } },
+                { nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() } },
+                { nativeCheck(res.getString(R.string.check_proc_sys_net_conf)) { checkProcSysNetConf() } },
+                { nativeCheck(res.getString(R.string.check_udp_queue_pressure)) { checkUdpQueuePressure() } },
+                { nativeCheck(res.getString(R.string.check_arp_timeout_illusion)) { checkArpTimeoutIllusion() } },
+                { nativeCheck(res.getString(R.string.check_broadcast_blackhole)) { checkBroadcastBlackhole() } },
+                { nativeCheck(res.getString(R.string.check_gso_asymmetry)) { checkGsoAsymmetry() } },
+                { nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) { checkIpv6LinkLocalBruteforce() } },
+                { checkTrafficStatsDiscrepancy(cm, context, res.getString(R.string.check_traffic_stats)) },
+            )
 
-    val java =
-        listOf(
-            checkActiveNetworkCapabilities(
-                cm,
-                res.getString(R.string.check_active_capabilities),
-            ),
-            checkActiveLinkProperties(cm, res.getString(R.string.check_active_properties)),
-            checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)),
-            checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)),
-            checkNetworkCallback(cm, res.getString(R.string.check_network_callback)),
-            checkVpnCallbackSuppression(
-                cm,
-                res.getString(R.string.check_vpn_callback_suppression),
-            ),
-            checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)),
-        )
+        val javaDefs =
+            listOf<suspend () -> CheckResult>(
+                { checkActiveNetworkCapabilities(cm, res.getString(R.string.check_active_capabilities)) },
+                { checkActiveLinkProperties(cm, res.getString(R.string.check_active_properties)) },
+                { checkAllNetworksVpn(cm, res.getString(R.string.check_all_networks_vpn)) },
+                { checkLinkPropertiesDns(cm, res.getString(R.string.check_link_properties_dns)) },
+                { checkNetworkCallback(cm, res.getString(R.string.check_network_callback)) },
+                { checkVpnCallbackSuppression(cm, res.getString(R.string.check_vpn_callback_suppression)) },
+                { checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)) },
+            )
 
-    val all = native + java
-    val scored = all.filter { it.passed != null }
-    val passed = scored.count { it.passed == true }
-    VpnHideLog.i(TAG, "=== SUMMARY: $passed/${scored.size} passed ===")
+        val nativeDeferred =
+            nativeDefs.map { def ->
+                async(Dispatchers.IO) {
+                    val r = def()
+                    onResult?.invoke(r, false)
+                    r
+                }
+            }
 
-    return CheckResults(native = native, java = java)
-}
+        val javaDeferred =
+            javaDefs.map { def ->
+                async(Dispatchers.IO) {
+                    val r = def()
+                    onResult?.invoke(r, true)
+                    r
+                }
+            }
+
+        val native = nativeDeferred.awaitAll()
+        val java = javaDeferred.awaitAll()
+
+        val all = native + java
+        val scored = all.filter { it.passed != null }
+        val passed = scored.count { it.passed == true }
+        VpnHideLog.i(TAG, "=== SUMMARY: $passed/${scored.size} passed ===")
+
+        CheckResults(native = native, java = java)
+    }
 
 private fun nativeCheck(
     name: String,

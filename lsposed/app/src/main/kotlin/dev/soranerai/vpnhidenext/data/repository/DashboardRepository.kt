@@ -20,6 +20,8 @@ import dev.soranerai.vpnhidenext.isEnabledInPrefs
 import dev.soranerai.vpnhidenext.normalizeVersion
 import dev.soranerai.vpnhidenext.suExec
 import dev.soranerai.vpnhidenext.versionsMismatch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val TAG = "VpnHide-Repository"
 
@@ -226,354 +228,354 @@ class DashboardRepository(
         return framework
     }
 
-    suspend fun loadDashboardState(selfNeedsRestart: Boolean): DashboardState {
-        val issues = mutableListOf<Issue>()
+    suspend fun loadDashboardState(selfNeedsRestart: Boolean): DashboardState =
+        withContext(Dispatchers.IO) {
+            val issues = mutableListOf<Issue>()
 
-        fun err(text: String) {
-            issues += Issue(IssueSeverity.ERROR, text)
-        }
-
-        fun warn(text: String) {
-            issues += Issue(IssueSeverity.WARNING, text)
-        }
-
-        val startTime = System.currentTimeMillis()
-        VpnHideLog.i(TAG, "=== Loading dashboard state ===")
-        val snapshot = collectDashboardSnapshot()
-        val currentBootId = snapshot.get("boot_id")
-        val db =
-            dev.soranerai.vpnhidenext.db.AppDatabase
-                .getInstance(context)
-        val appsSync = db.appDao().getAllAppProtectionSync()
-
-        // kmod
-        val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))
-        val kmodActive = kmodProp.installed && snapshot.get("lsmod") == "1"
-        val kmodTargetCount =
-            if (kmodProp.installed) {
-                appsSync.count { it.kmod && it.packageName != selfPkg }
-            } else {
-                0
+            fun err(text: String) {
+                issues += Issue(IssueSeverity.ERROR, text)
             }
-        val kmodRaw: ModuleState =
-            if (kmodProp.installed) {
-                ModuleState.Installed(
-                    version = kmodProp.version,
-                    active = kmodActive,
-                    targetCount = kmodTargetCount,
-                    gkiVariant = kmodProp.gkiVariant,
-                )
-            } else {
-                ModuleState.NotInstalled
-            }
-        VpnHideLog.i(TAG, "kmodRaw: $kmodRaw")
 
-        val kernelRaw = snapshot.get("uname")
-        val kernelRecommendation =
-            buildNativeInstallRecommendation(kernelRaw, androidMajorVersionLabel())
-        val kmodLoadStatus = readKmodLoadStatus(snapshot, currentBootId.trim())
-        VpnHideLog.i(TAG, "kmodLoadStatus=$kmodLoadStatus")
-
-        val recommendedKmi = kernelRecommendation?.recommendedGkiVariant
-        val kmodVariantMismatch =
-            kmodRaw is ModuleState.Installed &&
-                !kmodRaw.active &&
-                kernelRecommendation?.preferKmod == true &&
-                recommendedKmi != null &&
-                kmodRaw.gkiVariant != null &&
-                kmodRaw.gkiVariant != recommendedKmi &&
-                kmodRaw.gkiVariant != kernelRecommendation.alternativeGkiVariant
-        val kmodUnknownVariantBroken =
-            kmodRaw is ModuleState.Installed &&
-                !kmodRaw.active &&
-                kmodRaw.gkiVariant == null &&
-                kernelRecommendation?.preferKmod == true
-        val kmodOnUnsupportedKernel =
-            kmodRaw is ModuleState.Installed &&
-                !kmodRaw.active &&
-                kernelRecommendation != null &&
-                !kernelRecommendation.preferKmod
-        val kmodAmbiguousLoadFailed =
-            kmodRaw is ModuleState.Installed &&
-                !kmodRaw.active &&
-                kmodLoadStatus?.freshForCurrentBoot == true &&
-                kernelRecommendation?.variantAmbiguous == true &&
-                kmodRaw.gkiVariant != null &&
-                (
-                    kmodRaw.gkiVariant == kernelRecommendation.recommendedGkiVariant ||
-                        kmodRaw.gkiVariant == kernelRecommendation.alternativeGkiVariant
-                )
-        val kprobesMissing =
-            kmodLoadStatus?.freshForCurrentBoot == true && kmodLoadStatus.kretprobes == "n"
-        val kmodBrokenReason: KmodBrokenReason? =
-            when {
-                kmodRaw !is ModuleState.Installed -> null
-                kprobesMissing -> KmodBrokenReason.MissingKprobes
-                kmodOnUnsupportedKernel -> KmodBrokenReason.UnsupportedKernel
-                kmodVariantMismatch -> KmodBrokenReason.WrongVariant
-                kmodUnknownVariantBroken -> KmodBrokenReason.UnknownVariantInactive
-                kmodAmbiguousLoadFailed -> KmodBrokenReason.AmbiguousLoadFailed
-                else -> null
+            fun warn(text: String) {
+                issues += Issue(IssueSeverity.WARNING, text)
             }
-        val kmod: ModuleState =
-            if (kmodRaw is ModuleState.Installed && kmodBrokenReason != null) {
-                kmodRaw.copy(brokenReason = kmodBrokenReason)
-            } else {
-                kmodRaw
-            }
-        VpnHideLog.i(TAG, "kmod (with brokenReason): $kmod")
-        val nativeInstallRecommendation =
-            kernelRecommendation?.takeIf { kmod is ModuleState.NotInstalled }
-        VpnHideLog.i(
-            TAG,
-            "nativeInstallRecommendation=$nativeInstallRecommendation " +
-                "(raw=$kernelRecommendation variantMismatch=$kmodVariantMismatch " +
-                "unknownVariantBroken=$kmodUnknownVariantBroken)",
-        )
 
-        // lsposed hook status
-        val (_, hookStatusRaw) = suExec("$KMOD_CTL hook_status 2>/dev/null || true")
-        val hookProps = parseKeyValue(hookStatusRaw)
-        val hookVersion = hookProps["version"]
-        val hookBootId = hookProps["boot_id"]
-        val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
-        val lsposedTargetCount = appsSync.count { it.lsposed }
-        val lsposedFramework = detectLsposedFramework(snapshot)
-        val lsposedConfig =
-            when (lsposedFramework) {
-                LsposedFramework.NotInstalled -> {
-                    LsposedConfig.ModuleNotConfigured
+            val startTime = System.currentTimeMillis()
+            VpnHideLog.i(TAG, "=== Loading dashboard state ===")
+            val snapshot = collectDashboardSnapshot()
+            val currentBootId = snapshot.get("boot_id")
+            val db =
+                dev.soranerai.vpnhidenext.db.AppDatabase
+                    .getInstance(context)
+            val appsSync = db.appDao().getAllAppProtectionSync()
+
+            // kmod
+            val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))
+            val kmodActive = kmodProp.installed && snapshot.get("lsmod") == "1"
+            val kmodTargetCount =
+                if (kmodProp.installed) {
+                    appsSync.count { it.kmod && it.packageName != selfPkg }
+                } else {
+                    0
                 }
-
-                is LsposedFramework.Installed -> {
-                    if (lsposedFramework.disabled) {
-                        LsposedConfig.Disabled
-                    } else {
-                        null
-                    }
-                }
-            }
-        val lsposedRuntime: LsposedRuntime =
-            if (hooksActiveThisBoot) {
-                LsposedRuntime.Active(hookVersion)
-            } else {
-                LsposedRuntime.Inactive
-            }
-
-        val lsposed: LsposedState =
-            when (lsposedRuntime) {
-                is LsposedRuntime.Active -> {
-                    LsposedState.Active(lsposedRuntime.version, lsposedTargetCount)
-                }
-
-                LsposedRuntime.Inactive -> {
-                    when (lsposedConfig) {
-                        null -> {
-                            LsposedState.InstalledInactive(null)
-                        }
-
-                        LsposedConfig.ModuleNotConfigured -> {
-                            when (lsposedFramework) {
-                                LsposedFramework.NotInstalled -> {
-                                    LsposedState.NotInstalled
-                                }
-
-                                is LsposedFramework.Installed -> {
-                                    LsposedState.InstalledInactive(null)
-                                }
-                            }
-                        }
-
-                        LsposedConfig.Disabled -> {
-                            LsposedState.InstalledInactive(null)
-                        }
-                    }
-                }
-            }
-        VpnHideLog.i(
-            TAG,
-            "lsposed: $lsposed (hookBootId=$hookBootId currentBootId=${currentBootId.trim()} framework=$lsposedFramework runtime=$lsposedRuntime config=$lsposedConfig)",
-        )
-
-        // ── Issues ──
-        val hasNative = kmod is ModuleState.Installed
-        if (!hasNative) {
-            err(res.getString(R.string.dashboard_issue_no_native))
-        }
-        if (lsposedFramework is LsposedFramework.NotInstalled && lsposed !is LsposedState.Active) {
-            err(res.getString(R.string.dashboard_issue_lsposed_not_installed))
-        }
-        val brokenFields = hookProps["broken_fields"]?.takeIf { it.isNotBlank() }
-        if (brokenFields != null) {
-            val sdkLabel = hookProps["aosp_sdk"]?.takeIf { it.isNotBlank() } ?: "?"
-            err(res.getString(R.string.dashboard_issue_lsposed_field_rename, brokenFields, sdkLabel))
-        }
-
-        val appVersion = BuildConfig.VERSION_NAME
-        if (kmod is ModuleState.Installed) {
-            val moduleVersion = kmod.version
-            if (moduleVersion != null && versionsMismatch(moduleVersion, appVersion)) {
-                warn(buildModuleVersionIssue(moduleVersion, appVersion))
-            }
-        }
-        val totalTargets = lsposedTargetCount + kmodTargetCount
-        if (totalTargets == 0) {
-            err(res.getString(R.string.dashboard_issue_no_targets))
-        }
-        if (lsposed is LsposedState.Active) {
-            val runningVersion = lsposed.version
-            if (versionsMismatch(runningVersion, appVersion)) {
-                VpnHideLog.w(TAG, "version mismatch: running=$runningVersion app=$appVersion")
-                warn(
-                    res.getString(
-                        R.string.dashboard_issue_version_mismatch,
-                        runningVersion,
-                        appVersion,
-                    ),
-                )
-            }
-        }
-
-        // Debug logging warning
-        if (isEnabledInPrefs(context)) {
-            warn(res.getString(R.string.dashboard_issue_debug_logging_on))
-        }
-
-        // SELinux warning
-        val (_, getenforce) = suExec("getenforce 2>/dev/null")
-        if (getenforce.trim().equals("Permissive", ignoreCase = true)) {
-            warn(res.getString(R.string.dashboard_issue_selinux_permissive))
-        }
-
-        // ── Errors: kmod variant / load problems ──
-        val recommendedArtifact = kernelRecommendation?.recommendedArtifact
-        if (kmod is ModuleState.Installed) {
-            when {
-                kmodLoadStatus?.freshForCurrentBoot == true && kmodLoadStatus.kretprobes == "n" -> {
-                    err(res.getString(R.string.dashboard_issue_kprobes_missing))
-                }
-
-                kmodOnUnsupportedKernel && recommendedArtifact != null -> {
-                    err(
-                        res.getString(
-                            R.string.dashboard_issue_kmod_not_supported_kernel,
-                            kmodLoadStatus?.unameR ?: "?",
-                            recommendedArtifact,
-                        ),
+            val kmodRaw: ModuleState =
+                if (kmodProp.installed) {
+                    ModuleState.Installed(
+                        version = kmodProp.version,
+                        active = kmodActive,
+                        targetCount = kmodTargetCount,
+                        gkiVariant = kmodProp.gkiVariant,
                     )
+                } else {
+                    ModuleState.NotInstalled
                 }
+            VpnHideLog.i(TAG, "kmodRaw: $kmodRaw")
 
-                kmodVariantMismatch -> {
-                    err(
-                        res.getString(
-                            R.string.dashboard_issue_kmod_wrong_variant,
-                            kmod.gkiVariant ?: "?",
-                            recommendedKmi ?: "?",
-                            recommendedArtifact ?: "?",
-                        ),
-                    )
-                }
+            val kernelRaw = snapshot.get("uname")
+            val kernelRecommendation =
+                buildNativeInstallRecommendation(kernelRaw, androidMajorVersionLabel())
+            val kmodLoadStatus = readKmodLoadStatus(snapshot, currentBootId.trim())
+            VpnHideLog.i(TAG, "kmodLoadStatus=$kmodLoadStatus")
 
-                kmodUnknownVariantBroken && recommendedArtifact != null -> {
-                    err(
-                        res.getString(
-                            R.string.dashboard_issue_kmod_unknown_variant,
-                            recommendedArtifact,
-                        ),
-                    )
-                }
-
-                kmodAmbiguousLoadFailed -> {
-                    val installed = kmod.gkiVariant
-                    val tryArtifact =
-                        if (installed == kernelRecommendation?.recommendedGkiVariant) {
-                            kernelRecommendation?.alternativeArtifact
-                        } else {
-                            kernelRecommendation?.recommendedArtifact
-                        }
-                    err(
-                        res.getString(
-                            R.string.dashboard_issue_kmod_ambiguous_try_alternative,
-                            installed ?: "?",
-                            tryArtifact ?: "?",
-                        ),
-                    )
-                }
-
-                !kmod.active &&
+            val recommendedKmi = kernelRecommendation?.recommendedGkiVariant
+            val kmodVariantMismatch =
+                kmodRaw is ModuleState.Installed &&
+                    !kmodRaw.active &&
+                    kernelRecommendation?.preferKmod == true &&
+                    recommendedKmi != null &&
+                    kmodRaw.gkiVariant != null &&
+                    kmodRaw.gkiVariant != recommendedKmi &&
+                    kmodRaw.gkiVariant != kernelRecommendation.alternativeGkiVariant
+            val kmodUnknownVariantBroken =
+                kmodRaw is ModuleState.Installed &&
+                    !kmodRaw.active &&
+                    kmodRaw.gkiVariant == null &&
+                    kernelRecommendation?.preferKmod == true
+            val kmodOnUnsupportedKernel =
+                kmodRaw is ModuleState.Installed &&
+                    !kmodRaw.active &&
+                    kernelRecommendation != null &&
+                    !kernelRecommendation.preferKmod
+            val kmodAmbiguousLoadFailed =
+                kmodRaw is ModuleState.Installed &&
+                    !kmodRaw.active &&
                     kmodLoadStatus?.freshForCurrentBoot == true &&
-                    kmodLoadStatus.insmodStderr != null -> {
-                    err(
+                    kernelRecommendation?.variantAmbiguous == true &&
+                    kmodRaw.gkiVariant != null &&
+                    (
+                        kmodRaw.gkiVariant == kernelRecommendation.recommendedGkiVariant ||
+                            kmodRaw.gkiVariant == kernelRecommendation.alternativeGkiVariant
+                    )
+            val kprobesMissing =
+                kmodLoadStatus?.freshForCurrentBoot == true && kmodLoadStatus.kretprobes == "n"
+            val kmodBrokenReason: KmodBrokenReason? =
+                when {
+                    kmodRaw !is ModuleState.Installed -> null
+                    kprobesMissing -> KmodBrokenReason.MissingKprobes
+                    kmodOnUnsupportedKernel -> KmodBrokenReason.UnsupportedKernel
+                    kmodVariantMismatch -> KmodBrokenReason.WrongVariant
+                    kmodUnknownVariantBroken -> KmodBrokenReason.UnknownVariantInactive
+                    kmodAmbiguousLoadFailed -> KmodBrokenReason.AmbiguousLoadFailed
+                    else -> null
+                }
+            val kmod: ModuleState =
+                if (kmodRaw is ModuleState.Installed && kmodBrokenReason != null) {
+                    kmodRaw.copy(brokenReason = kmodBrokenReason)
+                } else {
+                    kmodRaw
+                }
+            VpnHideLog.i(TAG, "kmod (with brokenReason): $kmod")
+            val nativeInstallRecommendation =
+                kernelRecommendation?.takeIf { kmod is ModuleState.NotInstalled }
+            VpnHideLog.i(
+                TAG,
+                "nativeInstallRecommendation=$nativeInstallRecommendation " +
+                    "(raw=$kernelRecommendation variantMismatch=$kmodVariantMismatch " +
+                    "unknownVariantBroken=$kmodUnknownVariantBroken)",
+            )
+
+            // lsposed hook status
+            val (_, hookStatusRaw) = suExec("$KMOD_CTL hook_status 2>/dev/null || true")
+            val hookProps = parseKeyValue(hookStatusRaw)
+            val hookVersion = hookProps["version"]
+            val hookBootId = hookProps["boot_id"]
+            val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
+            val lsposedTargetCount = appsSync.count { it.lsposed }
+            val lsposedFramework = detectLsposedFramework(snapshot)
+            val lsposedConfig =
+                when (lsposedFramework) {
+                    LsposedFramework.NotInstalled -> {
+                        LsposedConfig.ModuleNotConfigured
+                    }
+
+                    is LsposedFramework.Installed -> {
+                        if (lsposedFramework.disabled) {
+                            LsposedConfig.Disabled
+                        } else {
+                            null
+                        }
+                    }
+                }
+            val lsposedRuntime: LsposedRuntime =
+                if (hooksActiveThisBoot) {
+                    LsposedRuntime.Active(hookVersion)
+                } else {
+                    LsposedRuntime.Inactive
+                }
+
+            val lsposed: LsposedState =
+                when (lsposedRuntime) {
+                    is LsposedRuntime.Active -> {
+                        LsposedState.Active(lsposedRuntime.version, lsposedTargetCount)
+                    }
+
+                    LsposedRuntime.Inactive -> {
+                        when (lsposedConfig) {
+                            null -> {
+                                LsposedState.InstalledInactive(null)
+                            }
+
+                            LsposedConfig.ModuleNotConfigured -> {
+                                when (lsposedFramework) {
+                                    LsposedFramework.NotInstalled -> {
+                                        LsposedState.NotInstalled
+                                    }
+
+                                    is LsposedFramework.Installed -> {
+                                        LsposedState.InstalledInactive(null)
+                                    }
+                                }
+                            }
+
+                            LsposedConfig.Disabled -> {
+                                LsposedState.InstalledInactive(null)
+                            }
+                        }
+                    }
+                }
+            VpnHideLog.i(
+                TAG,
+                "lsposed: $lsposed (hookBootId=$hookBootId currentBootId=${currentBootId.trim()} framework=$lsposedFramework runtime=$lsposedRuntime config=$lsposedConfig)",
+            )
+
+            // ── Issues ──
+            val hasNative = kmod is ModuleState.Installed
+            if (!hasNative) {
+                err(res.getString(R.string.dashboard_issue_no_native))
+            }
+            if (lsposedFramework is LsposedFramework.NotInstalled && lsposed !is LsposedState.Active) {
+                err(res.getString(R.string.dashboard_issue_lsposed_not_installed))
+            }
+            val brokenFields = hookProps["broken_fields"]?.takeIf { it.isNotBlank() }
+            if (brokenFields != null) {
+                val sdkLabel = hookProps["aosp_sdk"]?.takeIf { it.isNotBlank() } ?: "?"
+                err(res.getString(R.string.dashboard_issue_lsposed_field_rename, brokenFields, sdkLabel))
+            }
+
+            val appVersion = BuildConfig.VERSION_NAME
+            if (kmod is ModuleState.Installed) {
+                val moduleVersion = kmod.version
+                if (moduleVersion != null && versionsMismatch(moduleVersion, appVersion)) {
+                    warn(buildModuleVersionIssue(moduleVersion, appVersion))
+                }
+            }
+            val totalTargets = lsposedTargetCount + kmodTargetCount
+            if (totalTargets == 0) {
+                err(res.getString(R.string.dashboard_issue_no_targets))
+            }
+            if (lsposed is LsposedState.Active) {
+                val runningVersion = lsposed.version
+                if (versionsMismatch(runningVersion, appVersion)) {
+                    VpnHideLog.w(TAG, "version mismatch: running=$runningVersion app=$appVersion")
+                    warn(
                         res.getString(
-                            R.string.dashboard_issue_kmod_load_failed,
-                            kmodLoadStatus.insmodStderr,
+                            R.string.dashboard_issue_version_mismatch,
+                            runningVersion,
+                            appVersion,
                         ),
                     )
                 }
             }
-        }
 
-        val protection: ProtectionCheck =
-            when {
-                selfNeedsRestart -> {
-                    ProtectionCheck.NeedsRestart
-                }
+            // Debug logging warning
+            if (isEnabledInPrefs(context)) {
+                warn(res.getString(R.string.dashboard_issue_debug_logging_on))
+            }
 
-                else -> {
-                    val diagResults = DiagnosticsCache.awaitResults(context)
+            // SELinux warning
+            val (_, getenforce) = suExec("getenforce 2>/dev/null")
+            if (getenforce.trim().equals("Permissive", ignoreCase = true)) {
+                warn(res.getString(R.string.dashboard_issue_selinux_permissive))
+            }
 
-                    val native =
-                        if (hasNative) {
-                            if (diagResults == null) {
-                                NativeResult.Fail(0, 1)
+            // ── Errors: kmod variant / load problems ──
+            val recommendedArtifact = kernelRecommendation?.recommendedArtifact
+            if (kmod is ModuleState.Installed) {
+                when {
+                    kmodLoadStatus?.freshForCurrentBoot == true && kmodLoadStatus.kretprobes == "n" -> {
+                        err(res.getString(R.string.dashboard_issue_kprobes_missing))
+                    }
+
+                    kmodOnUnsupportedKernel && recommendedArtifact != null -> {
+                        err(
+                            res.getString(
+                                R.string.dashboard_issue_kmod_not_supported_kernel,
+                                kmodLoadStatus?.unameR ?: "?",
+                                recommendedArtifact,
+                            ),
+                        )
+                    }
+
+                    kmodVariantMismatch -> {
+                        err(
+                            res.getString(
+                                R.string.dashboard_issue_kmod_wrong_variant,
+                                kmod.gkiVariant ?: "?",
+                                recommendedKmi ?: "?",
+                                recommendedArtifact ?: "?",
+                            ),
+                        )
+                    }
+
+                    kmodUnknownVariantBroken && recommendedArtifact != null -> {
+                        err(
+                            res.getString(
+                                R.string.dashboard_issue_kmod_unknown_variant,
+                                recommendedArtifact,
+                            ),
+                        )
+                    }
+
+                    kmodAmbiguousLoadFailed -> {
+                        val installed = kmod.gkiVariant
+                        val tryArtifact =
+                            if (installed == kernelRecommendation?.recommendedGkiVariant) {
+                                kernelRecommendation?.alternativeArtifact
                             } else {
-                                val passed = diagResults.native.count { it.passed == true }
-                                val failed = diagResults.native.count { it.passed == false }
-                                val total = passed + failed
-                                when {
-                                    failed == 0 -> NativeResult.Ok(passed, total)
-                                    passed > 0 -> NativeResult.Partial(passed, total)
-                                    else -> NativeResult.Fail(0, total)
-                                }
+                                kernelRecommendation?.recommendedArtifact
                             }
-                        } else {
-                            NativeResult.NoModule
-                        }
+                        err(
+                            res.getString(
+                                R.string.dashboard_issue_kmod_ambiguous_try_alternative,
+                                installed ?: "?",
+                                tryArtifact ?: "?",
+                            ),
+                        )
+                    }
 
-                    val java =
-                        if (lsposed is LsposedState.Active) {
-                            if (diagResults == null) {
-                                JavaResult.Fail(0, 1)
-                            } else {
-                                val passed = diagResults.java.count { it.passed == true }
-                                val failed = diagResults.java.count { it.passed == false }
-                                val total = passed + failed
-                                when {
-                                    failed == 0 -> JavaResult.Ok(passed, total)
-                                    passed > 0 -> JavaResult.Partial(passed, total)
-                                    else -> JavaResult.Fail(0, total)
-                                }
-                            }
-                        } else {
-                            JavaResult.HooksInactive
-                        }
-
-                    ProtectionCheck.Checked(native, java)
+                    !kmod.active &&
+                        kmodLoadStatus?.freshForCurrentBoot == true &&
+                        kmodLoadStatus.insmodStderr != null -> {
+                        err(
+                            res.getString(
+                                R.string.dashboard_issue_kmod_load_failed,
+                                kmodLoadStatus.insmodStderr,
+                            ),
+                        )
+                    }
                 }
             }
 
-        VpnHideLog.i(TAG, "protection=$protection issues=$issues")
-        VpnHideLog.i(TAG, "=== Dashboard state loaded in ${System.currentTimeMillis() - startTime}ms ===")
+            val protection: ProtectionCheck =
+                when {
+                    selfNeedsRestart -> {
+                        ProtectionCheck.NeedsRestart
+                    }
 
-        return DashboardState(
-            kmod = kmod,
-            lsposed = lsposed,
-            nativeInstallRecommendation = nativeInstallRecommendation,
-            kmodLoadStatus = kmodLoadStatus,
-            protection = protection,
-            issues = issues,
-        )
-    }
+                    else -> {
+                        val diagState = DiagnosticsCache.state.value
+                        if (diagState is DiagnosticsCache.State.Ready) {
+                            val diagResults = diagState.results
+                            val native =
+                                if (hasNative) {
+                                    val passed = diagResults.native.count { it.passed == true }
+                                    val failed = diagResults.native.count { it.passed == false }
+                                    val total = passed + failed
+                                    when {
+                                        failed == 0 -> NativeResult.Ok(passed, total)
+                                        passed > 0 -> NativeResult.Partial(passed, total)
+                                        else -> NativeResult.Fail(0, total)
+                                    }
+                                } else {
+                                    NativeResult.NoModule
+                                }
+
+                            val java =
+                                if (lsposed is LsposedState.Active) {
+                                    val passed = diagResults.java.count { it.passed == true }
+                                    val failed = diagResults.java.count { it.passed == false }
+                                    val total = passed + failed
+                                    when {
+                                        failed == 0 -> JavaResult.Ok(passed, total)
+                                        passed > 0 -> JavaResult.Partial(passed, total)
+                                        else -> JavaResult.Fail(0, total)
+                                    }
+                                } else {
+                                    JavaResult.HooksInactive
+                                }
+
+                            ProtectionCheck.Checked(native, java)
+                        } else {
+                            // DiagnosticsCache.State.Running or DiagnosticsCache.State.NotRun
+                            val native = if (hasNative) NativeResult.Checking else NativeResult.NoModule
+                            val java = if (lsposed is LsposedState.Active) JavaResult.Checking else JavaResult.HooksInactive
+                            ProtectionCheck.Checked(native, java)
+                        }
+                    }
+                }
+
+            VpnHideLog.i(TAG, "protection=$protection issues=$issues")
+            VpnHideLog.i(TAG, "=== Dashboard state loaded in ${System.currentTimeMillis() - startTime}ms ===")
+
+            DashboardState(
+                kmod = kmod,
+                lsposed = lsposed,
+                nativeInstallRecommendation = nativeInstallRecommendation,
+                kmodLoadStatus = kmodLoadStatus,
+                protection = protection,
+                issues = issues,
+            )
+        }
 
     fun loadInterceptStats(): List<AppInterceptStats> {
         val pm = context.packageManager

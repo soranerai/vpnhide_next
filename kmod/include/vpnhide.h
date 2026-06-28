@@ -91,9 +91,14 @@ struct vpnhide_cover_iface {
 
 #define MAX_ACTIVE_VPNS 16
 
+struct vpnhide_active_vpn {
+	__u32 ifindex;
+	char name[MAX_IFACE_LEN];
+};
+
 struct vpnhide_vpn_ifindexes {
 	int count;
-	__u32 ifindexes[MAX_ACTIVE_VPNS];
+	struct vpnhide_active_vpn vpns[MAX_ACTIVE_VPNS];
 };
 
 #define VH_GET_IFACE_PREFIXES \

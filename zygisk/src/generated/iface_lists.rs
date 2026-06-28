@@ -57,7 +57,7 @@ pub fn matches_vpn(name: &[u8]) -> bool {
         return false;
     }
     // OpenVPN, WireGuard userspace, Tailscale, generic tunneling
-    if starts_with_ci(name, b"tun") {
+    if starts_with_ci(name, b"tun") && !starts_with_ci(name, b"tunl") {
         return true;
     }
     // OpenVPN bridged
@@ -86,10 +86,6 @@ pub fn matches_vpn(name: &[u8]) -> bool {
     }
     // L2TP
     if starts_with_ci(name, b"l2tp") {
-        return true;
-    }
-    // GRE tunnels
-    if starts_with_ci(name, b"gre") {
         return true;
     }
     // catch-all for renamed clients (myvpn0, vpn-client, xvpn1, ...)
@@ -121,7 +117,7 @@ mod tests {
         assert!(matches_vpn(b"xfrm0"), "matches_vpn('xfrm0')");
         assert!(matches_vpn(b"utun3"), "matches_vpn('utun3')");
         assert!(matches_vpn(b"l2tp0"), "matches_vpn('l2tp0')");
-        assert!(matches_vpn(b"gre0"), "matches_vpn('gre0')");
+        assert!(!matches_vpn(b"gre0"), "matches_vpn('gre0')");
         assert!(matches_vpn(b"TUN0"), "matches_vpn('TUN0')");
         assert!(matches_vpn(b"Wg99"), "matches_vpn('Wg99')");
         assert!(matches_vpn(b"MyVPN"), "matches_vpn('MyVPN')");
@@ -149,8 +145,10 @@ mod tests {
         assert!(!matches_vpn(b"if"), "matches_vpn('if')");
         assert!(!matches_vpn(b"if_inet6"), "matches_vpn('if_inet6')");
         assert!(!matches_vpn(b""), "matches_vpn('')");
-        assert!(matches_vpn(b"tunl"), "matches_vpn('tunl')");
+        assert!(!matches_vpn(b"tunl"), "matches_vpn('tunl')");
         assert!(!matches_vpn(b"atun0"), "matches_vpn('atun0')");
         assert!(matches_vpn(b"VPN"), "matches_vpn('VPN')");
+        assert!(!matches_vpn(b"gretap0"), "matches_vpn('gretap0')");
+        assert!(!matches_vpn(b"tunl0"), "matches_vpn('tunl0')");
     }
 }

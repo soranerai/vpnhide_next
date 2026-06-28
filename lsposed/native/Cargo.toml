@@ -7,7 +7,7 @@ license = "MIT"
 
 [lib]
 name = "vpnhide_checks"
-crate-type = ["cdylib"]
+crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 uniffi = "0.29"

@@ -26,7 +26,11 @@ data class HookInfo(
     val nameRes: Int,
     val symbolRes: Int,
     val descriptionRes: Int,
-)
+    val indices: List<Int>? = null,
+) {
+    val allIndices: List<Int>
+        get() = indices ?: listOf(index)
+}
 
 val ALL_HOOKS =
     listOf(
@@ -137,6 +141,19 @@ val ALL_HOOKS =
             R.string.hook_name_bpf_stats_spoof,
             R.string.hook_symbol_bpf_stats_spoof,
             R.string.hook_desc_bpf_stats_spoof,
+        ),
+        HookInfo(
+            18,
+            R.string.hook_name_enoent_file_hiding,
+            R.string.hook_symbol_enoent_file_hiding,
+            R.string.hook_desc_enoent_file_hiding,
+            indices = listOf(18, 19, 20, 21, 22, 23, 24, 26, 27),
+        ),
+        HookInfo(
+            25,
+            R.string.hook_name_udp_sendmsg,
+            R.string.hook_symbol_udp_sendmsg,
+            R.string.hook_desc_udp_sendmsg,
         ),
     )
 
@@ -497,7 +514,7 @@ fun HookTestingScreen(
 
                         Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                             for (hook in ALL_HOOKS) {
-                                val isEnabled = (currentMask and (1u shl hook.index)) != 0u
+                                val isEnabled = hook.allIndices.all { idx -> (currentMask and (1u shl idx)) != 0u }
                                 ElevatedCard(
                                     shape = RoundedCornerShape(8.dp),
                                     colors =
@@ -524,7 +541,15 @@ fun HookTestingScreen(
                                             Row(verticalAlignment = Alignment.CenterVertically) {
                                                 SuggestionChip(
                                                     onClick = {},
-                                                    label = { Text(stringResource(R.string.hook_testing_idx_format, hook.index)) },
+                                                    label = {
+                                                        val idxText =
+                                                            if (hook.allIndices.size == 1) {
+                                                                stringResource(R.string.hook_testing_idx_format, hook.allIndices.first())
+                                                            } else {
+                                                                "Idx 18, 19-24"
+                                                            }
+                                                        Text(idxText)
+                                                    },
                                                     modifier = Modifier.padding(end = 8.dp),
                                                 )
                                                 Text(
@@ -586,13 +611,15 @@ fun HookTestingScreen(
                                             checked = isEnabled,
                                             enabled = true,
                                             onCheckedChange = { checked ->
-                                                val newMask =
-                                                    if (checked) {
-                                                        currentMask or (1u shl hook.index)
-                                                    } else {
-                                                        currentMask and
-                                                            (1u shl hook.index).inv()
-                                                    }
+                                                var newMask = currentMask
+                                                for (idx in hook.allIndices) {
+                                                    newMask =
+                                                        if (checked) {
+                                                            newMask or (1u shl idx)
+                                                        } else {
+                                                            newMask and (1u shl idx).inv()
+                                                        }
+                                                }
                                                 applyNewMask(newMask)
                                             },
                                         )

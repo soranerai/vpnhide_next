@@ -19,7 +19,7 @@ class IfaceListsGeneratedTest {
         assertEquals("xfrm0", true, IfaceLists.isVpnIface("xfrm0"))
         assertEquals("utun3", true, IfaceLists.isVpnIface("utun3"))
         assertEquals("l2tp0", true, IfaceLists.isVpnIface("l2tp0"))
-        assertEquals("gre0", true, IfaceLists.isVpnIface("gre0"))
+        assertEquals("gre0", false, IfaceLists.isVpnIface("gre0"))
         assertEquals("TUN0", true, IfaceLists.isVpnIface("TUN0"))
         assertEquals("Wg99", true, IfaceLists.isVpnIface("Wg99"))
         assertEquals("MyVPN", true, IfaceLists.isVpnIface("MyVPN"))
@@ -47,8 +47,10 @@ class IfaceListsGeneratedTest {
         assertEquals("if", false, IfaceLists.isVpnIface("if"))
         assertEquals("if_inet6", false, IfaceLists.isVpnIface("if_inet6"))
         assertEquals("", false, IfaceLists.isVpnIface(""))
-        assertEquals("tunl", true, IfaceLists.isVpnIface("tunl"))
+        assertEquals("tunl", false, IfaceLists.isVpnIface("tunl"))
         assertEquals("atun0", false, IfaceLists.isVpnIface("atun0"))
         assertEquals("VPN", true, IfaceLists.isVpnIface("VPN"))
+        assertEquals("gretap0", false, IfaceLists.isVpnIface("gretap0"))
+        assertEquals("tunl0", false, IfaceLists.isVpnIface("tunl0"))
     }
 }
