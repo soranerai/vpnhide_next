@@ -28,8 +28,6 @@ import kotlinx.coroutines.isActive
  * State machine:
  * - [State.NotRun] — fresh, nothing attempted yet.
  * - [State.Running] — a run is in flight.
- * - [State.VpnOff] — last run aborted because no active VPN was
- *   detected. User gets a "turn on VPN, then retry" banner.
  * - [State.Ready] — results captured; exposed to both the Dashboard
  *   protection panel and the Diagnostics screen.
  *
@@ -47,8 +45,6 @@ internal object DiagnosticsCache {
         data class Running(
             val results: CheckResults,
         ) : State
-
-        data object VpnOff : State
 
         data class Ready(
             val results: CheckResults,
@@ -93,9 +89,9 @@ internal object DiagnosticsCache {
             }
         }
 
-        // Wait for it to become Ready or VpnOff
+        // Wait for it to become Ready
         state.first {
-            it is State.Ready || it is State.VpnOff
+            it is State.Ready
         }
 
         return (_state.value as? State.Ready)?.results
@@ -162,11 +158,13 @@ internal object DiagnosticsCache {
                 _state.value = State.Ready(results)
             } catch (e: Exception) {
                 tickerJob.cancel()
-                // Failures leave us in VpnOff so the user sees the retry UI
-                // rather than a frozen spinner. Real-world causes here are
-                // transient (root dropped, shell exec failure) and a retry
-                // usually works.
-                _state.value = State.VpnOff
+                val failedNative = currentResults.native.map {
+                    if (it.isRunning) it.copy(passed = false, isRunning = false) else it
+                }
+                val failedJava = currentResults.java.map {
+                    if (it.isRunning) it.copy(passed = false, isRunning = false) else it
+                }
+                _state.value = State.Ready(CheckResults(failedNative, failedJava))
                 VpnHideLog.w("VpnHide-Diag", "runAllChecks failed: ${e.message}")
             }
         }

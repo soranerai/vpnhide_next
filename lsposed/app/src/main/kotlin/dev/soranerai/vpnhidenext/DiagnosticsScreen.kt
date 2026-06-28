@@ -113,7 +113,6 @@ internal data class CheckResults(
         get() = native + java
 }
 
-internal suspend fun isVpnActive(): Boolean = withContext(Dispatchers.IO) { isVpnActiveBlocking() }
 
 @Composable
 fun DiagnosticsScreen(
@@ -191,15 +190,6 @@ fun DiagnosticsScreen(
                     text = stringResource(R.string.banner_added_self),
                     containerColor = MaterialTheme.colorScheme.tertiaryContainer,
                     contentColor = MaterialTheme.colorScheme.onTertiaryContainer,
-                )
-            }
-        } else if (diagState is DiagnosticsCache.State.VpnOff) {
-            item(key = "vpn_off_prompt") {
-                VpnOffPrompt(
-                    onRetry = {
-                        DiagnosticsCache.retry(scope, context)
-                        DashboardCache.refresh(scope, context, selfNeedsRestart)
-                    },
                 )
             }
         } else if (diagState is DiagnosticsCache.State.NotRun) {

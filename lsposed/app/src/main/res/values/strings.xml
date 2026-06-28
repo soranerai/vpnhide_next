@@ -91,8 +91,6 @@
     <string name="badge_running">RUNNING</string>
     <string name="diag_running_title">Running diagnostics&#8230;</string>
     <string name="diag_running_desc">Diagnostics checks are running in the background. You can expand details to see progress in real-time.</string>
-    <string name="banner_no_vpn">No active VPN detected. Turn on your VPN connection before running checks.</string>
-    <string name="banner_ready">VPN is active. This app is in the target list. Results below.</string>
     <string name="banner_added_self">Added VPNHide Next to the target list. Restart VPNHide Next (force-stop and reopen) for native-level checks to take effect — no device reboot needed.</string>
     <string name="banner_adding_self">Adding this app to target list&#8230;</string>
     <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPNHide Next → Mobile data &amp; Wi-Fi.</string>
@@ -132,9 +130,6 @@
     <string name="dashboard_protection_hooks_inactive">Hooks inactive</string>
     <string name="dashboard_protection_checking">Checking&#8230;</string>
     <string name="dashboard_needs_restart">VPNHide Next was just added to its own target list. Restart VPNHide Next (force-stop and reopen) to check protection — no device reboot needed.</string>
-    <string name="dashboard_no_vpn">No active VPN. Turn on VPN to check protection status.</string>
-    <string name="vpn_off_prompt">No active VPN. Turn it on, then tap Retry to run the protection checks. Results are cached until VPNHide Next is restarted — no need to re-run later in the same session.</string>
-    <string name="vpn_off_retry">Retry</string>
     <string name="dashboard_install_recommendation_title">Installation recommendation</string>
     <string name="dashboard_install_recommendation_device">Your device: %1$s, kernel %2$s</string>
     <string name="dashboard_install_recommendation_kmi_note">\"%1$s\" in the kernel version is the GKI Kernel Module Interface tag — it identifies the kernel\'s binary interface to modules, not your Android OS release.</string>

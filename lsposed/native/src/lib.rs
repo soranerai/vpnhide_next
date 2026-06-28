@@ -2460,6 +2460,31 @@ fn get_ip_recverr(msg: &libc::msghdr) -> Option<u32> {
     None
 }
 
+fn get_ipv6_recverr(msg: &libc::msghdr) -> Option<u32> {
+    unsafe {
+        if msg.msg_control.is_null() || msg.msg_controllen < std::mem::size_of::<libc::cmsghdr>() as _ {
+            return None;
+        }
+        let mut cmsg = msg.msg_control as *const libc::cmsghdr;
+        let control_end = (msg.msg_control as usize).checked_add(msg.msg_controllen as usize)?;
+        while !cmsg.is_null() && (cmsg as usize).checked_add(std::mem::size_of::<libc::cmsghdr>())? <= control_end {
+            let entry = &*cmsg;
+            if entry.cmsg_level == libc::IPPROTO_IPV6 && entry.cmsg_type == 25 { // IPV6_RECVERR is 25
+                let data_ptr = (cmsg as usize + cmsg_align(std::mem::size_of::<libc::cmsghdr>())) as *const sock_extended_err;
+                if (data_ptr as usize).checked_add(std::mem::size_of::<sock_extended_err>())? <= control_end {
+                    return Some((*data_ptr).ee_errno);
+                }
+            }
+            let next_ptr = cmsg as usize + cmsg_align(entry.cmsg_len as usize);
+            if next_ptr == cmsg as usize || next_ptr >= control_end {
+                break;
+            }
+            cmsg = next_ptr as *const libc::cmsghdr;
+        }
+    }
+    None
+}
+
 fn cmsg_align(len: usize) -> usize {
     let align = std::mem::size_of::<usize>();
     (len + align - 1) & !(align - 1)
@@ -2528,9 +2553,9 @@ pub fn check_arp_timeout_illusion() -> CheckOutput {
         msg.msg_iov = &mut iov;
         msg.msg_iovlen = 1;
 
-        let mut cmsg_buf = [0u8; 1024];
+        let mut cmsg_buf = [0u64; 128];
         msg.msg_control = cmsg_buf.as_mut_ptr().cast();
-        msg.msg_controllen = cmsg_buf.len() as _;
+        msg.msg_controllen = (cmsg_buf.len() * 8) as _;
 
         let recv_ret = libc::recvmsg(fd, &mut msg, libc::MSG_ERRQUEUE | libc::MSG_DONTWAIT);
         libc::close(fd);
@@ -2695,8 +2720,8 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
     unsafe {
         let mut active_indices: Vec<u32> = Vec::new();
         let mut named_vpn: Vec<String> = Vec::new();
-        // Indices found by bind probe but invisible to if_indextoname → name hidden by kmod.
-        let mut anonymous_indices: Vec<u32> = Vec::new();
+        // Indices that are anonymous OR are named VPN interfaces (tun, ppp, etc.).
+        let mut probably_tunnel_indices: Vec<u32> = Vec::new();
 
         // Pass 1: blind bind probe — discover active interface indices without enumerating them.
         // A fresh socket per iteration avoids the "already bound" problem and keeps each probe
@@ -2733,61 +2758,33 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 let name = cstr_to_str(ptr);
                 if is_vpn_iface(&name) && is_interface_up(&name) {
                     named_vpn.push(format!("idx={i}({name})"));
+                    probably_tunnel_indices.push(i);
                 }
             } else {
                 // if_indextoname failed for a confirmed-active index → name hidden by kmod.
-                // anonymous_indices.push(i);
+                probably_tunnel_indices.push(i);
             }
         }
 
-        // Passes 2-4 operate on the probe pool.  Normally that is anonymous_indices (active
-        // indices where if_indextoname returned NULL — name hidden by kmod).  If that list is
-        // empty the kernel may be intercepting if_indextoname itself; as a fallback probe the
-        // 10 indices immediately beyond the highest active one (tun0 always gets the largest
-        // ifindex on the device).
-        let fallback_indices: Vec<u32> = if anonymous_indices.is_empty() && !active_indices.is_empty() {
+        // Passes 2-4 operate on the probe pool.  Normally that is probably_tunnel_indices (active
+        // indices where if_indextoname returned NULL — name hidden by kmod, or returned a VPN name).
+        // If that list is empty the kernel may be intercepting if_indextoname itself; as a fallback
+        // probe the 10 indices immediately beyond the highest active one (tun0 always gets the
+        // largest ifindex on the device).
+        let fallback_indices: Vec<u32> = if probably_tunnel_indices.is_empty() && !active_indices.is_empty() {
             let last = *active_indices.last().unwrap();
-            ((last + 1)..=(last + 10)).collect()
+            ((last + 1)..=(last + 20)).collect()
         } else {
             Vec::new()
         };
-        let probe_pool: &[u32] = if !anonymous_indices.is_empty() {
-            &anonymous_indices
+        let probe_pool: &[u32] = if !probably_tunnel_indices.is_empty() {
+            &probably_tunnel_indices
         } else {
             &fallback_indices
         };
         // In fallback mode ENODEV on IPV6_ADD_MEMBERSHIP just means "no interface at this
         // index", not "no IFF_MULTICAST" — most fallback indices have no interface at all.
         let fallback_mode = !fallback_indices.is_empty();
-
-        // Pass 2: Multicast Capability Oracle (synchronous, no sleep).
-        // Physical wlan0/rmnet carry IFF_MULTICAST — mandatory for IPv6 NDP and Router Advertisements.
-        // Android VpnService tun0 lacks IFF_MULTICAST; joining ff02::1 on it returns EINVAL.
-        let mut multicast_denied: Vec<u32> = Vec::new();
-        for &idx in probe_pool {
-            let sock6 = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
-            if sock6 < 0 {
-                continue;
-            }
-            let mut mreq: libc::ipv6_mreq = std::mem::zeroed();
-            // ff02::1 = All-Nodes Link-Local Multicast
-            mreq.ipv6mr_multiaddr.s6_addr =
-                [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
-            mreq.ipv6mr_interface = idx as _;
-            // IPV6_ADD_MEMBERSHIP = 20
-            let ret = libc::setsockopt(
-                sock6,
-                libc::IPPROTO_IPV6,
-                20,
-                std::ptr::from_ref(&mreq).cast(),
-                std::mem::size_of_val(&mreq) as libc::socklen_t,
-            );
-            let err_no = if ret < 0 { last_os_errno() } else { 0 };
-            libc::close(sock6);
-            if ret < 0 && (err_no == libc::EINVAL || (!fallback_mode && err_no == libc::ENODEV)) {
-                multicast_denied.push(idx);
-            }
-        }
 
         // Pass 3: NDP Timeout Oracle (3.5 s per candidate, at most 2 anonymous indices).
         // On a physical interface the kernel sends NDP "who has fe80::dead:beef:cafe:1234?" and
@@ -2799,7 +2796,6 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             .iter()
             .copied()
             .rev() // highest index first — tun0 typically has the largest ifindex
-            .take(2)
             .collect();
         for idx in ndp_candidates {
             let sock6 = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
@@ -2838,22 +2834,31 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 iov_base: iov_buf.as_mut_ptr().cast(),
                 iov_len: iov_buf.len(),
             };
-            let mut cmsg_buf = [0u8; 512];
+            let mut cmsg_buf = [0u64; 64];
             let mut msg: libc::msghdr = std::mem::zeroed();
             msg.msg_iov = &mut iov;
             msg.msg_iovlen = 1;
             msg.msg_control = cmsg_buf.as_mut_ptr().cast();
-            msg.msg_controllen = cmsg_buf.len() as _;
+            msg.msg_controllen = (cmsg_buf.len() * 8) as _;
             let ret = libc::recvmsg(sock6, &mut msg, libc::MSG_ERRQUEUE | libc::MSG_DONTWAIT);
             libc::close(sock6);
-            if ret < 0 {
+            
+            let is_tunnel = if ret < 0 {
                 let e = last_os_errno();
-                if e == libc::EAGAIN || e == libc::EWOULDBLOCK {
-                    // Error queue empty → no NDP timeout → NOARP/P2P interface → tunnel
-                    ndp_tunnel.push(idx);
+                e == libc::EAGAIN || e == libc::EWOULDBLOCK
+            } else {
+                // A real NDP timeout on a physical interface yields EHOSTUNREACH.
+                // Any other error (like EAGAIN, ENOBUFS, ENETUNREACH, etc. from throttling or routing)
+                // means we did not get a real NDP timeout, so it is a tunnel or blocked interface.
+                if let Some(err_code) = get_ipv6_recverr(&msg) {
+                    err_code != libc::EHOSTUNREACH as u32
+                } else {
+                    true
                 }
+            };
+            if is_tunnel {
+                ndp_tunnel.push(idx);
             }
-            // ret >= 0: EHOSTUNREACH from NDP received → L2-capable interface, not a tunnel
         }
 
         // Pass 4: Hardware Qdisc Flood (non-blocking, no sleep).
@@ -2907,13 +2912,12 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             String::new()
         };
         let details = format!(
-            "{} active {:?}; anonymous {:?}{}; \
-             multicast_denied {:?}; ndp_tunnel {:?}; qdisc_tunnel {:?}",
+            "{} active {:?}; probably_tunnel {:?}{}; \
+            ndp_tunnel {:?}; qdisc_tunnel {:?}",
             active_indices.len(),
             active_indices,
-            anonymous_indices,
+            probably_tunnel_indices,
             fallback_note,
-            multicast_denied,
             ndp_tunnel,
             qdisc_tunnel,
         );
@@ -2938,15 +2942,6 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 "Hidden VPN tunnel detected by hardware qdisc flood{} (deep queue on {:?}) — {}",
                 mode,
                 qdisc_tunnel,
-                details,
-            ))
-        } else if !multicast_denied.is_empty() {
-            let mode = if fallback_mode { " [fallback]" } else { "" };
-            CheckOutput::fail(format!(
-                "Hidden VPN tunnel detected by multicast capability oracle{} \
-                 (IFF_MULTICAST denied on {:?}) — {}",
-                mode,
-                multicast_denied,
                 details,
             ))
         } else {

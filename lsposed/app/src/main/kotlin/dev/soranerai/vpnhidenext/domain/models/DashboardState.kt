@@ -34,8 +34,6 @@ sealed interface LsposedState {
 }
 
 sealed interface ProtectionCheck {
-    data object NoVpn : ProtectionCheck
-
     data object NeedsRestart : ProtectionCheck
 
     data class Checked(

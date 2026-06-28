@@ -99,9 +99,6 @@
     <string name="dashboard_protection_hooks_inactive">Хуки неактивны</string>
     <string name="dashboard_protection_checking">Выполняется проверка&#8230;</string>
     <string name="dashboard_needs_restart">VPNHide Next только что добавил себя в список целей. Перезапустите VPNHide Next (force-stop и откройте заново) для проверки защиты — перезагрузка устройства не нужна.</string>
-    <string name="dashboard_no_vpn">VPN не активен. Включите VPN для проверки защиты.</string>
-    <string name="vpn_off_prompt">VPN не активен. Включите его и нажмите «Повторить», чтобы запустить проверку защиты. Результаты кэшируются до перезапуска VPNHide Next — повторно гонять в рамках сессии не нужно.</string>
-    <string name="vpn_off_retry">Повторить</string>
     <string name="dashboard_install_recommendation_title">Рекомендация по установке</string>
     <string name="dashboard_install_recommendation_device">Ваше устройство: %1$s, ядро %2$s</string>
     <string name="dashboard_install_recommendation_kmi_note">«%1$s» в версии ядра — это GKI Kernel Module Interface, обозначающий бинарный интерфейс ядра для модулей, а не версию Android на устройстве.</string>
@@ -177,8 +174,6 @@
     <string name="badge_running">ЗАПУСК</string>
     <string name="diag_running_title">Запуск диагностики&#8230;</string>
     <string name="diag_running_desc">Проверки диагностики выполняются в фоновом режиме. Вы можете развернуть подробности, чтобы следить за прогрессом.</string>
-    <string name="banner_no_vpn">Активное VPN-соединение не обнаружено. Включите VPN перед запуском проверок.</string>
-    <string name="banner_ready">VPN активен. Приложение в списке целевых. Результаты проверок ниже.</string>
     <string name="banner_added_self">VPNHide Next добавлен в список целевых приложений. Перезапустите VPNHide Next (force-stop и откройте заново) для работы нативных проверок — перезагрузка устройства не нужна.</string>
     <string name="banner_adding_self">Добавление приложения в список целевых&#8230;</string>
     <string name="banner_network_blocked">Доступ к сети отключён для этого приложения. Проверки ioctl (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) не могут быть выполнены. Включите в Настройки → Приложения → VPNHide Next → Мобильный интернет и Wi-Fi.</string>

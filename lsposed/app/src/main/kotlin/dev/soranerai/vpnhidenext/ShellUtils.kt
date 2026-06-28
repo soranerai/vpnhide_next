@@ -121,45 +121,6 @@ internal fun performStartupOptimized(): StartupResult {
     )
 }
 
-/**
- * Single source of truth for "is a VPN currently up?". Both the dashboard
- * (sync, off the main thread already) and the diagnostics screen (suspend,
- * via `withContext(Dispatchers.IO)`) call this so the answer doesn't drift
- * — a previous version of the dashboard hard-coded a prefix list and missed
- * names the codegen-driven `IfaceLists.isVpnIface` catches (e.g. `if<N>`
- * from issue #86, `MyVPN`, `wg-client`).
- */
-internal fun isVpnActiveBlocking(customPrefixes: List<String> = emptyList()): Boolean {
-    val (exitCode, output) = suExec("ls /sys/class/net/ 2>/dev/null")
-    if (exitCode != 0) return false
-    val vpnIfaces =
-        output.lines().map { it.trim() }.filter { name ->
-            IfaceLists.isVpnIface(name) || customPrefixes.any { name.lowercase().startsWith(it.lowercase()) }
-        }
-    if (vpnIfaces.isEmpty()) {
-        VpnHideLog.d(TAG, "isVpnActive: no VPN interfaces found")
-        return false
-    }
-    val script =
-        buildString {
-            for (iface in vpnIfaces) {
-                appendLine("echo \"$iface=\$(cat /sys/class/net/$iface/operstate 2>/dev/null)\"")
-            }
-        }
-    val (_, statesOut) = suExec(script)
-    return statesOut.lines().any { line ->
-        val parts = line.split("=", limit = 2)
-        if (parts.size == 2) {
-            val iface = parts[0].trim()
-            val state = parts[1].trim()
-            val up = state == "unknown" || state == "up"
-            VpnHideLog.d(TAG, "isVpnActive: $iface operstate=$state up=$up")
-            up
-        } else {
-            false
-        }
-    }
-}
 
 internal fun buildUidResolver(
     uids: List<Int>,

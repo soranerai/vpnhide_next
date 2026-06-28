@@ -555,8 +555,6 @@ class DashboardRepository(
                             }
 
                         ProtectionCheck.Checked(native, java)
-                    } else if (diagState is DiagnosticsCache.State.VpnOff) {
-                        ProtectionCheck.NoVpn
                     } else {
                         // DiagnosticsCache.State.Running or DiagnosticsCache.State.NotRun
                         val native = if (hasNative) NativeResult.Checking else NativeResult.NoModule

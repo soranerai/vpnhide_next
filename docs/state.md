@@ -219,7 +219,6 @@ Not owned by us, but consulted for diagnostics or wiring.
 | `/proc/sys/kernel/random/boot_id` | Linux kernel | Compared everywhere with stored `boot_id` fields to detect "is this record from the current boot?" |
 | `/proc/version`, `/proc/modules`, `/proc/config.gz` | Linux kernel | Read by `kmod/module/post-fs-data.sh` for kernel diagnostics |
 | `/proc/net/{route,ipv6_route,if_inet6,tcp,tcp6,udp,udp6,dev,fib_trie}` | Linux kernel | Read by `lsposed/native/src/` diagnostics + filtered by Zygisk hooks (`zygisk/src/hooks.rs`) — a memfd substitute is returned when a target app `openat`'s these |
-| `/sys/class/net/`, `/sys/class/net/<iface>/operstate` | Linux kernel | `isVpnActiveBlocking` (`ShellUtils.kt:96`) iterates interfaces and checks operstate to detect "VPN is up right now" |
 
 ---
 
