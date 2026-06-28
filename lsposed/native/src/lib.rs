@@ -219,6 +219,50 @@ struct Ndmsg {
 const IFLA_IFNAME: u16 = 3;
 const RTA_OIF: u16 = 4;
 
+// Traffic control (qdisc) constants — not in libc for Android
+const RTM_NEWQDISC: u16 = 36;
+const RTM_GETQDISC: u16 = 38;
+const TCA_KIND: u16 = 1;
+
+#[repr(C)]
+struct Tcmsg {
+    tcm_family: u8,
+    _pad1: u8,
+    _pad2: u16,
+    tcm_ifindex: i32,
+    tcm_handle: u32,
+    tcm_parent: u32,
+    tcm_info: u32,
+}
+
+// TCP_INFO partial layout — bytes 0-23 cover the MSS fields we need.
+// Stable across all GKI versions: 8 flag bytes + rto + ato + snd_mss + rcv_mss.
+const TCP_INFO: libc::c_int = 11;
+
+#[repr(C)]
+struct TcpInfoMss {
+    _pre: [u8; 8], // state, ca_state, retransmits, probes, backoff, options, wscale, delivery_rate
+    _rto: u32,     // tcpi_rto
+    _ato: u32,     // tcpi_ato
+    tcpi_snd_mss: u32,
+    tcpi_rcv_mss: u32,
+}
+
+// SO_TIMESTAMPING constants
+const SO_TIMESTAMPING: libc::c_int = 37;
+const SOF_TIMESTAMPING_TX_HARDWARE: u32 = 1 << 0;
+const SOF_TIMESTAMPING_TX_SOFTWARE: u32 = 1 << 1;
+const SOF_TIMESTAMPING_RAW_HARDWARE: u32 = 1 << 6;
+const SOF_TIMESTAMPING_OPT_TSONLY: u32 = 1 << 11;
+const SCM_TIMESTAMPING: libc::c_int = 37;
+
+// scm_timestamping: 3 x timespec64 (sec: i64, nsec: i64)
+// ts[0]=SW ts, ts[1]=legacy HW ts, ts[2]=RAW HW ts
+#[repr(C)]
+struct ScmTimestamping {
+    ts: [[i64; 2]; 3],
+}
+
 // ── check implementations ────────────────────────────────────────────
 
 /// Open an IPv4 datagram socket and pass it to `f`, then close it.
@@ -1430,6 +1474,87 @@ pub fn check_tcp_mss() -> CheckOutput {
 }
 
 #[uniffi::export]
+pub fn check_tcp_info_mss() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_STREAM, 0);
+        if fd < 0 {
+            let err = last_os_errno();
+            return if err == libc::ECONNREFUSED {
+                CheckOutput::network_blocked("socket() returned ECONNREFUSED — no network access")
+            } else {
+                CheckOutput::fail(format!("cannot create TCP socket: {}", last_os_error()))
+            };
+        }
+
+        let tv = libc::timeval {
+            tv_sec: 2,
+            tv_usec: 0,
+        };
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_SNDTIMEO,
+            std::ptr::from_ref(&tv).cast(),
+            std::mem::size_of_val(&tv) as libc::socklen_t,
+        );
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808u32.to_be();
+
+        if libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        ) < 0
+        {
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "TCP connect to 8.8.8.8:53 failed ({}) — cannot probe TCP_INFO",
+                last_os_error()
+            ));
+        }
+
+        let mut info: TcpInfoMss = std::mem::zeroed();
+        let mut optlen = std::mem::size_of_val(&info) as libc::socklen_t;
+        let ret = libc::getsockopt(
+            fd,
+            libc::IPPROTO_TCP,
+            TCP_INFO,
+            std::ptr::from_mut(&mut info).cast(),
+            &mut optlen,
+        );
+        libc::close(fd);
+
+        if ret < 0 {
+            return CheckOutput::fail(format!("getsockopt(TCP_INFO) failed: {}", last_os_error()));
+        }
+
+        let snd = info.tcpi_snd_mss;
+        let rcv = info.tcpi_rcv_mss;
+        let mut problems = Vec::new();
+        if snd > 0 && snd < 1440 {
+            problems.push(format!("tcpi_snd_mss={snd}"));
+        }
+        if rcv > 0 && rcv < 1440 {
+            problems.push(format!("tcpi_rcv_mss={rcv}"));
+        }
+
+        if problems.is_empty() {
+            CheckOutput::pass(format!(
+                "TCP_INFO snd_mss={snd} rcv_mss={rcv} — MSS values normal"
+            ))
+        } else {
+            CheckOutput::fail(format!(
+                "TCP_INFO MSS below threshold ({}); VPN encapsulation overhead not spoofed",
+                problems.join(", ")
+            ))
+        }
+    }
+}
+
+#[uniffi::export]
 pub fn check_udp_pmtu() -> CheckOutput {
     unsafe {
         let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
@@ -1641,6 +1766,220 @@ pub fn check_netlink_getneigh() -> CheckOutput {
             ))
         } else {
             CheckOutput::pass(format!("neighbor table: {details}"))
+        }
+    }
+}
+
+// ── helpers shared by qdisc and trim-oracle checks ────────────────────
+
+/// Probe active interface ifindexes via IPv6 link-local bind without enumerating names.
+/// ENODEV → no interface; any other result → interface exists at that index.
+fn probe_active_ifindexes() -> Vec<u32> {
+    unsafe {
+        let mut result = Vec::new();
+        for i in 1u32..=64 {
+            let sock = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
+            if sock < 0 {
+                continue;
+            }
+            let mut addr: libc::sockaddr_in6 = std::mem::zeroed();
+            addr.sin6_family = libc::AF_INET6 as libc::sa_family_t;
+            addr.sin6_addr.s6_addr = [0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1];
+            addr.sin6_scope_id = i;
+            let ret = libc::bind(
+                sock,
+                std::ptr::from_ref(&addr).cast(),
+                std::mem::size_of_val(&addr) as libc::socklen_t,
+            );
+            let err = if ret < 0 { last_os_errno() } else { 0 };
+            libc::close(sock);
+            if ret < 0 && err == libc::ENODEV {
+                continue;
+            }
+            result.push(i);
+        }
+        result
+    }
+}
+
+/// Dump RTM_GETLINK and return the set of ifindexes visible in the response.
+fn visible_ifindexes_from_getlink() -> Result<Vec<u32>, CheckOutput> {
+    let fd = open_netlink()?;
+
+    #[repr(C)]
+    struct Req {
+        nlh: libc::nlmsghdr,
+        ifm: Ifinfomsg,
+    }
+
+    unsafe {
+        let mut req: Req = std::mem::zeroed();
+        req.nlh.nlmsg_len = std::mem::size_of::<Req>() as u32;
+        req.nlh.nlmsg_type = libc::RTM_GETLINK;
+        req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
+        req.nlh.nlmsg_seq = 10;
+
+        let mut dest: libc::sockaddr_nl = std::mem::zeroed();
+        dest.nl_family = libc::AF_NETLINK as u16;
+
+        if libc::sendto(
+            fd,
+            std::ptr::from_ref(&req).cast(),
+            req.nlh.nlmsg_len as usize,
+            0,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        ) < 0
+        {
+            let e = std::io::Error::last_os_error();
+            libc::close(fd);
+            return Err(if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("RTM_GETLINK denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("RTM_GETLINK send failed: {e}"))
+            });
+        }
+
+        let mut buf = [0u8; 32768];
+        let mut visible = Vec::new();
+
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
+            let len = netlink_recv(fd, &mut buf);
+            if len <= 0 {
+                break;
+            }
+            let cont = parse_netlink_msgs(&buf, len as usize, libc::RTM_NEWLINK, |b, offset, _| {
+                let ifm_ptr = b
+                    .as_ptr()
+                    .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                    as *const Ifinfomsg;
+                let ifm = &*ifm_ptr;
+                if ifm.ifi_index > 0 {
+                    visible.push(ifm.ifi_index as u32);
+                }
+            });
+            if !cont {
+                break;
+            }
+        }
+        libc::close(fd);
+        Ok(visible)
+    }
+}
+
+#[uniffi::export]
+pub fn check_qdisc_by_ifindex() -> CheckOutput {
+    unsafe {
+        let existing = probe_active_ifindexes();
+        if existing.is_empty() {
+            return CheckOutput::pass(
+                "no active interfaces found via bind probe — qdisc oracle skipped".to_string(),
+            );
+        }
+
+        let visible = match visible_ifindexes_from_getlink() {
+            Ok(v) => v,
+            Err(out) => return out,
+        };
+
+        let hidden: Vec<u32> = existing
+            .iter()
+            .filter(|&&idx| !visible.contains(&idx))
+            .copied()
+            .collect();
+
+        if hidden.is_empty() {
+            return CheckOutput::pass(format!(
+                "{} active iface(s), none hidden — qdisc oracle: no hidden interfaces to probe",
+                existing.len()
+            ));
+        }
+
+        let nl_fd = match open_netlink() {
+            Ok(fd) => fd,
+            Err(out) => return out,
+        };
+
+        #[repr(C)]
+        struct Req {
+            nlh: libc::nlmsghdr,
+            tcm: Tcmsg,
+        }
+        let mut req: Req = std::mem::zeroed();
+        req.nlh.nlmsg_len = std::mem::size_of::<Req>() as u32;
+        req.nlh.nlmsg_type = RTM_GETQDISC;
+        req.nlh.nlmsg_flags = (libc::NLM_F_REQUEST | libc::NLM_F_DUMP) as u16;
+        req.nlh.nlmsg_seq = 11;
+        req.tcm.tcm_family = libc::AF_UNSPEC as u8;
+
+        let mut dest: libc::sockaddr_nl = std::mem::zeroed();
+        dest.nl_family = libc::AF_NETLINK as u16;
+
+        if libc::sendto(
+            nl_fd,
+            std::ptr::from_ref(&req).cast(),
+            req.nlh.nlmsg_len as usize,
+            0,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        ) < 0
+        {
+            let e = std::io::Error::last_os_error();
+            libc::close(nl_fd);
+            return if is_selinux_denial(&e) {
+                CheckOutput::pass(format!("RTM_GETQDISC denied by SELinux ({e})"))
+            } else {
+                CheckOutput::fail(format!("RTM_GETQDISC send failed: {e}"))
+            };
+        }
+
+        let mut buf = [0u8; 32768];
+        let mut leaked: Vec<String> = Vec::new();
+        let hdr_tcm = std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<Tcmsg>();
+
+        for _ in 0..MAX_NETLINK_RECV_ITERS {
+            let len = netlink_recv(nl_fd, &mut buf);
+            if len <= 0 {
+                break;
+            }
+            let cont =
+                parse_netlink_msgs(&buf, len as usize, RTM_NEWQDISC, |b, offset, msg_len| {
+                    let tcm_ptr = b
+                        .as_ptr()
+                        .add(offset + std::mem::size_of::<libc::nlmsghdr>())
+                        as *const Tcmsg;
+                    let tcm = &*tcm_ptr;
+                    let iface_idx = tcm.tcm_ifindex as u32;
+
+                    if hidden.contains(&iface_idx) {
+                        let data_start = offset + hdr_tcm;
+                        let msg_end = offset + msg_len;
+                        let mut kind = String::from("unknown");
+                        for_each_rtattr(b, data_start, msg_end, |rta, payload| {
+                            if rta.rta_type == TCA_KIND && !payload.is_empty() {
+                                kind = cstr_to_str(payload.as_ptr().cast());
+                            }
+                        });
+                        leaked.push(format!("ifindex={iface_idx} qdisc={kind}"));
+                    }
+                });
+            if !cont {
+                break;
+            }
+        }
+        libc::close(nl_fd);
+
+        if leaked.is_empty() {
+            CheckOutput::pass(format!(
+                "{} hidden ifindex(es) {:?}: no qdisc info leaked — RTM_GETQDISC filtered",
+                hidden.len(),
+                hidden
+            ))
+        } else {
+            CheckOutput::fail(format!(
+                "qdisc info leaked for hidden ifindex(es): {} — RTM_GETQDISC not filtered by kmod",
+                leaked.join(", ")
+            ))
         }
     }
 }
@@ -2343,14 +2682,12 @@ pub fn check_udp_queue_pressure() -> CheckOutput {
         dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
 
         let payload = [0u8; 32];
-        let mut min_cycles = u64::MAX;
-        let mut max_cycles = 0;
-        let mut sum_cycles = 0u64;
-        let iterations = 1000;
         let mut success_count = 0;
 
-        for _ in 0..iterations {
-            let start = read_cntvct();
+        let start_time = std::time::Instant::now();
+        let timeout = std::time::Duration::from_millis(100);
+
+        while success_count < 1000 {
             let ret = libc::sendto(
                 fd,
                 payload.as_ptr().cast(),
@@ -2359,39 +2696,33 @@ pub fn check_udp_queue_pressure() -> CheckOutput {
                 std::ptr::from_ref(&dest).cast(),
                 std::mem::size_of_val(&dest) as libc::socklen_t,
             );
-            let end = read_cntvct();
-
             if ret >= 0 {
-                let diff = end.saturating_sub(start);
-                if diff < min_cycles {
-                    min_cycles = diff;
-                }
-                if diff > max_cycles {
-                    max_cycles = diff;
-                }
-                sum_cycles += diff;
                 success_count += 1;
+            } else {
+                let err = last_os_errno();
+                if err != libc::EAGAIN && err != libc::EWOULDBLOCK {
+                    // Stop on hard errors (like ENETUNREACH if network goes down)
+                    break;
+                }
+            }
+            if start_time.elapsed() >= timeout {
+                break;
             }
         }
 
         libc::close(fd);
 
-        let details = format!(
-            "Success rate: {}/1000 sends, cycles: min={}, max={}, avg={}",
-            success_count,
-            if min_cycles == u64::MAX {
-                0
-            } else {
-                min_cycles
-            },
-            max_cycles,
-            sum_cycles.checked_div(success_count as u64).unwrap_or(0)
-        );
+        let elapsed_ms = start_time.elapsed().as_millis();
+        let details = format!("Sent {}/1000 packets in {} ms", success_count, elapsed_ms);
 
-        if success_count >= 980 {
-            CheckOutput::fail(format!("VPN detected: {details}"))
+        if success_count == 1000 {
+            // High packet sending rate achieved -> Rate limiter is not active -> VPN is not hidden
+            CheckOutput::fail(format!("VPN detected (high transmission rate): {details}"))
         } else {
-            CheckOutput::pass(format!("No VPN detected: {details}"))
+            // Hitting rate limit -> Rate limiter active (either simulated by kmod, or slow network) -> Pass
+            CheckOutput::pass(format!(
+                "No VPN detected (transmission rate limited): {details}"
+            ))
         }
     }
 }
@@ -2447,39 +2778,6 @@ fn find_active_physical_ip_and_mask() -> Option<(u32, u32)> {
 }
 
 #[allow(clippy::unnecessary_cast)]
-fn get_ip_recverr(msg: &libc::msghdr) -> Option<u32> {
-    unsafe {
-        if msg.msg_control.is_null()
-            || msg.msg_controllen < std::mem::size_of::<libc::cmsghdr>() as _
-        {
-            return None;
-        }
-        let mut cmsg = msg.msg_control as *const libc::cmsghdr;
-        let control_end = (msg.msg_control as usize).checked_add(msg.msg_controllen as usize)?;
-        while !cmsg.is_null()
-            && (cmsg as usize).checked_add(std::mem::size_of::<libc::cmsghdr>())? <= control_end
-        {
-            let entry = &*cmsg;
-            if entry.cmsg_level == libc::IPPROTO_IP && entry.cmsg_type == libc::IP_RECVERR {
-                let data_ptr = (cmsg as usize + cmsg_align(std::mem::size_of::<libc::cmsghdr>()))
-                    as *const sock_extended_err;
-                if (data_ptr as usize).checked_add(std::mem::size_of::<sock_extended_err>())?
-                    <= control_end
-                {
-                    return Some((*data_ptr).ee_errno);
-                }
-            }
-            let next_ptr = cmsg as usize + cmsg_align(entry.cmsg_len as usize);
-            if next_ptr == cmsg as usize || next_ptr >= control_end {
-                break;
-            }
-            cmsg = next_ptr as *const libc::cmsghdr;
-        }
-    }
-    None
-}
-
-#[allow(clippy::unnecessary_cast)]
 fn get_ipv6_recverr(msg: &libc::msghdr) -> Option<u32> {
     unsafe {
         if msg.msg_control.is_null()
@@ -2516,170 +2814,6 @@ fn get_ipv6_recverr(msg: &libc::msghdr) -> Option<u32> {
 fn cmsg_align(len: usize) -> usize {
     let align = std::mem::size_of::<usize>();
     (len + align - 1) & !(align - 1)
-}
-
-#[uniffi::export]
-pub fn check_arp_timeout_illusion() -> CheckOutput {
-    unsafe {
-        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
-        if fd < 0 {
-            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
-        }
-
-        let flags = libc::fcntl(fd, libc::F_GETFL, 0);
-        libc::fcntl(fd, libc::F_SETFL, flags | libc::O_NONBLOCK);
-
-        let val: libc::c_int = 1;
-        if libc::setsockopt(
-            fd,
-            libc::IPPROTO_IP,
-            libc::IP_RECVERR,
-            std::ptr::from_ref(&val).cast(),
-            std::mem::size_of_val(&val) as libc::socklen_t,
-        ) < 0
-        {
-            let err = last_os_error();
-            libc::close(fd);
-            return CheckOutput::fail(format!("cannot set IP_RECVERR: {}", err));
-        }
-
-        let mut dest_ip = 0xC0A8FEFE; // 192.168.254.254
-        if let Some((ip, mask)) = find_active_physical_ip_and_mask() {
-            let subnet = ip & mask;
-            let host = ip & !mask;
-            let dead_host = if host == !mask - 1 {
-                !mask - 2
-            } else {
-                !mask - 1
-            };
-            dest_ip = subnet | dead_host;
-        }
-
-        let mut dest: libc::sockaddr_in = std::mem::zeroed();
-        dest.sin_family = libc::AF_INET as libc::sa_family_t;
-        dest.sin_port = 53u16.to_be();
-        dest.sin_addr.s_addr = dest_ip.to_be();
-
-        let payload = b"test";
-        let send_ret = libc::sendto(
-            fd,
-            payload.as_ptr().cast(),
-            payload.len(),
-            0,
-            std::ptr::from_ref(&dest).cast(),
-            std::mem::size_of_val(&dest) as libc::socklen_t,
-        );
-
-        if send_ret < 0 {
-            let err = last_os_error();
-            libc::close(fd);
-            return CheckOutput::fail(format!("sendto failed: {}", err));
-        }
-
-        std::thread::sleep(std::time::Duration::from_millis(3500));
-
-        let mut iov = libc::iovec {
-            iov_base: std::ptr::null_mut(),
-            iov_len: 0,
-        };
-        let mut msg: libc::msghdr = std::mem::zeroed();
-        msg.msg_iov = &mut iov;
-        msg.msg_iovlen = 1;
-
-        let mut cmsg_buf = [0u64; 128];
-        msg.msg_control = cmsg_buf.as_mut_ptr().cast();
-        msg.msg_controllen = (cmsg_buf.len() * 8) as _;
-
-        let recv_ret = libc::recvmsg(fd, &mut msg, libc::MSG_ERRQUEUE | libc::MSG_DONTWAIT);
-        libc::close(fd);
-
-        if recv_ret < 0 {
-            let err_no = last_os_errno();
-            if err_no == libc::EAGAIN || err_no == libc::EWOULDBLOCK {
-                return CheckOutput::fail(
-                    "Error queue is empty (no L2 ARP timeout error) — VPN detected (L2 bypassed)"
-                        .to_string(),
-                );
-            } else {
-                return CheckOutput::fail(format!(
-                    "recvmsg(MSG_ERRQUEUE) failed: {}",
-                    last_os_error()
-                ));
-            }
-        }
-
-        if let Some(err_code) = get_ip_recverr(&msg) {
-            CheckOutput::pass(format!(
-                "L2 ARP timeout error received: ee_errno = {} — no VPN detected",
-                err_code
-            ))
-        } else {
-            CheckOutput::pass(
-                "ARP timeout error received (details generic) — no VPN detected".to_string(),
-            )
-        }
-    }
-}
-
-#[uniffi::export]
-pub fn check_broadcast_blackhole() -> CheckOutput {
-    unsafe {
-        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
-        if fd < 0 {
-            return CheckOutput::fail(format!("cannot create socket: {}", last_os_error()));
-        }
-
-        let val: libc::c_int = 1;
-        if libc::setsockopt(
-            fd,
-            libc::SOL_SOCKET,
-            libc::SO_BROADCAST,
-            std::ptr::from_ref(&val).cast(),
-            std::mem::size_of_val(&val) as libc::socklen_t,
-        ) < 0
-        {
-            let err = last_os_error();
-            libc::close(fd);
-            return CheckOutput::fail(format!("cannot set SO_BROADCAST: {}", err));
-        }
-
-        let mut dest: libc::sockaddr_in = std::mem::zeroed();
-        dest.sin_family = libc::AF_INET as libc::sa_family_t;
-        dest.sin_port = 53u16.to_be();
-        dest.sin_addr.s_addr = 0xFFFFFFFF; // 255.255.255.255
-
-        let payload = b"test";
-        let send_ret = libc::sendto(
-            fd,
-            payload.as_ptr().cast(),
-            payload.len(),
-            0,
-            std::ptr::from_ref(&dest).cast(),
-            std::mem::size_of_val(&dest) as libc::socklen_t,
-        );
-
-        let err_no = if send_ret < 0 { last_os_errno() } else { 0 };
-        let err_str = if send_ret < 0 {
-            last_os_error()
-        } else {
-            String::new()
-        };
-        libc::close(fd);
-
-        if send_ret < 0 {
-            if err_no == libc::EACCES || err_no == libc::ENETUNREACH {
-                CheckOutput::fail(format!(
-                    "Broadcast send failed with expected VPN blackhole error: {err_str} (errno {err_no}) — VPN detected"
-                ))
-            } else {
-                CheckOutput::fail(format!(
-                    "Broadcast send failed with unexpected error: {err_str}"
-                ))
-            }
-        } else {
-            CheckOutput::pass("Broadcast send succeeded — no broadcast blackhole (physical network interface behavior)".to_string())
-        }
-    }
 }
 
 #[uniffi::export]
@@ -2758,17 +2892,180 @@ pub fn check_gso_asymmetry() -> CheckOutput {
             }
         } else {
             let duration_us = duration.as_micros();
-            if duration_us > 1500 {
-                CheckOutput::fail(format!(
-                    "GSO send succeeded but with software-fallback latency ({} us) — VPN detected",
-                    duration_us
-                ))
+            CheckOutput::pass(format!(
+                "GSO send succeeded with hardware offload latency ({} us) — physical interface",
+                duration_us
+            ))
+        }
+    }
+}
+
+#[uniffi::export]
+pub fn check_timestamping_hw() -> CheckOutput {
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+        if fd < 0 {
+            let err = last_os_errno();
+            return if err == libc::ECONNREFUSED {
+                CheckOutput::network_blocked("socket() ECONNREFUSED — no network access")
             } else {
-                CheckOutput::pass(format!(
-                    "GSO send succeeded with hardware offload latency ({} us) — physical interface",
-                    duration_us
-                ))
+                CheckOutput::fail(format!("cannot create UDP socket: {}", last_os_error()))
+            };
+        }
+
+        // Request hardware + software TX timestamps
+        let ts_flags: u32 = SOF_TIMESTAMPING_TX_HARDWARE
+            | SOF_TIMESTAMPING_TX_SOFTWARE
+            | SOF_TIMESTAMPING_RAW_HARDWARE
+            | SOF_TIMESTAMPING_OPT_TSONLY;
+
+        if libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            SO_TIMESTAMPING,
+            std::ptr::from_ref(&ts_flags).cast(),
+            std::mem::size_of_val(&ts_flags) as libc::socklen_t,
+        ) < 0
+        {
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "SO_TIMESTAMPING setsockopt unsupported: {}",
+                last_os_error()
+            ));
+        }
+
+        // Read back flags — kmod strips HW bits before the kernel sets sk_tsflags
+        let mut actual_flags: u32 = 0;
+        let mut optlen = std::mem::size_of_val(&actual_flags) as libc::socklen_t;
+        if libc::getsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            SO_TIMESTAMPING,
+            std::ptr::from_mut(&mut actual_flags).cast(),
+            &mut optlen,
+        ) < 0
+        {
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "SO_TIMESTAMPING getsockopt failed: {}",
+                last_os_error()
+            ));
+        }
+
+        let hw_bits = SOF_TIMESTAMPING_TX_HARDWARE | SOF_TIMESTAMPING_RAW_HARDWARE;
+        if (actual_flags & hw_bits) == 0 {
+            // kmod stripped hardware bits before the kernel could store them
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "SO_TIMESTAMPING hw bits stripped (req=0x{ts_flags:x} got=0x{actual_flags:x}) — kmod hiding hardware timestamp capability"
+            ));
+        }
+
+        // Hardware bits survived — send a packet and check actual timestamps
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808u32.to_be();
+
+        if libc::connect(
+            fd,
+            std::ptr::from_ref(&dest).cast(),
+            std::mem::size_of_val(&dest) as libc::socklen_t,
+        ) < 0
+        {
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "hw bits present (0x{actual_flags:x}) but connect failed — cannot verify actual timestamps"
+            ));
+        }
+
+        let data = [0u8; 1];
+        if libc::send(fd, data.as_ptr().cast(), 1, 0) < 0 {
+            libc::close(fd);
+            return CheckOutput::pass(format!(
+                "hw bits present but send failed: {}",
+                last_os_error()
+            ));
+        }
+
+        // Wait up to 150 ms for the TX timestamp via MSG_ERRQUEUE
+        let tv = libc::timeval {
+            tv_sec: 0,
+            tv_usec: 150_000,
+        };
+        libc::setsockopt(
+            fd,
+            libc::SOL_SOCKET,
+            libc::SO_RCVTIMEO,
+            std::ptr::from_ref(&tv).cast(),
+            std::mem::size_of_val(&tv) as libc::socklen_t,
+        );
+
+        let mut ctrl_buf = [0u8; 256];
+        let mut data_buf = [0u8; 16];
+        let mut iov = libc::iovec {
+            iov_base: data_buf.as_mut_ptr().cast(),
+            iov_len: data_buf.len(),
+        };
+        let mut msg: libc::msghdr = std::mem::zeroed();
+        msg.msg_iov = &mut iov;
+        msg.msg_iovlen = 1;
+        msg.msg_control = ctrl_buf.as_mut_ptr().cast();
+        msg.msg_controllen = ctrl_buf.len();
+
+        let recv_ret = libc::recvmsg(fd, &mut msg, libc::MSG_ERRQUEUE);
+        libc::close(fd);
+
+        if recv_ret < 0 {
+            return CheckOutput::pass(format!(
+                "hw bits present (0x{actual_flags:x}) but MSG_ERRQUEUE timed out — cannot determine hw ts availability"
+            ));
+        }
+
+        // Parse cmsghdr for SCM_TIMESTAMPING
+        let mut hw_sec: i64 = 0;
+        let mut hw_nsec: i64 = 0;
+        let mut sw_sec: i64 = 0;
+        let mut sw_nsec: i64 = 0;
+        let mut found = false;
+
+        let mut cmsg_ptr = libc::CMSG_FIRSTHDR(&msg as *const libc::msghdr);
+        while !cmsg_ptr.is_null() {
+            let cmsg = &*cmsg_ptr;
+            if cmsg.cmsg_level == libc::SOL_SOCKET && cmsg.cmsg_type == SCM_TIMESTAMPING {
+                let ts = &*(libc::CMSG_DATA(cmsg_ptr) as *const ScmTimestamping);
+                sw_sec = ts.ts[0][0];
+                sw_nsec = ts.ts[0][1];
+                hw_sec = ts.ts[2][0];
+                hw_nsec = ts.ts[2][1];
+                found = true;
+                break;
             }
+            cmsg_ptr = libc::CMSG_NXTHDR(&msg as *const libc::msghdr, cmsg_ptr);
+        }
+
+        if !found {
+            return CheckOutput::pass(format!(
+                "hw bits present (0x{actual_flags:x}) but no SCM_TIMESTAMPING in MSG_ERRQUEUE"
+            ));
+        }
+
+        let has_hw = hw_sec != 0 || hw_nsec != 0;
+        let has_sw = sw_sec != 0 || sw_nsec != 0;
+
+        if has_hw {
+            CheckOutput::pass(format!(
+                "hardware timestamp received (ts[2]={hw_sec}.{hw_nsec:09}ns) — physical NIC"
+            ))
+        } else if has_sw {
+            CheckOutput::fail(format!(
+                "SO_TIMESTAMPING: hw bits 0x{actual_flags:x} set but ts[2]=0; sw ts[0]={sw_sec}.{sw_nsec:09}ns — software-only path (virtual interface / VPN)"
+            ))
+        } else {
+            CheckOutput::pass(
+                "hw bits present but no timestamps in SCM_TIMESTAMPING — NIC lacks hw ts support"
+                    .to_string(),
+            )
         }
     }
 }
@@ -2808,19 +3105,71 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             }
             active_indices.push(i);
 
-            // Step 1: if_indextoname — succeeds even when netlink RTM_GETLINK is filtered.
-            // Physical interfaces (wlan0, rmnet0, lo) are fine; a VPN name here is a direct hit.
+            // Step 1a: if_indextoname (bionic reads /sys/class/net; kmod may block this path).
             let mut ifname_buf = [0u8; libc::IF_NAMESIZE];
             let ptr = libc::if_indextoname(i, ifname_buf.as_mut_ptr().cast());
-            if !ptr.is_null() {
-                let name = cstr_to_str(ptr);
-                if is_vpn_iface(&name) && is_interface_up(&name) {
-                    named_vpn.push(format!("idx={i}({name})"));
+            // Step 1b: if if_indextoname failed, try raw SIOCGIFNAME ioctl.
+            // bionic reads /sys/class/net; SIOCGIFNAME goes through dev_ioctl() which kmod
+            // may not hook even when it hides the sysfs/netlink entry.
+            let opt_name: Option<String> = if !ptr.is_null() {
+                Some(cstr_to_str(ptr))
+            } else {
+                let sock_n = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+                if sock_n < 0 {
+                    None
+                } else {
+                    // sizeof(ifreq) = IFNAMSIZ(16) + union(16); ifr_ifindex is at offset 16.
+                    let mut ifr = [0u8; 32];
+                    ifr[16..20].copy_from_slice(&(i as i32).to_ne_bytes());
+                    let r = libc::ioctl(
+                        sock_n,
+                        libc::SIOCGIFNAME as _,
+                        ifr.as_mut_ptr() as *mut libc::c_void,
+                    );
+                    libc::close(sock_n);
+                    if r >= 0 {
+                        Some(cstr_to_str(ifr.as_ptr().cast()))
+                    } else {
+                        None
+                    }
+                }
+            };
+            match opt_name.as_deref() {
+                Some(name) => {
+                    // Step 1c: SIOCGIFHWADDR — hardware type is kernel-controlled and cannot be
+                    // faked by renaming.  ARPHRD_NONE (65534) = tun/WireGuard/GRE (no MAC, no L2).
+                    // ARPHRD_PPP (512) = PPP tunnel.  Both prove conclusively it is a tunnel.
+                    let sock_hw = libc::socket(libc::AF_INET, libc::SOCK_DGRAM, 0);
+                    let arphrd: Option<u16> = if sock_hw >= 0 {
+                        let mut ifr_hw = [0u8; 32];
+                        let nb = name.as_bytes();
+                        ifr_hw[..nb.len().min(15)].copy_from_slice(&nb[..nb.len().min(15)]);
+                        let r = libc::ioctl(
+                            sock_hw,
+                            libc::SIOCGIFHWADDR as _,
+                            ifr_hw.as_mut_ptr() as *mut libc::c_void,
+                        );
+                        libc::close(sock_hw);
+                        if r >= 0 {
+                            Some(u16::from_ne_bytes([ifr_hw[16], ifr_hw[17]]))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+                    // ARPHRD_NONE = 65534, ARPHRD_PPP = 512
+                    let is_hw_tunnel = arphrd.is_some_and(|t| t == 65534 || t == 512);
+                    let arphrd_note = arphrd.map_or(String::new(), |t| format!(",arphrd={t}"));
+                    if is_hw_tunnel || (is_vpn_iface(name) && is_interface_up(name)) {
+                        named_vpn.push(format!("idx={i}({name}{arphrd_note})"));
+                        probably_tunnel_indices.push(i);
+                    }
+                }
+                None => {
+                    // Both if_indextoname and SIOCGIFNAME failed → name truly hidden by kmod.
                     probably_tunnel_indices.push(i);
                 }
-            } else {
-                // if_indextoname failed for a confirmed-active index → name hidden by kmod.
-                probably_tunnel_indices.push(i);
             }
         }
 
@@ -2878,7 +3227,7 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 0xfe, 0x80, 0, 0, 0, 0, 0, 0, 0xde, 0xad, 0xbe, 0xef, 0xca, 0xfe, 0x12, 0x34,
             ];
             dest.sin6_scope_id = idx;
-            libc::sendto(
+            let send_ret = libc::sendto(
                 sock6,
                 b"ping".as_ptr().cast(),
                 4,
@@ -2886,6 +3235,12 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 std::ptr::from_ref(&dest).cast(),
                 std::mem::size_of_val(&dest) as libc::socklen_t,
             );
+            if send_ret < 0 {
+                // Synchronous failure (ENODEV, ENETUNREACH, …): no interface or no L3 path.
+                // MSG_ERRQUEUE stays empty for a non-async reason — skip to avoid false positive.
+                libc::close(sock6);
+                continue;
+            }
             // Wait for NDP retransmission timeout (3 x default RETRANS_TIMER ≈ 3 s)
             std::thread::sleep(std::time::Duration::from_millis(3500));
             let mut iov_buf = [0u8; 512];
@@ -2998,6 +3353,11 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 "Hidden VPN tunnel detected by hardware qdisc flood{} (deep queue on {:?}) — {}",
                 mode, qdisc_tunnel, details,
             ))
+        } else if !probably_tunnel_indices.is_empty() {
+            CheckOutput::fail(format!(
+                "VPN interfaces exposed via anonymous index leak: {:?} — {}",
+                probably_tunnel_indices, details,
+            ))
         } else {
             CheckOutput::pass(format!("No VPN detected — {}", details))
         }
@@ -3087,8 +3447,12 @@ pub fn check_uid_route_rules_leak() -> CheckOutput {
                         _ => {}
                     });
 
-                    if has_uid_range && uid_start >= 10000 {
-                        uid_rules.push(format!("table={table_id} range={}-{}", uid_start, uid_end));
+                    if has_uid_range
+                        && (uid_start >= 10000 || uid_end >= 10000)
+                        && uid_end != u32::MAX
+                        && (uid_end - uid_start > 0)
+                    {
+                        uid_rules.push(format!("table={table_id} range={uid_start}-{uid_end}"));
                     }
                 },
             );
@@ -3226,6 +3590,40 @@ pub fn check_underlay_port_conflict() -> CheckOutput {
     }
 }
 
+#[uniffi::export]
+pub fn check_rtm_getlink_trim_oracle() -> CheckOutput {
+    let existing = probe_active_ifindexes();
+    if existing.is_empty() {
+        return CheckOutput::pass(
+            "no active interfaces found via bind probe — trim oracle skipped".to_string(),
+        );
+    }
+
+    let visible = match visible_ifindexes_from_getlink() {
+        Ok(v) => v,
+        Err(out) => return out,
+    };
+
+    let hidden: Vec<u32> = existing
+        .iter()
+        .filter(|&&idx| !visible.contains(&idx))
+        .copied()
+        .collect();
+
+    if hidden.is_empty() {
+        CheckOutput::pass(format!(
+            "{} active iface(s) via bind probe, all visible in RTM_GETLINK — no trim-oracle discrepancy",
+            existing.len()
+        ))
+    } else {
+        CheckOutput::fail(format!(
+            "{} hidden interface(s): ifindex(es) {:?} exist (bind probe) but absent from RTM_GETLINK dump — VPN interface actively hidden (confirms kmod trim)",
+            hidden.len(),
+            hidden
+        ))
+    }
+}
+
 #[allow(clippy::type_complexity)]
 pub fn run_all_checks_cli() {
     let checks: &[(&str, fn() -> CheckOutput)] = &[
@@ -3254,8 +3652,10 @@ pub fn run_all_checks_cli() {
         ("check_getsockname_spoof", check_getsockname_spoof),
         ("check_netlink_getrule", check_netlink_getrule),
         ("check_tcp_mss", check_tcp_mss),
+        ("check_tcp_info_mss", check_tcp_info_mss),
         ("check_udp_pmtu", check_udp_pmtu),
         ("check_netlink_getneigh", check_netlink_getneigh),
+        ("check_qdisc_by_ifindex", check_qdisc_by_ifindex),
         ("check_loopback_bind_conflict", check_loopback_bind_conflict),
         ("check_bpf_iface_map", check_bpf_iface_map),
         ("check_system_properties", check_system_properties),
@@ -3265,9 +3665,8 @@ pub fn run_all_checks_cli() {
         ("check_traceroute_rtt", check_traceroute_rtt),
         ("check_arm_timing", check_arm_timing),
         ("check_udp_queue_pressure", check_udp_queue_pressure),
-        ("check_arp_timeout_illusion", check_arp_timeout_illusion),
-        ("check_broadcast_blackhole", check_broadcast_blackhole),
         ("check_gso_asymmetry", check_gso_asymmetry),
+        ("check_timestamping_hw", check_timestamping_hw),
         (
             "check_ipv6_link_local_bruteforce",
             check_ipv6_link_local_bruteforce,
@@ -3275,6 +3674,10 @@ pub fn run_all_checks_cli() {
         ("check_uid_route_rules_leak", check_uid_route_rules_leak),
         ("check_pmtu_cache_poisoning", check_pmtu_cache_poisoning),
         ("check_underlay_port_conflict", check_underlay_port_conflict),
+        (
+            "check_rtm_getlink_trim_oracle",
+            check_rtm_getlink_trim_oracle,
+        ),
     ];
 
     println!("=== RUNNING NATIVE VPN HIDE DIAGNOSTIC CHECKS ===");

@@ -155,6 +155,18 @@ val ALL_HOOKS =
             R.string.hook_symbol_udp_sendmsg,
             R.string.hook_desc_udp_sendmsg,
         ),
+        HookInfo(
+            30,
+            R.string.hook_name_fib_trie_seq_show,
+            R.string.hook_symbol_fib_trie_seq_show,
+            R.string.hook_desc_fib_trie_seq_show,
+        ),
+        HookInfo(
+            31,
+            R.string.hook_name_tc_fill_qdisc,
+            R.string.hook_symbol_tc_fill_qdisc,
+            R.string.hook_desc_tc_fill_qdisc,
+        ),
     )
 
 val ALL_JAVA_HOOKS =

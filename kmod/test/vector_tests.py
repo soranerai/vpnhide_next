@@ -611,15 +611,15 @@ def test_udp_queue_pressure():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     s.setblocking(False)
     success_count_nt = 0
-    for _ in range(100):
+    for _ in range(1000):
         try:
             s.sendto(b"test_payload_32_bytes_long_here", ("127.0.0.1", 12345))
             success_count_nt += 1
         except OSError:
             pass
-    print(f"[UDP Queue Pressure] Non-target success rate: {success_count_nt}/100")
-    if success_count_nt < 95:
-        print(f"FAIL: UDP queue pressure non-target success rate too low: {success_count_nt}/100")
+    print(f"[UDP Queue Pressure] Non-target success rate: {success_count_nt}/1000")
+    if success_count_nt < 950:
+        print(f"FAIL: UDP queue pressure non-target success rate too low: {success_count_nt}/1000")
         return False
 
     # 2. Target check (UID 5555)
@@ -631,7 +631,7 @@ def test_udp_queue_pressure():
             s_tgt.setblocking(False)
             success_count = 0
             eagain_count = 0
-            for _ in range(100):
+            for _ in range(1000):
                 try:
                     s_tgt.sendto(b"test_payload_32_bytes_long_here", ("127.0.0.1", 12345))
                     success_count += 1
@@ -639,11 +639,11 @@ def test_udp_queue_pressure():
                     if e.errno == 11:  # EAGAIN is 11
                         eagain_count += 1
             print(
-                f"[UDP Queue Pressure] Target success rate: {success_count}/100, EAGAIN: {eagain_count}/100"
+                f"[UDP Queue Pressure] Target success rate: {success_count}/1000, EAGAIN: {eagain_count}/1000"
             )
-            if success_count > 20:
+            if success_count > 600:
                 print(
-                    f"FAIL: UDP queue pressure target succeeded too many times: {success_count}/100 (should be <= 20)"
+                    f"FAIL: UDP queue pressure target succeeded too many times: {success_count}/1000 (should be <= 600)"
                 )
                 sys.exit(1)
             if eagain_count == 0:

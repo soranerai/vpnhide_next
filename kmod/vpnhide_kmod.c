@@ -26,6 +26,9 @@
  *     Without them: Apps can bind to VPN interfaces or detect the tunnel via MTU size anomalies.
  *   - connect / bind: Controls port/host access on loopback/local interfaces.
  *     Without them: Apps can connect to local proxies or detect active proxy ports via EADDRINUSE.
+ *   - inet6_bind (link-local): Intercepts AF_INET6 bind probes with fe80::/10 + VPN scope_id.
+ *     Without it: Iterating scope_id 1..N and binding fe80::1 reveals active VPN indices
+ *     without any enumeration syscall (check_ipv6_link_local_bruteforce Pass 1).
  *   - getname / getsockname: Spoofs local socket addresses.
  *     Without it: getsockname() queries will return the VPN interface's private IP address.
  *   - sys_bpf: Hijacks eBPF stats maps queries.
@@ -71,6 +74,7 @@
 #include <linux/bpf.h>
 #include <linux/file.h>
 #include <linux/delay.h>
+#include <linux/tcp.h>
 
 #include "include/vpnhide.h"
 
@@ -150,6 +154,16 @@ static inline void sv_add(struct vh_stats_value *dst,
 #define IPV6_PMTUDISC_DO 2
 #endif
 
+#ifndef SO_TIMESTAMPING
+#define SO_TIMESTAMPING 37
+#endif
+
+#ifndef SOF_TIMESTAMPING_TX_HARDWARE
+#define SOF_TIMESTAMPING_TX_HARDWARE (1 << 0)
+#define SOF_TIMESTAMPING_RX_HARDWARE (1 << 2)
+#define SOF_TIMESTAMPING_RAW_HARDWARE (1 << 6)
+#endif
+
 #define MODNAME "vpnhide"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
@@ -212,6 +226,10 @@ enum vpnhide_hook_idx {
 	HOOK_UDP_SENDMSG = 25,
 	HOOK_DEV_SEQ = 26,
 	HOOK_IF6_SEQ = 27,
+	HOOK_INET6_BIND_LL = 28,
+	HOOK_UDPV6_SENDMSG = 29,
+	HOOK_FIB_TRIE = 30,
+	HOOK_TC_FILL_QDISC = 31,
 };
 
 static inline bool is_hook_active(enum vpnhide_hook_idx index)
@@ -947,6 +965,28 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 					sdata->intercepted = true;
 				}
 			}
+		} else if (optname == SO_TIMESTAMPING) {
+			/* Strip hardware timestamp bits so virtual interfaces
+			 * cannot be fingerprinted via missing hw timestamps.
+			 * ts[2] (raw hardware ts) is always zero on TUN/VPN;
+			 * without stripping, userspace detects software-only
+			 * path ↔ virtual interface. */
+			int flags;
+			if (optlen == sizeof(int) &&
+			    get_user(flags, (int __user *)optval_ptr) == 0) {
+				int stripped = flags &
+					       ~(SOF_TIMESTAMPING_TX_HARDWARE |
+						 SOF_TIMESTAMPING_RX_HARDWARE |
+						 SOF_TIMESTAMPING_RAW_HARDWARE);
+				if (stripped != flags &&
+				    put_user(stripped,
+					     (int __user *)optval_ptr) == 0) {
+					vpnhide_dbg(
+						"sys_setsockopt: stripped SO_TIMESTAMPING hw bits 0x%x→0x%x\n",
+						flags, stripped);
+					sdata->intercepted = true;
+				}
+			}
 		}
 	} else if (level == IPPROTO_IP) {
 		if (optname == IP_MTU_DISCOVER) {
@@ -988,6 +1028,29 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 						}
 					}
 				}
+			}
+		}
+	} else if (level == IPPROTO_UDP) {
+		/*
+		 * UDP_SEGMENT = 103: zero the segment size before the kernel
+		 * reads it.  Setting gso_size to 0 disables GSO on this socket,
+		 * turning the subsequent large send() into a plain (non-GSO) UDP
+		 * datagram.  Without this, the kernel returns -EIO in
+		 * udp_send_skb() because a tun/WireGuard device lacks
+		 * CHECKSUM_PARTIAL support (skb->ip_summed != CHECKSUM_PARTIAL),
+		 * which is the first condition gating GSO path entry.
+		 * setsockopt(UDP_SEGMENT, 0) still succeeds (gso_size = 0 is
+		 * valid), so the check's opt_ret >= 0 path continues normally.
+		 */
+		if (optname == 103 /* UDP_SEGMENT */ && optlen == sizeof(int)) {
+			int zero = 0;
+
+			if (put_user(zero, (int __user *)optval_ptr) == 0) {
+				vpnhide_dbg(
+					"sys_setsockopt: zeroed UDP_SEGMENT to block GSO probe uid=%u\n",
+					from_kuid(&init_user_ns,
+						  current_uid()));
+				sdata->intercepted = true;
 			}
 		}
 	}
@@ -1075,7 +1138,8 @@ static int sock_getsockopt_entry(struct kretprobe_instance *ri,
 	if (level == IPPROTO_IPV6 && optname != IPV6_MTU &&
 	    optname != IPV6_MTU_DISCOVER)
 		return 1;
-	if (level == IPPROTO_TCP && optname != TCP_MAXSEG)
+	if (level == IPPROTO_TCP && optname != TCP_MAXSEG &&
+	    optname != TCP_INFO)
 		return 1;
 
 	if (!is_target_uid())
@@ -1194,6 +1258,41 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 					}
 				}
 			}
+		}
+		return 0;
+	}
+
+	if (data->level == IPPROTO_TCP && data->optname == TCP_INFO) {
+		/* Spoof MSS fields in tcp_info to hide VPN tunnel overhead.
+		 * Only read/write the first 24 bytes (stable ABI subset):
+		 * 8 flag bytes + rto + ato + snd_mss + rcv_mss. */
+		struct {
+			u8 _pre[8];
+			u32 rto;
+			u32 ato;
+			u32 snd_mss;
+			u32 rcv_mss;
+		} ti;
+		int len = 0;
+		bool changed = false;
+
+		if (get_user(len, data->optlen) != 0 || len < (int)sizeof(ti))
+			return 0;
+		if (copy_from_user(&ti, data->optval, sizeof(ti)))
+			return 0;
+
+		if (ti.snd_mss > 0 && ti.snd_mss < 1440) {
+			ti.snd_mss = 1460;
+			changed = true;
+		}
+		if (ti.rcv_mss > 0 && ti.rcv_mss < 1440) {
+			ti.rcv_mss = 1460;
+			changed = true;
+		}
+		if (changed) {
+			if (copy_to_user(data->optval, &ti, sizeof(ti)) == 0)
+				vpnhide_dbg(
+					"sock_getsockopt_ret: spoofed TCP_INFO snd_mss/rcv_mss\n");
 		}
 		return 0;
 	}
@@ -1320,7 +1419,8 @@ static int sys_getsockopt_entry(struct kretprobe_instance *ri,
 	if (level == IPPROTO_IPV6 && optname != IPV6_MTU &&
 	    optname != IPV6_MTU_DISCOVER)
 		return 1;
-	if (level == IPPROTO_TCP && optname != TCP_MAXSEG)
+	if (level == IPPROTO_TCP && optname != TCP_MAXSEG &&
+	    optname != TCP_INFO)
 		return 1;
 
 	if (!is_target_uid())
@@ -1372,7 +1472,8 @@ static int sk_getsockopt_entry(struct kretprobe_instance *ri,
 	if (level == IPPROTO_IPV6 && optname != IPV6_MTU &&
 	    optname != IPV6_MTU_DISCOVER)
 		return 1;
-	if (level == IPPROTO_TCP && optname != TCP_MAXSEG)
+	if (level == IPPROTO_TCP && optname != TCP_MAXSEG &&
+	    optname != TCP_INFO)
 		return 1;
 
 	if (!is_target_uid())
@@ -1952,15 +2053,21 @@ static int fib_rule_fill_entry(struct kretprobe_instance *ri,
 	} else {
 		uid_t start = from_kuid(&init_user_ns, rule->uid_range.start);
 		uid_t end = from_kuid(&init_user_ns, rule->uid_range.end);
-		if (my_uid >= start && my_uid <= end) {
-			if (start != 0 || end != (uid_t)~0) {
-				if (rule->table != 254 && rule->table != 255 &&
-				    rule->table != 253 && rule->table > 100) {
-					filter = true;
-					vpnhide_dbg(
-						"fib_rule_fill_entry: hiding policy rule for UID range %u-%u, table %u\n",
-						start, end, rule->table);
-				}
+		/*
+		 * Hide any split-routing rule that touches app UID space (>= 10000).
+		 * We check `end` rather than `start` to also catch rules like [0..app_uid]
+		 * where the VPN routes from UID 0 up to the target app's UID.
+		 * Catch-all rules [0..UINT_MAX] are excluded via end != ~0.
+		 */
+		if (((start >= 10000 || end >= 10000) ||
+		     is_target_uid_val(start) || is_target_uid_val(end)) &&
+		    end != (uid_t)~0) {
+			if (rule->table != 254 && rule->table != 255 &&
+			    rule->table != 253 && rule->table > 100) {
+				filter = true;
+				vpnhide_dbg(
+					"fib_rule_fill_entry: hiding UID split-routing rule range %u-%u, table %u\n",
+					start, end, rule->table);
 			}
 		}
 	}
@@ -3412,6 +3519,182 @@ static struct kretprobe socket_bind_krp = {
 };
 
 /* ================================================================== */
+/*  Hook 12d: inet6_bind — IPv6 link-local scope_id probe suppression */
+/*  Android source path: net/ipv6/af_inet6.c                          */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts inet6_bind() for target UIDs. When the app calls     */
+/*    bind(AF_INET6, {fe80::, scope_id=i}), the kernel validates i    */
+/*    against the interface table and returns any code except ENODEV  */
+/*    if the interface exists — enough to confirm its presence.       */
+/*    This hook returns -ENODEV when scope_id matches a hidden VPN    */
+/*    interface index, making the interface invisible to blind         */
+/*    index bruteforce probes.                                        */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Iterating scope_id 1..64 and binding fe80::1 reveals which      */
+/*    indices have active interfaces without any enumeration API.     */
+/*    check_ipv6_link_local_bruteforce Pass 1 uses this technique.    */
+/*                                                                    */
+/*  inet6_bind(struct socket *sock, struct sockaddr *uaddr, int len)  */
+/*  arm64: x1 = uaddr (kernel ptr, already copied by move_addr_to_   */
+/*         kernel in __sys_bind before sock->ops->bind is invoked).   */
+/* ================================================================== */
+
+struct inet6_bind_ll_data {
+	bool should_deny;
+};
+
+static int inet6_bind_ll_entry(struct kretprobe_instance *ri,
+			       struct pt_regs *regs)
+{
+	struct inet6_bind_ll_data *data;
+	struct sockaddr_in6 sin6;
+
+	if (!is_hook_active(HOOK_INET6_BIND_LL))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	/*
+	 * uaddr (x1) is a kernel pointer — __sys_bind calls
+	 * move_addr_to_kernel() before invoking sock->ops->bind, so by
+	 * the time inet6_bind runs the address lives on the kernel stack.
+	 * Use copy_from_kernel_nofault for safe access without PAN faults.
+	 */
+	if (copy_from_kernel_nofault(&sin6, (const void *)regs->regs[1],
+				     sizeof(sin6)) != 0)
+		return 1;
+
+	if (sin6.sin6_family != AF_INET6)
+		return 1;
+
+	/* fe80::/10 link-local prefix: first byte 0xfe, second byte 0x80–0xbf */
+	if (sin6.sin6_addr.s6_addr[0] != 0xfe ||
+	    (sin6.sin6_addr.s6_addr[1] & 0xc0) != 0x80)
+		return 1;
+
+	if (sin6.sin6_scope_id == 0 ||
+	    !is_active_vpn_ifindex(sin6.sin6_scope_id))
+		return 1;
+
+	data = (void *)ri->data;
+	data->should_deny = true;
+
+	vpnhide_dbg(
+		"inet6_bind_ll: suppressing link-local probe scope_id=%u uid=%u\n",
+		sin6.sin6_scope_id, from_kuid(&init_user_ns, current_uid()));
+	return 0;
+}
+
+static int inet6_bind_ll_ret(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
+{
+	struct inet6_bind_ll_data *data = (void *)ri->data;
+
+	if (!data->should_deny)
+		return 0;
+
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
+	regs_set_return_value(regs, -ENODEV);
+	return 0;
+}
+
+static struct kretprobe inet6_bind_ll_krp = {
+	.handler = inet6_bind_ll_ret,
+	.entry_handler = inet6_bind_ll_entry,
+	.data_size = sizeof(struct inet6_bind_ll_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "inet6_bind",
+};
+
+/* ================================================================== */
+/*  Hook 12e: udpv6_sendmsg — block IPv6 link-local sendto on VPN     */
+/*  Suppresses Pass 3 (NDP timeout oracle) and Pass 4 (qdisc flood)   */
+/*  of check_ipv6_link_local_bruteforce in fallback mode.             */
+/*  Pass 3: send_ret < 0 (-ENOBUFS) → check skips the index,         */
+/*          no 3.5 s NDP wait, no errqueue inspection.                */
+/*  Pass 4: ENOBUFS → flood loop breaks on first iteration,           */
+/*          successful_sends stays 0 which is ≤ 5000 → not flagged.  */
+/* ================================================================== */
+
+struct udpv6_sendmsg_ll_data {
+	bool should_deny;
+};
+
+static int udpv6_sendmsg_ll_entry(struct kretprobe_instance *ri,
+				  struct pt_regs *regs)
+{
+	struct udpv6_sendmsg_ll_data *data;
+	struct msghdr *msg;
+	struct sockaddr_in6 sin6;
+
+	if (!is_hook_active(HOOK_UDPV6_SENDMSG))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	/*
+	 * udpv6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
+	 * x1 = msg.  msg lives on the kernel stack of __sys_sendto;
+	 * msg->msg_name points at the sockaddr_storage copy that
+	 * move_addr_to_kernel() filled before reaching the transport layer.
+	 */
+	msg = (struct msghdr *)regs->regs[1];
+	if (!msg || !msg->msg_name)
+		return 1;
+
+	if (msg->msg_namelen < (int)sizeof(sin6))
+		return 1;
+
+	if (copy_from_kernel_nofault(&sin6, msg->msg_name, sizeof(sin6)) != 0)
+		return 1;
+
+	if (sin6.sin6_family != AF_INET6)
+		return 1;
+
+	/* fe80::/10 link-local */
+	if (sin6.sin6_addr.s6_addr[0] != 0xfe ||
+	    (sin6.sin6_addr.s6_addr[1] & 0xc0) != 0x80)
+		return 1;
+
+	if (sin6.sin6_scope_id == 0 ||
+	    !is_active_vpn_ifindex(sin6.sin6_scope_id))
+		return 1;
+
+	data = (void *)ri->data;
+	data->should_deny = true;
+
+	vpnhide_dbg("udpv6_sendmsg_ll: blocking ll sendto scope_id=%u uid=%u\n",
+		    sin6.sin6_scope_id,
+		    from_kuid(&init_user_ns, current_uid()));
+	return 0;
+}
+
+static int udpv6_sendmsg_ll_ret(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	struct udpv6_sendmsg_ll_data *data = (void *)ri->data;
+
+	if (!data->should_deny)
+		return 0;
+
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
+	regs_set_return_value(regs, -ENOBUFS);
+	return 0;
+}
+
+static struct kretprobe udpv6_sendmsg_ll_krp = {
+	.handler = udpv6_sendmsg_ll_ret,
+	.entry_handler = udpv6_sendmsg_ll_entry,
+	.data_size = sizeof(struct udpv6_sendmsg_ll_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "udpv6_sendmsg",
+};
+
+/* ================================================================== */
 /*  Hook 13: inet_getname & inet6_getname — getsockname Spoofing      */
 /*  Android source path:                                              */
 /*    - inet_getname: net/ipv4/af_inet.c                              */
@@ -4833,8 +5116,8 @@ struct udp_sendmsg_data {
 	bool spoofed;
 };
 
-#define BUCKET_CAPACITY 10
-#define TOKEN_REGEN_NS 10000000ULL /* 10 milliseconds per token (100 pkts/s) */
+#define BUCKET_CAPACITY 250
+#define TOKEN_REGEN_NS 2000000ULL /* 2 milliseconds per token (500 pkts/s) */
 
 struct udp_uid_rate {
 	uid_t uid;
@@ -4941,9 +5224,8 @@ static int udp_sendmsg_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct udp_sendmsg_data *data = (void *)ri->data;
 
-	if (data->spoofed && data->sk) {
+	if (data->spoofed && data->sk)
 		data->sk->sk_sndbuf = data->orig_sndbuf;
-	}
 
 	return 0;
 }
@@ -4959,6 +5241,174 @@ static struct kretprobe udp_sendmsg_krp = {
 /* ================================================================== */
 /*  Module init / exit                                                */
 /* ================================================================== */
+
+/* ================================================================== */
+/*  Hook 30: fib_trie_seq_show — /proc/net/fib_trie                   */
+/*  Defensive filter: standard fib_trie output does not include       */
+/*  interface names, so this hook is a no-op on stock kernels.        */
+/*  It guards against vendor patches that emit "dev <ifname>" tokens. */
+/* ================================================================== */
+
+struct fib_trie_data {
+	struct seq_file *seq;
+	size_t start_count;
+};
+
+static int fib_trie_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_trie_data *data;
+
+	if (!is_hook_active(HOOK_FIB_TRIE))
+		return 1;
+	if (!is_target_uid())
+		return 1;
+
+	data = (void *)ri->data;
+	data->seq = (struct seq_file *)regs->regs[0];
+	data->start_count = data->seq ? data->seq->count : 0;
+	return 0;
+}
+
+static int fib_trie_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_trie_data *data = (void *)ri->data;
+	struct seq_file *seq = data->seq;
+	char *buf, *src, *dst, *end;
+
+	if (!seq || !seq->buf)
+		return 0;
+	if (seq->count <= data->start_count)
+		return 0;
+
+	buf = seq->buf;
+	src = buf + data->start_count;
+	dst = src;
+	end = buf + seq->count;
+
+	while (src < end) {
+		char *nl = memchr(src, '\n', end - src);
+		char *line_end = nl ? nl + 1 : end;
+		size_t line_len = line_end - src;
+		char word[IFNAMSIZ];
+		char *p = src;
+		bool has_vpn = false;
+
+		/* Scan each whitespace-separated word in the line */
+		while (p < line_end && !has_vpn) {
+			int j = 0;
+
+			while (p < line_end &&
+			       (*p == ' ' || *p == '\t' || *p == '|' ||
+				*p == '+' || *p == '-'))
+				p++;
+			while (p < line_end && j < IFNAMSIZ - 1 && *p != ' ' &&
+			       *p != '\t' && *p != '\n' && *p != '/' &&
+			       *p != '|')
+				word[j++] = *p++;
+			word[j] = '\0';
+			if (j > 0 && is_vpn_ifname(word))
+				has_vpn = true;
+		}
+
+		if (has_vpn) {
+			vpnhide_dbg(
+				"fib_trie_ret: suppressing line with VPN iface\n");
+			record_kmod_intercept(
+				from_kuid(&init_user_ns, current_uid()), 2);
+			src = line_end;
+			continue;
+		}
+		if (dst != src)
+			memmove(dst, src, line_len);
+		dst += line_len;
+		src = line_end;
+	}
+	seq->count = dst - buf;
+	return 0;
+}
+
+static struct kretprobe fib_trie_krp = {
+	.handler = fib_trie_ret,
+	.entry_handler = fib_trie_entry,
+	.data_size = sizeof(struct fib_trie_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "fib_trie_seq_show",
+};
+
+/* ================================================================== */
+/*  Hook 31: tc_fill_qdisc — filter RTM_GETQDISC responses            */
+/*  After discovering a hidden ifindex via brute-force, an attacker   */
+/*  can query RTM_GETQDISC for that ifindex and fingerprint the VPN   */
+/*  (TUN always returns "pfifo_fast"). We trim the skb entry the      */
+/*  same way rtnl_fill_ifinfo is trimmed for RTM_GETLINK.             */
+/*                                                                    */
+/*  tc_fill_qdisc(skb, q, d, event, portid, seq, flags, err_skb)     */
+/*  arm64: x0=skb                                                     */
+/*  tcmsg layout: family(1)+pad1(1)+pad2(2)+ifindex(4) = ifindex@4   */
+/* ================================================================== */
+
+struct tc_fill_qdisc_data {
+	struct sk_buff *skb;
+	int saved_len;
+};
+
+static int tc_fill_qdisc_entry(struct kretprobe_instance *ri,
+			       struct pt_regs *regs)
+{
+	struct tc_fill_qdisc_data *data;
+	struct sk_buff *skb;
+
+	if (!is_hook_active(HOOK_TC_FILL_QDISC))
+		return 1;
+	if (!is_target_uid())
+		return 1;
+
+	skb = (struct sk_buff *)regs->regs[0];
+	data = (void *)ri->data;
+	data->skb = skb;
+	data->saved_len = skb ? skb->len : 0;
+	return 0;
+}
+
+static int tc_fill_qdisc_ret(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
+{
+	struct tc_fill_qdisc_data *data = (void *)ri->data;
+	struct sk_buff *skb = data->skb;
+	/* nlmsghdr(16) + tcmsg.family(1)+pad1(1)+pad2(2) = ifindex at +20 */
+	const size_t ifindex_off = sizeof(struct nlmsghdr) + 4;
+	int ifindex = 0;
+
+	if (regs_return_value(regs) != 0)
+		return 0;
+	if (!skb || !skb->data)
+		return 0;
+	if (skb->len < data->saved_len + (int)(ifindex_off + sizeof(int)))
+		return 0;
+
+	if (copy_from_kernel_nofault(&ifindex,
+				     skb->data + data->saved_len + ifindex_off,
+				     sizeof(ifindex)) != 0)
+		return 0;
+
+	if (ifindex > 0 && is_active_vpn_ifindex((u32)ifindex)) {
+		vpnhide_dbg(
+			"tc_fill_qdisc_ret: hiding qdisc for VPN ifindex=%d\n",
+			ifindex);
+		skb_trim(skb, data->saved_len);
+		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
+				      2);
+	}
+	return 0;
+}
+
+static struct kretprobe tc_fill_qdisc_krp = {
+	.handler = tc_fill_qdisc_ret,
+	.entry_handler = tc_fill_qdisc_entry,
+	.data_size = sizeof(struct tc_fill_qdisc_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "tc_fill_qdisc",
+};
 
 /* Stealthy IOCTL interface replaces /proc files */
 
@@ -5000,6 +5450,7 @@ static struct kretprobe_reg probes[] = {
 	{ &socket_bind_krp, "__arm64_sys_bind", NULL, false, -1 },
 	{ &socket_connect_krp, "security_socket_connect", NULL, false, 16 },
 	{ &socket_bind_krp, "security_socket_bind", NULL, false, 17 },
+	{ &inet6_bind_ll_krp, "inet6_bind", NULL, false, -1 },
 	{ &sys_getsockname_krp, "__arm64_sys_getsockname", NULL, false, -1 },
 	{ &inet_getname_krp, "inet_getname", NULL, false, 20 },
 	{ &inet6_getname_krp, "inet6_getname", NULL, false, 20 },
@@ -5014,6 +5465,9 @@ static struct kretprobe_reg probes[] = {
 	{ &sys_newfstatat_krp, "__arm64_sys_newfstatat", NULL, false, -1 },
 	{ &sys_readlinkat_krp, "__arm64_sys_readlinkat", NULL, false, -1 },
 	{ &udp_sendmsg_krp, "udp_sendmsg", NULL, false, -1 },
+	{ &udpv6_sendmsg_ll_krp, "udpv6_sendmsg", NULL, false, -1 },
+	{ &fib_trie_krp, "fib_trie_seq_show", NULL, false, -1 },
+	{ &tc_fill_qdisc_krp, "tc_fill_qdisc", NULL, false, -1 },
 };
 
 static int __init vpnhide_init(void)
