@@ -4929,8 +4929,8 @@ struct udp_sendmsg_data {
 	bool spoofed;
 };
 
-#define BUCKET_CAPACITY 10
-#define TOKEN_REGEN_NS 10000000ULL /* 10 milliseconds per token (100 pkts/s) */
+#define BUCKET_CAPACITY 250
+#define TOKEN_REGEN_NS 2000000ULL /* 2 milliseconds per token (500 pkts/s) */
 
 struct udp_uid_rate {
 	uid_t uid;
