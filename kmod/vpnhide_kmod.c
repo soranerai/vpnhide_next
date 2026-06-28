@@ -210,6 +210,8 @@ enum vpnhide_hook_idx {
 	HOOK_OPENAT2 = 23,
 	HOOK_READLINKAT = 24,
 	HOOK_UDP_SENDMSG = 25,
+	HOOK_DEV_SEQ = 26,
+	HOOK_IF6_SEQ = 27,
 };
 
 static inline bool is_hook_active(enum vpnhide_hook_idx index)
@@ -4368,6 +4370,177 @@ static struct kretprobe sys_getdents64_krp = {
 	.kp.symbol_name = "__arm64_sys_getdents64",
 };
 
+static int dev_seq_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data;
+	if (!is_hook_active(HOOK_DEV_SEQ))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	data = (void *)ri->data;
+	data->seq = (struct seq_file *)regs->regs[0];
+	data->start_count = data->seq ? data->seq->count : 0;
+
+	vpnhide_dbg("dev_seq_entry: uid=%u target=1\n",
+		    from_kuid(&init_user_ns, current_uid()));
+
+	return 0;
+}
+
+static int dev_seq_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data = (void *)ri->data;
+	struct seq_file *seq = data->seq;
+	char *buf, *src, *dst, *end;
+	char ifname[IFNAMSIZ];
+	int j;
+
+	if (!seq || !seq->buf)
+		return 0;
+
+	if (seq->count <= data->start_count)
+		return 0;
+
+	buf = seq->buf;
+	src = buf + data->start_count;
+	dst = src;
+	end = buf + seq->count;
+
+	while (src < end) {
+		char *nl = memchr(src, '\n', end - src);
+		char *line_end = nl ? nl + 1 : end;
+		size_t line_len = line_end - src;
+		char *p = src;
+
+		while (p < line_end && (*p == ' ' || *p == '\t'))
+			p++;
+
+		j = 0;
+		while (p < line_end && *p != ':' && *p != ' ' && *p != '\t' &&
+		       *p != '\n' && j < IFNAMSIZ - 1) {
+			ifname[j++] = *p++;
+		}
+		ifname[j] = '\0';
+
+		if (j > 0 && is_vpn_ifname(ifname)) {
+			vpnhide_dbg("dev_seq_ret: hiding statistics for %s\n",
+				    ifname);
+			record_kmod_intercept(
+				from_kuid(&init_user_ns, current_uid()), 2);
+			src = line_end;
+			continue;
+		}
+
+		if (dst != src)
+			memmove(dst, src, line_len);
+		dst += line_len;
+		src = line_end;
+	}
+
+	seq->count = dst - buf;
+	return 0;
+}
+
+static struct kretprobe dev_seq_krp = {
+	.handler = dev_seq_ret,
+	.entry_handler = dev_seq_entry,
+	.data_size = sizeof(struct fib_route_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "dev_seq_show",
+};
+
+static int if6_seq_entry(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data;
+	if (!is_hook_active(HOOK_IF6_SEQ))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	data = (void *)ri->data;
+	data->seq = (struct seq_file *)regs->regs[0];
+	data->start_count = data->seq ? data->seq->count : 0;
+
+	vpnhide_dbg("if6_seq_entry: uid=%u target=1\n",
+		    from_kuid(&init_user_ns, current_uid()));
+
+	return 0;
+}
+
+static int if6_seq_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
+{
+	struct fib_route_data *data = (void *)ri->data;
+	struct seq_file *seq = data->seq;
+	char *buf, *src, *dst, *end;
+	char ifname[IFNAMSIZ];
+	int j;
+
+	if (!seq || !seq->buf)
+		return 0;
+
+	if (seq->count <= data->start_count)
+		return 0;
+
+	buf = seq->buf;
+	src = buf + data->start_count;
+	dst = src;
+	end = buf + seq->count;
+
+	while (src < end) {
+		char *nl = memchr(src, '\n', end - src);
+		char *line_end = nl ? nl + 1 : end;
+		size_t line_len = line_end - src;
+		char *p;
+
+		p = line_end - 1;
+		while (p >= src &&
+		       (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t'))
+			p--;
+
+		j = 0;
+		while (p >= src && *p != ' ' && *p != '\t' &&
+		       j < IFNAMSIZ - 1) {
+			j++;
+			p--;
+		}
+		p++;
+
+		for (j = 0; j < IFNAMSIZ - 1 && (p + j) < line_end &&
+			    p[j] != ' ' && p[j] != '\t' && p[j] != '\n';
+		     j++)
+			ifname[j] = p[j];
+		ifname[j] = '\0';
+
+		if (is_vpn_ifname(ifname)) {
+			vpnhide_dbg("if6_seq_ret: hiding interface %s\n",
+				    ifname);
+			record_kmod_intercept(
+				from_kuid(&init_user_ns, current_uid()), 2);
+			src = line_end;
+			continue;
+		}
+
+		if (dst != src)
+			memmove(dst, src, line_len);
+		dst += line_len;
+		src = line_end;
+	}
+
+	seq->count = dst - buf;
+	return 0;
+}
+
+static struct kretprobe if6_seq_krp = {
+	.handler = if6_seq_ret,
+	.entry_handler = if6_seq_entry,
+	.data_size = sizeof(struct fib_route_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "if6_seq_show",
+};
+
 static int get_path_from_dfd_and_name(int dfd, const char __user *filename,
 				      char *buf, int buflen)
 {
@@ -4660,8 +4833,8 @@ struct udp_sendmsg_data {
 	bool spoofed;
 };
 
-#define BUCKET_CAPACITY 20
-#define TOKEN_REGEN_NS 200000ULL /* 200 microseconds per token (5000 pkts/s) */
+#define BUCKET_CAPACITY 10
+#define TOKEN_REGEN_NS 10000000ULL /* 10 milliseconds per token (100 pkts/s) */
 
 struct udp_uid_rate {
 	uid_t uid;
@@ -4832,6 +5005,8 @@ static struct kretprobe_reg probes[] = {
 	{ &inet6_getname_krp, "inet6_getname", NULL, false, 20 },
 	{ &sys_bpf_krp, "__arm64_sys_bpf", NULL, false, -1 },
 	{ &sys_getdents64_krp, "__arm64_sys_getdents64", NULL, false, -1 },
+	{ &dev_seq_krp, "dev_seq_show", NULL, false, -1 },
+	{ &if6_seq_krp, "if6_seq_show", NULL, false, -1 },
 	{ &sys_openat_krp, "__arm64_sys_openat", NULL, false, -1 },
 	{ &sys_openat2_krp, "__arm64_sys_openat2", NULL, false, -1 },
 	{ &sys_faccessat_krp, "__arm64_sys_faccessat", NULL, false, -1 },

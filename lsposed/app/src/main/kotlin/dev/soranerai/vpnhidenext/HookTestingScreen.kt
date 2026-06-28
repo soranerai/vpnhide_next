@@ -147,7 +147,7 @@ val ALL_HOOKS =
             R.string.hook_name_enoent_file_hiding,
             R.string.hook_symbol_enoent_file_hiding,
             R.string.hook_desc_enoent_file_hiding,
-            indices = listOf(18, 19, 20, 21, 22, 23, 24),
+            indices = listOf(18, 19, 20, 21, 22, 23, 24, 26, 27),
         ),
         HookInfo(
             25,
