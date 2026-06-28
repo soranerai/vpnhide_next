@@ -208,8 +208,6 @@
     <string name="check_traceroute_rtt" translatable="false">traceroute RTT / IP_RECVERR</string>
     <string name="check_arm_timing" translatable="false">ARM CNTVCT timing check</string>
     <string name="check_udp_queue_pressure" translatable="false">UDP queue pressure timing check</string>
-    <string name="check_arp_timeout_illusion" translatable="false">Oracle of L2 Absence (ARP timeout)</string>
-    <string name="check_broadcast_blackhole" translatable="false">Broadcast Domain Rejection</string>
     <string name="check_gso_asymmetry" translatable="false">Hardware GSO Asymmetry</string>
     <string name="check_ipv6_link_local_bruteforce" translatable="false">IPv6 Link-Local Interface probe</string>
     <string name="check_ipv6_multicast_denied" translatable="false">IPv6 Multicast Capability Oracle</string>

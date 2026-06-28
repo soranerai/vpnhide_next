@@ -26,6 +26,9 @@
  *     Without them: Apps can bind to VPN interfaces or detect the tunnel via MTU size anomalies.
  *   - connect / bind: Controls port/host access on loopback/local interfaces.
  *     Without them: Apps can connect to local proxies or detect active proxy ports via EADDRINUSE.
+ *   - inet6_bind (link-local): Intercepts AF_INET6 bind probes with fe80::/10 + VPN scope_id.
+ *     Without it: Iterating scope_id 1..N and binding fe80::1 reveals active VPN indices
+ *     without any enumeration syscall (check_ipv6_link_local_bruteforce Pass 1).
  *   - getname / getsockname: Spoofs local socket addresses.
  *     Without it: getsockname() queries will return the VPN interface's private IP address.
  *   - sys_bpf: Hijacks eBPF stats maps queries.
@@ -212,6 +215,7 @@ enum vpnhide_hook_idx {
 	HOOK_UDP_SENDMSG = 25,
 	HOOK_DEV_SEQ = 26,
 	HOOK_IF6_SEQ = 27,
+	HOOK_INET6_BIND_LL = 28,
 };
 
 static inline bool is_hook_active(enum vpnhide_hook_idx index)
@@ -3412,6 +3416,98 @@ static struct kretprobe socket_bind_krp = {
 };
 
 /* ================================================================== */
+/*  Hook 12d: inet6_bind — IPv6 link-local scope_id probe suppression */
+/*  Android source path: net/ipv6/af_inet6.c                          */
+/*                                                                    */
+/*  What it does:                                                     */
+/*    Intercepts inet6_bind() for target UIDs. When the app calls     */
+/*    bind(AF_INET6, {fe80::, scope_id=i}), the kernel validates i    */
+/*    against the interface table and returns any code except ENODEV  */
+/*    if the interface exists — enough to confirm its presence.       */
+/*    This hook returns -ENODEV when scope_id matches a hidden VPN    */
+/*    interface index, making the interface invisible to blind         */
+/*    index bruteforce probes.                                        */
+/*                                                                    */
+/*  Consequence of absence (What happens without this hook):          */
+/*    Iterating scope_id 1..64 and binding fe80::1 reveals which      */
+/*    indices have active interfaces without any enumeration API.     */
+/*    check_ipv6_link_local_bruteforce Pass 1 uses this technique.    */
+/*                                                                    */
+/*  inet6_bind(struct socket *sock, struct sockaddr *uaddr, int len)  */
+/*  arm64: x1 = uaddr (kernel ptr, already copied by move_addr_to_   */
+/*         kernel in __sys_bind before sock->ops->bind is invoked).   */
+/* ================================================================== */
+
+struct inet6_bind_ll_data {
+	bool should_deny;
+};
+
+static int inet6_bind_ll_entry(struct kretprobe_instance *ri,
+				struct pt_regs *regs)
+{
+	struct inet6_bind_ll_data *data;
+	struct sockaddr_in6 sin6;
+
+	if (!is_hook_active(HOOK_INET6_BIND_LL))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	/*
+	 * uaddr (x1) is a kernel pointer — __sys_bind calls
+	 * move_addr_to_kernel() before invoking sock->ops->bind, so by
+	 * the time inet6_bind runs the address lives on the kernel stack.
+	 * Use copy_from_kernel_nofault for safe access without PAN faults.
+	 */
+	if (copy_from_kernel_nofault(&sin6, (const void *)regs->regs[1],
+				     sizeof(sin6)) != 0)
+		return 1;
+
+	if (sin6.sin6_family != AF_INET6)
+		return 1;
+
+	/* fe80::/10 link-local prefix: first byte 0xfe, second byte 0x80–0xbf */
+	if (sin6.sin6_addr.s6_addr[0] != 0xfe ||
+	    (sin6.sin6_addr.s6_addr[1] & 0xc0) != 0x80)
+		return 1;
+
+	if (sin6.sin6_scope_id == 0 ||
+	    !is_active_vpn_ifindex(sin6.sin6_scope_id))
+		return 1;
+
+	data = (void *)ri->data;
+	data->should_deny = true;
+
+	vpnhide_dbg(
+		"inet6_bind_ll: suppressing link-local probe scope_id=%u uid=%u\n",
+		sin6.sin6_scope_id,
+		from_kuid(&init_user_ns, current_uid()));
+	return 0;
+}
+
+static int inet6_bind_ll_ret(struct kretprobe_instance *ri,
+			     struct pt_regs *regs)
+{
+	struct inet6_bind_ll_data *data = (void *)ri->data;
+
+	if (!data->should_deny)
+		return 0;
+
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
+	regs_set_return_value(regs, -ENODEV);
+	return 0;
+}
+
+static struct kretprobe inet6_bind_ll_krp = {
+	.handler = inet6_bind_ll_ret,
+	.entry_handler = inet6_bind_ll_entry,
+	.data_size = sizeof(struct inet6_bind_ll_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "inet6_bind",
+};
+
+/* ================================================================== */
 /*  Hook 13: inet_getname & inet6_getname — getsockname Spoofing      */
 /*  Android source path:                                              */
 /*    - inet_getname: net/ipv4/af_inet.c                              */
@@ -5000,6 +5096,7 @@ static struct kretprobe_reg probes[] = {
 	{ &socket_bind_krp, "__arm64_sys_bind", NULL, false, -1 },
 	{ &socket_connect_krp, "security_socket_connect", NULL, false, 16 },
 	{ &socket_bind_krp, "security_socket_bind", NULL, false, 17 },
+	{ &inet6_bind_ll_krp, "inet6_bind", NULL, false, -1 },
 	{ &sys_getsockname_krp, "__arm64_sys_getsockname", NULL, false, -1 },
 	{ &inet_getname_krp, "inet_getname", NULL, false, 20 },
 	{ &inet6_getname_krp, "inet6_getname", NULL, false, 20 },

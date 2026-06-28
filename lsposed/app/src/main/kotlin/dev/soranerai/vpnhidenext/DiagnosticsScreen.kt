@@ -40,9 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
 import dev.soranerai.vpnhidenext.checks.CheckStatus
-import dev.soranerai.vpnhidenext.checks.checkArpTimeoutIllusion
 import dev.soranerai.vpnhidenext.checks.checkBpfIfaceMap
-import dev.soranerai.vpnhidenext.checks.checkBroadcastBlackhole
 import dev.soranerai.vpnhidenext.checks.checkGetifaddrs
 import dev.soranerai.vpnhidenext.checks.checkGetsocknameSpoof
 import dev.soranerai.vpnhidenext.checks.checkGetsockoptBind
@@ -808,8 +806,6 @@ internal fun getPlaceholderResults(context: android.content.Context): CheckResul
             R.string.check_netlink_getneigh,
             R.string.check_proc_sys_net_conf,
             R.string.check_udp_queue_pressure,
-            R.string.check_arp_timeout_illusion,
-            R.string.check_broadcast_blackhole,
             R.string.check_gso_asymmetry,
             R.string.check_ipv6_link_local_bruteforce,
             R.string.check_traffic_stats,
@@ -873,8 +869,6 @@ internal suspend fun runAllChecks(
                 { nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() } },
                 { nativeCheck(res.getString(R.string.check_proc_sys_net_conf)) { checkProcSysNetConf() } },
                 { nativeCheck(res.getString(R.string.check_udp_queue_pressure)) { checkUdpQueuePressure() } },
-                { nativeCheck(res.getString(R.string.check_arp_timeout_illusion)) { checkArpTimeoutIllusion() } },
-                { nativeCheck(res.getString(R.string.check_broadcast_blackhole)) { checkBroadcastBlackhole() } },
                 { nativeCheck(res.getString(R.string.check_gso_asymmetry)) { checkGsoAsymmetry() } },
                 { nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) { checkIpv6LinkLocalBruteforce() } },
                 { checkTrafficStatsDiscrepancy(cm, context, res.getString(R.string.check_traffic_stats)) },

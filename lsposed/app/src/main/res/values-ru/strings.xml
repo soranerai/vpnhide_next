@@ -157,8 +157,6 @@
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
     <string name="check_arm_timing" translatable="false">Измерение таймингов ARM CNTVCT</string>
     <string name="check_udp_queue_pressure" translatable="false">Анализ пропускной способности UDP-очереди</string>
-    <string name="check_arp_timeout_illusion" translatable="false">Оракул L2-отсутствия (ARP таймаут)</string>
-    <string name="check_broadcast_blackhole" translatable="false">Отторжение широковещательного домена</string>
     <string name="check_gso_asymmetry" translatable="false">Аномалия аппаратной разгрузки (GSO)</string>
     <string name="check_ipv6_link_local_bruteforce" translatable="false">Зондирование интерфейсов IPv6 Link-Local</string>
     <string name="check_ipv6_multicast_denied" translatable="false">Оракул мультикаст-возможностей IPv6</string>
