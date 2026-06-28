@@ -38,6 +38,26 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.ui.draw.clip
+
+private enum class ProtectionLevel { MIN, AVG, MAX }
+
+private val PROTECTION_MASK_MIN = 0x127FFu
+private val PROTECTION_MASK_AVG = 0x1FFFFu
+private val PROTECTION_MASK_MAX = 0xFFFFFFFFu
+
+private fun UInt.toProtectionLevel(): ProtectionLevel? =
+    when (this) {
+        PROTECTION_MASK_MIN -> ProtectionLevel.MIN
+        PROTECTION_MASK_AVG -> ProtectionLevel.AVG
+        PROTECTION_MASK_MAX -> ProtectionLevel.MAX
+        else -> null
+    }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -209,6 +229,39 @@ private fun DashboardContent(
     val warningHeader = if (darkTheme) Color(0xFFFFB74D) else Color(0xFFE65100)
     val onBannerColor = MaterialTheme.colorScheme.onSurface
 
+    var kernelMask by remember { mutableStateOf<UInt?>(null) }
+    val activeLevel: ProtectionLevel? = kernelMask?.toProtectionLevel()
+    LaunchedEffect(Unit) {
+        withContext(Dispatchers.IO) {
+            val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(context)
+            val config = db.globalConfigDao().getConfig()
+                ?: dev.soranerai.vpnhidenext.db.DbGlobalConfig()
+            withContext(Dispatchers.Main) { kernelMask = config.kernelHookMask.toUInt() }
+        }
+    }
+
+    ProtectionLevelCard(
+        activeLevel = activeLevel,
+        isLoaded = kernelMask != null,
+        onLevelSelected = { level ->
+            val newMask = when (level) {
+                ProtectionLevel.MIN -> PROTECTION_MASK_MIN
+                ProtectionLevel.AVG -> PROTECTION_MASK_AVG
+                ProtectionLevel.MAX -> PROTECTION_MASK_MAX
+            }
+            kernelMask = newMask
+            scope.launch(Dispatchers.IO) {
+                val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(context)
+                val dao = db.globalConfigDao()
+                val cur = dao.getConfig() ?: dev.soranerai.vpnhidenext.db.DbGlobalConfig()
+                dao.insertConfig(cur.copy(kernelHookMask = newMask.toLong()))
+                dev.soranerai.vpnhidenext.db.DatabaseSync.sync(context)
+            }
+        },
+    )
+    
+    Spacer(Modifier.height(12.dp))
+
     Column {
         // Module status cards
         Text(
@@ -334,6 +387,143 @@ private fun StatusBanner(
             color = contentColor,
             modifier = Modifier.padding(12.dp),
         )
+    }
+}
+
+// ── Protection Level Card ─────────────────────────────────────────────────
+
+@Composable
+private fun ProtectionLevelCard(
+    activeLevel: ProtectionLevel?,
+    isLoaded: Boolean,
+    onLevelSelected: (ProtectionLevel) -> Unit,
+) {
+    data class LevelDef(val level: ProtectionLevel, val color: Color, val labelRes: Int)
+
+    val levels = listOf(
+        LevelDef(ProtectionLevel.MIN, TelBlue, R.string.protection_level_min),
+        LevelDef(ProtectionLevel.AVG, TelGreen, R.string.protection_level_avg),
+        LevelDef(ProtectionLevel.MAX, TelOrange, R.string.protection_level_max),
+    )
+    val levelIcons = listOf(
+        Icons.Filled.VisibilityOff,
+        Icons.Outlined.Visibility,
+        Icons.Filled.Visibility,
+    )
+
+    val selectedIndex = when (activeLevel) {
+        ProtectionLevel.MIN -> 0
+        ProtectionLevel.AVG -> 1
+        ProtectionLevel.MAX -> 2
+        null -> -1
+    }
+
+    val indicatorColor by animateColorAsState(
+        targetValue = when (activeLevel) {
+            ProtectionLevel.MIN -> TelBlue
+            ProtectionLevel.AVG -> TelGreen
+            ProtectionLevel.MAX -> TelOrange
+            null -> Color.Transparent
+        },
+        label = "protectionLevelColor",
+    )
+
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.protection_level_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (isLoaded && activeLevel == null) {
+                    Surface(
+                        shape = RoundedCornerShape(6.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                    ) {
+                        Text(
+                            text = stringResource(R.string.protection_level_custom),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(12.dp))
+
+            Surface(
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                modifier = Modifier.fillMaxWidth().height(56.dp),
+            ) {
+                BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+                    val tabWidth = maxWidth / 3
+
+                    val indicatorOffset by animateDpAsState(
+                        targetValue = if (selectedIndex >= 0) tabWidth * selectedIndex else -tabWidth,
+                        animationSpec = spring(
+                            dampingRatio = Spring.DampingRatioMediumBouncy,
+                            stiffness = Spring.StiffnessLow,
+                        ),
+                        label = "protectionLevelIndicator",
+                    )
+
+                    Box(
+                        modifier = Modifier
+                            .offset(x = indicatorOffset)
+                            .width(tabWidth)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(indicatorColor.copy(alpha = 0.18f)),
+                    )
+
+                    Row(modifier = Modifier.fillMaxSize()) {
+                        levels.forEachIndexed { idx, def ->
+                            val isActive = activeLevel == def.level
+                            val contentColor =
+                                if (isActive) {
+                                    def.color
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                                }
+                            Box(
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clickable { onLevelSelected(def.level) },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    Icon(
+                                        imageVector = levelIcons[idx],
+                                        contentDescription = null,
+                                        tint = contentColor,
+                                        modifier = Modifier.size(18.dp),
+                                    )
+                                    Spacer(Modifier.height(3.dp))
+                                    Text(
+                                        text = stringResource(def.labelRes),
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontWeight = if (isActive) FontWeight.Bold else FontWeight.Normal,
+                                        color = contentColor,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 

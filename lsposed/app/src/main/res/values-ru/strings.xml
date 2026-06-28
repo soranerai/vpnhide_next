@@ -329,4 +329,11 @@
     <string name="chip_native">Native</string>
     <string name="chip_framework">Framework</string>
     <string name="protocol_both">Оба</string>
+
+    <!-- Protection Level Card -->
+    <string name="protection_level_title">Уровень защиты</string>
+    <string name="protection_level_min">Мин</string>
+    <string name="protection_level_avg">Сред</string>
+    <string name="protection_level_max">Макс</string>
+    <string name="protection_level_custom">Другой</string>
 </resources>
