@@ -2736,18 +2736,35 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 }
             } else {
                 // if_indextoname failed for a confirmed-active index → name hidden by kmod.
-                anonymous_indices.push(i);
+                // anonymous_indices.push(i);
             }
         }
 
-        // Passes 2-4 target anonymous_indices only: physical interfaces are already identified by
-        // name above; deeper probing is only needed for nameless (kmod-hidden) entries.
+        // Passes 2-4 operate on the probe pool.  Normally that is anonymous_indices (active
+        // indices where if_indextoname returned NULL — name hidden by kmod).  If that list is
+        // empty the kernel may be intercepting if_indextoname itself; as a fallback probe the
+        // 10 indices immediately beyond the highest active one (tun0 always gets the largest
+        // ifindex on the device).
+        let fallback_indices: Vec<u32> = if anonymous_indices.is_empty() && !active_indices.is_empty() {
+            let last = *active_indices.last().unwrap();
+            ((last + 1)..=(last + 10)).collect()
+        } else {
+            Vec::new()
+        };
+        let probe_pool: &[u32] = if !anonymous_indices.is_empty() {
+            &anonymous_indices
+        } else {
+            &fallback_indices
+        };
+        // In fallback mode ENODEV on IPV6_ADD_MEMBERSHIP just means "no interface at this
+        // index", not "no IFF_MULTICAST" — most fallback indices have no interface at all.
+        let fallback_mode = !fallback_indices.is_empty();
 
         // Pass 2: Multicast Capability Oracle (synchronous, no sleep).
         // Physical wlan0/rmnet carry IFF_MULTICAST — mandatory for IPv6 NDP and Router Advertisements.
         // Android VpnService tun0 lacks IFF_MULTICAST; joining ff02::1 on it returns EINVAL.
         let mut multicast_denied: Vec<u32> = Vec::new();
-        for &idx in &anonymous_indices {
+        for &idx in probe_pool {
             let sock6 = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
             if sock6 < 0 {
                 continue;
@@ -2767,7 +2784,7 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             );
             let err_no = if ret < 0 { last_os_errno() } else { 0 };
             libc::close(sock6);
-            if ret < 0 && (err_no == libc::EINVAL || err_no == libc::ENODEV) {
+            if ret < 0 && (err_no == libc::EINVAL || (!fallback_mode && err_no == libc::ENODEV)) {
                 multicast_denied.push(idx);
             }
         }
@@ -2778,7 +2795,7 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
         // A tunnel (NOARP + POINTOPOINT) skips NDP entirely: the packet enters the pipe silently,
         // no error is posted, and the error queue stays empty after the wait.
         let mut ndp_tunnel: Vec<u32> = Vec::new();
-        let ndp_candidates: Vec<u32> = anonymous_indices
+        let ndp_candidates: Vec<u32> = probe_pool
             .iter()
             .copied()
             .rev() // highest index first — tun0 typically has the largest ifindex
@@ -2846,7 +2863,7 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
         // Threshold: > 5000 successful sends before any stall → RAM-backed queue → tunnel.
         let flood_buf = [0u8; 64];
         let mut qdisc_tunnel: Vec<u32> = Vec::new();
-        for &idx in &anonymous_indices {
+        for &idx in probe_pool {
             let sock6 = libc::socket(libc::AF_INET6, libc::SOCK_DGRAM, 0);
             if sock6 < 0 {
                 continue;
@@ -2884,12 +2901,18 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             }
         }
 
+        let fallback_note = if fallback_mode {
+            format!("; fallback probed {:?}", fallback_indices)
+        } else {
+            String::new()
+        };
         let details = format!(
-            "{} active {:?}; anonymous {:?}; \
+            "{} active {:?}; anonymous {:?}{}; \
              multicast_denied {:?}; ndp_tunnel {:?}; qdisc_tunnel {:?}",
             active_indices.len(),
             active_indices,
             anonymous_indices,
+            fallback_note,
             multicast_denied,
             ndp_tunnel,
             qdisc_tunnel,
@@ -2902,21 +2925,27 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
                 details,
             ))
         } else if !ndp_tunnel.is_empty() {
+            let mode = if fallback_mode { " [fallback]" } else { "" };
             CheckOutput::fail(format!(
-                "Hidden VPN tunnel detected by NDP timeout oracle (NOARP on {:?}) — {}",
+                "Hidden VPN tunnel detected by NDP timeout oracle{} (NOARP on {:?}) — {}",
+                mode,
                 ndp_tunnel,
                 details,
             ))
         } else if !qdisc_tunnel.is_empty() {
+            let mode = if fallback_mode { " [fallback]" } else { "" };
             CheckOutput::fail(format!(
-                "Hidden VPN tunnel detected by hardware qdisc flood (deep queue on {:?}) — {}",
+                "Hidden VPN tunnel detected by hardware qdisc flood{} (deep queue on {:?}) — {}",
+                mode,
                 qdisc_tunnel,
                 details,
             ))
         } else if !multicast_denied.is_empty() {
+            let mode = if fallback_mode { " [fallback]" } else { "" };
             CheckOutput::fail(format!(
-                "Hidden VPN tunnel detected by multicast capability oracle \
+                "Hidden VPN tunnel detected by multicast capability oracle{} \
                  (IFF_MULTICAST denied on {:?}) — {}",
+                mode,
                 multicast_denied,
                 details,
             ))
