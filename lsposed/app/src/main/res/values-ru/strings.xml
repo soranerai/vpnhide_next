@@ -97,6 +97,7 @@
     <string name="dashboard_protection_unknown">Не проверено</string>
     <string name="dashboard_protection_no_module">Нет модуля</string>
     <string name="dashboard_protection_hooks_inactive">Хуки неактивны</string>
+    <string name="dashboard_protection_checking">Выполняется проверка&#8230;</string>
     <string name="dashboard_needs_restart">VPNHide Next только что добавил себя в список целей. Перезапустите VPNHide Next (force-stop и откройте заново) для проверки защиты — перезагрузка устройства не нужна.</string>
     <string name="dashboard_no_vpn">VPN не активен. Включите VPN для проверки защиты.</string>
     <string name="vpn_off_prompt">VPN не активен. Включите его и нажмите «Повторить», чтобы запустить проверку защиты. Результаты кэшируются до перезапуска VPNHide Next — повторно гонять в рамках сессии не нужно.</string>
@@ -173,6 +174,9 @@
     <string name="badge_pass">ОК</string>
     <string name="badge_fail">ПРОВАЛ</string>
     <string name="badge_info">ИНФО</string>
+    <string name="badge_running">ЗАПУСК</string>
+    <string name="diag_running_title">Запуск диагностики&#8230;</string>
+    <string name="diag_running_desc">Проверки диагностики выполняются в фоновом режиме. Вы можете развернуть подробности, чтобы следить за прогрессом.</string>
     <string name="banner_no_vpn">Активное VPN-соединение не обнаружено. Включите VPN перед запуском проверок.</string>
     <string name="banner_ready">VPN активен. Приложение в списке целевых. Результаты проверок ниже.</string>
     <string name="banner_added_self">VPNHide Next добавлен в список целевых приложений. Перезапустите VPNHide Next (force-stop и откройте заново) для работы нативных проверок — перезагрузка устройства не нужна.</string>

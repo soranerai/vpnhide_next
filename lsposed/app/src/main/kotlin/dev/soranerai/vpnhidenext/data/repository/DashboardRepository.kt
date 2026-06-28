@@ -20,6 +20,9 @@ import dev.soranerai.vpnhidenext.isEnabledInPrefs
 import dev.soranerai.vpnhidenext.normalizeVersion
 import dev.soranerai.vpnhidenext.suExec
 import dev.soranerai.vpnhidenext.versionsMismatch
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+
 
 private const val TAG = "VpnHide-Repository"
 
@@ -226,7 +229,7 @@ class DashboardRepository(
         return framework
     }
 
-    suspend fun loadDashboardState(selfNeedsRestart: Boolean): DashboardState {
+    suspend fun loadDashboardState(selfNeedsRestart: Boolean): DashboardState = withContext(Dispatchers.IO) {
         val issues = mutableListOf<Issue>()
 
         fun err(text: String) {
@@ -520,13 +523,11 @@ class DashboardRepository(
                 }
 
                 else -> {
-                    val diagResults = DiagnosticsCache.awaitResults(context)
-
-                    val native =
-                        if (hasNative) {
-                            if (diagResults == null) {
-                                NativeResult.Fail(0, 1)
-                            } else {
+                    val diagState = DiagnosticsCache.state.value
+                    if (diagState is DiagnosticsCache.State.Ready) {
+                        val diagResults = diagState.results
+                        val native =
+                            if (hasNative) {
                                 val passed = diagResults.native.count { it.passed == true }
                                 val failed = diagResults.native.count { it.passed == false }
                                 val total = passed + failed
@@ -535,16 +536,12 @@ class DashboardRepository(
                                     passed > 0 -> NativeResult.Partial(passed, total)
                                     else -> NativeResult.Fail(0, total)
                                 }
-                            }
-                        } else {
-                            NativeResult.NoModule
-                        }
-
-                    val java =
-                        if (lsposed is LsposedState.Active) {
-                            if (diagResults == null) {
-                                JavaResult.Fail(0, 1)
                             } else {
+                                NativeResult.NoModule
+                            }
+
+                        val java =
+                            if (lsposed is LsposedState.Active) {
                                 val passed = diagResults.java.count { it.passed == true }
                                 val failed = diagResults.java.count { it.passed == false }
                                 val total = passed + failed
@@ -553,19 +550,26 @@ class DashboardRepository(
                                     passed > 0 -> JavaResult.Partial(passed, total)
                                     else -> JavaResult.Fail(0, total)
                                 }
+                            } else {
+                                JavaResult.HooksInactive
                             }
-                        } else {
-                            JavaResult.HooksInactive
-                        }
 
-                    ProtectionCheck.Checked(native, java)
+                        ProtectionCheck.Checked(native, java)
+                    } else if (diagState is DiagnosticsCache.State.VpnOff) {
+                        ProtectionCheck.NoVpn
+                    } else {
+                        // DiagnosticsCache.State.Running or DiagnosticsCache.State.NotRun
+                        val native = if (hasNative) NativeResult.Checking else NativeResult.NoModule
+                        val java = if (lsposed is LsposedState.Active) JavaResult.Checking else JavaResult.HooksInactive
+                        ProtectionCheck.Checked(native, java)
+                    }
                 }
             }
 
         VpnHideLog.i(TAG, "protection=$protection issues=$issues")
         VpnHideLog.i(TAG, "=== Dashboard state loaded in ${System.currentTimeMillis() - startTime}ms ===")
 
-        return DashboardState(
+        DashboardState(
             kmod = kmod,
             lsposed = lsposed,
             nativeInstallRecommendation = nativeInstallRecommendation,

@@ -2756,7 +2756,7 @@ pub fn check_ipv6_link_local_bruteforce() -> CheckOutput {
             // ff02::1 = All-Nodes Link-Local Multicast
             mreq.ipv6mr_multiaddr.s6_addr =
                 [0xff, 0x02, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01];
-            mreq.ipv6mr_interface = idx as i32;
+            mreq.ipv6mr_interface = idx as _;
             // IPV6_ADD_MEMBERSHIP = 20
             let ret = libc::setsockopt(
                 sock6,
@@ -3143,4 +3143,73 @@ pub fn check_underlay_port_conflict() -> CheckOutput {
 }
 
 
+pub fn run_all_checks_cli() {
+    let checks: &[(&str, fn() -> CheckOutput)] = &[
+        ("check_ioctl_siocgifflags", check_ioctl_siocgifflags),
+        ("check_ioctl_siocgifmtu", check_ioctl_siocgifmtu),
+        ("check_ioctl_siocgifconf", check_ioctl_siocgifconf),
+        ("check_getifaddrs", check_getifaddrs),
+        ("check_netlink_getlink", check_netlink_getlink),
+        ("check_netlink_getroute", check_netlink_getroute),
+        ("check_netlink_anonymous_route", check_netlink_anonymous_route),
+        ("check_sys_class_net", check_sys_class_net),
+        ("check_proc_net_route", check_proc_net_route),
+        ("check_proc_net_if_inet6", check_proc_net_if_inet6),
+        ("check_proc_net_ipv6_route", check_proc_net_ipv6_route),
+        ("check_proc_net_tcp", check_proc_net_tcp),
+        ("check_proc_net_tcp6", check_proc_net_tcp6),
+        ("check_proc_net_udp", check_proc_net_udp),
+        ("check_proc_net_udp6", check_proc_net_udp6),
+        ("check_proc_net_dev", check_proc_net_dev),
+        ("check_proc_net_fib_trie", check_proc_net_fib_trie),
+        ("check_getsockopt_bind", check_getsockopt_bind),
+        ("check_inet_diag", check_inet_diag),
+        ("check_getsockname_spoof", check_getsockname_spoof),
+        ("check_netlink_getrule", check_netlink_getrule),
+        ("check_tcp_mss", check_tcp_mss),
+        ("check_udp_pmtu", check_udp_pmtu),
+        ("check_netlink_getneigh", check_netlink_getneigh),
+        ("check_loopback_bind_conflict", check_loopback_bind_conflict),
+        ("check_bpf_iface_map", check_bpf_iface_map),
+        ("check_system_properties", check_system_properties),
+        ("check_proc_sys_net_conf", check_proc_sys_net_conf),
+        ("check_ioctl_alternative", check_ioctl_alternative),
+        ("check_direct_syscall", check_direct_syscall),
+        ("check_traceroute_rtt", check_traceroute_rtt),
+        ("check_arm_timing", check_arm_timing),
+        ("check_udp_queue_pressure", check_udp_queue_pressure),
+        ("check_arp_timeout_illusion", check_arp_timeout_illusion),
+        ("check_broadcast_blackhole", check_broadcast_blackhole),
+        ("check_gso_asymmetry", check_gso_asymmetry),
+        ("check_ipv6_link_local_bruteforce", check_ipv6_link_local_bruteforce),
+        ("check_uid_route_rules_leak", check_uid_route_rules_leak),
+        ("check_pmtu_cache_poisoning", check_pmtu_cache_poisoning),
+        ("check_underlay_port_conflict", check_underlay_port_conflict),
+    ];
 
+    println!("=== RUNNING NATIVE VPN HIDE DIAGNOSTIC CHECKS ===");
+    let mut passed = 0;
+    let mut failed = 0;
+    let mut blocked = 0;
+
+    for (name, func) in checks {
+        let out = func();
+        match out.status {
+            CheckStatus::Pass => {
+                passed += 1;
+                println!("\x1b[32m[ PASS ]\x1b[0m {}: {}", name, out.detail);
+            }
+            CheckStatus::Fail => {
+                failed += 1;
+                println!("\x1b[31m[ FAIL ]\x1b[0m {}: {}", name, out.detail);
+            }
+            CheckStatus::NetworkBlocked => {
+                blocked += 1;
+                println!("\x1b[33m[ BLOCK]\x1b[0m {}: {}", name, out.detail);
+            }
+        }
+    }
+
+    println!("=================================================");
+    println!("Summary: {} passed, {} failed, {} network blocked", passed, failed, blocked);
+}

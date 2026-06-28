@@ -11,6 +11,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 /**
  * Cache for `runAllChecks` results.
@@ -41,7 +44,9 @@ internal object DiagnosticsCache {
     sealed interface State {
         data object NotRun : State
 
-        data object Running : State
+        data class Running(
+            val results: CheckResults,
+        ) : State
 
         data object VpnOff : State
 
@@ -54,6 +59,7 @@ internal object DiagnosticsCache {
     val state: StateFlow<State> = _state.asStateFlow()
 
     private var inflight: Job? = null
+    private val lock = Any()
 
     /** Start a run if one isn't already in flight and we don't have a
      * completed result yet. Idempotent — safe to call from both
@@ -121,21 +127,48 @@ internal object DiagnosticsCache {
     }
 
     private suspend fun doRun(appContext: Context) {
-        _state.value = State.Running
-        try {
-            val results =
-                withContext(Dispatchers.IO) {
-                    val cm = appContext.getSystemService(ConnectivityManager::class.java)
-                    runAllChecks(cm, appContext)
+        val initialResults = getPlaceholderResults(appContext)
+        _state.value = State.Running(initialResults)
+
+        var currentResults = initialResults
+
+        coroutineScope {
+            val tickerJob = launch(Dispatchers.Default) {
+                while (isActive) {
+                    delay(100)
+                    synchronized(lock) {
+                        val current = _state.value
+                        if (current is State.Running && current.results != currentResults) {
+                            _state.value = State.Running(currentResults)
+                        }
+                    }
                 }
-            _state.value = State.Ready(results)
-        } catch (e: Exception) {
-            // Failures leave us in VpnOff so the user sees the retry UI
-            // rather than a frozen spinner. Real-world causes here are
-            // transient (root dropped, shell exec failure) and a retry
-            // usually works.
-            _state.value = State.VpnOff
-            VpnHideLog.w("VpnHide-Diag", "runAllChecks failed: ${e.message}")
+            }
+
+            try {
+                val cm = appContext.getSystemService(ConnectivityManager::class.java)
+                val results = runAllChecks(cm, appContext) { updatedResult, isJava ->
+                    synchronized(lock) {
+                        val newNative = if (isJava) currentResults.native else currentResults.native.map {
+                            if (it.name == updatedResult.name) updatedResult else it
+                        }
+                        val newJava = if (!isJava) currentResults.java else currentResults.java.map {
+                            if (it.name == updatedResult.name) updatedResult else it
+                        }
+                        currentResults = CheckResults(newNative, newJava)
+                    }
+                }
+                tickerJob.cancel()
+                _state.value = State.Ready(results)
+            } catch (e: Exception) {
+                tickerJob.cancel()
+                // Failures leave us in VpnOff so the user sees the retry UI
+                // rather than a frozen spinner. Real-world causes here are
+                // transient (root dropped, shell exec failure) and a retry
+                // usually works.
+                _state.value = State.VpnOff
+                VpnHideLog.w("VpnHide-Diag", "runAllChecks failed: ${e.message}")
+            }
         }
     }
 }

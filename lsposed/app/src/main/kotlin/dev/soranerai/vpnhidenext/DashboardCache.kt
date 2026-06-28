@@ -25,6 +25,8 @@ import kotlinx.coroutines.withContext
  * data changes underneath.
  */
 internal object DashboardCache : AsyncCache<DashboardState>() {
+    private var diagnosticsJob: Job? = null
+
     fun ensureLoaded(
         scope: CoroutineScope,
         context: Context,
@@ -34,6 +36,7 @@ internal object DashboardCache : AsyncCache<DashboardState>() {
             val repository = DashboardRepository(context.applicationContext)
             repository.loadDashboardState(selfNeedsRestart)
         }
+        observeDiagnostics(scope, context, selfNeedsRestart)
     }
 
     fun refresh(
@@ -44,6 +47,27 @@ internal object DashboardCache : AsyncCache<DashboardState>() {
         launchReload(scope) {
             val repository = DashboardRepository(context.applicationContext)
             repository.loadDashboardState(selfNeedsRestart)
+        }
+        observeDiagnostics(scope, context, selfNeedsRestart)
+    }
+
+    private fun observeDiagnostics(
+        scope: CoroutineScope,
+        context: Context,
+        selfNeedsRestart: Boolean,
+    ) {
+        synchronized(lock) {
+            if (diagnosticsJob?.isActive == true) return
+            diagnosticsJob = scope.launch {
+                DiagnosticsCache.state.collect { diagState ->
+                    val current = state.value
+                    if (current != null && (diagState is DiagnosticsCache.State.Ready || diagState is DiagnosticsCache.State.VpnOff)) {
+                        val repository = DashboardRepository(context.applicationContext)
+                        val next = repository.loadDashboardState(selfNeedsRestart)
+                        updateState(next)
+                    }
+                }
+            }
         }
     }
 }

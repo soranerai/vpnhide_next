@@ -113,6 +113,15 @@ fun ModuleCard(
             val protectionText =
                 if (active) {
                     when (nativeResult) {
+                        is NativeResult.Checking -> {
+                            val statusText = stringResource(R.string.dashboard_protection_checking)
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    statusText,
+                                )
+                        }
+
                         is NativeResult.Ok -> {
                             val statusText = stringResource(R.string.dashboard_protection_ok)
                             "\n" +
@@ -178,6 +187,7 @@ fun ModuleCard(
                 dotColor = dotColor,
                 containerColor = containerColor,
                 contentColor = contentColor,
+                showLoading = active && nativeResult is NativeResult.Checking,
             )
         }
     }
@@ -223,6 +233,15 @@ fun LsposedCard(
             val targetsText = stringResource(R.string.dashboard_active_targets, state.targetCount)
             val protectionText =
                 when (javaResult) {
+                    is JavaResult.Checking -> {
+                        val statusText = stringResource(R.string.dashboard_protection_checking)
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                statusText,
+                            )
+                    }
+
                     is JavaResult.Ok -> {
                         val statusText = stringResource(R.string.dashboard_protection_ok)
                         "\n" +
@@ -285,6 +304,7 @@ fun LsposedCard(
                 dotColor = dotColor,
                 containerColor = containerColor,
                 contentColor = contentColor,
+                showLoading = javaResult is JavaResult.Checking,
             )
         }
     }
@@ -298,6 +318,7 @@ fun ModuleCardShell(
     dotColor: Color,
     containerColor: Color,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
+    showLoading: Boolean = false,
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
@@ -321,12 +342,20 @@ fun ModuleCardShell(
                     modifier = Modifier.weight(1f, fill = false),
                 )
 
-                Box(
-                    modifier =
-                        Modifier
-                            .size(8.dp)
-                            .background(color = dotColor, shape = CircleShape),
-                )
+                if (showLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(12.dp),
+                        strokeWidth = 2.dp,
+                        color = contentColor.copy(alpha = 0.6f),
+                    )
+                } else {
+                    Box(
+                        modifier =
+                            Modifier
+                                .size(8.dp)
+                                .background(color = dotColor, shape = CircleShape),
+                    )
+                }
             }
 
             Spacer(Modifier.height(6.dp))
