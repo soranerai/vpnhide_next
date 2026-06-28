@@ -2940,8 +2940,11 @@ pub fn check_uid_route_rules_leak() -> CheckOutput {
                         _ => {}
                     });
 
-                    if has_uid_range && uid_start >= 10000 {
-                        uid_rules.push(format!("table={table_id} range={}-{}", uid_start, uid_end));
+                    if has_uid_range
+                        && (uid_start >= 10000 || uid_end >= 10000)
+                        && uid_end != u32::MAX
+                    {
+                        uid_rules.push(format!("table={table_id} range={uid_start}-{uid_end}"));
                     }
                 },
             );

@@ -1956,15 +1956,19 @@ static int fib_rule_fill_entry(struct kretprobe_instance *ri,
 	} else {
 		uid_t start = from_kuid(&init_user_ns, rule->uid_range.start);
 		uid_t end = from_kuid(&init_user_ns, rule->uid_range.end);
-		if (my_uid >= start && my_uid <= end) {
-			if (start != 0 || end != (uid_t)~0) {
-				if (rule->table != 254 && rule->table != 255 &&
-				    rule->table != 253 && rule->table > 100) {
-					filter = true;
-					vpnhide_dbg(
-						"fib_rule_fill_entry: hiding policy rule for UID range %u-%u, table %u\n",
-						start, end, rule->table);
-				}
+		/*
+		 * Hide any split-routing rule that touches app UID space (>= 10000).
+		 * We check `end` rather than `start` to also catch rules like [0..app_uid]
+		 * where the VPN routes from UID 0 up to the target app's UID.
+		 * Catch-all rules [0..UINT_MAX] are excluded via end != ~0.
+		 */
+		if ((start >= 10000 || end >= 10000) && end != (uid_t)~0) {
+			if (rule->table != 254 && rule->table != 255 &&
+			    rule->table != 253 && rule->table > 100) {
+				filter = true;
+				vpnhide_dbg(
+					"fib_rule_fill_entry: hiding UID split-routing rule range %u-%u, table %u\n",
+					start, end, rule->table);
 			}
 		}
 	}
