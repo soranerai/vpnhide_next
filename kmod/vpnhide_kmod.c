@@ -216,6 +216,7 @@ enum vpnhide_hook_idx {
 	HOOK_DEV_SEQ = 26,
 	HOOK_IF6_SEQ = 27,
 	HOOK_INET6_BIND_LL = 28,
+	HOOK_UDPV6_SENDMSG = 29,
 };
 
 static inline bool is_hook_active(enum vpnhide_hook_idx index)
@@ -3512,6 +3513,92 @@ static struct kretprobe inet6_bind_ll_krp = {
 };
 
 /* ================================================================== */
+/*  Hook 12e: udpv6_sendmsg — block IPv6 link-local sendto on VPN     */
+/*  Suppresses Pass 3 (NDP timeout oracle) and Pass 4 (qdisc flood)   */
+/*  of check_ipv6_link_local_bruteforce in fallback mode.             */
+/*  Pass 3: send_ret < 0 (-ENOBUFS) → check skips the index,         */
+/*          no 3.5 s NDP wait, no errqueue inspection.                */
+/*  Pass 4: ENOBUFS → flood loop breaks on first iteration,           */
+/*          successful_sends stays 0 which is ≤ 5000 → not flagged.  */
+/* ================================================================== */
+
+struct udpv6_sendmsg_ll_data {
+	bool should_deny;
+};
+
+static int udpv6_sendmsg_ll_entry(struct kretprobe_instance *ri,
+				   struct pt_regs *regs)
+{
+	struct udpv6_sendmsg_ll_data *data;
+	struct msghdr *msg;
+	struct sockaddr_in6 sin6;
+
+	if (!is_hook_active(HOOK_UDPV6_SENDMSG))
+		return 1;
+
+	if (!is_target_uid())
+		return 1;
+
+	/*
+	 * udpv6_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
+	 * x1 = msg.  msg lives on the kernel stack of __sys_sendto;
+	 * msg->msg_name points at the sockaddr_storage copy that
+	 * move_addr_to_kernel() filled before reaching the transport layer.
+	 */
+	msg = (struct msghdr *)regs->regs[1];
+	if (!msg || !msg->msg_name)
+		return 1;
+
+	if (msg->msg_namelen < (int)sizeof(sin6))
+		return 1;
+
+	if (copy_from_kernel_nofault(&sin6, msg->msg_name, sizeof(sin6)) != 0)
+		return 1;
+
+	if (sin6.sin6_family != AF_INET6)
+		return 1;
+
+	/* fe80::/10 link-local */
+	if (sin6.sin6_addr.s6_addr[0] != 0xfe ||
+	    (sin6.sin6_addr.s6_addr[1] & 0xc0) != 0x80)
+		return 1;
+
+	if (sin6.sin6_scope_id == 0 ||
+	    !is_active_vpn_ifindex(sin6.sin6_scope_id))
+		return 1;
+
+	data = (void *)ri->data;
+	data->should_deny = true;
+
+	vpnhide_dbg(
+		"udpv6_sendmsg_ll: blocking ll sendto scope_id=%u uid=%u\n",
+		sin6.sin6_scope_id,
+		from_kuid(&init_user_ns, current_uid()));
+	return 0;
+}
+
+static int udpv6_sendmsg_ll_ret(struct kretprobe_instance *ri,
+				 struct pt_regs *regs)
+{
+	struct udpv6_sendmsg_ll_data *data = (void *)ri->data;
+
+	if (!data->should_deny)
+		return 0;
+
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
+	regs_set_return_value(regs, -ENOBUFS);
+	return 0;
+}
+
+static struct kretprobe udpv6_sendmsg_ll_krp = {
+	.handler = udpv6_sendmsg_ll_ret,
+	.entry_handler = udpv6_sendmsg_ll_entry,
+	.data_size = sizeof(struct udpv6_sendmsg_ll_data),
+	.maxactive = VPNHIDE_KRETPROBE_MAXACTIVE,
+	.kp.symbol_name = "udpv6_sendmsg",
+};
+
+/* ================================================================== */
 /*  Hook 13: inet_getname & inet6_getname — getsockname Spoofing      */
 /*  Android source path:                                              */
 /*    - inet_getname: net/ipv4/af_inet.c                              */
@@ -5115,6 +5202,7 @@ static struct kretprobe_reg probes[] = {
 	{ &sys_newfstatat_krp, "__arm64_sys_newfstatat", NULL, false, -1 },
 	{ &sys_readlinkat_krp, "__arm64_sys_readlinkat", NULL, false, -1 },
 	{ &udp_sendmsg_krp, "udp_sendmsg", NULL, false, -1 },
+	{ &udpv6_sendmsg_ll_krp, "udpv6_sendmsg", NULL, false, -1 },
 };
 
 static int __init vpnhide_init(void)
