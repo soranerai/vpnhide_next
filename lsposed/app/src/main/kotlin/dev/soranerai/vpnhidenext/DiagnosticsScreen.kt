@@ -200,6 +200,43 @@ fun DiagnosticsScreen(
                     contentAlignment = Alignment.Center,
                 ) { CircularProgressIndicator() }
             }
+        } else if (diagState is DiagnosticsCache.State.VpnOff) {
+            item(key = "vpn_off_card") {
+                Card(
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    ),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(24.dp),
+                            )
+                            Text(
+                                text = stringResource(R.string.diag_no_vpn_title),
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            text = stringResource(R.string.diag_no_vpn_desc),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
         } else if (diagState is DiagnosticsCache.State.Running || diagState is DiagnosticsCache.State.Ready) {
             if (networkBlocked) {
                 item(key = "banner_network_blocked") {

@@ -524,42 +524,52 @@ class DashboardRepository(
 
                     else -> {
                         val diagState = DiagnosticsCache.state.value
-                        if (diagState is DiagnosticsCache.State.Ready) {
-                            val diagResults = diagState.results
-                            val native =
-                                if (hasNative) {
-                                    val passed = diagResults.native.count { it.passed == true }
-                                    val failed = diagResults.native.count { it.passed == false }
-                                    val total = passed + failed
-                                    when {
-                                        failed == 0 -> NativeResult.Ok(passed, total)
-                                        passed > 0 -> NativeResult.Partial(passed, total)
-                                        else -> NativeResult.Fail(0, total)
-                                    }
-                                } else {
-                                    NativeResult.NoModule
-                                }
+                        when {
+                            diagState is DiagnosticsCache.State.VpnOff -> {
+                                val native = if (hasNative) NativeResult.VpnOff else NativeResult.NoModule
+                                val java = if (lsposed is LsposedState.Active) JavaResult.VpnOff else JavaResult.HooksInactive
+                                ProtectionCheck.Checked(native, java)
+                            }
 
-                            val java =
-                                if (lsposed is LsposedState.Active) {
-                                    val passed = diagResults.java.count { it.passed == true }
-                                    val failed = diagResults.java.count { it.passed == false }
-                                    val total = passed + failed
-                                    when {
-                                        failed == 0 -> JavaResult.Ok(passed, total)
-                                        passed > 0 -> JavaResult.Partial(passed, total)
-                                        else -> JavaResult.Fail(0, total)
+                            diagState is DiagnosticsCache.State.Ready -> {
+                                val diagResults = diagState.results
+                                val native =
+                                    if (hasNative) {
+                                        val passed = diagResults.native.count { it.passed == true }
+                                        val failed = diagResults.native.count { it.passed == false }
+                                        val total = passed + failed
+                                        when {
+                                            failed == 0 -> NativeResult.Ok(passed, total)
+                                            passed > 0 -> NativeResult.Partial(passed, total)
+                                            else -> NativeResult.Fail(0, total)
+                                        }
+                                    } else {
+                                        NativeResult.NoModule
                                     }
-                                } else {
-                                    JavaResult.HooksInactive
-                                }
 
-                            ProtectionCheck.Checked(native, java)
-                        } else {
-                            // DiagnosticsCache.State.Running or DiagnosticsCache.State.NotRun
-                            val native = if (hasNative) NativeResult.Checking else NativeResult.NoModule
-                            val java = if (lsposed is LsposedState.Active) JavaResult.Checking else JavaResult.HooksInactive
-                            ProtectionCheck.Checked(native, java)
+                                val java =
+                                    if (lsposed is LsposedState.Active) {
+                                        val passed = diagResults.java.count { it.passed == true }
+                                        val failed = diagResults.java.count { it.passed == false }
+                                        val total = passed + failed
+                                        when {
+                                            failed == 0 -> JavaResult.Ok(passed, total)
+                                            passed > 0 -> JavaResult.Partial(passed, total)
+                                            else -> JavaResult.Fail(0, total)
+                                        }
+                                    } else {
+                                        JavaResult.HooksInactive
+                                    }
+
+                                ProtectionCheck.Checked(native, java)
+                            }
+
+                            else -> {
+                                // DiagnosticsCache.State.Running or DiagnosticsCache.State.NotRun
+                                val native = if (hasNative) NativeResult.Checking else NativeResult.NoModule
+                                val java = if (lsposed is LsposedState.Active) JavaResult.Checking else JavaResult.HooksInactive
+                                ProtectionCheck.Checked(native, java)
+                            }
                         }
                     }
                 }

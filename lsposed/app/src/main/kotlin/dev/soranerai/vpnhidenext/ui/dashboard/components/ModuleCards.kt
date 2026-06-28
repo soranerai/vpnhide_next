@@ -157,6 +157,14 @@ fun ModuleCard(
                                 )
                         }
 
+                        is NativeResult.VpnOff -> {
+                            "\n" +
+                                stringResource(
+                                    R.string.dashboard_protection_prefix,
+                                    stringResource(R.string.dashboard_protection_vpn_off),
+                                )
+                        }
+
                         null -> {
                             ""
                         }
@@ -170,12 +178,14 @@ fun ModuleCard(
             val isFail = broken != null || (active && nativeResult is NativeResult.Fail)
             val isPartial = active && nativeResult is NativeResult.Partial
             val isOk = active && nativeResult is NativeResult.Ok
+            val isVpnOff = active && nativeResult is NativeResult.VpnOff
 
             val (containerColor, contentColor, dotColor) =
                 getCardColors(
                     isFail = isFail,
                     isPartial = isPartial,
                     isOk = isOk,
+                    isVpnOff = isVpnOff,
                     active = active,
                     darkTheme = darkTheme,
                 )
@@ -277,6 +287,14 @@ fun LsposedCard(
                             )
                     }
 
+                    is JavaResult.VpnOff -> {
+                        "\n" +
+                            stringResource(
+                                R.string.dashboard_protection_prefix,
+                                stringResource(R.string.dashboard_protection_vpn_off),
+                            )
+                    }
+
                     null -> {
                         ""
                     }
@@ -287,12 +305,14 @@ fun LsposedCard(
             val isFail = javaResult is JavaResult.Fail
             val isPartial = javaResult is JavaResult.Partial
             val isOk = javaResult is JavaResult.Ok
+            val isVpnOff = javaResult is JavaResult.VpnOff
 
             val (containerColor, contentColor, dotColor) =
                 getCardColors(
                     isFail = isFail,
                     isPartial = isPartial,
                     isOk = isOk,
+                    isVpnOff = isVpnOff,
                     active = true,
                     darkTheme = darkTheme,
                 )
@@ -394,6 +414,7 @@ private fun getCardColors(
     isOk: Boolean,
     active: Boolean,
     darkTheme: Boolean,
+    isVpnOff: Boolean = false,
 ): Triple<Color, Color, Color> =
     when {
         isFail -> {
@@ -418,6 +439,14 @@ private fun getCardColors(
             } else {
                 Triple(Color(0xFFE8F5E9), Color(0xFF2E7D32), TelGreen)
             }
+        }
+
+        isVpnOff -> {
+            Triple(
+                MaterialTheme.colorScheme.surfaceVariant,
+                MaterialTheme.colorScheme.onSurface,
+                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
+            )
         }
 
         else -> {

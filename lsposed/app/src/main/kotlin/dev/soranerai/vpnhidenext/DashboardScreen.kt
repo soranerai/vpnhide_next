@@ -263,14 +263,6 @@ private fun DashboardContent(
     Spacer(Modifier.height(12.dp))
 
     Column {
-        // Module status cards
-        Text(
-            text = stringResource(R.string.dashboard_modules),
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.padding(vertical = 8.dp),
-        )
-
         val (javaResult, nativeResult) =
             when (val p = s.protection) {
                 is ProtectionCheck.Checked -> Pair(p.java, p.native)
@@ -418,6 +410,8 @@ private fun ProtectionLevelCard(
         null -> -1
     }
 
+    val darkTheme = isSystemInDarkTheme()
+
     val indicatorColor by animateColorAsState(
         targetValue = when (activeLevel) {
             ProtectionLevel.MIN -> TelBlue
@@ -428,9 +422,20 @@ private fun ProtectionLevelCard(
         label = "protectionLevelColor",
     )
 
+    val cardContainerColor by animateColorAsState(
+        targetValue = when (activeLevel) {
+            ProtectionLevel.MIN -> if (darkTheme) Color(0xFF0D1D30) else Color(0xFFDCEEFA)
+            ProtectionLevel.AVG -> if (darkTheme) Color(0xFF0E2016) else Color(0xFFDCF0E3)
+            ProtectionLevel.MAX -> if (darkTheme) Color(0xFF221800) else Color(0xFFFFF3DC)
+            null -> MaterialTheme.colorScheme.surface
+        },
+        label = "protectionCardBg",
+    )
+
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
         modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.elevatedCardColors(containerColor = cardContainerColor),
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Row(
@@ -667,7 +672,7 @@ private fun InterceptStatisticsSection(
 ) {
     var expandedApps by remember { mutableStateOf(setOf<Int>()) }
 
-    Spacer(Modifier.height(24.dp))
+    Spacer(Modifier.height(12.dp))
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()

@@ -61,6 +61,8 @@ sealed interface NativeResult {
     ) : NativeResult
 
     data object NoModule : NativeResult
+
+    data object VpnOff : NativeResult
 }
 
 sealed interface JavaResult {
@@ -82,6 +84,8 @@ sealed interface JavaResult {
     ) : JavaResult
 
     data object HooksInactive : JavaResult
+
+    data object VpnOff : JavaResult
 }
 
 enum class IssueSeverity {

@@ -62,7 +62,7 @@ internal object DashboardCache : AsyncCache<DashboardState>() {
                 scope.launch {
                     DiagnosticsCache.state.collect { diagState ->
                         val current = state.value
-                        if (current != null && diagState is DiagnosticsCache.State.Ready) {
+                        if (current != null && (diagState is DiagnosticsCache.State.Ready || diagState is DiagnosticsCache.State.VpnOff)) {
                             val repository = DashboardRepository(context.applicationContext)
                             val next = repository.loadDashboardState(selfNeedsRestart)
                             updateState(next)

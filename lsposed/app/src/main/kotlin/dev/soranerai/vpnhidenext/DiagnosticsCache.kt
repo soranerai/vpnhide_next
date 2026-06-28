@@ -49,6 +49,8 @@ internal object DiagnosticsCache {
         data class Ready(
             val results: CheckResults,
         ) : State
+
+        data object VpnOff : State
     }
 
     private val _state = MutableStateFlow<State>(State.NotRun)
@@ -66,7 +68,7 @@ internal object DiagnosticsCache {
         context: Context,
     ) {
         val s = _state.value
-        if (s is State.Ready || s is State.Running) return
+        if (s is State.Ready || s is State.Running || s is State.VpnOff) return
 
         if (inflight?.isActive == true) return
         inflight = scope.launch { doRun(context.applicationContext) }
@@ -79,21 +81,15 @@ internal object DiagnosticsCache {
     suspend fun awaitResults(context: Context): CheckResults? {
         val s = _state.value
         if (s is State.Ready) return s.results
+        if (s is State.VpnOff) return null
 
         if (s !is State.Running) {
-            // Start it if not running
             withContext(Dispatchers.Main) {
-                // We use a global scope or just run it here?
-                // Better to use the singleton's doRun directly to ensure only one runs.
                 doRun(context.applicationContext)
             }
         }
 
-        // Wait for it to become Ready
-        state.first {
-            it is State.Ready
-        }
-
+        state.first { it is State.Ready || it is State.VpnOff }
         return (_state.value as? State.Ready)?.results
     }
 
@@ -122,9 +118,26 @@ internal object DiagnosticsCache {
         _state.value = State.NotRun
     }
 
+    private fun hasActiveVpnInterface(): Boolean {
+        val (exit, out) = suExec("ip link show up 2>/dev/null")
+        if (exit != 0 || out.isBlank()) return true
+        val vpnPrefixes = listOf("tun", "wg", "ppp", "tap", "ipsec")
+        return out.lines().any { line ->
+            val name = Regex("""^\d+:\s+(\S+?)[@:]""").find(line.trim())?.groupValues?.getOrNull(1)?.lowercase()
+                ?: return@any false
+            vpnPrefixes.any { name.startsWith(it) }
+        }
+    }
+
     private suspend fun doRun(appContext: Context) {
         val initialResults = getPlaceholderResults(appContext)
         _state.value = State.Running(initialResults)
+
+        val vpnActive = withContext(Dispatchers.IO) { hasActiveVpnInterface() }
+        if (!vpnActive) {
+            _state.value = State.VpnOff
+            return
+        }
 
         var currentResults = initialResults
 

@@ -336,4 +336,9 @@
     <string name="protection_level_avg">Сред</string>
     <string name="protection_level_max">Макс</string>
     <string name="protection_level_custom">Другой</string>
+
+    <!-- VPN off diagnostics -->
+    <string name="diag_no_vpn_title">Проверки не запущены</string>
+    <string name="diag_no_vpn_desc">Активный VPN не обнаружен. Подключитесь к VPN для запуска диагностики.</string>
+    <string name="dashboard_protection_vpn_off">-/-</string>
 </resources>
