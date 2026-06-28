@@ -995,6 +995,28 @@ static int sys_setsockopt_entry(struct kretprobe_instance *ri,
 				}
 			}
 		}
+	} else if (level == IPPROTO_UDP) {
+		/*
+		 * UDP_SEGMENT = 103: zero the segment size before the kernel
+		 * reads it.  Setting gso_size to 0 disables GSO on this socket,
+		 * turning the subsequent large send() into a plain (non-GSO) UDP
+		 * datagram.  Without this, the kernel returns -EIO in
+		 * udp_send_skb() because a tun/WireGuard device lacks
+		 * CHECKSUM_PARTIAL support (skb->ip_summed != CHECKSUM_PARTIAL),
+		 * which is the first condition gating GSO path entry.
+		 * setsockopt(UDP_SEGMENT, 0) still succeeds (gso_size = 0 is
+		 * valid), so the check's opt_ret >= 0 path continues normally.
+		 */
+		if (optname == 103 /* UDP_SEGMENT */ && optlen == sizeof(int)) {
+			int zero = 0;
+
+			if (put_user(zero, (int __user *)optval_ptr) == 0) {
+				vpnhide_dbg(
+					"sys_setsockopt: zeroed UDP_SEGMENT to block GSO probe uid=%u\n",
+					from_kuid(&init_user_ns, current_uid()));
+				sdata->intercepted = true;
+			}
+		}
 	}
 
 	if (!sdata->override_ret && !sdata->intercepted)
@@ -5128,9 +5150,8 @@ static int udp_sendmsg_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 {
 	struct udp_sendmsg_data *data = (void *)ri->data;
 
-	if (data->spoofed && data->sk) {
+	if (data->spoofed && data->sk)
 		data->sk->sk_sndbuf = data->orig_sndbuf;
-	}
 
 	return 0;
 }
