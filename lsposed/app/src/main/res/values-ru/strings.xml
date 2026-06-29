@@ -352,4 +352,8 @@
     <string name="diag_no_vpn_title">Проверки не запущены</string>
     <string name="diag_no_vpn_desc">Активный VPN не обнаружен. Подключитесь к VPN для запуска диагностики.</string>
     <string name="dashboard_protection_vpn_off">-/-</string>
+
+    <!-- Hook Descriptions -->
+    <string name="hook_desc_inet6_bind_ll">Блокирует вызовы bind() на адреса IPv6 link-local скрытого VPN-интерфейса для предотвращения сканирования через перебор scope_id.</string>
+    <string name="hook_desc_udpv6_sendmsg_ll">Блокирует отправку пакетов (sendto) на адреса IPv6 link-local скрытого VPN-интерфейса для предотвращения детекции VPN-туннеля.</string>
 </resources>
