@@ -42,6 +42,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.ui.draw.clip
 
@@ -390,6 +391,95 @@ private fun ProtectionLevelCard(
     isLoaded: Boolean,
     onLevelSelected: (ProtectionLevel) -> Unit,
 ) {
+    var showFaq by remember { mutableStateOf(false) }
+
+    if (showFaq) {
+        AlertDialog(
+            onDismissRequest = { showFaq = false },
+            title = { Text(stringResource(R.string.protection_faq_title)) },
+            text = {
+                Column(
+                    modifier = Modifier.verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.VisibilityOff, contentDescription = null,
+                                tint = TelBlue, modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                stringResource(R.string.protection_faq_min_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TelBlue,
+                            )
+                        }
+                        Text(
+                            stringResource(R.string.protection_faq_min_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider()
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Icon(
+                                Icons.Outlined.Visibility, contentDescription = null,
+                                tint = TelGreen, modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                stringResource(R.string.protection_faq_avg_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TelGreen,
+                            )
+                        }
+                        Text(
+                            stringResource(R.string.protection_faq_avg_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    HorizontalDivider()
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(7.dp),
+                        ) {
+                            Icon(
+                                Icons.Filled.Visibility, contentDescription = null,
+                                tint = TelOrange, modifier = Modifier.size(15.dp),
+                            )
+                            Text(
+                                stringResource(R.string.protection_faq_max_title),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = TelOrange,
+                            )
+                        }
+                        Text(
+                            stringResource(R.string.protection_faq_max_body),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showFaq = false }) {
+                    Text(stringResource(R.string.protection_faq_close))
+                }
+            },
+        )
+    }
+
     data class LevelDef(val level: ProtectionLevel, val color: Color, val labelRes: Int)
 
     val levels = listOf(
@@ -448,16 +538,32 @@ private fun ProtectionLevelCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
-                if (isLoaded && activeLevel == null) {
-                    Surface(
-                        shape = RoundedCornerShape(6.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    if (isLoaded && activeLevel == null) {
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant,
+                        ) {
+                            Text(
+                                text = stringResource(R.string.protection_level_custom),
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                            )
+                        }
+                    }
+                    IconButton(
+                        onClick = { showFaq = true },
+                        modifier = Modifier.size(28.dp),
                     ) {
-                        Text(
-                            text = stringResource(R.string.protection_level_custom),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                            contentDescription = null,
+                            modifier = Modifier.size(17.dp),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
                         )
                     }
                 }

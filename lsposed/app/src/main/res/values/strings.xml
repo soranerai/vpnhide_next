@@ -426,6 +426,14 @@
     <string name="protection_level_avg">Avg</string>
     <string name="protection_level_max">Max</string>
     <string name="protection_level_custom">Custom</string>
+    <string name="protection_faq_title">Protection Levels</string>
+    <string name="protection_faq_min_title">Min — Essential Coverage</string>
+    <string name="protection_faq_min_body">Hides the VPN interface from network enumeration APIs — getifaddrs(), ioctl, netlink, and kernel routing tables. VPN-assigned ports are intercepted at bind() and connect() to prevent port-based fingerprinting.\n\nAll Java-layer checks pass. Most native checks pass.\n\nNot covered: socket-option probes (MTU/MSS, TCP_INFO, SO_BINDTODEVICE), GSO/PMTU side-channels, eBPF traffic-stat maps, and filesystem paths such as /sys/class/net.</string>
+    <string name="protection_faq_avg_title">Avg — Full Socket Coverage</string>
+    <string name="protection_faq_avg_body">Everything in Min, plus setsockopt/getsockopt interception. MTU, MSS, TCP_INFO, SO_BINDTODEVICE, and SO_TIMESTAMPING values are spoofed to match a physical interface. SO_MARK leaks are blocked. GSO and PMTU probes are neutralised. getsockname/getpeername return physical-interface addresses.\n\nAll Java and virtually all native direct-API checks pass.\n\nNot covered: eBPF traffic statistics, filesystem enumeration (/sys/class/net, /proc/net/dev), and UDP timing side-channels.</string>
+    <string name="protection_faq_max_title">Max — Complete Coverage</string>
+    <string name="protection_faq_max_body">Everything in Avg, plus:\n\n• /proc/net/dev, /proc/net/if_inet6, /proc/net/fib_trie — VPN interface hidden from proc entries\n• /sys/class/net/* — VPN interface hidden from the filesystem\n• eBPF maps — VPN traffic statistics zeroed\n• UDP rate-limit timing — side-channel neutralised\n• IPv6 link-local bruteforce — blocked\n• Traffic shaping (qdisc) — VPN qdisc hidden\n\nCovers all known direct and indirect detection vectors.</string>
+    <string name="protection_faq_close">Got it</string>
 
     <!-- VPN off diagnostics -->
     <string name="diag_no_vpn_title">Checks not run</string>

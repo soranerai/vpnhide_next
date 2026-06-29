@@ -337,6 +337,14 @@
     <string name="protection_level_avg">Сред</string>
     <string name="protection_level_max">Макс</string>
     <string name="protection_level_custom">Другой</string>
+    <string name="protection_faq_title">Уровни защиты</string>
+    <string name="protection_faq_min_title">Мин — Базовое покрытие</string>
+    <string name="protection_faq_min_body">Скрывает VPN-интерфейс от API перечисления сети — getifaddrs(), ioctl, netlink и таблиц маршрутизации ядра. VPN-порты перехватываются при bind() и connect() для защиты от портового фингерпринтинга.\n\nВсе Java-проверки проходят. Большинство нативных проверок проходят.\n\nНе покрыто: зондирование параметров сокета (MTU/MSS, TCP_INFO, SO_BINDTODEVICE), атаки через GSO/PMTU, eBPF-карты статистики трафика и пути файловой системы /sys/class/net.</string>
+    <string name="protection_faq_avg_title">Сред — Полное покрытие сокетов</string>
+    <string name="protection_faq_avg_body">Всё из «Мин», плюс перехват setsockopt/getsockopt. Значения MTU, MSS, TCP_INFO, SO_BINDTODEVICE и аппаратных меток SO_TIMESTAMPING подменяются под физический интерфейс. Утечки SO_MARK блокируются. GSO и PMTU-зонды нейтрализуются. getsockname/getpeername возвращают адреса физического интерфейса.\n\nВсе Java и практически все нативные прямые проверки проходят.\n\nНе покрыто: eBPF-статистика трафика, перечисление через файловую систему (/sys/class/net, /proc/net/dev) и временны́е атаки через UDP.</string>
+    <string name="protection_faq_max_title">Макс — Полное покрытие</string>
+    <string name="protection_faq_max_body">Всё из «Сред», плюс:\n\n• /proc/net/dev, /proc/net/if_inet6, /proc/net/fib_trie — VPN-интерфейс скрыт из proc\n• /sys/class/net/* — VPN-интерфейс скрыт из файловой системы\n• eBPF-карты — статистика трафика VPN обнулена\n• Ограничение скорости UDP — временна́я атака нейтрализована\n• IPv6 link-local перебор — заблокирован\n• Управление трафиком (qdisc) — VPN qdisc скрыт\n\nПокрывает все известные прямые и косвенные векторы обнаружения.</string>
+    <string name="protection_faq_close">Понятно</string>
 
     <!-- VPN off diagnostics -->
     <string name="diag_no_vpn_title">Проверки не запущены</string>
