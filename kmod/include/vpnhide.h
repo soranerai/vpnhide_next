@@ -65,6 +65,8 @@ struct vpnhide_uid_stats {
 	uid_t uid;
 	unsigned int ioctl_count;
 	unsigned int netlink_count;
+	unsigned int proc_count;
+	unsigned int sockopt_count;
 	unsigned int connect_count;
 	unsigned int getname_count;
 };

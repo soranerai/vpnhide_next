@@ -23,6 +23,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -164,6 +165,7 @@ internal data class CheckResults(
         get() = native + java
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DiagnosticsScreen(
     selfNeedsRestart: Boolean,
@@ -178,6 +180,7 @@ fun DiagnosticsScreen(
     var exporting by remember { mutableStateOf(false) }
     var debugZipFile by remember { mutableStateOf<File?>(null) }
     var showAllChecks by remember { mutableStateOf(false) }
+    var isRefreshing by remember { mutableStateOf(false) }
 
     // Kick off the diagnostics run once per process. If selfNeedsRestart
     // is true we skip — hooks aren't applied to this app yet, results
@@ -219,9 +222,18 @@ fun DiagnosticsScreen(
     val failedJava = remember(results) { results?.java?.filter { !it.isSkipped && it.passed == false } ?: emptyList() }
     val isChecking = remember(results) { results?.all?.any { it.isRunning } == true }
 
+    PullToRefreshBox(
+        isRefreshing = isRefreshing,
+        onRefresh = {
+            isRefreshing = true
+            DiagnosticsCache.retry(scope, context)
+            isRefreshing = false
+        },
+        modifier = modifier.fillMaxSize(),
+    ) {
     LazyColumn(
         modifier =
-            modifier
+            Modifier
                 .fillMaxSize()
                 .padding(horizontal = 16.dp),
     ) {
@@ -592,6 +604,7 @@ fun DiagnosticsScreen(
                 WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
             Spacer(Modifier.height(bottomNavPadding + 100.dp))
         }
+    }
     }
 }
 

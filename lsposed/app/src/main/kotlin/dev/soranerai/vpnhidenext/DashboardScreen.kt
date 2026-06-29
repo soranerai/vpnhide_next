@@ -1097,6 +1097,8 @@ private fun InterceptStatisticsSection(
                                                     when (vector) {
                                                         "ioctl" -> stringResource(R.string.vector_label_ioctl)
                                                         "netlink" -> stringResource(R.string.vector_label_netlink)
+                                                        "proc" -> stringResource(R.string.vector_label_proc)
+                                                        "sockopt" -> stringResource(R.string.vector_label_sockopt)
                                                         "connect" -> stringResource(R.string.vector_label_connect)
                                                         "getname" -> stringResource(R.string.vector_label_getname)
                                                         else -> vector

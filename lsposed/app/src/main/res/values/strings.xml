@@ -208,8 +208,8 @@
     <string name="check_direct_syscall" translatable="false">direct syscall (socket/ioctl)</string>
     <string name="check_traceroute_rtt" translatable="false">traceroute RTT / IP_RECVERR</string>
     <string name="check_arm_timing" translatable="false">ARM CNTVCT timing check</string>
-    <string name="check_udp_queue_pressure" translatable="false">UDP queue pressure timing check</string>
-    <string name="check_gso_asymmetry" translatable="false">Hardware GSO Asymmetry</string>
+    <string name="check_udp_queue_pressure" translatable="false">udp_sendmsg sk_sndbuf timing</string>
+    <string name="check_gso_asymmetry" translatable="false">setsockopt UDP_SEGMENT probe</string>
     <string name="check_ipv6_link_local_bruteforce" translatable="false">IPv6 Link-Local Interface probe</string>
     <string name="check_tcp_info_mss" translatable="false">getsockopt TCP_INFO MSS</string>
     <string name="check_qdisc_by_ifindex" translatable="false">RTM_GETQDISC ifindex probe</string>
@@ -218,7 +218,7 @@
     <string name="check_ipv6_multicast_denied" translatable="false">IPv6 Multicast Capability Oracle</string>
     <string name="check_ipv6_ndp_tunnel" translatable="false">IPv6 NDP Tunnel Oracle</string>
     <string name="check_ipv6_qdisc_tunnel" translatable="false">IPv6 Hardware Qdisc Pressure</string>
-    <string name="check_uid_route_rules_leak" translatable="false">Split Routing dynamic rules leak</string>
+    <string name="check_uid_route_rules_leak" translatable="false">RTM_GETRULE UID route leak</string>
     <string name="check_pmtu_cache_poisoning" translatable="false">Global Path MTU Cache Leak</string>
     <string name="check_underlay_port_conflict" translatable="false">UDP Underlay Port Conflict</string>
 
@@ -236,7 +236,7 @@
     <string name="check_netlink_getrule" translatable="false">netlink RTM_GETRULE</string>
     <string name="check_tcp_mss" translatable="false">getsockopt TCP_MAXSEG</string>
     <string name="check_netlink_getneigh" translatable="false">netlink RTM_GETNEIGH</string>
-    <string name="check_udp_pmtu" translatable="false">UDP Path MTU Discovery</string>
+    <string name="check_udp_pmtu" translatable="false">setsockopt IP_MTU_DISCOVER</string>
     <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
     <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
@@ -399,10 +399,12 @@
     <string name="dashboard_stats_native_title">Native Intercepts</string>
 
     <!-- Vector Labels -->
-    <string name="vector_label_ioctl">ioctl / SIOCGIF</string>
-    <string name="vector_label_netlink">netlink RTNETLINK</string>
-    <string name="vector_label_connect">Loopback Block</string>
-    <string name="vector_label_getname">getsockname Spoof</string>
+    <string name="vector_label_ioctl">ioctl SIOCGIF*</string>
+    <string name="vector_label_netlink">netlink RTM_GET*</string>
+    <string name="vector_label_proc">/proc/net &amp; /sys</string>
+    <string name="vector_label_sockopt">setsockopt / getsockopt</string>
+    <string name="vector_label_connect">connect / bind</string>
+    <string name="vector_label_getname">getsockname spoof</string>
 
     <!-- Port Rules Screen -->
     <string name="ports_mass_rules_title">Mass Rules (Global)</string>

@@ -516,10 +516,12 @@ static bool is_target_uid(void)
 
 struct kmod_uid_rolling_stats {
 	uid_t uid;
-	u32 ioctl_counts[BUCKETS_COUNT];
-	u32 netlink_counts[BUCKETS_COUNT];
-	u32 connect_counts[BUCKETS_COUNT];
-	u32 getname_counts[BUCKETS_COUNT];
+	u32 ioctl_counts[BUCKETS_COUNT];    /* type 0 */
+	u32 netlink_counts[BUCKETS_COUNT];  /* type 1 */
+	u32 proc_counts[BUCKETS_COUNT];     /* type 2 */
+	u32 sockopt_counts[BUCKETS_COUNT];  /* type 3 */
+	u32 connect_counts[BUCKETS_COUNT];  /* type 4 */
+	u32 getname_counts[BUCKETS_COUNT];  /* type 5 */
 	u64 bucket_times[BUCKETS_COUNT];
 };
 
@@ -543,17 +545,23 @@ static void record_kmod_intercept(uid_t uid, int type)
 			if (kmod_stats[i].bucket_times[idx] != now_min) {
 				kmod_stats[i].ioctl_counts[idx] = 0;
 				kmod_stats[i].netlink_counts[idx] = 0;
+				kmod_stats[i].proc_counts[idx] = 0;
+				kmod_stats[i].sockopt_counts[idx] = 0;
 				kmod_stats[i].connect_counts[idx] = 0;
 				kmod_stats[i].getname_counts[idx] = 0;
 				kmod_stats[i].bucket_times[idx] = now_min;
 			}
-			if (type == 1)
+			if (type == 0)
 				kmod_stats[i].ioctl_counts[idx]++;
-			else if (type == 2)
+			else if (type == 1)
 				kmod_stats[i].netlink_counts[idx]++;
+			else if (type == 2)
+				kmod_stats[i].proc_counts[idx]++;
 			else if (type == 3)
-				kmod_stats[i].connect_counts[idx]++;
+				kmod_stats[i].sockopt_counts[idx]++;
 			else if (type == 4)
+				kmod_stats[i].connect_counts[idx]++;
+			else if (type == 5)
 				kmod_stats[i].getname_counts[idx]++;
 			spin_unlock_irqrestore(&kmod_stats_lock, flags);
 			return;
@@ -566,6 +574,10 @@ static void record_kmod_intercept(uid_t uid, int type)
 		       sizeof(kmod_stats[kmod_stats_count].ioctl_counts));
 		memset(kmod_stats[kmod_stats_count].netlink_counts, 0,
 		       sizeof(kmod_stats[kmod_stats_count].netlink_counts));
+		memset(kmod_stats[kmod_stats_count].proc_counts, 0,
+		       sizeof(kmod_stats[kmod_stats_count].proc_counts));
+		memset(kmod_stats[kmod_stats_count].sockopt_counts, 0,
+		       sizeof(kmod_stats[kmod_stats_count].sockopt_counts));
 		memset(kmod_stats[kmod_stats_count].connect_counts, 0,
 		       sizeof(kmod_stats[kmod_stats_count].connect_counts));
 		memset(kmod_stats[kmod_stats_count].getname_counts, 0,
@@ -574,13 +586,17 @@ static void record_kmod_intercept(uid_t uid, int type)
 		       sizeof(kmod_stats[kmod_stats_count].bucket_times));
 
 		kmod_stats[kmod_stats_count].bucket_times[idx] = now_min;
-		if (type == 1)
+		if (type == 0)
 			kmod_stats[kmod_stats_count].ioctl_counts[idx] = 1;
-		else if (type == 2)
+		else if (type == 1)
 			kmod_stats[kmod_stats_count].netlink_counts[idx] = 1;
+		else if (type == 2)
+			kmod_stats[kmod_stats_count].proc_counts[idx] = 1;
 		else if (type == 3)
-			kmod_stats[kmod_stats_count].connect_counts[idx] = 1;
+			kmod_stats[kmod_stats_count].sockopt_counts[idx] = 1;
 		else if (type == 4)
+			kmod_stats[kmod_stats_count].connect_counts[idx] = 1;
+		else if (type == 5)
 			kmod_stats[kmod_stats_count].getname_counts[idx] = 1;
 
 		kmod_stats_count++;
@@ -657,7 +673,7 @@ static int dev_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 		vpnhide_dbg("dev_ioctl_ret: hiding iface=%s cmd=0x%x\n", name,
 			    data->cmd);
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      1);
+				      0);
 		regs_set_return_value(regs, -ENODEV);
 	}
 
@@ -811,7 +827,7 @@ static int sock_ioctl_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 			return 0;
 		}
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      1);
+				      0);
 		vpnhide_dbg("ifconf filtered %d -> %d bytes\n", orig_len,
 			    ifc.ifc_len);
 	}
@@ -1166,6 +1182,8 @@ static int sock_getsockopt_ret(struct kretprobe_instance *ri,
 
 	if (ret != 0)
 		return 0;
+
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 3);
 
 	if (data->level == IPPROTO_IP && data->optname == IP_MTU) {
 		int mtu = 0;
@@ -1565,7 +1583,7 @@ static int rtnl_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("rtnl_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
-	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 2);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -1641,7 +1659,7 @@ static int inet6_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("inet6_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
-	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 2);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -1717,7 +1735,7 @@ static int inet_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	vpnhide_dbg("inet_fill_ret: trimming skb %u -> %u\n", data->skb->len,
 		    data->saved_len);
-	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 2);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
 	skb_trim(data->skb, data->saved_len);
 	regs_set_return_value(regs, 0);
 	return 0;
@@ -1984,7 +2002,7 @@ static int fib_dump_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	if (regs_return_value(regs) >= 0) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      2);
+				      1);
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
 	}
@@ -2094,7 +2112,7 @@ static int fib_rule_fill_ret(struct kretprobe_instance *ri,
 
 	if (regs_return_value(regs) >= 0) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      2);
+				      1);
 		/* Trim the Netlink buffer back to remove the serialized rule */
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
@@ -2187,7 +2205,7 @@ static int rt6_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	if (regs_return_value(regs) >= 0) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      2);
+				      1);
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
 	}
@@ -2396,7 +2414,7 @@ static int rt_fill_ret(struct kretprobe_instance *ri, struct pt_regs *regs)
 
 	if (regs_return_value(regs) >= 0) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      2);
+				      1);
 		skb_trim(data->skb, data->saved_len);
 		regs_set_return_value(regs, 0);
 	}
@@ -3006,8 +3024,8 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 
 		spin_lock_irqsave(&kmod_stats_lock, flags);
 		for (i = 0; i < kmod_stats_count; i++) {
-			u32 ioctl_sum = 0, netlink_sum = 0, connect_sum = 0,
-			    getname_sum = 0;
+			u32 ioctl_sum = 0, netlink_sum = 0, proc_sum = 0,
+			    sockopt_sum = 0, connect_sum = 0, getname_sum = 0;
 			for (b = 0; b < BUCKETS_COUNT; b++) {
 				if (now_min - kmod_stats[i].bucket_times[b] <
 				    BUCKETS_COUNT) {
@@ -3015,20 +3033,29 @@ static int handle_vpnhide_ioctl(unsigned int cmd, unsigned long arg)
 						kmod_stats[i].ioctl_counts[b];
 					netlink_sum +=
 						kmod_stats[i].netlink_counts[b];
+					proc_sum +=
+						kmod_stats[i].proc_counts[b];
+					sockopt_sum +=
+						kmod_stats[i].sockopt_counts[b];
 					connect_sum +=
 						kmod_stats[i].connect_counts[b];
 					getname_sum +=
 						kmod_stats[i].getname_counts[b];
 				}
 			}
-			if (ioctl_sum > 0 || netlink_sum > 0 ||
-			    connect_sum > 0 || getname_sum > 0) {
+			if (ioctl_sum > 0 || netlink_sum > 0 || proc_sum > 0 ||
+			    sockopt_sum > 0 || connect_sum > 0 ||
+			    getname_sum > 0) {
 				sdata->stats[active_count].uid =
 					kmod_stats[i].uid;
 				sdata->stats[active_count].ioctl_count =
 					ioctl_sum;
 				sdata->stats[active_count].netlink_count =
 					netlink_sum;
+				sdata->stats[active_count].proc_count =
+					proc_sum;
+				sdata->stats[active_count].sockopt_count =
+					sockopt_sum;
 				sdata->stats[active_count].connect_count =
 					connect_sum;
 				sdata->stats[active_count].getname_count =
@@ -3325,7 +3352,7 @@ static int socket_connect_ret(struct kretprobe_instance *ri,
 
 	if (data->should_block) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      3);
+				      4);
 		if (sys_connect_uses_wrapper) {
 			if (data->intercepted && retval == -EFAULT) {
 				regs_set_return_value(regs, -ECONNREFUSED);
@@ -3596,7 +3623,7 @@ static int inet6_bind_ll_ret(struct kretprobe_instance *ri,
 	if (!data->should_deny)
 		return 0;
 
-	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 4);
 	regs_set_return_value(regs, -ENODEV);
 	return 0;
 }
@@ -3681,7 +3708,7 @@ static int udpv6_sendmsg_ll_ret(struct kretprobe_instance *ri,
 	if (!data->should_deny)
 		return 0;
 
-	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 1);
+	record_kmod_intercept(from_kuid(&init_user_ns, current_uid()), 4);
 	regs_set_return_value(regs, -ENOBUFS);
 	return 0;
 }
@@ -3758,7 +3785,7 @@ static void spoof_getsockname_ipv4(void __user *uaddr,
 		     &((struct sockaddr_in __user *)uaddr)->sin_addr.s_addr) ==
 	    0) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      4);
+				      5);
 		vpnhide_dbg(
 			"sys_getsockname_ret: spoofed IPv4 from %pI4 to %pI4\n",
 			&addr, &target_ip);
@@ -3796,7 +3823,7 @@ static void spoof_getsockname_ipv6(void __user *uaddr,
 	if (copy_to_user(&((struct sockaddr_in6 __user *)uaddr)->sin6_addr,
 			 &target_ip6, sizeof(struct in6_addr)) == 0) {
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      4);
+				      5);
 		vpnhide_dbg(
 			"sys_getsockname_ret: spoofed IPv6 from %pI6c to %pI6c\n",
 			&old_addr, &target_ip6);
@@ -3940,7 +3967,7 @@ static int inet6_getname_ret(struct kretprobe_instance *ri,
 				memcpy(&sin6->sin6_addr, &target_ip6, 16);
 				record_kmod_intercept(from_kuid(&init_user_ns,
 								current_uid()),
-						      4);
+						      5);
 				vpnhide_dbg(
 					"inet6_getname_ret: spoofed IPv6 from %pI6c to %pI6c\n",
 					&old_addr, &target_ip6);
@@ -5397,7 +5424,7 @@ static int tc_fill_qdisc_ret(struct kretprobe_instance *ri,
 			ifindex);
 		skb_trim(skb, data->saved_len);
 		record_kmod_intercept(from_kuid(&init_user_ns, current_uid()),
-				      2);
+				      1);
 	}
 	return 0;
 }

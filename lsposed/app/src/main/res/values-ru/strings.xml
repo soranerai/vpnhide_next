@@ -156,8 +156,8 @@
 
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
     <string name="check_arm_timing" translatable="false">Измерение таймингов ARM CNTVCT</string>
-    <string name="check_udp_queue_pressure" translatable="false">Анализ пропускной способности UDP-очереди</string>
-    <string name="check_gso_asymmetry" translatable="false">Аномалия аппаратной разгрузки (GSO)</string>
+    <string name="check_udp_queue_pressure" translatable="false">udp_sendmsg sk_sndbuf timing</string>
+    <string name="check_gso_asymmetry" translatable="false">setsockopt UDP_SEGMENT probe</string>
     <string name="check_ipv6_link_local_bruteforce" translatable="false">Зондирование интерфейсов IPv6 Link-Local</string>
     <string name="check_tcp_info_mss" translatable="false">getsockopt TCP_INFO MSS</string>
     <string name="check_qdisc_by_ifindex" translatable="false">Зондирование RTM_GETQDISC по ifindex</string>
@@ -166,7 +166,7 @@
     <string name="check_ipv6_multicast_denied" translatable="false">Оракул мультикаст-возможностей IPv6</string>
     <string name="check_ipv6_ndp_tunnel" translatable="false">Оракул NDP-таймаута IPv6</string>
     <string name="check_ipv6_qdisc_tunnel" translatable="false">Давление аппаратной очереди IPv6</string>
-    <string name="check_uid_route_rules_leak" translatable="false">Утечка правил маршрутизации Split Tunneling</string>
+    <string name="check_uid_route_rules_leak" translatable="false">RTM_GETRULE UID route leak</string>
     <string name="check_pmtu_cache_poisoning" translatable="false">Утечка глобального кэша Path MTU (PMTU)</string>
     <string name="check_underlay_port_conflict" translatable="false">Конфликт портов Underlay-сокета UDP</string>
     <string name="summary_format">%1$d/%2$d пройдено</string>
@@ -310,10 +310,12 @@
     <string name="dashboard_stats_native_title">Перехваты Native</string>
 
     <!-- Vector Labels -->
-    <string name="vector_label_ioctl">ioctl / SIOCGIF</string>
-    <string name="vector_label_netlink">netlink RTNETLINK</string>
-    <string name="vector_label_connect">Блокировка Loopback</string>
-    <string name="vector_label_getname">Спуфинг getsockname</string>
+    <string name="vector_label_ioctl">ioctl SIOCGIF*</string>
+    <string name="vector_label_netlink">netlink RTM_GET*</string>
+    <string name="vector_label_proc">/proc/net &amp; /sys</string>
+    <string name="vector_label_sockopt">setsockopt / getsockopt</string>
+    <string name="vector_label_connect">connect / bind</string>
+    <string name="vector_label_getname">getsockname spoof</string>
 
     <!-- Port Rules Screen -->
     <string name="ports_mass_rules_title">Массовые правила (глобальные)</string>

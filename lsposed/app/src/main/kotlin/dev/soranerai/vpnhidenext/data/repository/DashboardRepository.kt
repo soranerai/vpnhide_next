@@ -628,16 +628,21 @@ class DashboardRepository(
         if (nativeStatsRaw.isNotBlank()) {
             nativeStatsRaw.lines().forEach { line ->
                 val parts = line.split(';')
-                if (parts.size == 5) {
+                if (parts.size == 7) {
                     val uid = parts[0].toIntOrNull()
                     val ioctl = parts[1].toIntOrNull() ?: 0
                     val netlink = parts[2].toIntOrNull() ?: 0
-                    val connect = parts[3].toIntOrNull() ?: 0
-                    val getname = parts[4].toIntOrNull() ?: 0
-                    if (uid != null && (ioctl > 0 || netlink > 0 || connect > 0 || getname > 0)) {
+                    val proc = parts[3].toIntOrNull() ?: 0
+                    val sockopt = parts[4].toIntOrNull() ?: 0
+                    val connect = parts[5].toIntOrNull() ?: 0
+                    val getname = parts[6].toIntOrNull() ?: 0
+                    if (uid != null && (ioctl > 0 || netlink > 0 || proc > 0 ||
+                            sockopt > 0 || connect > 0 || getname > 0)) {
                         val hookMap = uidNativeMap.computeIfAbsent(uid) { mutableMapOf() }
                         if (ioctl > 0) hookMap["ioctl"] = ioctl
                         if (netlink > 0) hookMap["netlink"] = netlink
+                        if (proc > 0) hookMap["proc"] = proc
+                        if (sockopt > 0) hookMap["sockopt"] = sockopt
                         if (connect > 0) hookMap["connect"] = connect
                         if (getname > 0) hookMap["getname"] = getname
                     }

@@ -484,9 +484,11 @@ int main(int argc, char **argv)
 				return 1;
 			}
 			for (int i = 0; i < sdata.count; i++) {
-				printf("%u;%u;%u;%u;%u\n", sdata.stats[i].uid,
+				printf("%u;%u;%u;%u;%u;%u;%u\n", sdata.stats[i].uid,
 				       sdata.stats[i].ioctl_count,
 				       sdata.stats[i].netlink_count,
+				       sdata.stats[i].proc_count,
+				       sdata.stats[i].sockopt_count,
 				       sdata.stats[i].connect_count,
 				       sdata.stats[i].getname_count);
 			}
