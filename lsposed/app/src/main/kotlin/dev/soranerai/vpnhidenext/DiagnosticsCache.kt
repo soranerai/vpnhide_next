@@ -130,7 +130,12 @@ internal object DiagnosticsCache {
     }
 
     private suspend fun doRun(appContext: Context) {
-        val initialResults = getPlaceholderResults(appContext)
+        val hookMask = withContext(Dispatchers.IO) {
+            val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(appContext)
+            db.globalConfigDao().getConfig()?.kernelHookMask?.toUInt() ?: 0xFFFFFFFFu
+        }
+
+        val initialResults = getPlaceholderResults(appContext, hookMask)
         _state.value = State.Running(initialResults)
 
         val vpnActive = withContext(Dispatchers.IO) { hasActiveVpnInterface() }
@@ -158,7 +163,7 @@ internal object DiagnosticsCache {
             try {
                 val cm = appContext.getSystemService(ConnectivityManager::class.java)
                 val results =
-                    runAllChecks(cm, appContext) { updatedResult, isJava ->
+                    runAllChecks(cm, appContext, hookMask) { updatedResult, isJava ->
                         synchronized(lock) {
                             val newNative =
                                 if (isJava) {

@@ -174,6 +174,7 @@
     <string name="badge_fail">ПРОВАЛ</string>
     <string name="badge_info">ИНФО</string>
     <string name="badge_running">ЗАПУСК</string>
+    <string name="badge_skipped">ПРОПУСК</string>
     <string name="diag_running_title">Запуск диагностики&#8230;</string>
     <string name="diag_running_desc">Проверки диагностики выполняются в фоновом режиме. Вы можете развернуть подробности, чтобы следить за прогрессом.</string>
     <string name="banner_added_self">VPNHide Next добавлен в список целевых приложений. Перезапустите VPNHide Next (force-stop и откройте заново) для работы нативных проверок — перезагрузка устройства не нужна.</string>

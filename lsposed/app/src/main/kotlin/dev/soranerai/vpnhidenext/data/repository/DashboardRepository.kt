@@ -535,8 +535,9 @@ class DashboardRepository(
                                 val diagResults = diagState.results
                                 val native =
                                     if (hasNative) {
-                                        val passed = diagResults.native.count { it.passed == true }
-                                        val failed = diagResults.native.count { it.passed == false }
+                                        val nonSkipped = diagResults.native.filter { !it.isSkipped }
+                                        val passed = nonSkipped.count { it.passed == true }
+                                        val failed = nonSkipped.count { it.passed == false }
                                         val total = passed + failed
                                         when {
                                             failed == 0 -> NativeResult.Ok(passed, total)
@@ -549,8 +550,9 @@ class DashboardRepository(
 
                                 val java =
                                     if (lsposed is LsposedState.Active) {
-                                        val passed = diagResults.java.count { it.passed == true }
-                                        val failed = diagResults.java.count { it.passed == false }
+                                        val nonSkipped = diagResults.java.filter { !it.isSkipped }
+                                        val passed = nonSkipped.count { it.passed == true }
+                                        val failed = nonSkipped.count { it.passed == false }
                                         val total = passed + failed
                                         when {
                                             failed == 0 -> JavaResult.Ok(passed, total)

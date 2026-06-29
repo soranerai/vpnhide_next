@@ -103,7 +103,57 @@ data class CheckResult(
     val passed: Boolean?,
     val detail: String,
     val isRunning: Boolean = false,
+    val isSkipped: Boolean = false,
 )
+
+// Maps each native check's string resource ID to the kernel hook bit indices it depends on.
+// Empty array = no specific hook dependency (always runs). A check is skipped when ALL of its
+// required bits are disabled in the kernel mask (none set → hook isn't protecting this vector).
+private val NATIVE_CHECK_HOOK_BITS: Map<Int, IntArray> = mapOf(
+    R.string.check_ioctl_flags to intArrayOf(0),            // HOOK_DEV_IOCTL
+    R.string.check_ioctl_mtu to intArrayOf(0),
+    R.string.check_ioctl_conf to intArrayOf(1),             // HOOK_SOCK_IOCTL
+    R.string.check_getifaddrs to intArrayOf(2, 3, 4),       // HOOK_RTNL_FILL, HOOK_INET6_FILL, HOOK_INET_FILL
+    R.string.check_netlink_getlink to intArrayOf(2),        // HOOK_RTNL_FILL
+    R.string.check_netlink_getroute to intArrayOf(7, 9, 10),// HOOK_FIB_DUMP, HOOK_RT6_FILL, HOOK_RT_FILL
+    R.string.check_netlink_anonymous_route to intArrayOf(7),// HOOK_FIB_DUMP
+    R.string.check_proc_route to intArrayOf(5),             // HOOK_FIB_ROUTE
+    R.string.check_proc_ipv6_route to intArrayOf(6),        // HOOK_IPV6_ROUTE
+    R.string.check_proc_if_inet6 to intArrayOf(27),         // HOOK_IF6_SEQ
+    R.string.check_proc_tcp to intArrayOf(),                // proc/net/tcp has no iface names; always runs
+    R.string.check_proc_tcp6 to intArrayOf(),
+    R.string.check_proc_udp to intArrayOf(),
+    R.string.check_proc_udp6 to intArrayOf(),
+    R.string.check_proc_dev to intArrayOf(26),              // HOOK_DEV_SEQ
+    R.string.check_proc_fib_trie to intArrayOf(30),         // HOOK_FIB_TRIE
+    R.string.check_bpf_iface_map to intArrayOf(17),         // HOOK_BPF
+    R.string.check_sys_class_net to intArrayOf(18, 19, 20, 21, 22, 23, 24), // file-hiding hooks
+    R.string.check_net_iface_enum to intArrayOf(2, 3, 4),   // HOOK_RTNL_FILL, HOOK_INET6_FILL, HOOK_INET_FILL
+    R.string.check_proc_route_java to intArrayOf(5),        // HOOK_FIB_ROUTE
+    R.string.check_getsockopt_bind to intArrayOf(11, 12),   // HOOK_SETSOCKOPT, HOOK_GETSOCKOPT
+    R.string.check_inet_diag to intArrayOf(),               // SELinux policy check; no hook dependency
+    R.string.check_getsockname_spoof to intArrayOf(14, 15), // HOOK_GETNAME_INET, HOOK_GETNAME_INET6
+    R.string.check_netlink_getrule to intArrayOf(8),        // HOOK_FIB_RULE_FILL
+    R.string.check_tcp_mss to intArrayOf(12),               // HOOK_GETSOCKOPT (spoofs IP_MTU + TCP_MAXSEG)
+    R.string.check_udp_pmtu to intArrayOf(11),              // HOOK_SETSOCKOPT (changes IP_MTU_DISCOVER→PMTUDISC_DONT)
+    R.string.check_netlink_getneigh to intArrayOf(),        // RTM_GETNEIGH not hooked; always runs
+    R.string.check_proc_sys_net_conf to intArrayOf(18, 19, 20, 21, 22, 23, 24),
+    R.string.check_udp_queue_pressure to intArrayOf(25),    // HOOK_UDP_SENDMSG
+    R.string.check_gso_asymmetry to intArrayOf(11),         // HOOK_SETSOCKOPT (zeroes UDP_SEGMENT to block GSO probe)
+    R.string.check_ipv6_link_local_bruteforce to intArrayOf(28, 29), // HOOK_INET6_BIND_LL, HOOK_UDPV6_SENDMSG
+    R.string.check_uid_route_rules_leak to intArrayOf(8),   // HOOK_FIB_RULE_FILL (RTM_GETRULE)
+    R.string.check_tcp_info_mss to intArrayOf(12),          // HOOK_GETSOCKOPT (spoofs TCP_INFO MSS fields)
+    R.string.check_qdisc_by_ifindex to intArrayOf(31),      // HOOK_TC_FILL_QDISC
+    R.string.check_timestamping_hw to intArrayOf(11),       // HOOK_SETSOCKOPT (strips HW timestamp bits)
+    R.string.check_rtm_getlink_trim_oracle to intArrayOf(2),// HOOK_RTNL_FILL
+    R.string.check_traffic_stats to intArrayOf(17),         // HOOK_BPF (TrafficStats via BPF maps)
+)
+
+private fun isCheckSkipped(resId: Int, hookMask: UInt): Boolean {
+    val bits = NATIVE_CHECK_HOOK_BITS[resId] ?: return false
+    if (bits.isEmpty()) return false
+    return bits.none { (hookMask and (1u shl it)) != 0u }
+}
 
 @androidx.compose.runtime.Immutable
 internal data class CheckResults(
@@ -163,10 +213,10 @@ fun DiagnosticsScreen(
     // produce that state, so this test isolates the "app has no network
     // permission" banner from everything else.
     val networkBlocked = results?.native?.any { it.passed == null && !it.isRunning } == true
-    val hasFailed = results?.all?.any { it.passed == false } == true
+    val hasFailed = results?.all?.any { !it.isSkipped && it.passed == false } == true
 
-    val failedNative = remember(results) { results?.native?.filter { it.passed == false } ?: emptyList() }
-    val failedJava = remember(results) { results?.java?.filter { it.passed == false } ?: emptyList() }
+    val failedNative = remember(results) { results?.native?.filter { !it.isSkipped && it.passed == false } ?: emptyList() }
+    val failedJava = remember(results) { results?.java?.filter { !it.isSkipped && it.passed == false } ?: emptyList() }
     val isChecking = remember(results) { results?.all?.any { it.isRunning } == true }
 
     LazyColumn(
@@ -665,6 +715,7 @@ private fun CheckRow(r: CheckResult) {
     val statusIcon =
         when {
             r.isRunning -> null
+            r.isSkipped -> Icons.Default.RemoveCircle
             r.passed == true -> Icons.Default.CheckCircle
             r.passed == false -> Icons.Default.Cancel
             else -> Icons.Default.Info
@@ -672,16 +723,17 @@ private fun CheckRow(r: CheckResult) {
     val statusColor =
         when {
             r.isRunning -> MaterialTheme.colorScheme.primary
+            r.isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
             r.passed == true -> TelGreen
             r.passed == false -> TelRed
             else -> MaterialTheme.colorScheme.onSurfaceVariant
         }
 
     val badgeText =
-        if (r.isRunning) {
-            stringResource(R.string.badge_running)
-        } else {
-            stringResource(
+        when {
+            r.isRunning -> stringResource(R.string.badge_running)
+            r.isSkipped -> stringResource(R.string.badge_skipped)
+            else -> stringResource(
                 when (r.passed) {
                     true -> R.string.badge_pass
                     false -> R.string.badge_fail
@@ -781,16 +833,18 @@ private fun CheckRow(r: CheckResult) {
         if (expanded && r.detail.isNotBlank()) {
             Spacer(Modifier.height(8.dp))
             val detailBgColor =
-                when (r.passed) {
-                    true -> TelGreen.copy(alpha = 0.08f)
-                    false -> TelRed.copy(alpha = 0.08f)
-                    null -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
+                when {
+                    r.isSkipped -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                    r.passed == true -> TelGreen.copy(alpha = 0.08f)
+                    r.passed == false -> TelRed.copy(alpha = 0.08f)
+                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 }
             val detailTextColor =
-                when (r.passed) {
-                    true -> TelGreen
-                    false -> TelRed
-                    null -> MaterialTheme.colorScheme.onSurface
+                when {
+                    r.isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    r.passed == true -> TelGreen
+                    r.passed == false -> TelRed
+                    else -> MaterialTheme.colorScheme.onSurface
                 }
             Surface(
                 color = detailBgColor,
@@ -813,7 +867,7 @@ private fun CheckRow(r: CheckResult) {
 //  Check runner — runs directly in the main process
 // ==========================================================================
 
-internal fun getPlaceholderResults(context: android.content.Context): CheckResults {
+internal fun getPlaceholderResults(context: android.content.Context, hookMask: UInt = 0xFFFFFFFFu): CheckResults {
     val res = context.resources
     val nativeNames =
         listOf(
@@ -848,6 +902,7 @@ internal fun getPlaceholderResults(context: android.content.Context): CheckResul
             R.string.check_udp_queue_pressure,
             R.string.check_gso_asymmetry,
             R.string.check_ipv6_link_local_bruteforce,
+            R.string.check_uid_route_rules_leak,
             R.string.check_tcp_info_mss,
             R.string.check_qdisc_by_ifindex,
             R.string.check_timestamping_hw,
@@ -865,7 +920,13 @@ internal fun getPlaceholderResults(context: android.content.Context): CheckResul
             R.string.check_get_network_for_type,
         )
     return CheckResults(
-        native = nativeNames.map { CheckResult(res.getString(it), null, "", isRunning = true) },
+        native = nativeNames.map { rid ->
+            if (isCheckSkipped(rid, hookMask)) {
+                CheckResult(res.getString(rid), true, "", isSkipped = true)
+            } else {
+                CheckResult(res.getString(rid), null, "", isRunning = true)
+            }
+        },
         java = javaNames.map { CheckResult(res.getString(it), null, "", isRunning = true) },
     )
 }
@@ -873,6 +934,7 @@ internal fun getPlaceholderResults(context: android.content.Context): CheckResul
 internal suspend fun runAllChecks(
     cm: ConnectivityManager,
     context: android.content.Context,
+    hookMask: UInt = 0xFFFFFFFFu,
     onResult: ((CheckResult, isJava: Boolean) -> Unit)? = null,
 ): CheckResults =
     coroutineScope {
@@ -882,45 +944,63 @@ internal suspend fun runAllChecks(
 
         val res = context.resources
 
+        fun skipOrRun(resId: Int, block: () -> CheckOutput): suspend () -> CheckResult = {
+            val name = res.getString(resId)
+            if (isCheckSkipped(resId, hookMask)) {
+                CheckResult(name, true, "", isSkipped = true)
+            } else {
+                nativeCheck(name, block)
+            }
+        }
+
+        fun skipOrRunFn(resId: Int, fn: (String) -> CheckResult): suspend () -> CheckResult = {
+            val name = res.getString(resId)
+            if (isCheckSkipped(resId, hookMask)) {
+                CheckResult(name, true, "", isSkipped = true)
+            } else {
+                fn(name)
+            }
+        }
+
         val nativeDefs =
             listOf<suspend () -> CheckResult>(
-                { nativeCheck(res.getString(R.string.check_ioctl_flags)) { checkIoctlSiocgifflags() } },
-                { nativeCheck(res.getString(R.string.check_ioctl_mtu)) { checkIoctlSiocgifmtu() } },
-                { nativeCheck(res.getString(R.string.check_ioctl_conf)) { checkIoctlSiocgifconf() } },
-                { nativeCheck(res.getString(R.string.check_getifaddrs)) { checkGetifaddrs() } },
-                { nativeCheck(res.getString(R.string.check_netlink_getlink)) { checkNetlinkGetlink() } },
-                { nativeCheck(res.getString(R.string.check_netlink_getroute)) { checkNetlinkGetroute() } },
-                { nativeCheck(res.getString(R.string.check_netlink_anonymous_route)) { checkNetlinkAnonymousRoute() } },
-                { nativeCheck(res.getString(R.string.check_proc_route)) { checkProcNetRoute() } },
-                { nativeCheck(res.getString(R.string.check_proc_ipv6_route)) { checkProcNetIpv6Route() } },
-                { nativeCheck(res.getString(R.string.check_proc_if_inet6)) { checkProcNetIfInet6() } },
-                { nativeCheck(res.getString(R.string.check_proc_tcp)) { checkProcNetTcp() } },
-                { nativeCheck(res.getString(R.string.check_proc_tcp6)) { checkProcNetTcp6() } },
-                { nativeCheck(res.getString(R.string.check_proc_udp)) { checkProcNetUdp() } },
-                { nativeCheck(res.getString(R.string.check_proc_udp6)) { checkProcNetUdp6() } },
-                { nativeCheck(res.getString(R.string.check_proc_dev)) { checkProcNetDev() } },
-                { nativeCheck(res.getString(R.string.check_proc_fib_trie)) { checkProcNetFibTrie() } },
-                { nativeCheck(res.getString(R.string.check_bpf_iface_map)) { checkBpfIfaceMap() } },
-                { nativeCheck(res.getString(R.string.check_sys_class_net)) { checkSysClassNet() } },
-                { checkNetworkInterfaceEnum(res.getString(R.string.check_net_iface_enum)) },
-                { checkProcNetRouteJava(res.getString(R.string.check_proc_route_java)) },
-                { nativeCheck(res.getString(R.string.check_getsockopt_bind)) { checkGetsockoptBind() } },
-                { nativeCheck(res.getString(R.string.check_inet_diag)) { checkInetDiag() } },
-                { nativeCheck(res.getString(R.string.check_getsockname_spoof)) { checkGetsocknameSpoof() } },
-                { nativeCheck(res.getString(R.string.check_netlink_getrule)) { checkNetlinkGetrule() } },
-                { nativeCheck(res.getString(R.string.check_tcp_mss)) { checkTcpMss() } },
-                { nativeCheck(res.getString(R.string.check_udp_pmtu)) { checkUdpPmtu() } },
-                { nativeCheck(res.getString(R.string.check_netlink_getneigh)) { checkNetlinkGetneigh() } },
-                { nativeCheck(res.getString(R.string.check_proc_sys_net_conf)) { checkProcSysNetConf() } },
-                { nativeCheck(res.getString(R.string.check_udp_queue_pressure)) { checkUdpQueuePressure() } },
-                { nativeCheck(res.getString(R.string.check_gso_asymmetry)) { checkGsoAsymmetry() } },
-                { nativeCheck(res.getString(R.string.check_ipv6_link_local_bruteforce)) { checkIpv6LinkLocalBruteforce() } },
-                { nativeCheck(res.getString(R.string.check_uid_route_rules_leak)) { checkUidRouteRulesLeak() } },
-                { nativeCheck(res.getString(R.string.check_tcp_info_mss)) { checkTcpInfoMss() } },
-                { nativeCheck(res.getString(R.string.check_qdisc_by_ifindex)) { checkQdiscByIfindex() } },
-                { nativeCheck(res.getString(R.string.check_timestamping_hw)) { checkTimestampingHw() } },
-                { nativeCheck(res.getString(R.string.check_rtm_getlink_trim_oracle)) { checkRtmGetlinkTrimOracle() } },
-                { checkTrafficStatsDiscrepancy(cm, context, res.getString(R.string.check_traffic_stats)) },
+                skipOrRun(R.string.check_ioctl_flags) { checkIoctlSiocgifflags() },
+                skipOrRun(R.string.check_ioctl_mtu) { checkIoctlSiocgifmtu() },
+                skipOrRun(R.string.check_ioctl_conf) { checkIoctlSiocgifconf() },
+                skipOrRun(R.string.check_getifaddrs) { checkGetifaddrs() },
+                skipOrRun(R.string.check_netlink_getlink) { checkNetlinkGetlink() },
+                skipOrRun(R.string.check_netlink_getroute) { checkNetlinkGetroute() },
+                skipOrRun(R.string.check_netlink_anonymous_route) { checkNetlinkAnonymousRoute() },
+                skipOrRun(R.string.check_proc_route) { checkProcNetRoute() },
+                skipOrRun(R.string.check_proc_ipv6_route) { checkProcNetIpv6Route() },
+                skipOrRun(R.string.check_proc_if_inet6) { checkProcNetIfInet6() },
+                skipOrRun(R.string.check_proc_tcp) { checkProcNetTcp() },
+                skipOrRun(R.string.check_proc_tcp6) { checkProcNetTcp6() },
+                skipOrRun(R.string.check_proc_udp) { checkProcNetUdp() },
+                skipOrRun(R.string.check_proc_udp6) { checkProcNetUdp6() },
+                skipOrRun(R.string.check_proc_dev) { checkProcNetDev() },
+                skipOrRun(R.string.check_proc_fib_trie) { checkProcNetFibTrie() },
+                skipOrRun(R.string.check_bpf_iface_map) { checkBpfIfaceMap() },
+                skipOrRun(R.string.check_sys_class_net) { checkSysClassNet() },
+                skipOrRunFn(R.string.check_net_iface_enum) { checkNetworkInterfaceEnum(it) },
+                skipOrRunFn(R.string.check_proc_route_java) { checkProcNetRouteJava(it) },
+                skipOrRun(R.string.check_getsockopt_bind) { checkGetsockoptBind() },
+                skipOrRun(R.string.check_inet_diag) { checkInetDiag() },
+                skipOrRun(R.string.check_getsockname_spoof) { checkGetsocknameSpoof() },
+                skipOrRun(R.string.check_netlink_getrule) { checkNetlinkGetrule() },
+                skipOrRun(R.string.check_tcp_mss) { checkTcpMss() },
+                skipOrRun(R.string.check_udp_pmtu) { checkUdpPmtu() },
+                skipOrRun(R.string.check_netlink_getneigh) { checkNetlinkGetneigh() },
+                skipOrRun(R.string.check_proc_sys_net_conf) { checkProcSysNetConf() },
+                skipOrRun(R.string.check_udp_queue_pressure) { checkUdpQueuePressure() },
+                skipOrRun(R.string.check_gso_asymmetry) { checkGsoAsymmetry() },
+                skipOrRun(R.string.check_ipv6_link_local_bruteforce) { checkIpv6LinkLocalBruteforce() },
+                skipOrRun(R.string.check_uid_route_rules_leak) { checkUidRouteRulesLeak() },
+                skipOrRun(R.string.check_tcp_info_mss) { checkTcpInfoMss() },
+                skipOrRun(R.string.check_qdisc_by_ifindex) { checkQdiscByIfindex() },
+                skipOrRun(R.string.check_timestamping_hw) { checkTimestampingHw() },
+                skipOrRun(R.string.check_rtm_getlink_trim_oracle) { checkRtmGetlinkTrimOracle() },
+                skipOrRunFn(R.string.check_traffic_stats) { checkTrafficStatsDiscrepancy(cm, context, it) },
             )
 
         val javaDefs =

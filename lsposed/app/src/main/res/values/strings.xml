@@ -89,6 +89,7 @@
     <string name="badge_fail">FAIL</string>
     <string name="badge_info">INFO</string>
     <string name="badge_running">RUNNING</string>
+    <string name="badge_skipped">SKIPPED</string>
     <string name="diag_running_title">Running diagnostics&#8230;</string>
     <string name="diag_running_desc">Diagnostics checks are running in the background. You can expand details to see progress in real-time.</string>
     <string name="banner_added_self">Added VPNHide Next to the target list. Restart VPNHide Next (force-stop and reopen) for native-level checks to take effect — no device reboot needed.</string>
