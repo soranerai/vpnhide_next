@@ -123,17 +123,29 @@ internal object DiagnosticsCache {
         if (exit != 0 || out.isBlank()) return true
         val vpnPrefixes = listOf("tun", "wg", "ppp", "tap", "ipsec")
         return out.lines().any { line ->
-            val name = Regex("""^\d+:\s+(\S+?)[@:]""").find(line.trim())?.groupValues?.getOrNull(1)?.lowercase()
-                ?: return@any false
+            val name =
+                Regex("""^\d+:\s+(\S+?)[@:]""")
+                    .find(line.trim())
+                    ?.groupValues
+                    ?.getOrNull(1)
+                    ?.lowercase()
+                    ?: return@any false
             vpnPrefixes.any { name.startsWith(it) }
         }
     }
 
     private suspend fun doRun(appContext: Context) {
-        val hookMask = withContext(Dispatchers.IO) {
-            val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(appContext)
-            db.globalConfigDao().getConfig()?.kernelHookMask?.toUInt() ?: 0xFFFFFFFFu
-        }
+        val hookMask =
+            withContext(Dispatchers.IO) {
+                val db =
+                    dev.soranerai.vpnhidenext.db.AppDatabase
+                        .getInstance(appContext)
+                db
+                    .globalConfigDao()
+                    .getConfig()
+                    ?.kernelHookMask
+                    ?.toUInt() ?: 0xFFFFFFFFu
+            }
 
         val initialResults = getPlaceholderResults(appContext, hookMask)
         _state.value = State.Running(initialResults)

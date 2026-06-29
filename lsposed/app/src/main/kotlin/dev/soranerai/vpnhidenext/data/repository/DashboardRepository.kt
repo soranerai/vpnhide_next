@@ -636,8 +636,11 @@ class DashboardRepository(
                     val sockopt = parts[4].toIntOrNull() ?: 0
                     val connect = parts[5].toIntOrNull() ?: 0
                     val getname = parts[6].toIntOrNull() ?: 0
-                    if (uid != null && (ioctl > 0 || netlink > 0 || proc > 0 ||
-                            sockopt > 0 || connect > 0 || getname > 0)) {
+                    if (uid != null && (
+                            ioctl > 0 || netlink > 0 || proc > 0 ||
+                                sockopt > 0 || connect > 0 || getname > 0
+                        )
+                    ) {
                         val hookMap = uidNativeMap.computeIfAbsent(uid) { mutableMapOf() }
                         if (ioctl > 0) hookMap["ioctl"] = ioctl
                         if (netlink > 0) hookMap["netlink"] = netlink

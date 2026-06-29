@@ -516,12 +516,12 @@ static bool is_target_uid(void)
 
 struct kmod_uid_rolling_stats {
 	uid_t uid;
-	u32 ioctl_counts[BUCKETS_COUNT];    /* type 0 */
-	u32 netlink_counts[BUCKETS_COUNT];  /* type 1 */
-	u32 proc_counts[BUCKETS_COUNT];     /* type 2 */
-	u32 sockopt_counts[BUCKETS_COUNT];  /* type 3 */
-	u32 connect_counts[BUCKETS_COUNT];  /* type 4 */
-	u32 getname_counts[BUCKETS_COUNT];  /* type 5 */
+	u32 ioctl_counts[BUCKETS_COUNT]; /* type 0 */
+	u32 netlink_counts[BUCKETS_COUNT]; /* type 1 */
+	u32 proc_counts[BUCKETS_COUNT]; /* type 2 */
+	u32 sockopt_counts[BUCKETS_COUNT]; /* type 3 */
+	u32 connect_counts[BUCKETS_COUNT]; /* type 4 */
+	u32 getname_counts[BUCKETS_COUNT]; /* type 5 */
 	u64 bucket_times[BUCKETS_COUNT];
 };
 

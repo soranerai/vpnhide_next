@@ -2,6 +2,10 @@ package dev.soranerai.vpnhidenext
 
 import android.content.Intent
 import android.net.Uri
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -14,12 +18,15 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
@@ -38,13 +45,6 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.animation.animateColorAsState
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.material.icons.automirrored.outlined.HelpOutline
-import androidx.compose.material.icons.outlined.Visibility
-import androidx.compose.ui.draw.clip
 
 private enum class ProtectionLevel { MIN, AVG, MAX }
 
@@ -234,9 +234,13 @@ private fun DashboardContent(
     val activeLevel: ProtectionLevel? = kernelMask?.toProtectionLevel()
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
-            val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(context)
-            val config = db.globalConfigDao().getConfig()
-                ?: dev.soranerai.vpnhidenext.db.DbGlobalConfig()
+            val db =
+                dev.soranerai.vpnhidenext.db.AppDatabase
+                    .getInstance(context)
+            val config =
+                db.globalConfigDao().getConfig()
+                    ?: dev.soranerai.vpnhidenext.db
+                        .DbGlobalConfig()
             withContext(Dispatchers.Main) { kernelMask = config.kernelHookMask.toUInt() }
         }
     }
@@ -245,22 +249,28 @@ private fun DashboardContent(
         activeLevel = activeLevel,
         isLoaded = kernelMask != null,
         onLevelSelected = { level ->
-            val newMask = when (level) {
-                ProtectionLevel.MIN -> PROTECTION_MASK_MIN
-                ProtectionLevel.AVG -> PROTECTION_MASK_AVG
-                ProtectionLevel.MAX -> PROTECTION_MASK_MAX
-            }
+            val newMask =
+                when (level) {
+                    ProtectionLevel.MIN -> PROTECTION_MASK_MIN
+                    ProtectionLevel.AVG -> PROTECTION_MASK_AVG
+                    ProtectionLevel.MAX -> PROTECTION_MASK_MAX
+                }
             kernelMask = newMask
             scope.launch(Dispatchers.IO) {
-                val db = dev.soranerai.vpnhidenext.db.AppDatabase.getInstance(context)
+                val db =
+                    dev.soranerai.vpnhidenext.db.AppDatabase
+                        .getInstance(context)
                 val dao = db.globalConfigDao()
-                val cur = dao.getConfig() ?: dev.soranerai.vpnhidenext.db.DbGlobalConfig()
+                val cur =
+                    dao.getConfig() ?: dev.soranerai.vpnhidenext.db
+                        .DbGlobalConfig()
                 dao.insertConfig(cur.copy(kernelHookMask = newMask.toLong()))
-                dev.soranerai.vpnhidenext.db.DatabaseSync.sync(context)
+                dev.soranerai.vpnhidenext.db.DatabaseSync
+                    .sync(context)
             }
         },
     )
-    
+
     Spacer(Modifier.height(12.dp))
 
     Column {
@@ -408,8 +418,10 @@ private fun ProtectionLevelCard(
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
                             Icon(
-                                Icons.Filled.VisibilityOff, contentDescription = null,
-                                tint = TelBlue, modifier = Modifier.size(15.dp),
+                                Icons.Filled.VisibilityOff,
+                                contentDescription = null,
+                                tint = TelBlue,
+                                modifier = Modifier.size(15.dp),
                             )
                             Text(
                                 stringResource(R.string.protection_faq_min_title),
@@ -431,8 +443,10 @@ private fun ProtectionLevelCard(
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
                             Icon(
-                                Icons.Outlined.Visibility, contentDescription = null,
-                                tint = TelGreen, modifier = Modifier.size(15.dp),
+                                Icons.Outlined.Visibility,
+                                contentDescription = null,
+                                tint = TelGreen,
+                                modifier = Modifier.size(15.dp),
                             )
                             Text(
                                 stringResource(R.string.protection_faq_avg_title),
@@ -454,8 +468,10 @@ private fun ProtectionLevelCard(
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
                             Icon(
-                                Icons.Filled.Visibility, contentDescription = null,
-                                tint = TelOrange, modifier = Modifier.size(15.dp),
+                                Icons.Filled.Visibility,
+                                contentDescription = null,
+                                tint = TelOrange,
+                                modifier = Modifier.size(15.dp),
                             )
                             Text(
                                 stringResource(R.string.protection_faq_max_title),
@@ -480,45 +496,54 @@ private fun ProtectionLevelCard(
         )
     }
 
-    data class LevelDef(val level: ProtectionLevel, val color: Color, val labelRes: Int)
-
-    val levels = listOf(
-        LevelDef(ProtectionLevel.MIN, TelBlue, R.string.protection_level_min),
-        LevelDef(ProtectionLevel.AVG, TelGreen, R.string.protection_level_avg),
-        LevelDef(ProtectionLevel.MAX, TelOrange, R.string.protection_level_max),
-    )
-    val levelIcons = listOf(
-        Icons.Filled.VisibilityOff,
-        Icons.Outlined.Visibility,
-        Icons.Filled.Visibility,
+    data class LevelDef(
+        val level: ProtectionLevel,
+        val color: Color,
+        val labelRes: Int,
     )
 
-    val selectedIndex = when (activeLevel) {
-        ProtectionLevel.MIN -> 0
-        ProtectionLevel.AVG -> 1
-        ProtectionLevel.MAX -> 2
-        null -> -1
-    }
+    val levels =
+        listOf(
+            LevelDef(ProtectionLevel.MIN, TelBlue, R.string.protection_level_min),
+            LevelDef(ProtectionLevel.AVG, TelGreen, R.string.protection_level_avg),
+            LevelDef(ProtectionLevel.MAX, TelOrange, R.string.protection_level_max),
+        )
+    val levelIcons =
+        listOf(
+            Icons.Filled.VisibilityOff,
+            Icons.Outlined.Visibility,
+            Icons.Filled.Visibility,
+        )
+
+    val selectedIndex =
+        when (activeLevel) {
+            ProtectionLevel.MIN -> 0
+            ProtectionLevel.AVG -> 1
+            ProtectionLevel.MAX -> 2
+            null -> -1
+        }
 
     val darkTheme = isSystemInDarkTheme()
 
     val indicatorColor by animateColorAsState(
-        targetValue = when (activeLevel) {
-            ProtectionLevel.MIN -> TelBlue
-            ProtectionLevel.AVG -> TelGreen
-            ProtectionLevel.MAX -> TelOrange
-            null -> Color.Transparent
-        },
+        targetValue =
+            when (activeLevel) {
+                ProtectionLevel.MIN -> TelBlue
+                ProtectionLevel.AVG -> TelGreen
+                ProtectionLevel.MAX -> TelOrange
+                null -> Color.Transparent
+            },
         label = "protectionLevelColor",
     )
 
     val cardContainerColor by animateColorAsState(
-        targetValue = when (activeLevel) {
-            ProtectionLevel.MIN -> if (darkTheme) Color(0xFF0D1D30) else Color(0xFFDCEEFA)
-            ProtectionLevel.AVG -> if (darkTheme) Color(0xFF0E2016) else Color(0xFFDCF0E3)
-            ProtectionLevel.MAX -> if (darkTheme) Color(0xFF221800) else Color(0xFFFFF3DC)
-            null -> MaterialTheme.colorScheme.surface
-        },
+        targetValue =
+            when (activeLevel) {
+                ProtectionLevel.MIN -> if (darkTheme) Color(0xFF0D1D30) else Color(0xFFDCEEFA)
+                ProtectionLevel.AVG -> if (darkTheme) Color(0xFF0E2016) else Color(0xFFDCF0E3)
+                ProtectionLevel.MAX -> if (darkTheme) Color(0xFF221800) else Color(0xFFFFF3DC)
+                null -> MaterialTheme.colorScheme.surface
+            },
         label = "protectionCardBg",
     )
 
@@ -581,20 +606,22 @@ private fun ProtectionLevelCard(
 
                     val indicatorOffset by animateDpAsState(
                         targetValue = if (selectedIndex >= 0) tabWidth * selectedIndex else -tabWidth,
-                        animationSpec = spring(
-                            dampingRatio = Spring.DampingRatioMediumBouncy,
-                            stiffness = Spring.StiffnessLow,
-                        ),
+                        animationSpec =
+                            spring(
+                                dampingRatio = Spring.DampingRatioMediumBouncy,
+                                stiffness = Spring.StiffnessLow,
+                            ),
                         label = "protectionLevelIndicator",
                     )
 
                     Box(
-                        modifier = Modifier
-                            .offset(x = indicatorOffset)
-                            .width(tabWidth)
-                            .fillMaxHeight()
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(indicatorColor.copy(alpha = 0.18f)),
+                        modifier =
+                            Modifier
+                                .offset(x = indicatorOffset)
+                                .width(tabWidth)
+                                .fillMaxHeight()
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(indicatorColor.copy(alpha = 0.18f)),
                     )
 
                     Row(modifier = Modifier.fillMaxSize()) {
