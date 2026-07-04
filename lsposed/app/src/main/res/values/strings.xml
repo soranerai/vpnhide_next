@@ -270,6 +270,11 @@
     <string name="hook_testing_list_kernel">Kernel Hooks List</string>
     <string name="hook_testing_list_java">Java Hooks List</string>
 
+    <!-- Per-App Hook Isolation Screen -->
+    <string name="app_hook_isolation_title">Hook Isolation</string>
+    <string name="app_hook_isolation_use_global">Use global settings</string>
+    <string name="app_hook_isolation_use_global_desc">When off, this app uses its own custom hook mask instead of the global one on the Dashboard.</string>
+
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Filters LinkProperties serialization to remove VPN interfaces, routes, and DNS servers.</string>
     <string name="hook_desc_network_capabilities">Filters VPN transport out of NetworkCapabilities, cloaking it as Wi-Fi or cellular connections.</string>

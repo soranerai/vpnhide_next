@@ -32,6 +32,7 @@ internal fun AppRow(
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
+    onHookIsolationClick: () -> Unit,
 ) {
     Surface(
         modifier =
@@ -82,6 +83,19 @@ internal fun AppRow(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                )
+            }
+
+            IconButton(onClick = onHookIsolationClick) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = null,
+                    tint =
+                        if (app.hasHookOverride) {
+                            if (app.userId != 0) Color(0xFF2196F3) else MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
                 )
             }
 

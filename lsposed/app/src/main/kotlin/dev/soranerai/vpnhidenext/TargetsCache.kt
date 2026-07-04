@@ -36,6 +36,8 @@ internal data class TargetsSnapshot(
     val lsposedTargets: Set<Pair<String, Int>>,
     val portsObservers: Set<Pair<String, Int>>,
     val portRules: Map<Pair<String, Int>, List<PortRule>>,
+    val kernelHookMasks: Map<Pair<String, Int>, Long>,
+    val javaHookMasks: Map<Pair<String, Int>, Long>,
     val massPortRules: List<PortRule>,
     val ifacePrefixes: List<String>,
     val uidToPkg: Map<Int, String>,
@@ -243,6 +245,14 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                 lsposedTargets = apps.filter { it.lsposed }.map { it.packageName to it.userId }.toSet(),
                 portsObservers = apps.filter { it.portHiding }.map { it.packageName to it.userId }.toSet(),
                 portRules = portRulesMap,
+                kernelHookMasks =
+                    apps
+                        .mapNotNull { a -> a.kernelHookMask?.let { (a.packageName to a.userId) to it } }
+                        .toMap(),
+                javaHookMasks =
+                    apps
+                        .mapNotNull { a -> a.javaHookMask?.let { (a.packageName to a.userId) to it } }
+                        .toMap(),
                 massPortRules =
                     massRules.map { m ->
                         PortRule(
@@ -362,6 +372,8 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             lsposedTargets = emptySet(),
             portsObservers = parseEntries(sections["PORTS_OBSERVERS"]),
             portRules = portRules,
+            kernelHookMasks = emptyMap(),
+            javaHookMasks = emptyMap(),
             massPortRules = emptyList(),
             ifacePrefixes =
                 sections["IFACE_PREFIXES"]

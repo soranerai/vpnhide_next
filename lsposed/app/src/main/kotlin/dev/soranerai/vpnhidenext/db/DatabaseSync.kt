@@ -75,6 +75,9 @@ internal object DatabaseSync {
             }
             parts += buildKmodPortRulesApplyCommand(ruleMap)
 
+            // 5. Build and apply per-app hook mask overrides directly to the kernel module
+            parts += buildAppHookMasksApplyCommand(apps)
+
             // Execute all consolidated commands
             if (parts.isNotEmpty()) {
                 val (exitCode, _) = suExec(parts.joinToString(" ; "))

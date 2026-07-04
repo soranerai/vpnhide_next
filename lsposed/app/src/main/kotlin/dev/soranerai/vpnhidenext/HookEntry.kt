@@ -208,6 +208,7 @@ class HookEntry : IXposedHookLoadPackage {
                         var javaHookMask = 0xFFFFFFFFu
                         val uids = mutableSetOf<Int>()
                         val prefixes = mutableListOf<String>()
+                        val appJavaHookMasks = mutableMapOf<Int, UInt>()
                         var coverIface: String? = null
                         var statsClearGen: Int? = null
 
@@ -218,6 +219,7 @@ class HookEntry : IXposedHookLoadPackage {
                                     HookContext.systemServerTargetUids = uids.toSet()
                                     HookContext.systemServerIfacePrefixes = prefixes.toList()
                                     HookContext.cachedJavaHooksMask = javaHookMask
+                                    HookContext.appJavaHookMasks = appJavaHookMasks.toMap()
                                     HookContext.cachedPhysicalIfaceName = coverIface
                                     HookContext.vpnPackageCache.clear()
                                     statsClearGen?.let { gen ->
@@ -232,13 +234,28 @@ class HookEntry : IXposedHookLoadPackage {
                                 }
                                 uids.clear()
                                 prefixes.clear()
+                                appJavaHookMasks.clear()
                                 javaHookMask = 0xFFFFFFFFu
                                 coverIface = null
                                 statsClearGen = null
                                 continue
                             }
 
-                            if (line.startsWith("java_hook_mask:")) {
+                            if (line.startsWith("app_java_hook_mask:")) {
+                                val entriesStr = line.substringAfter("app_java_hook_mask:").trim()
+                                if (entriesStr.isNotEmpty()) {
+                                    entriesStr.split(" ").forEach { entry ->
+                                        val parts = entry.split(":")
+                                        if (parts.size == 2) {
+                                            val uid = parts[0].toIntOrNull()
+                                            val mask = parts[1].toUIntOrNull()
+                                            if (uid != null && mask != null) {
+                                                appJavaHookMasks[uid] = mask
+                                            }
+                                        }
+                                    }
+                                }
+                            } else if (line.startsWith("java_hook_mask:")) {
                                 javaHookMask = line.substringAfter("java_hook_mask:").trim().toUIntOrNull() ?: 0xFFFFFFFFu
                             } else if (line.startsWith("java_stats_clear_gen:")) {
                                 statsClearGen = line.substringAfter("java_stats_clear_gen:").trim().toIntOrNull()

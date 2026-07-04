@@ -15,8 +15,12 @@ internal data class AppEntry(
     // Port Hiding
     val portHiding: Boolean = false,
     val portRules: List<PortRule> = emptyList(),
+    // Per-app hook isolation overrides (null = inherit the global hook mask)
+    val kernelHookMask: Long? = null,
+    val javaHookMask: Long? = null,
 ) {
     val anyProtection get() = kmod || lsposed
+    val hasHookOverride get() = kernelHookMask != null || javaHookMask != null
 }
 
 internal enum class PortProtocol { TCP, UDP, BOTH }

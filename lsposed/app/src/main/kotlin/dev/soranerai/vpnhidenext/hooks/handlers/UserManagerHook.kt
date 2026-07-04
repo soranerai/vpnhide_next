@@ -43,7 +43,7 @@ object UserManagerHook {
                 "getUserInfo",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6) || HookContext.isInternalCheck.get() == true) return
+                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) || HookContext.isInternalCheck.get() == true) return
                         if (!HookContext.isTargetCaller()) return
 
                         val callingUid = Binder.getCallingUid()
@@ -81,7 +81,7 @@ object UserManagerHook {
                 "isProfile",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6) || HookContext.isInternalCheck.get() == true) return
+                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) || HookContext.isInternalCheck.get() == true) return
                         if (!HookContext.isTargetCaller()) return
 
                         val callingUid = Binder.getCallingUid()
@@ -108,7 +108,7 @@ object UserManagerHook {
                 "getProfiles",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6) || HookContext.isInternalCheck.get() == true) return
+                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) || HookContext.isInternalCheck.get() == true) return
                         if (!HookContext.isTargetCaller()) return
 
                         val callingUid = Binder.getCallingUid()
@@ -154,7 +154,7 @@ object UserManagerHook {
                 "getProfileIds",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6) || HookContext.isInternalCheck.get() == true) return
+                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) || HookContext.isInternalCheck.get() == true) return
                         if (!HookContext.isTargetCaller()) return
 
                         val callingUid = Binder.getCallingUid()
@@ -193,7 +193,7 @@ object UserManagerHook {
                 "getProfileParent",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6) || HookContext.isInternalCheck.get() == true) return
+                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) || HookContext.isInternalCheck.get() == true) return
                         if (!HookContext.isTargetCaller()) return
 
                         val callingUid = Binder.getCallingUid()
@@ -221,7 +221,7 @@ object UserManagerHook {
                 "getProfileParentId",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6) || HookContext.isInternalCheck.get() == true) return
+                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) || HookContext.isInternalCheck.get() == true) return
                         if (!HookContext.isTargetCaller()) return
 
                         val callingUid = Binder.getCallingUid()

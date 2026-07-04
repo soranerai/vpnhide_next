@@ -165,6 +165,7 @@ private fun MainScreen(
     var showIfacePrefixes by remember { mutableStateOf(false) }
     var localIfacePrefixes by remember { mutableStateOf<List<String>?>(null) }
     var showHookTesting by remember { mutableStateOf(false) }
+    var editingHookIsolation by remember { mutableStateOf<AppEntry?>(null) }
     val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
     val searchFocusRequester = remember { FocusRequester() }
@@ -434,6 +435,7 @@ private fun MainScreen(
                                         isProtectionDirty = dirtyModes.isNotEmpty()
                                     },
                                     onAppPortConfig = { editingAppRules = it },
+                                    onHookIsolationClick = { editingHookIsolation = it },
                                     updatedApp = rulesUpdatedApp,
                                     saveTrigger = saveTrigger,
                                     pendingMassRules = localMassRules,
@@ -661,6 +663,28 @@ private fun MainScreen(
                             rulesUpdatedApp = app.copy(portRules = updatedRules)
                         }
                         editingAppRules = null
+                    },
+                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+                )
+            }
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = editingHookIsolation != null,
+            enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            editingHookIsolation?.let { app ->
+                BackHandler {
+                    editingHookIsolation = null
+                    TargetsCache.refresh(scope, context)
+                }
+                AppHookIsolationScreen(
+                    app = app,
+                    onBack = {
+                        editingHookIsolation = null
+                        TargetsCache.refresh(scope, context)
                     },
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
                 )

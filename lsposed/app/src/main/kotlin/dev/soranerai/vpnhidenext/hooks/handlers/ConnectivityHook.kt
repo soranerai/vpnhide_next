@@ -56,7 +56,7 @@ object ConnectivityHook {
                         method,
                         object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
-                                if (!HookContext.isJavaHookActive(4)) return
+                                if (!HookContext.isJavaHookActive(4, HookContext.resolveEffectiveUid())) return
                                 val nri = param.args.firstOrNull() ?: return
                                 val uid =
                                     try {
@@ -118,7 +118,7 @@ object ConnectivityHook {
                         method,
                         object : XC_MethodHook() {
                             override fun afterHookedMethod(param: MethodHookParam) {
-                                if (!HookContext.isJavaHookActive(5)) return
+                                if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid())) return
                                 val uid =
                                     if (method.name.startsWith("copy")) {
                                         param.args.getOrNull(2) as? Int
@@ -157,7 +157,7 @@ object ConnectivityHook {
                 getDefaultProxyMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(5)) return
+                        if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid())) return
                         val callingUid = Binder.getCallingUid()
                         if (HookContext.loadTargetUids().contains(callingUid)) {
                             if (param.result != null) {
@@ -184,7 +184,7 @@ object ConnectivityHook {
                 getProxyForNetworkMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(5)) return
+                        if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid())) return
                         val callingUid = Binder.getCallingUid()
                         if (HookContext.loadTargetUids().contains(callingUid)) {
                             if (param.result != null) {
@@ -224,7 +224,7 @@ object ConnectivityHook {
                 networkMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(5)) return
+                        if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid())) return
                         HookContext.csInstance = param.thisObject
                         val callingUid = Binder.getCallingUid()
                         if (!HookContext.loadTargetUids().contains(callingUid)) return

@@ -32,6 +32,7 @@ internal fun ProtectionScreen(
     sortOrder: AppSortOrder,
     onStateChange: (ProtectionMode, Set<ProtectionMode>) -> Unit,
     onAppPortConfig: (AppEntry) -> Unit,
+    onHookIsolationClick: (AppEntry) -> Unit,
     updatedApp: AppEntry?,
     saveTrigger: Int,
     pendingMassRules: List<PortRule>?,
@@ -178,6 +179,8 @@ internal fun ProtectionScreen(
                             uid = app.uid,
                             kmod = key in t.kmodTargets,
                             lsposed = key in t.lsposedTargets,
+                            kernelHookMask = t.kernelHookMasks[key],
+                            javaHookMask = t.javaHookMasks[key],
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.kmod || it.lsposed }.thenBy { it.label })
             originalVpn = vpnApps
@@ -199,6 +202,8 @@ internal fun ProtectionScreen(
                             uid = app.uid,
                             portHiding = key in t.portsObservers,
                             portRules = t.portRules[key] ?: emptyList(),
+                            kernelHookMask = t.kernelHookMasks[key],
+                            javaHookMask = t.javaHookMasks[key],
                         )
                     }.sortedWith(compareByDescending<AppEntry> { it.portHiding }.thenBy { it.label })
             originalPort = portApps
@@ -281,6 +286,7 @@ internal fun ProtectionScreen(
                             },
                             sortedIds = vpnSortedIds,
                             onRefresh = onRefresh,
+                            onHookIsolationClick = onHookIsolationClick,
                             listState = vpnListState,
                             modifier = Modifier.fillMaxSize(),
                         )
@@ -345,8 +351,14 @@ internal fun ProtectionScreen(
                                     val kmod = vpnApp?.kmod ?: false
                                     val lsposed = vpnApp?.lsposed ?: false
                                     val portHiding = portApp?.portHiding ?: false
+                                    val kernelHookMask = vpnApp?.kernelHookMask ?: portApp?.kernelHookMask
+                                    val javaHookMask = vpnApp?.javaHookMask ?: portApp?.javaHookMask
 
-                                    if (!kmod && !lsposed && !portHiding) return@mapNotNull null
+                                    if (!kmod && !lsposed && !portHiding &&
+                                        kernelHookMask == null && javaHookMask == null
+                                    ) {
+                                        return@mapNotNull null
+                                    }
 
                                     dev.soranerai.vpnhidenext.db.AppProtection(
                                         packageName = pkg,
@@ -355,6 +367,8 @@ internal fun ProtectionScreen(
                                         kmod = kmod,
                                         lsposed = lsposed,
                                         portHiding = portHiding,
+                                        kernelHookMask = kernelHookMask,
+                                        javaHookMask = javaHookMask,
                                     )
                                 }
                             appDao.insertAppProtections(protections)
