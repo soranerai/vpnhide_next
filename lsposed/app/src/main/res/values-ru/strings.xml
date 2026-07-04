@@ -218,6 +218,11 @@
     <string name="hook_testing_list_kernel">Список хуков ядра</string>
     <string name="hook_testing_list_java">Список Java-хуков</string>
 
+    <!-- Per-App Hook Isolation Screen -->
+    <string name="app_hook_isolation_title">Изоляция хуков</string>
+    <string name="app_hook_isolation_use_global">Использовать глобальные настройки</string>
+    <string name="app_hook_isolation_use_global_desc">Если выключено, для этого приложения будет использоваться собственная маска хуков вместо глобальной маски на главном экране.</string>
+
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Фильтрует сериализацию LinkProperties для удаления VPN-интерфейсов, маршрутов и DNS-серверов.</string>
     <string name="hook_desc_network_capabilities">Фильтрует транспорт VPN из NetworkCapabilities, маскируя его под Wi-Fi или сотовую связь.</string>

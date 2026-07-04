@@ -7,4 +7,7 @@ internal data class AppProtection(
     val kmod: Boolean = false,
     val lsposed: Boolean = false,
     val portHiding: Boolean = false,
+    // null = no override, inherit the global hook mask
+    val kernelHookMask: Long? = null,
+    val javaHookMask: Long? = null,
 )

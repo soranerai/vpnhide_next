@@ -18,7 +18,7 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(1)) return
+                    if (!HookContext.isJavaHookActive(1, HookContext.resolveEffectiveUid())) return
                     if (writingCopy.get() == true || !HookContext.isTargetCaller()) return
                     val nc = param.thisObject as NetworkCapabilities
                     val copy = NetworkCapabilities(nc)
@@ -49,7 +49,7 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(2)) return
+                    if (!HookContext.isJavaHookActive(2, HookContext.resolveEffectiveUid())) return
                     if (writingCopy.get() == true || !HookContext.isTargetCaller()) return
                     val ni = param.thisObject as NetworkInfo
                     if (XposedHelpers.getIntField(ni, "mNetworkType") != ConnectivityHook.TYPE_VPN) return
@@ -151,7 +151,7 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(3)) return
+                    if (!HookContext.isJavaHookActive(3, HookContext.resolveEffectiveUid())) return
                     if (writingNetCopy.get() == true) return
                     val target = HookContext.isTargetCaller()
                     if (!target) return
@@ -189,7 +189,7 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(0)) return
+                    if (!HookContext.isJavaHookActive(0, HookContext.resolveEffectiveUid())) return
                     if (writingCopy.get() == true || !HookContext.isTargetCaller()) return
                     val lp = param.thisObject as LinkProperties
                     val isVpn = lp.interfaceName?.let { HookContext.isVpnInterfaceName(it) } ?: false

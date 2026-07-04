@@ -19,7 +19,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -32,6 +31,7 @@ internal fun AppRow(
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
+    onHookIsolationClick: () -> Unit,
 ) {
     Surface(
         modifier =
@@ -85,12 +85,25 @@ internal fun AppRow(
                 )
             }
 
+            IconButton(onClick = onHookIsolationClick) {
+                Icon(
+                    Icons.Default.Settings,
+                    contentDescription = null,
+                    tint =
+                        if (app.hasHookOverride) {
+                            if (app.userId != 0) Color(0xFF2196F3) else MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        },
+                )
+            }
+
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (installed.kmod) {
-                    ProtectionChip(stringResource(R.string.chip_native), app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
+                    ProtectionChip("N", app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
                 }
 
-                ProtectionChip(stringResource(R.string.chip_framework), app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
+                ProtectionChip("F", app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
             }
         }
     }
@@ -112,15 +125,15 @@ private fun ProtectionChip(
     Surface(
         onClick = onClick,
         enabled = installed,
-        shape = RoundedCornerShape(10.dp),
+        shape = RoundedCornerShape(8.dp),
         color = color.copy(alpha = if (installed) 1f else 0.3f),
         contentColor = textColor,
+        modifier = Modifier.size(32.dp),
     ) {
         Box(
-            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, fontWeight = FontWeight.Bold, fontSize = 11.sp)
+            Text(label, fontWeight = FontWeight.Bold, fontSize = 13.sp)
         }
     }
 }

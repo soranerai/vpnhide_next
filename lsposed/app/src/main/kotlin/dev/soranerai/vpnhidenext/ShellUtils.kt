@@ -2,6 +2,7 @@ package dev.soranerai.vpnhidenext
 
 import android.content.Context
 import android.util.Base64
+import dev.soranerai.vpnhidenext.db.AppProtection
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -178,5 +179,26 @@ internal fun buildKmodPortRulesApplyCommand(rules: Map<Int, List<PortRule>>): St
             }
         }
         append("[ -n \"\$ARGS\" ] && $KMOD_CTL port_rules \$ARGS; fi")
+    }
+}
+
+internal fun buildAppHookMasksApplyCommand(apps: List<AppProtection>): String {
+    val overridden = apps.filter { it.kernelHookMask != null || it.javaHookMask != null }
+    if (overridden.isEmpty()) {
+        return "[ -c $DEV_NODE ] && $KMOD_CTL app_hooks; true"
+    }
+
+    return buildString {
+        append("if [ -c $DEV_NODE ]; then ")
+        append("ARGS=\"\"; ")
+        overridden.forEach { app ->
+            val hasKernel = if (app.kernelHookMask != null) 1 else 0
+            val hasJava = if (app.javaHookMask != null) 1 else 0
+            append(
+                "ARGS=\"\$ARGS ${app.uid} $hasKernel ${app.kernelHookMask ?: 0L} " +
+                    "$hasJava ${app.javaHookMask ?: 0L}\"; ",
+            )
+        }
+        append("[ -n \"\$ARGS\" ] && $KMOD_CTL app_hooks \$ARGS; fi")
     }
 }

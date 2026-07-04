@@ -56,6 +56,7 @@ internal fun AppPickerScreen(
     onUpdate: (List<AppEntry>) -> Unit,
     sortedIds: List<String>,
     onRefresh: () -> Unit,
+    onHookIsolationClick: (AppEntry) -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -150,6 +151,7 @@ internal fun AppPickerScreen(
                                         }
                                     onUpdate(newList)
                                 },
+                                onHookIsolationClick = { onHookIsolationClick(app) },
                             )
                         }
                     }

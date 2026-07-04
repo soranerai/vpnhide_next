@@ -33,6 +33,9 @@ object HookContext {
     @Volatile
     var cachedJavaHooksMask: UInt? = null
 
+    @Volatile
+    var appJavaHookMasks: Map<Int, UInt>? = null
+
     // Cache: packageName -> is package VPN?
     val vpnPackageCache = ConcurrentHashMap<String, Boolean>()
 
@@ -64,8 +67,22 @@ object HookContext {
         return loadTargetUids().contains(callingUid)
     }
 
-    fun isJavaHookActive(bitIndex: Int): Boolean {
-        val mask = cachedJavaHooksMask ?: 0xFFFFFFFFu
+    // Same uid resolution as isTargetCaller(), exposed so call sites can reuse it for isJavaHookActive().
+    fun resolveEffectiveUid(): Int {
+        val callingUid = Binder.getCallingUid()
+        if (callingUid == 1000) {
+            val cbUid = currentCallbackUid.get() ?: getInheritedCallingUid()
+            if (cbUid != null) return cbUid
+        }
+        return callingUid
+    }
+
+    fun isJavaHookActive(
+        bitIndex: Int,
+        uid: Int,
+    ): Boolean {
+        val override = appJavaHookMasks?.get(uid)
+        val mask = override ?: cachedJavaHooksMask ?: 0xFFFFFFFFu
         return (mask and (1u shl bitIndex)) != 0u
     }
 

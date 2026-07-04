@@ -15,7 +15,7 @@ object PackageManagerHook {
     )
 
     private fun guardCheck(param: XC_MethodHook.MethodHookParam): CallerContext? {
-        if (!HookContext.isJavaHookActive(5) ||
+        if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid()) ||
             HookContext.isInternalCheck.get() == true ||
             !HookContext.isTargetCaller()
         ) {
@@ -214,7 +214,7 @@ object PackageManagerHook {
                 "getPackageInfo",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(5) ||
+                        if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid()) ||
                             HookContext.isInternalCheck.get() == true ||
                             !HookContext.isTargetCaller()
                         ) {
