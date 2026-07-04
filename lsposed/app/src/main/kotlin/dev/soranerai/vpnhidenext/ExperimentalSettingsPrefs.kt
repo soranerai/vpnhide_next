@@ -40,19 +40,3 @@ internal suspend fun setJavaHookBit(
     dao.insertConfig(current.copy(javaHookMask = newMask))
     return DatabaseSync.sync(context)
 }
-
-internal suspend fun getSimSpoofMode(context: Context): String {
-    val config = AppDatabase.getInstance(context).globalConfigDao().getConfig() ?: DbGlobalConfig()
-    return config.simSpoofMode
-}
-
-/** No kernel/LSPosed side to sync yet — this is a pure UI placeholder for now. */
-internal suspend fun setSimSpoofMode(
-    context: Context,
-    mode: String,
-) {
-    val db = AppDatabase.getInstance(context)
-    val dao = db.globalConfigDao()
-    val current = dao.getConfig() ?: DbGlobalConfig()
-    dao.insertConfig(current.copy(simSpoofMode = mode))
-}

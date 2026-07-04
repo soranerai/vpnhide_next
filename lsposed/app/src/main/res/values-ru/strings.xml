@@ -199,9 +199,6 @@
     <string name="settings_toggle_hide_vpn_apps_desc">Автоматически скрывает установленные VPN-приложения от других защищаемых приложений.</string>
     <string name="settings_toggle_hide_self_title">Скрывать VPNHide Next автоматически</string>
     <string name="settings_toggle_hide_self_desc">Скрывает пакет самого VPNHide Next от защищаемых приложений.</string>
-    <string name="settings_sim_spoof_title">Активировать подмену данных SIM</string>
-    <string name="settings_sim_spoof_desc">Заглушка для будущей функции подмены данных SIM-карты.</string>
-    <string name="settings_sim_spoof_option_none">Нет</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Изоляция хуков</string>

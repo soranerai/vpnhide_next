@@ -251,9 +251,6 @@
     <string name="settings_toggle_hide_vpn_apps_desc">Automatically hides installed VPN apps from other protected apps.</string>
     <string name="settings_toggle_hide_self_title">Auto-hide VPNHide Next</string>
     <string name="settings_toggle_hide_self_desc">Hides the VPNHide Next package itself from protected apps.</string>
-    <string name="settings_sim_spoof_title">Enable SIM data spoofing</string>
-    <string name="settings_sim_spoof_desc">Placeholder for an upcoming SIM data spoofing feature.</string>
-    <string name="settings_sim_spoof_option_none">None</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Hook Isolation</string>

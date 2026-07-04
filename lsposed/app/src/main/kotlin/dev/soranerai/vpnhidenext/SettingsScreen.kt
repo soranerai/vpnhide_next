@@ -63,17 +63,13 @@ fun SettingsScreen(
 
     var hideVpnApps by remember { mutableStateOf(false) }
     var hideSelf by remember { mutableStateOf(false) }
-    var simSpoofMode by remember { mutableStateOf("none") }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             hideVpnApps = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_HIDE_VPN_APPS)
             hideSelf = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_SELF_HIDE)
-            simSpoofMode = getSimSpoofMode(context)
         }
     }
-
-    val simSpoofNone = stringResource(R.string.settings_sim_spoof_option_none)
 
     Scaffold(
         topBar = {
@@ -160,17 +156,6 @@ fun SettingsScreen(
                                     withContext(Dispatchers.Main) { hideSelf = previous }
                                 }
                             }
-                        },
-                    )
-                    SettingsRowDivider()
-                    SettingsDropdownRow(
-                        title = stringResource(R.string.settings_sim_spoof_title),
-                        subtitle = stringResource(R.string.settings_sim_spoof_desc),
-                        options = listOf(simSpoofNone),
-                        selected = if (simSpoofMode == "none") simSpoofNone else simSpoofMode,
-                        onSelect = { _ ->
-                            simSpoofMode = "none"
-                            scope.launch(Dispatchers.IO) { setSimSpoofMode(context, "none") }
                         },
                     )
                 }
