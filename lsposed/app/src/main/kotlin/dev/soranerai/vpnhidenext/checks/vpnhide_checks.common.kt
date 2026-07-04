@@ -1,6 +1,6 @@
 
 
-@file:Suppress("RemoveRedundantBackticks")
+@file:Suppress("RemoveRedundantBackticks", "ktlint:standard:filename")
 
 package dev.soranerai.vpnhidenext.checks
 
@@ -16,10 +16,11 @@ package dev.soranerai.vpnhidenext.checks
 // compile the Rust component. The easiest way to ensure this is to bundle the Kotlin
 // helpers directly inline like we're doing here.
 
-public class InternalException(message: String) : kotlin.Exception(message)
+public class InternalException(
+    message: String,
+) : kotlin.Exception(message)
 
 // Public interface members begin here.
-
 
 // Interface implemented by anything that can contain an object reference.
 //
@@ -32,12 +33,17 @@ public class InternalException(message: String) : kotlin.Exception(message)
 @OptIn(ExperimentalStdlibApi::class)
 public interface Disposable : AutoCloseable {
     public fun destroy()
+
     override fun close(): Unit = destroy()
+
     public companion object {
         internal fun destroy(vararg args: Any?) {
             for (arg in args) {
                 when (arg) {
-                    is Disposable -> arg.destroy()
+                    is Disposable -> {
+                        arg.destroy()
+                    }
+
                     is ArrayList<*> -> {
                         for (idx in arg.indices) {
                             val element = arg[idx]
@@ -46,6 +52,7 @@ public interface Disposable : AutoCloseable {
                             }
                         }
                     }
+
                     is Map<*, *> -> {
                         for (element in arg.values) {
                             if (element is Disposable) {
@@ -53,6 +60,7 @@ public interface Disposable : AutoCloseable {
                             }
                         }
                     }
+
                     is Array<*> -> {
                         for (element in arg) {
                             if (element is Disposable) {
@@ -60,6 +68,7 @@ public interface Disposable : AutoCloseable {
                             }
                         }
                     }
+
                     is Iterable<*> -> {
                         for (element in arg) {
                             if (element is Disposable) {
@@ -93,43 +102,34 @@ public inline fun <T : Disposable?, R> T.use(block: (T) -> R): R {
 /** Used to instantiate an interface without an actual pointer, for fakes in tests, mostly. */
 public object NoPointer
 
-
-
-
-
-
-public data class CheckOutput (
-    var `status`: CheckStatus, 
-    var `detail`: kotlin.String
+public data class CheckOutput(
+    var `status`: CheckStatus,
+    var `detail`: kotlin.String,
 ) {
     public companion object
 }
 
-
-
-
-
-
 public enum class CheckStatus {
-    
     /**
      * Probe ran and saw nothing VPN-shaped, or was legitimately blocked
      * (SELinux denial, ENODEV, etc.) — both outcomes confirm the VPN is
      * hidden from this surface.
      */
     PASS,
+
     /**
      * Probe surfaced VPN-shaped data the kmod / lsposed should have hidden.
      */
     FAIL,
+
     /**
      * App has no network permission, so the probe couldn't run at all.
      * Reported separately from Pass/Fail so the UI can tell the user to
      * enable network access before trusting the results.
      */
-    NETWORK_BLOCKED;
+    NETWORK_BLOCKED,
+
+    ;
+
     public companion object
 }
-
-
-
