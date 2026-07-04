@@ -54,7 +54,6 @@ import java.io.File
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
-    onOpenHookTesting: () -> Unit,
     onOpenDiagnosticsDetail: () -> Unit,
     selfNeedsRestart: Boolean,
     modifier: Modifier = Modifier,
@@ -119,12 +118,6 @@ fun SettingsScreen(
             }
             item(key = "group_testing") {
                 SettingsGroup {
-                    SettingsNavRow(
-                        title = stringResource(R.string.diag_hook_isolation_title),
-                        subtitle = stringResource(R.string.diag_hook_isolation_description),
-                        onClick = onOpenHookTesting,
-                    )
-                    SettingsRowDivider()
                     SettingsNavRow(
                         title = stringResource(R.string.settings_diagnostics_detail_title),
                         subtitle = stringResource(R.string.settings_diagnostics_detail_desc),

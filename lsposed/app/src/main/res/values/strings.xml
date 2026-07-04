@@ -8,9 +8,6 @@
     <string name="tab_statistics">Statistics</string>
 
     <!-- Protection modes (segmented button) -->
-    <string name="mode_vpn_targets">Tun</string>
-    <string name="mode_port_hiding">Ports</string>
-    <string name="port_hiding_coming_soon">Coming soon</string>
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>
@@ -241,10 +238,6 @@
     <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
 
-    <!-- Hook Isolation Diagnostics -->
-    <string name="diag_hook_isolation_title">Hook Isolation</string>
-    <string name="diag_hook_isolation_description">Test and isolate individual kernel-level and framework-level hooks. Helpful for pinpointing which specific hook is causing system or app instability.</string>
-    <string name="diag_hook_isolation_configure_btn">Configure Hooks</string>
     <string name="diag_open_details_btn">More details</string>
 
     <!-- Settings Screen -->
@@ -287,9 +280,14 @@
     <string name="hook_testing_list_java">Java Hooks List</string>
 
     <!-- Per-App Hook Isolation Screen -->
-    <string name="app_hook_isolation_title">Hook Isolation</string>
     <string name="app_hook_isolation_use_global">Use global settings</string>
     <string name="app_hook_isolation_use_global_desc">When off, this app uses its own custom hook mask instead of the global one on the Dashboard.</string>
+
+    <!-- App Settings Screen (global + per-app hooks/ports) -->
+    <string name="app_settings_title_global">Global settings</string>
+    <string name="app_settings_tab_hooks">Hooks</string>
+    <string name="app_settings_tab_ports">Ports</string>
+    <string name="app_settings_port_hiding_off_hint">Port hiding is currently off for this app — turn on the \"P\" toggle in the app list for these rules to take effect.</string>
 
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Filters LinkProperties serialization to remove VPN interfaces, routes, and DNS servers.</string>

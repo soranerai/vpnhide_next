@@ -8,9 +8,6 @@
     <string name="tab_statistics">Статистика</string>
 
     <!-- Protection modes (segmented button) -->
-    <string name="mode_vpn_targets">Туннели</string>
-    <string name="mode_port_hiding">Порты</string>
-    <string name="port_hiding_coming_soon">Скоро</string>
 
     <!-- Port hiding -->
     <string name="ports_hint_safe">Безопасно для банков, госуслуг, маркетплейсов, не-браузерных приложений. Chromium-браузеры используют localhost для dev/PWA — их не стоит делать observer\'ами.</string>
@@ -189,10 +186,6 @@
     <string name="diag_btn_show_details">Показать подробности</string>
     <string name="diag_btn_hide_details">Скрыть подробности</string>
 
-    <!-- Hook Isolation Diagnostics -->
-    <string name="diag_hook_isolation_title">Изоляция хуков</string>
-    <string name="diag_hook_isolation_description">Тестирование и отключение отдельных хуков на уровне ядра и фреймворка. Полезно для точного выявления конкретного хука, вызывающего перезагрузку или нестабильность системы/приложений.</string>
-    <string name="diag_hook_isolation_configure_btn">Настроить хуки</string>
     <string name="diag_open_details_btn">Подробнее</string>
 
     <!-- Settings Screen -->
@@ -235,9 +228,14 @@
     <string name="hook_testing_list_java">Список Java-хуков</string>
 
     <!-- Per-App Hook Isolation Screen -->
-    <string name="app_hook_isolation_title">Изоляция хуков</string>
     <string name="app_hook_isolation_use_global">Использовать глобальные настройки</string>
     <string name="app_hook_isolation_use_global_desc">Если выключено, для этого приложения будет использоваться собственная маска хуков вместо глобальной маски на главном экране.</string>
+
+    <!-- App Settings Screen (глобальные + per-app хуки/порты) -->
+    <string name="app_settings_title_global">Глобальные настройки</string>
+    <string name="app_settings_tab_hooks">Хуки</string>
+    <string name="app_settings_tab_ports">Порты</string>
+    <string name="app_settings_port_hiding_off_hint">Скрытие портов сейчас выключено для этого приложения — включите переключатель «P» в списке приложений, чтобы правила вступили в силу.</string>
 
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Фильтрует сериализацию LinkProperties для удаления VPN-интерфейсов, маршрутов и DNS-серверов.</string>

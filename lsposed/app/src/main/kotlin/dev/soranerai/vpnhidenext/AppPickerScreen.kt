@@ -56,7 +56,7 @@ internal fun AppPickerScreen(
     onUpdate: (List<AppEntry>) -> Unit,
     sortedIds: List<String>,
     onRefresh: () -> Unit,
-    onHookIsolationClick: (AppEntry) -> Unit,
+    onOpenAppSettings: (AppEntry) -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -131,6 +131,7 @@ internal fun AppPickerScreen(
                                                 when (layer) {
                                                     Layer.KMOD -> it.copy(kmod = !it.kmod)
                                                     Layer.LSPOSED -> it.copy(lsposed = !it.lsposed)
+                                                    Layer.PORTS -> it.copy(ports = !it.ports)
                                                 }
                                             }
                                         }
@@ -151,7 +152,18 @@ internal fun AppPickerScreen(
                                         }
                                     onUpdate(newList)
                                 },
-                                onHookIsolationClick = { onHookIsolationClick(app) },
+                                onTogglePort = {
+                                    val newList =
+                                        apps.map {
+                                            if (it.packageName != app.packageName || it.userId != app.userId) {
+                                                it
+                                            } else {
+                                                it.copy(portHiding = !it.portHiding)
+                                            }
+                                        }
+                                    onUpdate(newList)
+                                },
+                                onSettingsClick = { onOpenAppSettings(app) },
                             )
                         }
                     }

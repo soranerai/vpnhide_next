@@ -10,7 +10,7 @@ import dev.soranerai.vpnhidenext.db.DbGlobalConfig
  * [SettingsScreen]. The VPN-app-hiding and self-hiding toggles are both
  * just friendly shortcuts for individual bits of the existing
  * [DbGlobalConfig.javaHookMask] — the same mask edited bit-by-bit on the
- * "Hook Isolation" screen ([HookTestingScreen]) — so flipping either one
+ * "Hook Isolation" screen ([AppSettingsScreen]) — so flipping either one
  * here also updates the corresponding switch there and vice versa.
  */
 internal suspend fun isJavaHookBitEnabled(
@@ -25,7 +25,7 @@ internal suspend fun isJavaHookBitEnabled(
  * Flip a single bit of the global java hook mask and push it down to the
  * kernel module / LSPosed side via [DatabaseSync.sync]. Returns whether
  * the sync succeeded — callers should revert their optimistic UI state on
- * failure, same as [HookTestingScreen]'s per-hook switches.
+ * failure, same as [AppSettingsScreen]'s per-hook switches.
  */
 internal suspend fun setJavaHookBit(
     context: Context,
