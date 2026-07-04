@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Run ktlint on staged Kotlin files in lsposed/
+STAGED_KT=$(git diff --cached --name-only --diff-filter=ACM | grep '^lsposed/.*\.kt$')
+
+if [ -n "$STAGED_KT" ]; then
+    if command -v ktlint >/dev/null 2>&1; then
+        echo "$STAGED_KT" | xargs ktlint
+        if [ $? -ne 0 ]; then
+            echo ""
+            echo "ktlint failed. Run 'ktlint --format \"lsposed/**/*.kt\"' to fix."
+            exit 1
+        fi
+    else
+        echo "Warning: ktlint not found, skipping format check"
+    fi
+fi

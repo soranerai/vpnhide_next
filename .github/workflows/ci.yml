@@ -1,0 +1,277 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.img.outputs.image }}
+    steps:
+      - id: img
+        env:
+          REPO: ${{ github.repository }}
+        run: |
+          echo "image=ghcr.io/${REPO,,}/ci:latest" >> "$GITHUB_OUTPUT"
+
+
+  lint:
+    needs: setup
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.setup.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          fetch-depth: 0
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Python lint + format (ruff). Fast (~100 ms on 1800 LoC) so it
+      # runs first — fails before the slow Rust/Gradle steps.
+      - name: ruff format
+        uses: astral-sh/ruff-action@v4.0.0
+        with:
+          args: format --check
+      - name: ruff check
+        uses: astral-sh/ruff-action@v4.0.0
+        with:
+          args: check
+
+      # Gradle cache (deps + configuration cache + wrapper). cache-read-only
+      # on PRs so only main pushes write — keeps the cache from churning on
+      # every PR's branch-scoped key.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # Shell — module-side scripts (Magisk/KSU) and host-side dev tooling.
+      # shellcheck is preinstalled in the CI image (apt). The list is
+      # explicit so we don't accidentally pick up vendored .sh from
+      # zygisk/third_party.
+      - name: shellcheck
+        # SC2034: `SKIPUNZIP` and the `for i in seq …` counters look unused
+        #         to shellcheck — Magisk reads SKIPUNZIP externally, the
+        #         counters are loop iterators we don't read by name.
+        # SC3043: `local` is "not POSIX" but Android's /system/bin/sh
+        #         (mksh on Pixel) supports it, and our module-side
+        #         scripts always run there.
+        # The inline `apt-get install` is a one-job fallback for the
+        # window between this PR landing and the next ci-image rebuild
+        # (the Dockerfile bake also adds shellcheck). After the rebuild
+        # this no-ops in <1s.
+        run: |
+          if ! command -v shellcheck >/dev/null; then
+            apt-get update -qq && apt-get install -y --no-install-recommends shellcheck >/dev/null
+          fi
+          shellcheck -x -e SC2034,SC3043 \
+            kmod/module/customize.sh kmod/module/post-fs-data.sh kmod/module/service.sh \
+            scripts/clean-device.sh scripts/update-json.sh \
+            kmod/test/run.sh kmod/test/build-kernel.sh kmod/test/init.sh
+
+      # Kotlin — checks/ is uniffi-generated FFI glue committed as-is from
+      # the private repo build, not hand-written; excluded from style checks.
+      - name: ktlint
+        run: |
+          ktlint "lsposed/app/src/**/*.kt" \
+            "!lsposed/app/src/main/kotlin/dev/soranerai/vpnhidenext/checks/**"
+
+      # Single Gradle invocation: lint + tests share configuration
+      # cache and warm daemon. ANDROID_NDK_ROOT is baked into CI image.
+      - name: Android lint + Kotlin unit tests
+        run: cd lsposed && ./gradlew :app:lintDebug :app:testDebugUnitTest
+
+  kmod:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        kmi:
+          - android12-5.10
+          - android13-5.10
+          - android13-5.15
+          - android14-5.15
+          - android14-6.1
+          - android15-6.6
+          - android16-6.12
+    steps:
+      - name: Download prebuilt kmod from private repo
+        run: |
+          mkdir -p kmod-artifacts
+          if [ -n "${{ secrets.PRIVATE_REPO_PAT }}" ]; then
+            gh release download --repo soranerai/vpnhide_next_private \
+              -p "vpnhide-kmod-${{ matrix.kmi }}.zip" \
+              -D kmod-artifacts
+          else
+            echo "⚠ PRIVATE_REPO_PAT not configured"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpnhide-kmod-${{ matrix.kmi }}
+          path: kmod-artifacts/vpnhide-kmod-${{ matrix.kmi }}.zip
+          if-no-files-found: warn
+
+  # kmod-qemu (the runtime boot-in-QEMU gate) moved to vpnhide_next_private's
+  # CI: it needs kmod/vpnhide_kmod.c to rebuild the module against each
+  # ddk-qemu image's exact baked kernel tree (required for CFI/vermagic
+  # match), and that source only lives in the private repo now.
+
+  lsposed:
+    needs: setup
+    runs-on: ubuntu-latest
+    container:
+      image: ${{ needs.setup.outputs.image }}
+      credentials:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Mark workspace safe
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      # Gradle cache (deps + configuration cache + wrapper). cache-read-only
+      # on PRs so only main pushes write the cache.
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+        with:
+          cache-read-only: ${{ github.event_name == 'pull_request' }}
+
+      # ci:latest (.github/docker/ci/Dockerfile) doesn't bake in gh CLI either —
+      # fetch the static binary directly (public repo, no auth needed).
+      - name: Install gh CLI
+        run: |
+          GH_VERSION=2.63.2
+          curl -sSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
+            | tar -xz -C /tmp
+          mv "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh
+
+      - name: Download prebuilt libvpnhide_checks.so from private repo
+        run: |
+          if [ -z "${{ secrets.PRIVATE_REPO_PAT }}" ]; then
+            echo "⚠ PRIVATE_REPO_PAT not configured. Skipping private repo sync."
+            exit 1
+          fi
+          mkdir -p lsposed/app/src/main/jniLibs/arm64-v8a
+          gh release download --repo soranerai/vpnhide_next_private \
+            -p 'libvpnhide_checks.so' \
+            -D lsposed/app/src/main/jniLibs/arm64-v8a
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+
+      - name: Set up keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+        run: |
+          KEYSTORE_PATH="$GITHUB_WORKSPACE/lsposed/release.jks"
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            echo "$KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE_PATH"
+          else
+            echo "ANDROID_KEYSTORE_BASE64 is empty (fork PR); generating an ephemeral keystore. Resulting APK is signed with a throwaway key and is NOT suitable for release."
+            KEYSTORE_PASSWORD=ephemeral
+            KEY_ALIAS=ephemeral
+            keytool -genkeypair -v \
+              -keystore "$KEYSTORE_PATH" \
+              -storepass "$KEYSTORE_PASSWORD" \
+              -keypass "$KEYSTORE_PASSWORD" \
+              -alias "$KEY_ALIAS" \
+              -keyalg RSA -keysize 4096 -validity 365 \
+              -dname "CN=vpnhide-fork-ci, O=vpnhide, C=US"
+          fi
+          # Build via printf — `%s` swallows the value verbatim with no
+          # shell expansion of $, backticks, backslashes, or `!`. Heredoc
+          # without single-quoted EOF would re-expand each line.
+          {
+            printf 'password=%s\n' "$KEYSTORE_PASSWORD"
+            printf 'keyAlias=%s\n' "$KEY_ALIAS"
+            printf 'storeFile=%s\n' "$KEYSTORE_PATH"
+          } > "$GITHUB_WORKSPACE/lsposed/keystore.properties"
+
+      # Release tags get the full assembleRelease (R8/ProGuard, signed APK
+      # ready for the GitHub release). PRs and main pushes get assembleDebug
+      # — same code paths exercised, no R8 step (~1.5–2 min faster).
+      # `case` instead of `[[`: container jobs default to /bin/sh (POSIX).
+      - name: Build APK
+        run: |
+          cd "$GITHUB_WORKSPACE/lsposed"
+          case "$GITHUB_REF" in
+            refs/tags/v*)
+              ./gradlew assembleRelease
+              cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/vpnhide.apk"
+              ;;
+            *)
+              ./gradlew assembleDebug
+              cp app/build/outputs/apk/debug/app-debug.apk "$GITHUB_WORKSPACE/vpnhide.apk"
+              ;;
+          esac
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: vpnhide-apk
+          path: vpnhide.apk
+          if-no-files-found: error
+
+
+  release:
+    needs: [lint, kmod, lsposed]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    # Only the release job needs write — used by softprops/action-gh-release
+    # below to create the draft GitHub release. lint/build jobs run on the
+    # workflow-level `contents: read`.
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v8
+        with:
+          path: dist/
+          merge-multiple: true
+
+      - name: Extract release notes from CHANGELOG.md
+        run: |
+          TAG="${{ github.ref_name }}"
+          awk -v t="^## ${TAG}\$" '$0~t{flag=1;next} /^## v/{flag=0} flag' \
+            CHANGELOG.md > release-notes.md
+          echo "=== release-notes.md ==="
+          cat release-notes.md
+
+      - name: Create draft release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          body_path: release-notes.md
+          generate_release_notes: true
+          draft: true
+          files: |
+            dist/*.zip
+            dist/*.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

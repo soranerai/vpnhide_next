@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+      Recommended scope shown when activating this module in LSPosed.
+      "android" = System Framework (system_server), which is the only
+      process this module hooks. The module's handleLoadPackage filters
+      for system_server and ignores everything else.
+    -->
+    <string-array name="xposedscope">
+        <item>android</item>
+    </string-array>
+</resources>

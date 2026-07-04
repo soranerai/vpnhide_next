@@ -1,0 +1,444 @@
+<resources>
+    <string name="app_name">VPNHide Next</string>
+    <string name="module_description">Hides active VPN connection from selected apps — NetworkCapabilities, NetworkInfo, NetworkInterface, LinkProperties, /proc/net</string>
+
+    <!-- Navigation -->
+    <string name="tab_dashboard">Dashboard</string>
+    <string name="tab_protection">Protection</string>
+    <string name="tab_diagnostics">Diagnostics</string>
+
+    <!-- Protection modes (segmented button) -->
+    <string name="mode_vpn_targets">Tun</string>
+    <string name="mode_port_hiding">Ports</string>
+    <string name="port_hiding_coming_soon">Coming soon</string>
+
+    <!-- Port hiding -->
+    <string name="ports_chip" translatable="false">P</string>
+    <string name="ports_hint_safe">Safe for banks, госуслуги, marketplaces, non-browser apps. Chromium-based browsers use localhost for dev/PWA features — avoid adding them as observers.</string>
+    <string name="ports_hint_reboot">Rules are re-applied on every Save. After reboot, the module restores them automatically via service.sh.</string>
+    <string name="ports_save_success">Saved · %1$d observer(s)</string>
+    <string name="ports_count" translatable="false">P: %d</string>
+    <string name="bulk_rules_title">Bulk Rules</string>
+    <string name="bulk_rules_subtitle">Applies to all protected apps</string>
+    <string name="no_rules">No rules defined</string>
+    <string name="back">Back</string>
+    <string name="bulk_btn">Bulk</string>
+    <string name="cancel">Cancel</string>
+    <string name="apply_bulk_btn">Apply</string>
+    <string name="new_bulk_rule">New Bulk Rule</string>
+    <string name="edit_bulk_rule">Edit Bulk Rule</string>
+    <string name="label_optional">Label (optional)</string>
+    <string name="port_start">Start Port</string>
+    <string name="port_end">End Port</string>
+    <string name="protocol">Protocol</string>
+    <string name="add_rule">Add Rule</string>
+    <string name="err_rule_redundant">Redundant: covered by \"%s\"</string>
+    <string name="err_rule_exists">This rule already exists</string>
+    
+    <!-- Interface Prefixes -->
+    <string name="iface_prefixes_title">Tun Interfaces</string>
+    <string name="iface_prefixes_subtitle">Manage custom network interface prefixes for VPN hiding</string>
+    <string name="section_system_ifaces">System Protected (Default)</string>
+    <string name="section_custom_ifaces">Custom Rules</string>
+    <string name="no_prefixes">No custom rules added yet</string>
+    <string name="new_prefix">New Prefix</string>
+    <string name="edit_prefix">Edit Prefix</string>
+    <string name="prefix_label">Interface prefix (e.g. tun, wg)</string>
+
+    <!-- App picker -->
+    <string name="selected_count">%d selected</string>
+    <string name="btn_save">Save</string>
+    <string name="action_refresh_apps">Refresh app list</string>
+    <string name="search_placeholder">Search apps&#8230;</string>
+    <string name="filter_system">System</string>
+    <string name="filter_show_system">Show system apps</string>
+    <string name="filter_russian_only">Russian apps only</string>
+    <string name="filter_only_selected">Only selected</string>
+    <string name="filter_only_work_profile">Only work profile</string>
+    <string name="sort_name_asc">Name (A-Z)</string>
+    <string name="sort_name_desc">Name (Z-A)</string>
+    <string name="sort_selected_first">Selected first</string>
+
+
+    <!-- Root status -->
+    <string name="root_error_title">Root access required</string>
+    <string name="root_error_message">VPNHide Next needs root access to manage target apps. Grant root permissions to this app in your root manager (Magisk, KernelSU, etc.) and reopen the app.</string>
+
+    <!-- Kmod status -->
+    <string name="kmod_error_title">Kernel module required</string>
+    <string name="kmod_error_message">VPNHide Next requires the kmod kernel module to be installed and active. Please install the module in your root manager (Magisk, KernelSU, etc.), reboot your device, and try again.</string>
+
+    <!-- Save feedback -->
+    <string name="save_success">Saved %d target(s)</string>
+    <string name="save_failed_exit">Save failed (exit code %d)</string>
+    <string name="save_failed_error">Save failed: %s</string>
+    <string name="save_failed_root">Save failed: root access denied</string>
+    <string name="migrating_data">Migrating data&#8230;</string>
+    <string name="save_header_comment" translatable="false"># Managed by VPNHide Next app</string>
+
+    <!-- Diagnostics -->
+    <string name="summary_format">%1$d/%2$d passed</string>
+    <string name="btn_export_debug">Collect debug log</string>
+    <string name="btn_export_debug_running">Collecting debug info&#8230;</string>
+    <string name="btn_save_debug">Save</string>
+    <string name="btn_share_debug">Share</string>
+    <string name="diag_debug_logging_title">Debug logging</string>
+    <string name="diag_debug_logging_description">Detailed logging in logcat and dmesg. Do not enable unless necessary.</string>
+
+    <string name="badge_pass">PASS</string>
+    <string name="badge_fail">FAIL</string>
+    <string name="badge_info">INFO</string>
+    <string name="badge_running">RUNNING</string>
+    <string name="badge_skipped">SKIPPED</string>
+    <string name="diag_running_title">Running diagnostics&#8230;</string>
+    <string name="diag_running_desc">Diagnostics checks are running in the background. You can expand details to see progress in real-time.</string>
+    <string name="banner_added_self">Added VPNHide Next to the target list. Restart VPNHide Next (force-stop and reopen) for native-level checks to take effect — no device reboot needed.</string>
+    <string name="banner_adding_self">Adding this app to target list&#8230;</string>
+    <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPNHide Next → Mobile data &amp; Wi-Fi.</string>
+    <string name="section_native">Native level (kmod)</string>
+    <string name="section_java">Java API level (LSPosed)</string>
+    <string name="diag_all_good_title">All Good!</string>
+    <string name="diag_all_good_desc">All diagnostics checks passed successfully. Your protection is active and fully functional.</string>
+    <string name="diag_some_failed_title">Checks Failed</string>
+    <string name="diag_some_failed_desc">Some diagnostics checks failed. This might indicate that the kernel module is not properly loaded or configuration needs attention.</string>
+    <string name="diag_btn_show_details">Show details</string>
+    <string name="diag_btn_hide_details">Hide details</string>
+
+    <!-- Dashboard -->
+    <string name="dashboard_modules">Modules</string>
+    <string name="dashboard_kmod">Native</string>
+
+    <string name="dashboard_lsposed_module">Framework</string>
+    <string name="dashboard_not_installed">Not installed</string>
+    <string name="dashboard_installed_inactive">Installed, inactive</string>
+    <string name="dashboard_installed_restart_app">Installed, restart VPNHide Next to activate</string>
+    <string name="dashboard_kmod_broken_wrong_variant">Installed, wrong GKI variant</string>
+    <string name="dashboard_kmod_broken_unsupported_kernel">Installed, kernel not supported</string>
+    <string name="dashboard_kmod_broken_no_kprobes">Installed, kernel has no kprobes</string>
+    <string name="dashboard_kmod_broken_unknown_variant">Installed, did not load</string>
+    <string name="dashboard_kmod_broken_ambiguous">Installed, did not load — try the other GKI variant</string>
+    <string name="dashboard_active_targets">Active · %d target(s)</string>
+    <string name="dashboard_reboot_needed">Device reboot needed</string>
+    <string name="dashboard_protection">Protection status</string>
+    <string name="dashboard_protection_prefix">Protection: %s</string>
+    <string name="dashboard_native_protection">Native level</string>
+    <string name="dashboard_java_protection">Java API level</string>
+    <string name="dashboard_protection_ok">OK</string>
+    <string name="dashboard_protection_partial">Partial</string>
+    <string name="dashboard_protection_fail">Not working</string>
+    <string name="dashboard_protection_unknown">Not checked</string>
+    <string name="dashboard_protection_no_module">No module</string>
+    <string name="dashboard_protection_hooks_inactive">Hooks inactive</string>
+    <string name="dashboard_protection_checking">Checking&#8230;</string>
+    <string name="dashboard_needs_restart">VPNHide Next was just added to its own target list. Restart VPNHide Next (force-stop and reopen) to check protection — no device reboot needed.</string>
+    <string name="dashboard_install_recommendation_title">Installation recommendation</string>
+    <string name="dashboard_install_recommendation_device">Your device: %1$s, kernel %2$s</string>
+    <string name="dashboard_install_recommendation_kmi_note">\"%1$s\" in the kernel version is the GKI Kernel Module Interface tag — it identifies the kernel\'s binary interface to modules, not your Android OS release.</string>
+    <string name="dashboard_install_recommendation_kmod">Kernel module is recommended. Download %1$s.</string>
+    <string name="dashboard_install_recommendation_kmod_ambiguous">Kernel module is recommended. Your kernel\'s GKI branch isn\'t identifiable from uname -r, so try %1$s first; if it doesn\'t load after reboot, install %2$s instead.</string>
+    <string name="dashboard_install_recommendation_kmod_unsupported">Kernel module is not supported for your device.</string>
+    <string name="dashboard_issues">Errors (%d)</string>
+    <string name="dashboard_warnings">Warnings (%d)</string>
+
+    <string name="dashboard_issue_debug_logging_on">Debug logging is enabled. VPNHide Next is writing verbose lines to logcat that anyone with root can read. Turn it off in Diagnostics after you\'ve finished collecting a bug report.</string>
+    <string name="dashboard_issue_selinux_permissive">SELinux is Permissive. Six detection vectors VPNHide Next relies on the kernel to block (RTM_GETROUTE, /proc/net/{tcp,udp,dev,fib_trie}, /sys/class/net) are reachable to target apps. Run `setenforce 1` and investigate what disabled it.</string>
+    <string name="dashboard_issue_no_native">No native module installed. Install kmod for full protection.</string>
+    <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPNHide Next module for System Framework.</string>
+    <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>
+    <string name="dashboard_issue_lsposed_config_unreadable">Failed to read LSPosed/Vector configuration. Reopen LSPosed/Vector, verify that VPNHide Next is enabled there, and then reopen VPNHide Next.</string>
+    <string name="dashboard_issue_lsposed_not_enabled">VPNHide Next is present in LSPosed/Vector, but the module is disabled. Enable VPNHide Next in LSPosed/Vector and keep System Framework in its scope.</string>
+    <string name="dashboard_issue_lsposed_no_system_scope">VPNHide Next is enabled in LSPosed/Vector, but System Framework is missing from its scope. Add System Framework to the VPNHide Next scope in LSPosed/Vector.</string>
+    <string name="dashboard_issue_lsposed_extra_scope">VPNHide Next should stay scoped only to System Framework in LSPosed/Vector. Remove these apps from the VPNHide Next scope: %1$s. Use Protection → Tun in VPNHide Next for filtering instead.</string>
+    <string name="dashboard_issue_lsposed_field_rename">AOSP field rename detected on Android SDK %2$s: %1$s. Java-layer protection is degraded for the affected hooks (they were skipped at install time to avoid logcat-spam from per-call NoSuchFieldError). Please file an issue at github.com/okhsunrog/vpnhide/issues with this list so the hooks can be updated for your Android version.</string>
+    <string name="dashboard_issue_no_targets">No target apps configured. Go to Protection → Tun to select apps.</string>
+    <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch: running %1$s, installed %2$s. Reboot the device to apply the update.</string>
+    <string name="dashboard_issue_kmod_version_mismatch">Kernel module version mismatch: module %1$s, app %2$s. Open KernelSU/Magisk → Modules to update the module.</string>
+    <string name="dashboard_issue_update_kmod">Kernel module is out of date: running %1$s, latest is %2$s. Update the kmod module.</string>
+    <string name="dashboard_issue_update_app_for_kmod">VPNHide Next app is out of date for this kmod: module is %1$s, app is %2$s. Update the app.</string>
+    <string name="dashboard_running_version">Running module version: %s</string>
+
+    <!-- kmod variant / load diagnostics -->
+    <string name="dashboard_issue_kmod_wrong_variant">Wrong kernel module variant: installed %1$s, your kernel needs %2$s. Uninstall the current kmod and install %3$s from the latest release.</string>
+    <string name="dashboard_issue_kmod_unknown_variant">Kernel module is installed but not loading, and the zip doesn\'t identify which GKI variant it was built for. Reinstall %1$s from the latest release to make sure it matches your kernel.</string>
+    <string name="dashboard_issue_kmod_ambiguous_try_alternative">Kernel module %1$s failed to load this boot. Your kernel\'s GKI branch isn\'t identifiable from uname -r, so install %2$s instead.</string>
+    <string name="dashboard_issue_kmod_load_failed">Kernel module failed to load. insmod error: %1$s. Use Diagnostics → Collect debug log to attach the full boot-time insmod output to a bug report.</string>
+    <string name="dashboard_issue_kmod_not_supported_kernel">Your kernel (%1$s) has no matching vpnhide-kmod variant. Uninstall the kmod module and install %2$s instead.</string>
+    <string name="dashboard_issue_kprobes_missing">Your kernel was built without CONFIG_KRETPROBES. The VPNHide Next kernel module cannot work on this kernel.</string>
+
+    <!-- Update -->
+    <string name="update_available_title">Update available</string>
+    <string name="update_available_subtitle">Version %1$s is available</string>
+    <string name="update_download">Download</string>
+
+    <!-- Changelog -->
+    <string name="changelog_title">What\'s new in v%1$s</string>
+    <string name="changelog_section_added">Added</string>
+    <string name="changelog_section_changed">Changed</string>
+    <string name="changelog_section_fixed">Fixed</string>
+    <string name="changelog_section_notes">Notes</string>
+    <string name="toast_copied_to_clipboard">Copied to clipboard</string>
+
+    <!-- Native check names (technical, not translatable) -->
+    <string name="check_ioctl_flags" translatable="false">ioctl SIOCGIFFLAGS tun0</string>
+    <string name="check_ioctl_mtu" translatable="false">ioctl SIOCGIFMTU tun0</string>
+    <string name="check_ioctl_conf" translatable="false">ioctl SIOCGIFCONF enum</string>
+    <string name="check_getifaddrs" translatable="false">getifaddrs() enum</string>
+    <string name="check_netlink_getlink" translatable="false">netlink RTM_GETLINK</string>
+    <string name="check_netlink_getroute" translatable="false">netlink RTM_GETROUTE</string>
+    <string name="check_netlink_anonymous_route" translatable="false">netlink RTM_GETROUTE (anon)</string>
+    <string name="check_proc_route" translatable="false">/proc/net/route</string>
+    <string name="check_proc_ipv6_route" translatable="false">/proc/net/ipv6_route</string>
+    <string name="check_proc_if_inet6" translatable="false">/proc/net/if_inet6</string>
+    <string name="check_proc_tcp" translatable="false">/proc/net/tcp</string>
+    <string name="check_proc_tcp6" translatable="false">/proc/net/tcp6</string>
+    <string name="check_proc_udp" translatable="false">/proc/net/udp</string>
+    <string name="check_proc_udp6" translatable="false">/proc/net/udp6</string>
+    <string name="check_proc_dev" translatable="false">/proc/net/dev</string>
+    <string name="check_proc_fib_trie" translatable="false">/proc/net/fib_trie</string>
+    <string name="check_bpf_iface_map" translatable="false">BPF map netd_iface_index_name_map</string>
+    <string name="check_sys_class_net" translatable="false">/sys/class/net &amp; virtual</string>
+    <string name="check_net_iface_enum" translatable="false">NetworkInterface enum</string>
+    <string name="check_proc_route_java" translatable="false">/proc/net/route (Java)</string>
+    <string name="check_loopback_bind_conflict" translatable="false">bind() loopback conflict</string>
+    <string name="check_abstract_unix_sockets" translatable="false">Abstract UNIX socket probe</string>
+    <string name="check_traffic_stats" translatable="false">TrafficStats volume anomaly</string>
+    <string name="check_system_properties" translatable="false">__system_property_get VPN keys</string>
+    <string name="check_proc_sys_net_conf" translatable="false">/proc/sys/net/... (conf/neigh)</string>
+    <string name="check_ioctl_alternative" translatable="false">ioctl alternative queries</string>
+    <string name="check_direct_syscall" translatable="false">direct syscall (socket/ioctl)</string>
+    <string name="check_traceroute_rtt" translatable="false">traceroute RTT / IP_RECVERR</string>
+    <string name="check_arm_timing" translatable="false">ARM CNTVCT timing check</string>
+    <string name="check_udp_queue_pressure" translatable="false">udp_sendmsg sk_sndbuf timing</string>
+    <string name="check_gso_asymmetry" translatable="false">setsockopt UDP_SEGMENT probe</string>
+    <string name="check_ipv6_link_local_bruteforce" translatable="false">IPv6 Link-Local Interface probe</string>
+    <string name="check_tcp_info_mss" translatable="false">getsockopt TCP_INFO MSS</string>
+    <string name="check_qdisc_by_ifindex" translatable="false">RTM_GETQDISC ifindex probe</string>
+    <string name="check_timestamping_hw" translatable="false">SO_TIMESTAMPING hardware bits</string>
+    <string name="check_rtm_getlink_trim_oracle" translatable="false">RTM_GETLINK trim oracle</string>
+    <string name="check_ipv6_multicast_denied" translatable="false">IPv6 Multicast Capability Oracle</string>
+    <string name="check_ipv6_ndp_tunnel" translatable="false">IPv6 NDP Tunnel Oracle</string>
+    <string name="check_ipv6_qdisc_tunnel" translatable="false">IPv6 Hardware Qdisc Pressure</string>
+    <string name="check_uid_route_rules_leak" translatable="false">RTM_GETRULE UID route leak</string>
+    <string name="check_pmtu_cache_poisoning" translatable="false">Global Path MTU Cache Leak</string>
+    <string name="check_underlay_port_conflict" translatable="false">UDP Underlay Port Conflict</string>
+
+    <!-- Java/LSPosed check names (technical, not translatable) -->
+    <string name="check_active_capabilities" translatable="false">Active Network Capabilities</string>
+    <string name="check_active_properties" translatable="false">Active Network LinkProperties</string>
+    <string name="check_all_networks_vpn" translatable="false">getAllNetworks() VPN scan</string>
+    <string name="check_link_properties_dns" translatable="false">LinkProperties dns</string>
+    <string name="check_proxy_host" translatable="false">System proxy properties</string>
+    <string name="check_network_callback" translatable="false">NetworkCallback push model</string>
+    <string name="check_underlying_networks" translatable="false">Underlying networks check</string>
+    <string name="check_getsockopt_bind" translatable="false">getsockopt SO_BINDTODEVICE</string>
+    <string name="check_inet_diag" translatable="false">inet_diag netlink scan</string>
+    <string name="check_getsockname_spoof" translatable="false">getsockname() IP spoofing</string>
+    <string name="check_netlink_getrule" translatable="false">netlink RTM_GETRULE</string>
+    <string name="check_tcp_mss" translatable="false">getsockopt TCP_MAXSEG</string>
+    <string name="check_netlink_getneigh" translatable="false">netlink RTM_GETNEIGH</string>
+    <string name="check_udp_pmtu" translatable="false">setsockopt IP_MTU_DISCOVER</string>
+    <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
+    <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
+    <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
+
+    <!-- Hook Isolation Diagnostics -->
+    <string name="diag_hook_isolation_title">Hook Isolation</string>
+    <string name="diag_hook_isolation_description">Test and isolate individual kernel-level and framework-level hooks. Helpful for pinpointing which specific hook is causing system or app instability.</string>
+    <string name="diag_hook_isolation_configure_btn">Configure Hooks</string>
+
+    <!-- Hook Testing Screen -->
+    <string name="hook_testing_title">Hook Isolation</string>
+    <string name="hook_testing_tab_kernel">Kernel Hooks</string>
+    <string name="hook_testing_tab_framework">Framework Hooks</string>
+    
+    <string name="hook_testing_kernel_card_title">Crash Isolation Tool (Kernel)</string>
+    <string name="hook_testing_kernel_card_desc">Disable individual kernel hooks at runtime to find which function causes system or app crashes. Disabled hooks will safely let calls pass through completely unchanged.</string>
+    <string name="hook_testing_kernel_err_parse">Failed to parse active hooks mask: \'%1$s\'</string>
+    <string name="hook_testing_kernel_err_not_active">Kernel module not active or does not support dynamic hooks. Make sure kmod is loaded.</string>
+    <string name="hook_testing_kernel_err_set">Failed to set active hooks mask</string>
+    <string name="hook_testing_kernel_mask_title">Active Kernel Hooks Mask</string>
+    
+    <string name="hook_testing_framework_card_title">Crash Isolation Tool (Java)</string>
+    <string name="hook_testing_framework_card_desc">Disable individual Java framework hooks in system_server on the fly. Changes are applied instantly without rebooting the system!</string>
+    <string name="hook_testing_framework_err_parse">Failed to parse Java hooks mask: \'%1$s\'</string>
+    <string name="hook_testing_framework_err_access">Failed to access Java hooks mask file.</string>
+    <string name="hook_testing_framework_err_set">Failed to write Java hooks mask</string>
+    <string name="hook_testing_framework_mask_title">Active Java Hooks Mask</string>
+
+    <string name="hook_testing_btn_enable_all">Enable All</string>
+    <string name="hook_testing_btn_disable_all">Disable All</string>
+    <string name="hook_testing_list_kernel">Kernel Hooks List</string>
+    <string name="hook_testing_list_java">Java Hooks List</string>
+
+    <!-- Java Hook Descriptions -->
+    <string name="hook_desc_link_properties">Filters LinkProperties serialization to remove VPN interfaces, routes, and DNS servers.</string>
+    <string name="hook_desc_network_capabilities">Filters VPN transport out of NetworkCapabilities, cloaking it as Wi-Fi or cellular connections.</string>
+    <string name="hook_desc_network_info">Morphs VPN connection status into standard mobile network status (DISCONNECTED or MOBILE) to hide active VPNs.</string>
+    <string name="hook_desc_network">Redirects active network requests from the VPN network instance to the best available physical network.</string>
+    <string name="hook_desc_connectivity_service">Filters VPN network out of global network lists and blocks leakage of active VPN callbacks.</string>
+    <string name="hook_desc_package_manager">Filters VpnServices and hides VPN packages from targeted apps.</string>
+    <string name="hook_desc_user_manager">Filters user profiles and spoof isManagedProfile checks to hide work profiles.</string>
+
+    <!-- Backup & Restore -->
+    <string name="backup_restore_title">Backup &amp; Restore</string>
+    <string name="backup_restore_description">Export your protected apps, tunnel interface prefixes, and port hiding rules to a JSON file, or restore them from an existing backup.</string>
+    <string name="btn_export">Export</string>
+    <string name="btn_import">Import</string>
+    <string name="export_success">Settings exported successfully</string>
+    <string name="export_failed">Export failed: %1$s</string>
+    <string name="import_success">Settings imported and applied successfully</string>
+    <string name="import_failed">Import failed: %1$s</string>
+    <string name="dashboard_intercept_statistics">Intercept Statistics</string>
+    <string name="dashboard_stats_lifetime_hint">Showing rolling telemetry for the last 30 minutes</string>
+    <string name="btn_clear">Clear</string>
+
+    <!-- Hook Isolation Labels -->
+    <string name="hook_testing_idx_format">Idx %1$d</string>
+
+    <!-- Kernel Hook Names -->
+    <string name="hook_name_dev_ioctl">Network interfaces (ioctl)</string>
+    <string name="hook_name_sock_ioctl">Socket list (ioctl)</string>
+    <string name="hook_name_rtnl_fill_ifinfo">Interface list (Netlink)</string>
+    <string name="hook_name_inet6_fill_ifaddr">IPv6 addresses (Netlink)</string>
+    <string name="hook_name_inet_fill_ifaddr">IPv4 addresses (Netlink)</string>
+    <string name="hook_name_fib_route_seq_show">Routing table IPv4 (/proc)</string>
+    <string name="hook_name_ipv6_route_seq_show">Routing table IPv6 (/proc)</string>
+    <string name="hook_name_fib_dump_info">Route list IPv4 (Netlink)</string>
+    <string name="hook_name_fib_nl_fill_rule">Routing rules (Netlink)</string>
+    <string name="hook_name_rt6_fill_node">Route list IPv6 (Netlink)</string>
+    <string name="hook_name_rt_fill_info">Route dump IPv4 (Netlink)</string>
+    <string name="hook_name_sys_setsockopt">Socket options (setsockopt)</string>
+    <string name="hook_name_sys_getsockopt">Socket options (getsockopt)</string>
+    <string name="hook_name_sys_connect">Loopback connections (connect)</string>
+    <string name="hook_name_sys_getsockname_ipv4">Local address IPv4 (getsockname)</string>
+    <string name="hook_name_sys_getsockname_ipv6">Local address IPv6 (getsockname)</string>
+    <string name="hook_name_sys_bind">Loopback port binding (bind)</string>
+    <string name="hook_name_bpf_stats_spoof">Traffic statistics (BPF)</string>
+    <string name="hook_name_enoent_file_hiding">File hiding (ENOENT) + dev/if6 seq</string>
+    <string name="hook_name_udp_sendmsg">UDP queue speed (udp_sendmsg)</string>
+    <string name="hook_name_inet6_bind_ll">IPv6 link-local bind (inet6_bind)</string>
+    <string name="hook_name_udpv6_sendmsg_ll">IPv6 link-local send (udpv6_sendmsg)</string>
+    <string name="hook_name_fib_trie_seq_show">FIB trie proc filter (fib_trie_seq_show)</string>
+    <string name="hook_name_tc_fill_qdisc">Traffic control qdisc filter (tc_fill_qdisc)</string>
+
+    <!-- Kernel Hook Symbols -->
+    <string name="hook_symbol_dev_ioctl" translatable="false">dev_ioctl</string>
+    <string name="hook_symbol_sock_ioctl" translatable="false">sock_ioctl</string>
+    <string name="hook_symbol_rtnl_fill_ifinfo" translatable="false">rtnl_fill_ifinfo</string>
+    <string name="hook_symbol_inet6_fill_ifaddr" translatable="false">inet6_fill_ifaddr</string>
+    <string name="hook_symbol_inet_fill_ifaddr" translatable="false">inet_fill_ifaddr</string>
+    <string name="hook_symbol_fib_route_seq_show" translatable="false">fib_route_seq_show</string>
+    <string name="hook_symbol_ipv6_route_seq_show" translatable="false">ipv6_route_seq_show</string>
+    <string name="hook_symbol_fib_dump_info" translatable="false">fib_dump_info</string>
+    <string name="hook_symbol_fib_nl_fill_rule" translatable="false">fib_nl_fill_rule</string>
+    <string name="hook_symbol_rt6_fill_node" translatable="false">rt6_fill_node</string>
+    <string name="hook_symbol_rt_fill_info" translatable="false">rt_fill_info</string>
+    <string name="hook_symbol_sys_setsockopt" translatable="false">__arm64_sys_setsockopt</string>
+    <string name="hook_symbol_sys_getsockopt" translatable="false">__arm64_sys_getsockopt</string>
+    <string name="hook_symbol_sys_connect" translatable="false">__arm64_sys_connect</string>
+    <string name="hook_symbol_sys_getsockname_ipv4" translatable="false">__arm64_sys_getsockname + inet_getname</string>
+    <string name="hook_symbol_sys_getsockname_ipv6" translatable="false">__arm64_sys_getsockname + inet6_getname</string>
+    <string name="hook_symbol_sys_bind" translatable="false">__arm64_sys_bind</string>
+    <string name="hook_symbol_bpf_stats_spoof" translatable="false">__arm64_sys_bpf</string>
+    <string name="hook_symbol_enoent_file_hiding" translatable="false">openat, faccessat, newfstatat, getdents64, dev_seq_show, if6_seq_show</string>
+    <string name="hook_symbol_udp_sendmsg" translatable="false">udp_sendmsg</string>
+    <string name="hook_symbol_inet6_bind_ll" translatable="false">inet6_bind</string>
+    <string name="hook_symbol_udpv6_sendmsg_ll" translatable="false">udpv6_sendmsg</string>
+    <string name="hook_symbol_fib_trie_seq_show" translatable="false">fib_trie_seq_show</string>
+    <string name="hook_symbol_tc_fill_qdisc" translatable="false">tc_fill_qdisc</string>
+
+    <!-- Kernel Hook Descriptions -->
+    <string name="hook_desc_dev_ioctl">Intercepts general interface IOCTLs (e.g., SIOCGIFFLAGS, SIOCGIFMTU) to hide VPN interface states.</string>
+    <string name="hook_desc_sock_ioctl">Intercepts socket-level IOCTLs like SIOCGIFCONF to filter out VPN interfaces during network enumeration.</string>
+    <string name="hook_desc_rtnl_fill_ifinfo">Filters VPN network interfaces out of netlink link-dump (RTM_GETLINK) responses.</string>
+    <string name="hook_desc_inet6_fill_ifaddr">Filters VPN IPv6 addresses out of netlink address-dump (RTM_GETADDR) responses.</string>
+    <string name="hook_desc_inet_fill_ifaddr">Filters VPN IPv4 addresses out of netlink address-dump (RTM_GETADDR) responses.</string>
+    <string name="hook_desc_fib_route_seq_show">Filters out VPN routes when apps read the IPv4 routing table in /proc/net/route.</string>
+    <string name="hook_desc_ipv6_route_seq_show">Filters out VPN routes when apps read the IPv6 routing table in /proc/net/ipv6_route.</string>
+    <string name="hook_desc_fib_dump_info">Filters out IPv4 VPN routes during netlink routing table dumps.</string>
+    <string name="hook_desc_fib_nl_fill_rule">Filters out VPN policy routing rules from netlink rule-dump (RTM_GETRULE) responses.</string>
+    <string name="hook_desc_rt6_fill_node">Filters out IPv6 VPN routes from netlink route-dump (RTM_GETROUTE) responses.</string>
+    <string name="hook_desc_rt_fill_info">Filters out IPv4 VPN routes from netlink route-dump (RTM_GETROUTE) responses.</string>
+    <string name="hook_desc_sys_setsockopt">Intercepts setsockopt calls to deny VPN socket binding (SO_BINDTODEVICE/IFINDEX), override SO_MARK to 0, and spoof MTU discovery.</string>
+    <string name="hook_desc_sys_getsockopt">Intercepts getsockopt calls to spoof MTU, MSS (TCP_MAXSEG), MTU discovery, and hide socket binding to a VPN interface.</string>
+    <string name="hook_desc_sys_connect">Implements Port Hiding by blocking loopback connections to VPN daemon control ports.</string>
+    <string name="hook_desc_sys_getsockname_ipv4">Spoofs getsockname for IPv4 sockets, masking the local VPN interface IP with the cover interface IP.</string>
+    <string name="hook_desc_sys_getsockname_ipv6">Spoofs getsockname for IPv6 sockets, masking the local VPN interface IP with the cover interface IP.</string>
+    <string name="hook_desc_sys_bind">Intercepts bind() on loopback: redirects protected ports to random free ephemeral ports (0) to bypass conflict checks.</string>
+    <string name="hook_desc_bpf_stats_spoof">Intercepts BPF map lookups via sys_bpf syscall to return zero traffic counters on stats maps (iface_stats, tether_stats, stats_map_) for VPN interfaces and target UIDs.</string>
+    <string name="hook_desc_enoent_file_hiding">Denies access to, hides, and filters out VPN-related paths and interface listings in /sys/class/net, /proc/net/dev, /proc/net/if_inet6, /proc/net, and /proc/sys/net (returns ENOENT or removes from directory listings).</string>
+    <string name="hook_desc_udp_sendmsg">Emulates physical network queue limits (EAGAIN) and timing delays on non-blocking UDP sockets to hide virtual TUN speeds.</string>
+    <string name="hook_desc_inet6_bind_ll">Blocks link-local IPv6 bind() calls on hidden VPN interface scopes to suppress NDP brute-force interface discovery.</string>
+    <string name="hook_desc_udpv6_sendmsg_ll">Blocks link-local IPv6 sendto() packets directed at hidden VPN interface scopes to prevent NDP brute-force routing checks.</string>
+    <string name="hook_desc_fib_trie_seq_show">Filters out VPN interface references from /proc/net/fib_trie (FIB trie) output.</string>
+    <string name="hook_desc_tc_fill_qdisc">Filters out qdisc (traffic control) entries for VPN interfaces from RTM_GETQDISC netlink responses.</string>
+
+    <!-- Java Hook Names -->
+    <string name="hook_name_link_properties">Link properties</string>
+    <string name="hook_name_network_capabilities">Network capabilities</string>
+    <string name="hook_name_network_info">Network status</string>
+    <string name="hook_name_network">Network requests</string>
+    <string name="hook_name_connectivity_service">Active network list</string>
+    <string name="hook_name_package_manager">Hiding VPN apps</string>
+    <string name="hook_name_user_manager">Hiding work profiles</string>
+
+    <!-- Java Hook Symbols -->
+    <string name="hook_symbol_link_properties" translatable="false">android.net.LinkProperties</string>
+    <string name="hook_symbol_network_capabilities" translatable="false">android.net.NetworkCapabilities</string>
+    <string name="hook_symbol_network_info" translatable="false">android.net.NetworkInfo</string>
+    <string name="hook_symbol_network" translatable="false">android.net.Network</string>
+    <string name="hook_symbol_connectivity_service" translatable="false">com.android.server.ConnectivityService</string>
+    <string name="hook_symbol_package_manager" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
+    <string name="hook_symbol_user_manager" translatable="false">com.android.server.pm.UserManagerService</string>
+
+
+    <!-- Intercepts Statistics Dashboard -->
+    <string name="dashboard_stats_empty_title">No Intercepts Recorded</string>
+    <string name="dashboard_stats_empty_desc">Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.</string>
+    <string name="dashboard_stats_framework_title">Framework Intercepts</string>
+    <string name="dashboard_stats_native_title">Native Intercepts</string>
+
+    <!-- Vector Labels -->
+    <string name="vector_label_ioctl">ioctl SIOCGIF*</string>
+    <string name="vector_label_netlink">netlink RTM_GET*</string>
+    <string name="vector_label_proc">/proc/net &amp; /sys</string>
+    <string name="vector_label_sockopt">setsockopt / getsockopt</string>
+    <string name="vector_label_connect">connect / bind</string>
+    <string name="vector_label_getname">getsockname spoof</string>
+
+    <!-- Port Rules Screen -->
+    <string name="ports_mass_rules_title">Mass Rules (Global)</string>
+    <string name="ports_local_rules_title">Local Rules</string>
+    <string name="btn_save_back">Save &amp; Back</string>
+    <string name="port_rule_port_format">Port: %1$d</string>
+    <string name="port_rule_range_format">Range: %1$d - %2$d</string>
+    <string name="port_rule_protocol_format">Protocol: %1$s</string>
+    <string name="ports_new_rule_title">New Port Rule</string>
+    <string name="ports_edit_rule_title">Edit Port Rule</string>
+    <string name="ports_label_placeholder">e.g. My Server</string>
+    <string name="ports_default_range_hint">Default: All ports (1-65535)</string>
+    <string name="ports_redundant_rules_removed_warning">%1$d redundant rule(s) will be removed</string>
+    <string name="chip_native">Native</string>
+    <string name="chip_framework">Framework</string>
+    <string name="protocol_both">Both</string>
+
+    <!-- Protection Level Card -->
+    <string name="protection_level_title">Protection Level</string>
+    <string name="protection_level_min">Min</string>
+    <string name="protection_level_avg">Avg</string>
+    <string name="protection_level_max">Max</string>
+    <string name="protection_level_custom">Custom</string>
+    <string name="protection_faq_title">Protection Levels</string>
+    <string name="protection_faq_min_title">Min — Essential Coverage</string>
+    <string name="protection_faq_min_body">Hides the VPN interface from network enumeration APIs — getifaddrs(), ioctl, netlink, and kernel routing tables. VPN-assigned ports are intercepted at bind() and connect() to prevent port-based fingerprinting.\n\nAll Java-layer checks pass. Most native checks pass.\n\nNot covered: socket-option probes (MTU/MSS, TCP_INFO, SO_BINDTODEVICE), GSO/PMTU side-channels, eBPF traffic-stat maps, and filesystem paths such as /sys/class/net.</string>
+    <string name="protection_faq_avg_title">Avg — Full Socket Coverage</string>
+    <string name="protection_faq_avg_body">Everything in Min, plus setsockopt/getsockopt interception. MTU, MSS, TCP_INFO, SO_BINDTODEVICE, and SO_TIMESTAMPING values are spoofed to match a physical interface. SO_MARK leaks are blocked. GSO and PMTU probes are neutralised. getsockname/getpeername return physical-interface addresses.\n\nAll Java and virtually all native direct-API checks pass.\n\nNot covered: eBPF traffic statistics, filesystem enumeration (/sys/class/net, /proc/net/dev), and UDP timing side-channels.</string>
+    <string name="protection_faq_max_title">Max — Complete Coverage</string>
+    <string name="protection_faq_max_body">Everything in Avg, plus:\n\n• /proc/net/dev, /proc/net/if_inet6, /proc/net/fib_trie — VPN interface hidden from proc entries\n• /sys/class/net/* — VPN interface hidden from the filesystem\n• eBPF maps — VPN traffic statistics zeroed\n• UDP rate-limit timing — side-channel neutralised\n• IPv6 link-local bruteforce — blocked\n• Traffic shaping (qdisc) — VPN qdisc hidden\n\nCovers all known direct and indirect detection vectors.</string>
+    <string name="protection_faq_close">Got it</string>
+
+    <!-- VPN off diagnostics -->
+    <string name="diag_no_vpn_title">Checks not run</string>
+    <string name="diag_no_vpn_desc">No active VPN detected. Connect to a VPN to run diagnostic checks.</string>
+    <string name="dashboard_protection_vpn_off">-/-</string>
+</resources>

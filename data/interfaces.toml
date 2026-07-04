@@ -1,0 +1,262 @@
+# Single source of truth for VPN-like network interface name patterns.
+# A name matching any rule below is treated as a tunnel and hidden from
+# target apps (kmod) / from the calling process (lsposed).
+#
+# Read at codegen time by scripts/codegen-interfaces.py, which renders
+# three matchers (kmod C, lsposed-native Rust, lsposed
+# Kotlin). Sync between platforms is enforced by a CI lint step that
+# re-runs the codegen and fails if the generated files drift.
+#
+# Match grammar (intentionally tiny so all four targets implement it
+# identically without depending on a regex engine — kernel C has none):
+#
+#   { exact   = "lo"     }                          name == "lo"
+#   { prefix  = "rmnet"  }                          name.starts_with("rmnet")
+#   { prefix  = "wlan", suffix = "digits" }         starts_with + rest is 1+ ASCII digits
+#   { contains = "vpn"   }                          needle anywhere in name
+#
+# All matches are ASCII case-insensitive.
+#
+# [[test]] entries below feed into the generated unit tests in each
+# language target — they verify that all four matchers agree on a fixed
+# set of inputs. CI runs them on every PR.
+
+[[vpn]]
+match = { prefix = "tun" }
+note = "OpenVPN, WireGuard userspace, Tailscale, generic tunneling"
+
+[[vpn]]
+match = { prefix = "tap" }
+note = "OpenVPN bridged"
+
+[[vpn]]
+match = { prefix = "wg" }
+note = "WireGuard kernel"
+
+[[vpn]]
+match = { prefix = "ppp" }
+note = "PPTP / L2TP PPP tunnels"
+
+[[vpn]]
+match = { prefix = "ipsec" }
+note = "Android built-in IPsec VPN"
+
+[[vpn]]
+match = { prefix = "xfrm" }
+note = "kernel IPsec XFRM framework"
+
+[[vpn]]
+match = { prefix = "utun" }
+note = "Apple-style, rare on Android"
+
+[[vpn]]
+match = { prefix = "l2tp" }
+note = "L2TP"
+
+[[vpn]]
+match = { contains = "vpn" }
+note = "catch-all for renamed clients (myvpn0, vpn-client, xvpn1, ...)"
+
+[[vpn]]
+match = { prefix = "if", suffix = "digits" }
+note = """Anonymous netdev / renamed tunnel using the kernel's default \
+naming pattern (e.g. `ip link set tun0 name if33` from issue #86). \
+Does NOT match `ifb<N>` — those are kernel intermediate-functional-block \
+traffic-shaping ifaces (different shape: `if` + letter, not + digit)."""
+
+
+# ── Test vectors ──────────────────────────────────────────────────────
+# Array of {name, is_vpn} fixtures. Codegen renders these into per-
+# language unit tests so all four matchers stay in lockstep.
+
+[[test]]
+name = "tun0"
+is_vpn = true
+
+[[test]]
+name = "tun"          # bare prefix, no digits — still matches
+is_vpn = true
+
+[[test]]
+name = "tun1234"
+is_vpn = true
+
+[[test]]
+name = "tap0"
+is_vpn = true
+
+[[test]]
+name = "wg0"
+is_vpn = true
+
+[[test]]
+name = "wg-client"    # prefix wg, then any suffix
+is_vpn = true
+
+[[test]]
+name = "ppp0"
+is_vpn = true
+
+[[test]]
+name = "ipsec0"
+is_vpn = true
+
+[[test]]
+name = "xfrm0"
+is_vpn = true
+
+[[test]]
+name = "utun3"
+is_vpn = true
+
+[[test]]
+name = "l2tp0"
+is_vpn = true
+
+[[test]]
+name = "gre0"
+is_vpn = false
+
+# Case-insensitivity
+
+[[test]]
+name = "TUN0"
+is_vpn = true
+
+[[test]]
+name = "Wg99"
+is_vpn = true
+
+[[test]]
+name = "MyVPN"
+is_vpn = true
+
+[[test]]
+name = "custom_VPN_42"
+is_vpn = true
+
+# Substring catch-all
+
+[[test]]
+name = "myvpn0"
+is_vpn = true
+
+[[test]]
+name = "vpn"
+is_vpn = true
+
+[[test]]
+name = "xvpn1"
+is_vpn = true
+
+# Real physical / system interfaces — must NOT match
+
+[[test]]
+name = "lo"
+is_vpn = false
+
+[[test]]
+name = "wlan0"
+is_vpn = false
+
+[[test]]
+name = "wlan"
+is_vpn = false
+
+[[test]]
+name = "rmnet0"
+is_vpn = false
+
+[[test]]
+name = "rmnet_data0"
+is_vpn = false
+
+[[test]]
+name = "rmnet_ipa0"
+is_vpn = false
+
+[[test]]
+name = "eth0"
+is_vpn = false
+
+[[test]]
+name = "ccmni0"
+is_vpn = false
+
+[[test]]
+name = "seth_lte8"
+is_vpn = false
+
+[[test]]
+name = "dummy0"
+is_vpn = false
+
+[[test]]
+name = "bnep0"
+is_vpn = false
+
+[[test]]
+name = "rndis0"
+is_vpn = false
+
+# The renamed-tun trick from issue #86 — caught by the
+# `if` + digits rule above.
+
+[[test]]
+name = "if33"
+is_vpn = true
+
+[[test]]
+name = "if0"
+is_vpn = true
+
+[[test]]
+name = "if99"
+is_vpn = true
+
+# `ifb<N>` is the kernel's intermediate-functional-block (traffic
+# shaping). Different shape (`if` + letter) — must NOT match.
+
+[[test]]
+name = "ifb0"
+is_vpn = false
+
+[[test]]
+name = "ifb1"
+is_vpn = false
+
+# `if` alone or with non-digit suffix — must NOT match.
+
+[[test]]
+name = "if"
+is_vpn = false
+
+[[test]]
+name = "if_inet6"
+is_vpn = false
+
+# Edge cases
+
+[[test]]
+name = ""             # empty
+is_vpn = false
+
+[[test]]
+name = "tunl"         # 'tunl' (IP-in-IP tunnel) should NOT be classified as VPN
+is_vpn = false
+
+[[test]]
+name = "atun0"        # prefix only matches at start of name
+is_vpn = false
+
+[[test]]
+name = "VPN"          # full name is the substring
+is_vpn = true
+
+[[test]]
+name = "gretap0"
+is_vpn = false
+
+[[test]]
+name = "tunl0"
+is_vpn = false

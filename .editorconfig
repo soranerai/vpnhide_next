@@ -1,0 +1,14 @@
+root = true
+
+[*]
+indent_size = 4
+indent_style = space
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+[*.kt]
+# Compose @Composable functions use PascalCase by convention
+ktlint_function_naming_ignore_when_annotated_with = Composable
+# Wildcard imports are idiomatic for Compose (androidx.compose.*)
+ktlint_standard_no-wildcard-imports = disabled

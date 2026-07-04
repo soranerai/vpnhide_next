@@ -1,0 +1,809 @@
+{
+  "history": [
+    {
+      "version": "1.12.1",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Optimize JSON configuration storage to only persist apps with active protections",
+              "ru": "Оптимизация хранения конфигурации JSON: теперь сохраняются только приложения с активной защитой"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.12.0",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Cache physical interface name from daemon and eliminate redundant ConnectivityService IPC calls",
+              "ru": "Кэшировать имя физического интерфейса из демона и устранить избыточные Binder-вызовы ConnectivityService"
+            },
+            {
+              "en": "Migrate companion app local storage from SQLite to a single JSON configuration file in Device Protected Storage with a one-time startup migration screen",
+              "ru": "Локальное хранилище приложения перенесено из базы данных SQLite в JSON-конфигурацию в Device Protected Storage с однократным автоматическим экраном миграции при запуске"
+            },
+            {
+              "en": "Migrate kernel module configuration load path to read vpnhide_config.json directly on boot via parson, removing the sqlite3 CLI binary and reducing module zip size",
+              "ru": "Миграция загрузки правил ядра на чтение конфигурационного файла vpnhide_config.json напрямую с помощью библиотеки parson, что позволило исключить бинарник sqlite3 и уменьшить размер архива модуля"
+            },
+            {
+              "en": "Optimize loadTargetUids by caching selfUid to prevent expensive reflection calls on every binder invocation",
+              "ru": "Оптимизация loadTargetUids путем кэширования selfUid для предотвращения ресурсоемких рефлексивных вызовов при каждом вызове binder"
+            },
+            {
+              "en": "Refactor ConnectivityService Network-handle hooks into a shared helper to eliminate per-method boilerplate",
+              "ru": "Рефакторинг хуков Network-хэндлов ConnectivityService в общий хелпер для устранения дублирования кода"
+            },
+            {
+              "en": "App list loads instantly from disk cache on startup",
+              "ru": "Список приложений загружается мгновенно из дискового кэша при запуске"
+            },
+            {
+              "en": "Hide successful diagnostics checks by default and display a simplified status card; show only failed checks if any check fails",
+              "ru": "Скрыты успешные проверки диагностики по умолчанию, добавлен упрощенный статус-индикатор и показ только непройденных проверок при их наличии"
+            },
+            {
+              "en": "Require the kernel module (kmod) to be installed and active on app startup.",
+              "ru": "Требовать установленный и активный модуль ядра (kmod) при запуске приложения."
+            },
+            {
+              "en": "Switched daemon interface detection from /proc/net/route heuristics to Active Probing via SO_BINDTODEVICE.",
+              "ru": "Переключено обнаружение интерфейсов демона с эвристики /proc/net/route на активное прощупывание через SO_BINDTODEVICE."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Android 17: migrate NetworkCapabilities sanitization to public API so NC hook is not skipped on renamed private fields",
+              "ru": "Android 17: мигрировать санитизацию NetworkCapabilities на публичный API, чтобы хук не отключался при переименовании приватных полей"
+            },
+            {
+              "en": "Bound netlink diagnostic recv loops and add SO_RCVTIMEO to prevent OOM crash when kmod suppresses NLMSG_DONE",
+              "ru": "Ограничить циклы recv в диагностике netlink и добавить SO_RCVTIMEO для предотвращения краша OOM при подавлении NLMSG_DONE модулем ядра"
+            },
+            {
+              "en": "Fix name resolution of Work Profile applications on the Intercept Statistics and Scope screen",
+              "ru": "Исправлено отображение имен приложений рабочего профиля в виде имени пакета на экране статистики перехватов и списке областей"
+            },
+            {
+              "en": "Fix clearing of LSPosed framework hook statistics on dashboard reset",
+              "ru": "Исправлен сброс статистики перехвата Java-хуков LSPosed при сбросе на дашборде"
+            },
+            {
+              "en": "Fix dashboard expanding multiple statistics cards for apps with the same package name in different user profiles by keying on UID instead of package name",
+              "ru": "Исправлено одновременное открытие карточек статистики для приложений с одинаковым именем пакета в разных профилях за счет использования UID вместо имени пакета"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Remove FAQ screen and button from the main app interface",
+              "ru": "Удален экран FAQ и соответствующая кнопка из основного интерфейса приложения"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.11.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Added UserManager hooks to hide work profiles from targeted apps",
+              "ru": "Добавлены хуки UserManager для сокрытия рабочего профиля от целевых приложений"
+            },
+            {
+              "en": "Implement RCU-based active VPN interface caching inside the kernel module driven by the daemon, eliminating runtime string matching and netdev traversals on hot BPF paths",
+              "ru": "Реализация RCU-кэширования активных VPN-интерфейсов в модуле ядра под управлением демона, устраняющая сравнения строк и обходы сетевых устройств на горячих путях BPF"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Migrated remaining hardcoded UI strings to localized resources",
+              "ru": "Перенесены оставшиеся жестко заданные строки интерфейса в локализованные ресурсы"
+            },
+            {
+              "en": "Migrated socket bind, connect, and getsockname hooks to top-level syscall wrappers to prevent bypasses via inlining",
+              "ru": "Хуки bind, connect и getsockname перенесены на уровень системных вызовов для предотвращения обхода через инлайнинг"
+            },
+            {
+              "en": "Optimize all kretprobe hooks to return 1 early from entry handlers for non-target UIDs and non-matching requests, skipping return handler execution and releasing kretprobe resources instantly",
+              "ru": "Оптимизация всех хуков kretprobe для быстрого возврата 1 из входных обработчиков для нецелевых процессов и несовпадающих запросов, предотвращая вызов обработчиков возврата и мгновенно освобождая ресурсы kretprobe"
+            },
+            {
+              "en": "Optimize hot-path locking and memory copying (RCU for spoof IP, stack arrays for BPF, get/put_user for socket options)",
+              "ru": "Оптимизация блокировок и копирований на горячих путях (RCU для IP-спуфинга, стековые буферы для BPF, get/put_user для сокет-опций)"
+            },
+            {
+              "en": "Optimize __sys_bpf hot paths by adding fast-path filter checks and rapid switch matching",
+              "ru": "Оптимизация горячих путей __sys_bpf с помощью быстрых проверок фильтрации и быстрого сопоставления через switch"
+            },
+            {
+              "en": "Optimized kretprobe hooks by skipping return handlers for non-target processes, significantly reducing CPU overhead",
+              "ru": "Оптимизированы kretprobe хуки за счет пропуска обработчиков возврата для нецелевых процессов, что значительно снижает нагрузку на CPU"
+            },
+            {
+              "en": "Remove dev_get_by_index_rcu lookups from setsockopt and getsockopt hooks, using active VPN cache for SO_BINDTOIFINDEX instead",
+              "ru": "Удаление вызовов dev_get_by_index_rcu из хуков setsockopt и getsockopt, использование кэша активных VPN для SO_BINDTOIFINDEX"
+            },
+            {
+              "en": "Updated hook card titles in Hook Isolation screen to show user-friendly names instead of technical identifiers",
+              "ru": "Обновлены заголовки карточек хуков на экране изоляции для отображения понятных названий вместо технических идентификаторов"
+            },
+            {
+              "en": "Updated Hook Isolation screen to match recent kernel-level hook refactorings and migrated all UI strings to localized resources",
+              "ru": "Экран изоляции хуков обновлен под последние изменения в модуле ядра, все строки интерфейса перенесены в локализованные ресурсы"
+            },
+            {
+              "en": "Removed all /data/system config files, replacing file observers with direct /dev/vpnhide_ctrl kernel blocking reads.",
+              "ru": "Удалена зависимость от файлов конфигурации в /data/system, файловые наблюдатели заменены на прямое блокирующее чтение из ядра через /dev/vpnhide_ctrl."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Add sock_common_getsockopt fallback hook to properly spoof TCP_MAXSEG when syscall hook is disabled",
+              "ru": "Добавлен хук fallback sock_common_getsockopt для корректного спуфинга TCP_MAXSEG при отключенном хуке системного вызова"
+            },
+            {
+              "en": "Fix BPF map laundering instability for single lookup queries",
+              "ru": "Исправление нестабильности лаундеринга BPF карт при одиночных запросах"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Removed early-boot kernel crash detection and automatic hook mitigation logic",
+              "ru": "Удалена логика раннего детектирования крашей ядра и автоматического отключения хуков"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.10.1",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Migrate getsockopt intercept from sk_getsockopt/sock_getsockopt to __arm64_sys_getsockopt for better reliability against LTO inlining",
+              "ru": "Перенос перехвата getsockopt с sk_getsockopt/sock_getsockopt на __arm64_sys_getsockopt для защиты от обхода через LTO-инлайнинг"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.10.0",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Always block socket binding attempts (SO_BINDTODEVICE/SO_BINDTOIFINDEX) to VPN interfaces with ENODEV for target UIDs",
+              "ru": "Попытки привязки сокетов к VPN-интерфейсам теперь всегда жестко блокируются с возвратом ENODEV для целевых UID"
+            },
+            {
+              "en": "Optimize sys_setsockopt and sys_bpf hot paths by caching wrapper detection",
+              "ru": "Оптимизирован горячий путь sys_setsockopt и sys_bpf путем кэширования типа системного вызова"
+            },
+            {
+              "en": "Updated kernel module hook descriptions, names and symbols in Hook Testing Screen",
+              "ru": "Обновлены описания, имена и символы хуков ядра на экране тестирования хуков"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix caching race conditions in system_server PackageManager hooks",
+              "ru": "Исправление гонки кэширования в хуках PackageManager в system_server"
+            },
+            {
+              "en": "Fix ConnectivityService hook capture on some Android 16 builds",
+              "ru": "Исправлен захват хука ConnectivityService на некоторых сборках Android 16"
+            },
+            {
+              "en": "Fix SO_BINDTODEVICE leak on kernels without sock_getsockopt/sock_setsockopt",
+              "ru": "Исправлена утечка SO_BINDTODEVICE на ядрах без sock_getsockopt/sock_setsockopt"
+            },
+            {
+              "en": "intercept setsockopt at the syscall",
+              "ru": "перехват setsockopt на уровне системных вызовов"
+            },
+            {
+              "en": "Record statistics for sys_setsockopt intercepts to show up in diagnostics counters",
+              "ru": "Добавлена запись статистики перехватов sys_setsockopt для отображения в счетчиках диагностики"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Remove 'aikido' soft SO_BINDTODEVICE spoofing (zeroing out optlen)",
+              "ru": "Удален мягкий спуфинг SO_BINDTODEVICE (aikido) с обнулением optlen"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.9.7",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Replaced eBPF map ops hijacking with direct syscall filtering, and add batch lookup support for statistics laundering",
+              "ru": "Заменен перехвата map ops в eBPF на прямую фильтрацию системного вызова, а также добавлена поддержка пакетного чтения для очистки статистики"
+            },
+            {
+              "en": "Prevent VPN apps from hiding themselves",
+              "ru": "Не скрывать VPN-приложение от самого себя"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.9.6",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Reverted dynamic symbol resolution in kernel module to prevent CFI panics on fresh kernels",
+              "ru": "Откачено динамическое разрешение символов в модуле ядра для предотвращения паники CFI на свежих ядрах"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Optimize CPU and battery usage in kernel module, daemon, and lsposed hook",
+              "ru": "Оптимизация потребления CPU и батареи в модуле ядра, демоне и хуке lsposed"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.9.5",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Support Samsung Exynos mobile data interfaces (pdp*) in vpnhide_daemon",
+              "ru": "Поддержка мобильных интерфейсов Samsung Exynos (pdp*) в vpnhide_daemon"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix cellular socket spoofing and CLAT/IPv6-only fallback",
+              "ru": "Исправлено сокрытие адресов сокета в мобильных сетях и при использовании CLAT/IPv6-only"
+            },
+            {
+              "en": "Resolve all kretprobe symbol names dynamically to fix registration failures due to LLVM suffixes/LTO",
+              "ru": "Динамический поиск имен символов kretprobe для устранения ошибок регистрации из-за суффиксов LLVM/LTO"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.9.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Implemented kernel-level TrafficStats BPF map spoofing.",
+              "ru": "Добавлен спуфинг BPF-карт TrafficStats на уровне ядра."
+            },
+            {
+              "en": "Implemented auto filtering VpnServices and hiding VPN packages",
+              "ru": "Добавлена автофильтрация VpnServices и сокрытие VPN приложений"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Moved TrafficStats check to native slots, bump check version filter to API 35",
+              "ru": "Перенесена TrafficStats проверка в нативный слот, поднят фильтр проверки до API 35"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "TrafficStats volume anomaly check now uses /proc/net/dev as ground truth to detect partial BPF-laundering failures that previously produced false-green results; iface_stats laundering implemented via two-pass BPF_MAP_LOOKUP_BATCH post-processing (collect VPN bytes, add to cover interface)",
+              "ru": "Проверка аномалий TrafficStats теперь использует /proc/net/dev как эталон для обнаружения частичных сбоев BPF-лаундеринга, которые ранее давали ложно-зелёный результат; лаундеринг iface_stats реализован через двухпроходную постобработку BPF_MAP_LOOKUP_BATCH (сбор VPN-байт и добавление к cover-интерфейсу)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.8.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Added diagnostic checks for loopback bind conflict and TrafficStats volume anomaly. Added NetworkStatsService system_server hooks to spoof TrafficStats and bypass detection.",
+              "ru": "Добавлены диагностические проверки для конфликта bind() на loopback и аномалии трафика TrafficStats. Добавлены хуки на NetworkStatsService в system_server для подмены TrafficStats и обхода детекта."
+            },
+            {
+              "en": "Added security_socket_bind kernel hook to silently redirect blocked loopback port binds to port 0, making bind conflict scanning succeed transparently.",
+              "ru": "Добавлен хук ядра security_socket_bind для незаметного перенаправления заблокированных привязок портов на loopback на порт 0, благодаря чему сканирование портов через bind() успешно завершается."
+            },
+            {
+              "en": "Added UDP Path MTU (PMTU) discovery active check and kernel-level socket spoofing hooks to hide PMTU bottlenecks",
+              "ru": "Добавлена активная проверка UDP Path MTU (PMTU) и нативные хуки ядра для скрытия ограничений PMTU"
+            },
+            {
+              "en": "Add ConnectivityDiagnostics as an isolated Java hook with its own toggle and localized description in the isolation settings",
+              "ru": "Добавлен хук ConnectivityDiagnostics в качестве изолированного Java-хука с собственным переключателем и локализованным описанием в настройках изоляции"
+            },
+            {
+              "en": "Display passed checks counts ratio and partial status with premium blue theme on dashboard cards",
+              "ru": "Отображение количества работающих хуков, статуса Partial и синего оформления для частично скрытых векторов"
+            },
+            {
+              "en": "Implement registerConnectivityDiagnosticsCallback suppression hook in ConnectivityService to prevent target apps from receiving VPN reports",
+              "ru": "Реализован хук подавления registerConnectivityDiagnosticsCallback в ConnectivityService для предотвращения получения VPN-отчетов целевыми приложениями"
+            },
+            {
+              "en": "Added automatic SQLite target migration from original app",
+              "ru": "Добавлена автоматическая миграция целей в SQLite из оригинального приложения"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Expanded kernel and Java active hooks mask to 32 bits for future-proof hook management",
+              "ru": "Расширены маски активных Kernel и Java хуков до 32 бит для поддержки будущих хуков"
+            },
+            {
+              "en": "Optimize Hook Isolation",
+              "ru": "Оптимизация экрана изоляции хуков"
+            },
+            {
+              "en": "Replace Room ORM with raw SQLite",
+              "ru": "Переход с Room ORM на сырой SQLite"
+            },
+            {
+              "en": "Refined diagnostics screen styling with smooth rounded cards and status-aware detail tints",
+              "ru": "Улучшено оформление экрана диагностики с мягким скруглением карточек и цветным выделением деталей"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.7.5",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Implement app settings backup and restore (.json) in diagnostics",
+              "ru": "Добавлен импорт/экспорт настроек (выбранных приложений) в формате .json на экран диагностики"
+            },
+            {
+              "en": "Implement manual statistics reset and automatic 30-minute stats expiration on the dashboard",
+              "ru": "Добавлена возможность ручного сброса статистики перехватов и автоматический сброс через 30 минут на дашборде"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Completely transition to SQLite-only configuration, eliminating legacy text files",
+              "ru": "Полный переход на хранение конфигурации исключительно в БД SQLite и удаление устаревших текстовых файлов"
+            },
+            {
+              "en": "Exclude self package from dashboard Native targets count, and rename screen row toggles from Kernel/LSPosed to Native/Framework",
+              "ru": "Исключено само приложение из подсчета Native целей на дашборде, и переименованы переключатели на экране защиты с Kernel/LSPosed на Native/Framework"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix cross-profile SecurityException during dashboard stats package resolution",
+              "ru": "Исправлен вылет SecurityException при получении имени пакета для статистики в мультипрофильной среде (Shelter)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.7.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add getNetworkForType() diagnostics check and AOSP ConnectivityService hook to hide VPN network type",
+              "ru": "Добавлена диагностика getNetworkForType() и AOSP хук в ConnectivityService для скрытия VPN типа сети"
+            },
+            {
+              "en": "Implement native and framework-level real-time call intercept statistics on the Dashboard",
+              "ru": "Добавлена статистика перехвата вызовов на нативном и framework-уровне в реальном времени на главном экране"
+            },
+            {
+              "en": "Add dynamic Java/Framework hook disabling on the fly to Diagnostics isolation screen",
+              "ru": "Добавлена возможность динамического отключения Java/Framework хуков на лету на экране диагностики"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Make Dashboard module and protection status cards more compact and side-by-side",
+              "ru": "Сделаны более компактными плитки модулей и статусов защиты на главном экране (в одну строку)"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix first-launch self-registration and prune uninstalled apps from target database",
+              "ru": "Исправлена саморегистрация при первом запуске и добавлена очистка удаленных приложений из БД целей"
+            },
+            {
+              "en": "Fix RTM_GETROUTE route leaking on Android 12 GKI 5.10",
+              "ru": "Исправление утечки маршрутов RTM_GETROUTE на Android 12 GKI 5.10"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.6.1",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix potential kernel panic on rt_fill_info hook, and implement stealth getsockopt spoofing via sock_common_getsockopt for IP_MTU, IPV6_MTU, and TCP_MAXSEG to prevent detection of MTU/MSS clamping.",
+              "ru": "Устранено возможное падение ядра на хуке rt_fill_info, а также реализована маскировка getsockopt через sock_common_getsockopt для IP_MTU, IPV6_MTU и TCP_MAXSEG для предотвращения обнаружения заниженного MTU/MSS."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.6.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add getsockname diagnostic check to verify VPN hiding on connected sockets",
+              "ru": "Добавлена проверка getsockname на экран диагностики для проверки скрытия VPN на сокетах"
+            },
+            {
+              "en": "Implement getsockname spoofing via userspace IP service",
+              "ru": "Реализация подмены getsockname через службу получения IP-адресов в пространстве пользователя"
+            },
+            {
+              "en": "Intercept setsockopt(SO_MARK) calls to reset physical/non-VPN interface routing binds",
+              "ru": "Перехват вызовов setsockopt(SO_MARK) для сброса привязок маршрутизации к физическим интерфейсам вне VPN"
+            },
+            {
+              "en": "Added RTM_GETRULE, TCP_MAXSEG, and RTM_GETNEIGH checks to diagnostics suite",
+              "ru": "Добавлены проверки RTM_GETRULE, TCP_MAXSEG и RTM_GETNEIGH на экран диагностики"
+            },
+            {
+              "en": "Added dynamic kernel hook isolation screen to diagnostics for crash debugging",
+              "ru": "Добавлен экран изоляции хуков ядра на вкладку диагностики для поиска причин падений"
+            },
+            {
+              "en": "- WifiInfo hooks in system_server: restore IP/SSID/BSSID redacted by Android 12+ privacy controls (fixes MTS detection on Wi-Fi)\n- Suppress VPN-specific network callbacks for target apps in system_server (fixes MTS detection on cellular networks)\n- Add new diagnostic checks in the companion app to verify VPN callback suppression and WifiInfo unredaction",
+              "ru": "- Хуки WifiInfo в system_server: восстановление IP/SSID/BSSID, которые Android 12+ скрывает для приложений без ACCESS_FINE_LOCATION (исправляет детект МТС на Wi-Fi)\n- Блокировка специфичных для VPN сетевых коллбеков в system_server для целевых приложений (исправляет детект МТС на мобильных сетях)\n- Добавлены новые диагностические проверки для верификации блокировки VPN-коллбеков и восстановления параметров WifiInfo"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix critical kernel panic (Null dereference and invalid skb register mapping in GKI 6.1+ rt_fill_info)",
+              "ru": "Устранение критической ошибки ядра (Null-разыменование и неверное сопоставление регистра skb в GKI 6.1+ rt_fill_info)"
+            },
+            {
+              "en": "Implement robust score-based physical interface ranking to select default internet-routing interface (e.g. ccmni2 with DNS) rather than secondary cellular interfaces (e.g. ccmni1).",
+              "ru": "Внедрено надежное ранжирование физических интерфейсов по приоритетам и интернет-способностям для правильного выбора основного интернет-интерфейса."
+            },
+            {
+              "en": "Fix register mapping in rt_fill_info hook to prevent kernel panics on ARM64",
+              "ru": "Исправление маппинга регистров в хуке rt_fill_info для предотвращения паники ядра на ARM64"
+            },
+            {
+              "en": "Fix setsockopt registers mapping for ARM64 kernels >= 6.4 (including 6.6 and 6.12)",
+              "ru": "Исправление маппинга регистров sock_setsockopt для ядер ARM64 >= 6.4 (включая 6.6 и 6.12)"
+            },
+            {
+              "en": "Hid routing policy database rules from target apps",
+              "ru": "Скрыты правила маршрутизации политик от целевых приложений"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.5.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add NetworkCapabilities signal strength and bandwidth checks to diagnostics with stealth masking",
+              "ru": "Добавлены проверки уровня сигнала и пропускной способности NetworkCapabilities в диагностику со скрытой маскировкой"
+            },
+            {
+              "en": "Added getsockopt SO_BINDTODEVICE and inet_diag socket diagnostics to native checks screen",
+              "ru": "Добавлены проверки getsockopt SO_BINDTODEVICE и inet_diag сокет-диагностики на экран нативных проверок"
+            },
+            {
+              "en": "Implement dynamic Network netId replacement with physical network to prevent cross-id leakage",
+              "ru": "Реализована динамическая подмена Network netId физической сетью для исключения перекрестных утечек"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Consolidated diagnostic checks on the screen",
+              "ru": "Объединены диагностические проверки на экране"
+            },
+            {
+              "en": "Implement dynamic physical network properties propagation and add Wi-Fi state/WifiInfo diagnostic checks",
+              "ru": "Внедрено динамическое наследование свойств физической сети и добавлены проверки модулей Wi-Fi в диагностику"
+            },
+            {
+              "en": "Moved all Xposed logs under the debug flag",
+              "ru": "Все Xposed-логи убраны под debug-флаг"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix Java-level VPN interface detection leak by dynamically redirecting to physical network properties",
+              "ru": "Исправлена утечка детекта VPN-интерфейса в Java API через динамическую подмену на свойства физической сети"
+            },
+            {
+              "en": "Fix false-positive VPN detection in some apps (e.g. MTS)",
+              "ru": "Исправлено ложноположительное детектирование VPN в некоторых приложениях (например, МТС)"
+            },
+            {
+              "en": "Fix loopback port bypass via 0.0.0.0, loopback subnets, IPv6 wildcard, and IPv4-mapped IPv6 loopback addresses",
+              "ru": "Исправление обхода блокировки портов через 0.0.0.0, loopback-подсети, IPv6 wildcard и IPv4-mapped IPv6 loopback-адреса"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.4.1",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "rainbow hehe detection fix",
+              "ru": "исправлен детект VPN приложением \"Улыбка Радуги\""
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.4.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Added NetworkCallback check to Diagnostics",
+              "ru": "Добавлена проверка NetworkCallback в экран диагностики"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix DNS leak of target/VPN interfaces in LinkProperties hooks",
+              "ru": "Исправлена утечка DNS целевых/VPN интерфейсов в хуках LinkProperties"
+            },
+            {
+              "en": "Fixed NetworkCallback push-model and VpnService.prepare VPN detection leaks",
+              "ru": "Реализован перехват APEX лоадеров. Найдены и закрыты два новых критических вектора обнаружения VPN через NetworkCallback"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.3.0",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Some ui fixes",
+              "ru": "Исправление некоторых багов ui"
+            },
+            {
+              "en": "Custom interfaces hide ability",
+              "ru": "Возможность скрывать кастомные интерфейсы"
+            },
+            {
+              "en": "Migrated boot-time rule application to SQLite database for faster startup",
+              "ru": "Переведена загрузочная инициализация правил на базу данных SQLite для ускорения запуска"
+            },
+            {
+              "en": "Second stage of migration to Room",
+              "ru": "Второй этап миграции на БД Room"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.2.5",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Full support for Work Profile and secondary users with visual distinction and profile filtering",
+              "ru": "Полная поддержка рабочих профилей и дополнительных пользователей с визуальным разделением и фильтрацией"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Improved app responsiveness by pre-loading application lists at startup",
+              "ru": "Улучшена отзывчивость приложения"
+            },
+            {
+              "en": "Significantly improved settings saving performance",
+              "ru": "Значительно ускорено сохранение настроек"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fixed incorrect label color for mass rules",
+              "ru": "Исправлен некорректный цвет лейбла массовых правил"
+            },
+            {
+              "en": "Fixed settings restore after reboot",
+              "ru": "Исправлено восстановление настроек после перезагрузки"
+            },
+            {
+              "en": "Restoration of protection targets and port rules after reboot",
+              "ru": "Восстановление настроек защиты и правил портов после перезагрузки"
+            }
+          ]
+        },
+        {
+          "type": "removed",
+          "items": [
+            {
+              "en": "Removed unstable VPN routing bypass logic",
+              "ru": "Удалена нестабильная логика обхода маршрутизации VPN"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.2.0",
+      "sections": []
+    },
+    {
+      "version": "1.1.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Granular Port Hiding: Ability to hide specific local ports from targeted applications via kernel-level socket filtering (connect() hook)",
+              "ru": "Гранулярное скрытие портов: Возможность скрывать конкретные локальные порты от выбранных приложений через фильтрацию сокетов на уровне ядра (хук connect())"
+            },
+            {
+              "en": "Custom Rule Sets: Support for port ranges (e.g., 8080-8090) and protocol selection (TCP, UDP, or both) per application",
+              "ru": "Настраиваемые наборы правил: Поддержка диапазонов портов (например, 8080-8090) и выбора протокола (TCP, UDP или оба) для каждого приложения"
+            },
+            {
+              "en": "Enhanced UI: New interactive port rules editor with protocol toggles and simplified range management",
+              "ru": "Улучшенный интерфейс: Новый интерактивный редактор правил портов с переключателями протоколов и упрощенным управлением диапазонами"
+            },
+            {
+              "en": "Memory Stability: Switched to virtual memory allocation (kvmalloc) in the kernel for large rule sets, preventing ENOMEM on fragmented systems",
+              "ru": "Стабильность памяти: Переход на виртуальное выделение памяти (kvmalloc) в ядре для больших наборов правил, предотвращающий ошибки ENOMEM на фрагментированных системах"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "version": "1.0.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Deep redesign and optimization: Completely reworked interface (skeleton, async loading) and optimized code",
+              "ru": "Глубокий редизайн и оптимизация: Полностью переработанный интерфейс (skeleton, async loading) и оптимизированный код"
+            },
+            {
+              "en": "Flexible sorting: Added the ability to sort applications properly",
+              "ru": "Гибкая сортировка: Добавлена возможность нормальной сортировки приложений"
+            },
+            {
+              "en": "Hiding anonymous TUN routes: Exclusion of TUN from route requests",
+              "ru": "Сокрытие анонимных маршрутов TUN: Исключение TUN из запросов маршрутов"
+            },
+            {
+              "en": "Kernel-level bind bypass: Ability to route packets directly, bypassing any application binds at the kernel level",
+              "ru": "Обход биндов на уровне ядра: Возможность разворачивать пакеты напрямую в обход любых биндов приложений"
+            },
+            {
+              "en": "Maximum stealth: Complete removal of /proc/ files accessible to all applications, eliminating module detection via the file system",
+              "ru": "Максимальная скрытность: Полный отказ от файлов в /proc/, которые доступны всем приложениям, что исключает обнаружение модуля через файловую систему"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

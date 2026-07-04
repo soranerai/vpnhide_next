@@ -1,0 +1,21 @@
+# Ruff config — applies to every .py in the repo.
+# All our scripts are stdlib-only by policy (see scripts/build_lib.py
+# header), so ruff is a dev/CI tool here, never a runtime dependency.
+
+[tool.ruff]
+target-version = "py312"  # CI image (Ubuntu 24.04) ships Python 3.12
+line-length = 100
+extend-exclude = [
+    # third-party / vendored — not our code, don't lint
+    "zygisk/third_party",
+    # cargo build outputs that may contain stray .py files
+    "**/target",
+    # local-only worktrees / agent state, untracked
+    ".claude",
+]
+
+[tool.ruff.lint]
+# Conservative rule set: pycodestyle (E/W) + pyflakes (F) + isort (I)
+# + bugbear foot-guns (B) + pyupgrade (UP) + simplifications (SIM).
+# No pylint-style noise, no mypy.
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]

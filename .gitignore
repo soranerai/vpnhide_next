@@ -1,0 +1,48 @@
+
+# LSPosed (Kotlin/Gradle)
+lsposed/.gradle/
+lsposed/build/
+lsposed/app/build/
+lsposed/.idea/
+lsposed/*.iml
+lsposed/local.properties
+lsposed/captures/
+lsposed/*.jks
+lsposed/*.keystore
+lsposed/keystore.properties
+lsposed/app/src/main/jniLibs/
+lsposed/native/target/
+
+# Portshide (iptables module)
+portshide/vpnhide-ports.zip
+
+# Kmod (kernel module)
+kmod/*.o
+kmod/*.mod
+kmod/*.mod.c
+kmod/*.mod.o
+kmod/Module.symvers
+kmod/modules.order
+kmod/.tmp_versions/
+kmod/vpnhide-kmod.zip
+kmod/.*.cmd
+kmod/*.usyms
+kmod/vpnhide_kmod.ko
+kmod/module/vpnhide_kmod.ko
+kmod/.env
+kmod/*.lds
+kmod/test_iface_lists
+kmod/vpnhide-ctl-host
+kmod/vpnhide-daemon-host
+kmod/*.log
+kmod/*log.txt
+
+# General
+*.swp
+*.log
+/tmp/
+/*.zip
+scripts/__pycache__/
+release.jks
+lsposed/.kotlin/sessions/kotlin-compiler*
+vpnhide_next_private
