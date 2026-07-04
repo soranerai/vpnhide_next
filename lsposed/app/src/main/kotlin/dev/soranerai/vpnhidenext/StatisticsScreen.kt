@@ -1,7 +1,6 @@
 package dev.soranerai.vpnhidenext
 
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -193,20 +192,20 @@ private fun InterceptStatisticsSection(
                         val icon = appSummary?.icon
 
                         ElevatedCard(
+                            onClick = {
+                                expandedApps =
+                                    if (isExpanded) {
+                                        expandedApps - appStat.uid
+                                    } else {
+                                        expandedApps + appStat.uid
+                                    }
+                            },
                             shape = RoundedCornerShape(16.dp),
                             colors =
                                 CardDefaults.elevatedCardColors(
                                     containerColor = innerCardColor,
                                 ),
-                            modifier =
-                                Modifier.fillMaxWidth().clickable {
-                                    expandedApps =
-                                        if (isExpanded) {
-                                            expandedApps - appStat.uid
-                                        } else {
-                                            expandedApps + appStat.uid
-                                        }
-                                },
+                            modifier = Modifier.fillMaxWidth(),
                         ) {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Row(

@@ -118,14 +118,24 @@ fun SettingsScreen(
             item(key = "spacer_top") { Spacer(Modifier.height(8.dp)) }
 
             item(key = "section_diagnostics") {
-                SectionHeader(stringResource(R.string.settings_section_diagnostics), icon = Icons.Default.Troubleshoot, tint = TelBlue)
+                SectionHeader(
+                    stringResource(R.string.settings_section_diagnostics),
+                    icon = Icons.Default.Troubleshoot,
+                    tint = TelBlue,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "backup_restore_card") { BackupRestoreCard() }
             item(key = "debug_logging_card") { DebugLoggingCard() }
             item(key = "debug_log_export_card") { DebugLogExportCard(selfNeedsRestart) }
 
             item(key = "section_statistics") {
-                SectionHeader(stringResource(R.string.settings_section_statistics), icon = Icons.Default.BarChart, tint = TelGreen)
+                SectionHeader(
+                    stringResource(R.string.settings_section_statistics),
+                    icon = Icons.Default.BarChart,
+                    tint = TelGreen,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "group_statistics") {
                 val labelsByPeriod = StatsRetentionPeriod.entries.associateWith { it.displayLabel() }
@@ -153,7 +163,12 @@ fun SettingsScreen(
             }
 
             item(key = "section_testing") {
-                SectionHeader(stringResource(R.string.settings_section_testing), icon = Icons.Default.Science, tint = TelPurple)
+                SectionHeader(
+                    stringResource(R.string.settings_section_testing),
+                    icon = Icons.Default.Science,
+                    tint = TelPurple,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "group_testing") {
                 SettingsGroup {
@@ -168,7 +183,12 @@ fun SettingsScreen(
             }
 
             item(key = "section_experimental") {
-                SectionHeader(stringResource(R.string.settings_section_experimental), icon = Icons.Default.Whatshot, tint = TelOrange)
+                SectionHeader(
+                    stringResource(R.string.settings_section_experimental),
+                    icon = Icons.Default.Whatshot,
+                    tint = TelOrange,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "group_experimental") {
                 SettingsGroup {

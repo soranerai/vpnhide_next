@@ -150,8 +150,9 @@ internal fun SectionHeader(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
     tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier,
 ) {
-    Row(verticalAlignment = Alignment.CenterVertically) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
         if (icon != null) {
             Icon(
                 imageVector = icon,
