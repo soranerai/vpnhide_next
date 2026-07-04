@@ -79,6 +79,8 @@
     <string name="btn_export_debug_running">Collecting debug info&#8230;</string>
     <string name="btn_save_debug">Save</string>
     <string name="btn_share_debug">Share</string>
+    <string name="debug_log_export_title">Debug log export</string>
+    <string name="debug_log_export_desc">Bundles app, kernel and LSPosed logs into a shareable zip archive.</string>
     <string name="diag_debug_logging_title">Debug logging</string>
     <string name="diag_debug_logging_description">Detailed logging in logcat and dmesg. Do not enable unless necessary.</string>
 

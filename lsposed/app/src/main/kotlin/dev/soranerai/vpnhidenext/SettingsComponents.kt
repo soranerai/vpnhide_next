@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
@@ -91,6 +92,50 @@ internal fun SettingsRowIcon(
                 tint = tint,
                 modifier = Modifier.size(19.dp),
             )
+        }
+    }
+}
+
+/**
+ * Compact square, icon-only action button — used in place of a labeled
+ * [androidx.compose.material3.OutlinedButton] wherever the label text would
+ * either not fit next to a card's title or would just duplicate what the
+ * icon already conveys (export/import/save/share/clear).
+ */
+@Composable
+internal fun SettingsSquareIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+    tint: Color = MaterialTheme.colorScheme.primary,
+    size: androidx.compose.ui.unit.Dp = 44.dp,
+    enabled: Boolean = true,
+    loading: Boolean = false,
+) {
+    Surface(
+        onClick = onClick,
+        enabled = enabled && !loading,
+        shape = RoundedCornerShape(12.dp),
+        color = tint.copy(alpha = if (enabled) 0.12f else 0.06f),
+        border = BorderStroke(1.dp, tint.copy(alpha = if (enabled) 0.3f else 0.12f)),
+        modifier = modifier.size(size),
+    ) {
+        Box(contentAlignment = Alignment.Center, modifier = Modifier.size(size)) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(size * 0.4f),
+                    strokeWidth = 2.dp,
+                    color = tint,
+                )
+            } else {
+                Icon(
+                    imageVector = icon,
+                    contentDescription = contentDescription,
+                    tint = if (enabled) tint else tint.copy(alpha = 0.5f),
+                    modifier = Modifier.size(size * 0.45f),
+                )
+            }
         }
     }
 }

@@ -96,6 +96,10 @@ private fun InterceptStatisticsSection(
     val darkTheme = isSystemInDarkTheme()
     val containerColor = if (darkTheme) Color(0xFF1E3E28) else Color(0xFFE8F5E9)
     val contentColor = if (darkTheme) Color(0xFFA5D6A7) else Color(0xFF2E7D32)
+    // Nested per-app cards stay in the same green family as the panel — a
+    // lighter/darker tonal step, not the theme's neutral surface — so they
+    // read as "inside this card" instead of an unrelated black/white pane.
+    val innerCardColor = if (darkTheme) Color(0xFF17331F) else Color.White
 
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
@@ -128,7 +132,9 @@ private fun InterceptStatisticsSection(
                 }
 
                 if (stats != null && stats.isNotEmpty()) {
-                    TextButton(
+                    SettingsSquareIconButton(
+                        icon = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.btn_clear),
                         onClick = {
                             scope.launch {
                                 // 1. Instantly clear the UI stats cache
@@ -141,24 +147,9 @@ private fun InterceptStatisticsSection(
                                 InterceptStatsCache.refresh(scope, context)
                             }
                         },
-                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                        modifier = Modifier.height(32.dp),
-                        colors =
-                            ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Delete,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(4.dp))
-                        Text(
-                            text = stringResource(R.string.btn_clear),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
+                        tint = contentColor,
+                        size = 36.dp,
+                    )
                 }
             }
 
@@ -166,8 +157,8 @@ private fun InterceptStatisticsSection(
 
             if (stats == null) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SkeletonStatsCard()
-                    SkeletonStatsCard()
+                    SkeletonStatsCard(containerColor = innerCardColor)
+                    SkeletonStatsCard(containerColor = innerCardColor)
                 }
             } else if (stats.isEmpty()) {
                 Surface(
@@ -205,7 +196,7 @@ private fun InterceptStatisticsSection(
                             shape = RoundedCornerShape(16.dp),
                             colors =
                                 CardDefaults.elevatedCardColors(
-                                    containerColor = MaterialTheme.colorScheme.surface,
+                                    containerColor = innerCardColor,
                                 ),
                             modifier =
                                 Modifier.fillMaxWidth().clickable {
@@ -473,9 +464,10 @@ private fun InterceptStatisticsSection(
 }
 
 @Composable
-private fun SkeletonStatsCard() {
+private fun SkeletonStatsCard(containerColor: Color = MaterialTheme.colorScheme.surface) {
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
