@@ -236,6 +236,8 @@
     <string name="app_settings_tab_hooks">Хуки</string>
     <string name="app_settings_tab_ports">Порты</string>
     <string name="app_settings_port_hiding_off_hint">Скрытие портов сейчас выключено для этого приложения — включите переключатель «P» в списке приложений, чтобы правила вступили в силу.</string>
+    <string name="app_settings_fab_global_desc">Правила скрытия по умолчанию для всех приложений</string>
+    <string name="app_row_settings_desc">Настройки скрытия для этого приложения</string>
 
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Фильтрует сериализацию LinkProperties для удаления VPN-интерфейсов, маршрутов и DNS-серверов.</string>

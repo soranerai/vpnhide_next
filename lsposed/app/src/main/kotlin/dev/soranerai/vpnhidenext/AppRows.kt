@@ -7,7 +7,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -88,8 +89,8 @@ internal fun AppRow(
 
             IconButton(onClick = onSettingsClick) {
                 Icon(
-                    Icons.Default.Settings,
-                    contentDescription = null,
+                    Icons.Default.Tune,
+                    contentDescription = stringResource(R.string.app_row_settings_desc),
                     tint =
                         if (app.hasHookOverride || app.portRules.isNotEmpty()) {
                             if (app.userId != 0) Color(0xFF2196F3) else MaterialTheme.colorScheme.primary

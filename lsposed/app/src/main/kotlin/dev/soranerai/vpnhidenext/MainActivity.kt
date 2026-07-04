@@ -560,8 +560,8 @@ private fun MainScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Default.SettingsSuggest,
-                                        contentDescription = null,
+                                        Icons.Default.AdminPanelSettings,
+                                        contentDescription = stringResource(R.string.app_settings_fab_global_desc),
                                         modifier = Modifier.size(28.dp),
                                     )
                                 }

@@ -12,8 +12,18 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Troubleshoot
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -45,6 +55,10 @@ import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.db.JAVA_HOOK_BIT_HIDE_VPN_APPS
 import dev.soranerai.vpnhidenext.db.JAVA_HOOK_BIT_SELF_HIDE
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
+import dev.soranerai.vpnhidenext.ui.theme.TelBlue
+import dev.soranerai.vpnhidenext.ui.theme.TelGreen
+import dev.soranerai.vpnhidenext.ui.theme.TelOrange
+import dev.soranerai.vpnhidenext.ui.theme.TelPurple
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -105,14 +119,14 @@ fun SettingsScreen(
             item(key = "spacer_top") { Spacer(Modifier.height(8.dp)) }
 
             item(key = "section_diagnostics") {
-                SectionHeader(stringResource(R.string.settings_section_diagnostics))
+                SectionHeader(stringResource(R.string.settings_section_diagnostics), icon = Icons.Default.Troubleshoot, tint = TelBlue)
             }
             item(key = "backup_restore_card") { BackupRestoreCard() }
             item(key = "debug_logging_card") { DebugLoggingCard() }
             item(key = "debug_log_export_card") { DebugLogExportCard(selfNeedsRestart) }
 
             item(key = "section_statistics") {
-                SectionHeader(stringResource(R.string.settings_section_statistics))
+                SectionHeader(stringResource(R.string.settings_section_statistics), icon = Icons.Default.BarChart, tint = TelGreen)
             }
             item(key = "group_statistics") {
                 val labelsByPeriod = StatsRetentionPeriod.entries.associateWith { it.displayLabel() }
@@ -122,6 +136,8 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_stats_retention_desc),
                         options = labelsByPeriod.values.toList(),
                         selected = labelsByPeriod.getValue(statsRetentionPeriod),
+                        icon = Icons.Default.Schedule,
+                        iconTint = TelGreen,
                         onSelect = { label ->
                             val newPeriod = labelsByPeriod.entries.first { it.value == label }.key
                             val previous = statsRetentionPeriod
@@ -138,20 +154,22 @@ fun SettingsScreen(
             }
 
             item(key = "section_testing") {
-                SectionHeader(stringResource(R.string.settings_section_testing))
+                SectionHeader(stringResource(R.string.settings_section_testing), icon = Icons.Default.Science, tint = TelPurple)
             }
             item(key = "group_testing") {
                 SettingsGroup {
                     SettingsNavRow(
                         title = stringResource(R.string.settings_diagnostics_detail_title),
                         subtitle = stringResource(R.string.settings_diagnostics_detail_desc),
+                        icon = Icons.Default.Assessment,
+                        iconTint = TelPurple,
                         onClick = onOpenDiagnosticsDetail,
                     )
                 }
             }
 
             item(key = "section_experimental") {
-                SectionHeader(stringResource(R.string.settings_section_experimental))
+                SectionHeader(stringResource(R.string.settings_section_experimental), icon = Icons.Default.Whatshot, tint = TelOrange)
             }
             item(key = "group_experimental") {
                 SettingsGroup {
@@ -159,6 +177,8 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_toggle_hide_vpn_apps_title),
                         subtitle = stringResource(R.string.settings_toggle_hide_vpn_apps_desc),
                         checked = hideVpnApps,
+                        icon = Icons.Default.VisibilityOff,
+                        iconTint = TelOrange,
                         onCheckedChange = { newValue ->
                             val previous = hideVpnApps
                             hideVpnApps = newValue
@@ -175,6 +195,8 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_toggle_hide_self_title),
                         subtitle = stringResource(R.string.settings_toggle_hide_self_desc),
                         checked = hideSelf,
+                        icon = Icons.Default.Shield,
+                        iconTint = TelOrange,
                         onCheckedChange = { newValue ->
                             val previous = hideSelf
                             hideSelf = newValue
@@ -296,12 +318,15 @@ private fun BackupRestoreCard() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = stringResource(R.string.backup_restore_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                SettingsRowIcon(icon = Icons.Default.SettingsBackupRestore, tint = TelBlue)
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.backup_restore_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Spacer(Modifier.width(8.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -395,9 +420,11 @@ private fun DebugLoggingCard() {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(20.dp).fillMaxWidth(),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            SettingsRowIcon(icon = Icons.Default.BugReport, tint = TelBlue)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.diag_debug_logging_title),
