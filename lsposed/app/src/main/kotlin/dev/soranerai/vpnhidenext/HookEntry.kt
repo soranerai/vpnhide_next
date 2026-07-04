@@ -197,7 +197,6 @@ class HookEntry : IXposedHookLoadPackage {
     private fun startConfigReader() {
         Thread({
             var lastJavaStatsClearGen = -1
-            var lastStatsBucketSecs = -1
             while (!Thread.currentThread().isInterrupted) {
                 try {
                     val file = File("/dev/vpnhide_ctrl")
@@ -233,16 +232,11 @@ class HookEntry : IXposedHookLoadPackage {
                                             HookLog.i("VpnHide: cleared java stats (gen=$gen)")
                                         }
                                     }
+                                    // RollingCounter reads statsBucketDurationMs live and
+                                    // stores raw timestamps, so existing stats stay valid
+                                    // across a duration change — just update it, no clear.
                                     statsBucketSecs?.let { secs ->
-                                        if (lastStatsBucketSecs == -1) {
-                                            lastStatsBucketSecs = secs
-                                            HookContext.statsBucketDurationMs = secs * 1000L
-                                        } else if (secs != lastStatsBucketSecs) {
-                                            HookContext.statsBucketDurationMs = secs * 1000L
-                                            HookContext.hookStats.clear()
-                                            lastStatsBucketSecs = secs
-                                            HookLog.i("VpnHide: stats window changed to ${secs}s/bucket, cleared java stats")
-                                        }
+                                        HookContext.statsBucketDurationMs = secs * 1000L
                                     }
                                 }
                                 uids.clear()

@@ -103,7 +103,7 @@ object HookContext {
         if (targetUid == selfUid) return
 
         val appStats = hookStats.computeIfAbsent(targetUid) { ConcurrentHashMap() }
-        appStats.computeIfAbsent(hookName) { RollingCounter(statsBucketDurationMs) }.increment()
+        appStats.computeIfAbsent(hookName) { RollingCounter() }.increment()
         hookStatsChanged.set(true)
     }
 
@@ -246,19 +246,22 @@ object HookContext {
         return null
     }
 
-    class RollingCounter(
-        private val bucketDurationMs: Long = 60_000L,
-    ) {
+    class RollingCounter {
         private val bucketCounts = IntArray(NUM_BUCKETS)
         private val bucketTimes = LongArray(NUM_BUCKETS)
 
+        // Reads HookContext.statsBucketDurationMs live on every call (instead of
+        // capturing it once at construction) and stores raw timestamps rather than
+        // pre-divided bucket numbers, so a retention-period change is reflected
+        // immediately without invalidating/clearing already-recorded data.
         @Synchronized
         fun increment() {
-            val nowBucket = System.currentTimeMillis() / bucketDurationMs
-            val idx = (nowBucket % NUM_BUCKETS).toInt()
-            if (bucketTimes[idx] != nowBucket) {
+            val durationMs = statsBucketDurationMs
+            val nowMs = System.currentTimeMillis()
+            val idx = ((nowMs / durationMs) % NUM_BUCKETS).toInt()
+            if (bucketTimes[idx] / durationMs != nowMs / durationMs) {
                 bucketCounts[idx] = 1
-                bucketTimes[idx] = nowBucket
+                bucketTimes[idx] = nowMs
             } else {
                 bucketCounts[idx]++
             }
@@ -266,10 +269,12 @@ object HookContext {
 
         @Synchronized
         fun getSum(): Int {
-            val nowBucket = System.currentTimeMillis() / bucketDurationMs
+            val durationMs = statsBucketDurationMs
+            val nowMs = System.currentTimeMillis()
+            val windowMs = NUM_BUCKETS * durationMs
             var sum = 0
             for (i in 0 until NUM_BUCKETS) {
-                if (nowBucket - bucketTimes[i] < NUM_BUCKETS) {
+                if (nowMs - bucketTimes[i] < windowMs) {
                     sum += bucketCounts[i]
                 }
             }
