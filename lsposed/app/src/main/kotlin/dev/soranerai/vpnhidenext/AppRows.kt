@@ -11,15 +11,13 @@ import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Work
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -63,21 +61,14 @@ internal fun AppRow(
             Spacer(Modifier.width(12.dp))
 
             Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = app.label,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = if (app.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    ProfileNameChip(app.userId)
-                }
+                Text(
+                    text = app.label,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    color = if (app.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
                 Text(
                     text = app.packageName,
                     fontSize = 12.sp,
@@ -85,6 +76,8 @@ internal fun AppRow(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.height(2.dp))
+                UidChip(app.uid)
             }
 
             IconButton(onClick = onSettingsClick) {
@@ -177,36 +170,19 @@ internal fun BoxScope.ProfileIconBadge(userId: Int) {
 }
 
 @Composable
-internal fun ProfileNameChip(userId: Int) {
-    if (userId != 0) {
-        val userNames by AppListCache.userNames.collectAsState()
-        val profileName =
-            remember(userId, userNames) {
-                val rawName = userNames[userId]
-                if (rawName == null) {
-                    userId.toString()
-                } else {
-                    val nameLower = rawName.lowercase().trim()
-                    val isDefault =
-                        nameLower == "work profile" ||
-                            nameLower == "work" ||
-                            nameLower == "рабочий профиль" ||
-                            nameLower == "рабочий"
-                    if (isDefault) userId.toString() else rawName
-                }
-            }
-        Surface(
-            shape = RoundedCornerShape(4.dp),
-            color = Color(0xFF2196F3).copy(alpha = 0.12f),
-            contentColor = Color(0xFF2196F3),
-        ) {
-            Text(
-                text = profileName,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                maxLines = 1,
-            )
-        }
+internal fun UidChip(uid: Int) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.1f),
+        contentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+    ) {
+        Text(
+            text = stringResource(R.string.app_row_uid_format, uid),
+            fontFamily = FontFamily.Monospace,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+            maxLines = 1,
+        )
     }
 }

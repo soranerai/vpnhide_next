@@ -355,7 +355,7 @@
     <string name="dashboard_summary_title">Сводка перехватов</string>
     <string name="dashboard_summary_total_label">Всего перехвачено</string>
     <string name="dashboard_summary_native">Native</string>
-    <string name="dashboard_summary_lsposed">LSPosed</string>
+    <string name="dashboard_summary_lsposed">Framework</string>
     <string name="dashboard_summary_ports">Порты</string>
     <string name="dashboard_summary_top_hooks">Топ хуков</string>
     <string name="dashboard_summary_empty">Перехватов пока не зафиксировано</string>
