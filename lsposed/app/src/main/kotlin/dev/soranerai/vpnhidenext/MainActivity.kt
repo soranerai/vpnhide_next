@@ -129,7 +129,7 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
     }
 }
 
-private enum class Tab { Dashboard, Protection, Diagnostics }
+private enum class Tab { Dashboard, Protection, Statistics }
 
 private data class RefreshContext(
     val loading: Boolean,
@@ -155,17 +155,11 @@ private fun MainScreen(
     var sortOrder by remember { mutableStateOf(AppSortOrder.SELECTED_FIRST) }
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
-    var currentProtectionMode by remember { mutableStateOf(ProtectionMode.VpnTargets) }
-    var dirtyProtectionModes by remember { mutableStateOf(setOf<ProtectionMode>()) }
     var saveTrigger by remember { mutableStateOf(0) }
-    var editingAppRules by remember { mutableStateOf<AppEntry?>(null) }
-    var showBulkRules by remember { mutableStateOf(false) }
-    var localMassRules by remember { mutableStateOf<List<PortRule>?>(null) }
-    var rulesUpdatedApp by remember { mutableStateOf<AppEntry?>(null) }
-    var showIfacePrefixes by remember { mutableStateOf(false) }
-    var localIfacePrefixes by remember { mutableStateOf<List<String>?>(null) }
-    var showHookTesting by remember { mutableStateOf(false) }
-    var editingHookIsolation by remember { mutableStateOf<AppEntry?>(null) }
+    var showGlobalAppSettings by remember { mutableStateOf(false) }
+    var editingAppSettings by remember { mutableStateOf<AppEntry?>(null) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showDiagnosticsDetail by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
     val searchFocusRequester = remember { FocusRequester() }
@@ -279,6 +273,14 @@ private fun MainScreen(
                                 scope = scope,
                                 context = context,
                             )
+                            if (currentTab == Tab.Statistics) {
+                                IconButton(onClick = { showSettings = true }) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        contentDescription = stringResource(R.string.settings_title),
+                                    )
+                                }
+                            }
                             if (currentTab == Tab.Protection) {
                                 IconButton(onClick = { searchActive = true }) {
                                     Icon(
@@ -429,30 +431,15 @@ private fun MainScreen(
                                     showOnlySelected = showOnlySelected,
                                     showOnlyWorkProfile = showOnlyWorkProfile,
                                     sortOrder = sortOrder,
-                                    onStateChange = { mode, dirtyModes ->
-                                        currentProtectionMode = mode
-                                        dirtyProtectionModes = dirtyModes
-                                        isProtectionDirty = dirtyModes.isNotEmpty()
-                                    },
-                                    onAppPortConfig = { editingAppRules = it },
-                                    onHookIsolationClick = { editingHookIsolation = it },
-                                    updatedApp = rulesUpdatedApp,
+                                    onDirtyChange = { isProtectionDirty = it },
+                                    onOpenAppSettings = { editingAppSettings = it },
                                     saveTrigger = saveTrigger,
-                                    pendingMassRules = localMassRules,
-                                    pendingIfacePrefixes = localIfacePrefixes,
-                                    onSaved = {
-                                        localMassRules = null
-                                        localIfacePrefixes = null
-                                        rulesUpdatedApp = null
-                                    },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
 
-                            Tab.Diagnostics -> {
-                                DiagnosticsScreen(
-                                    selfNeedsRestart = restart,
-                                    onOpenHookTesting = { showHookTesting = true },
+                            Tab.Statistics -> {
+                                StatisticsScreen(
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -470,7 +457,7 @@ private fun MainScreen(
                             .fillMaxWidth(),
                     contentAlignment = Alignment.Center,
                 ) {
-                    val showSave = currentTab == Tab.Protection && currentProtectionMode in dirtyProtectionModes
+                    val showSave = currentTab == Tab.Protection && isProtectionDirty
                     val showExtraBtn = currentTab == Tab.Protection
 
                     val controlsProgress by animateFloatAsState(
@@ -504,7 +491,7 @@ private fun MainScreen(
                         listOf(
                             Tab.Dashboard to Icons.Default.Home,
                             Tab.Protection to Icons.Default.Shield,
-                            Tab.Diagnostics to Icons.Default.CheckCircle,
+                            Tab.Statistics to Icons.Default.BarChart,
                         )
 
                     // The bounding box for the entire Pill + Save FAB combo
@@ -547,20 +534,14 @@ private fun MainScreen(
                             }
                         }
 
-                        // Extra Settings Button (Bulk Rules for Ports, Iface Prefixes for TUN)
+                        // Extra Settings Button — opens the global hooks+ports settings screen
                         if (extraBtnProgress > 0.01f) {
                             val extraBtnOffset by animateDpAsState(
                                 targetValue = if (showSave) (-72).dp else 0.dp,
                                 label = "extraBtnOffset",
                             )
                             Surface(
-                                onClick = {
-                                    if (currentProtectionMode == ProtectionMode.PortHiding) {
-                                        showBulkRules = true
-                                    } else {
-                                        showIfacePrefixes = true
-                                    }
-                                },
+                                onClick = { showGlobalAppSettings = true },
                                 color = bulkColor,
                                 contentColor = bulkContentColor,
                                 modifier =
@@ -646,44 +627,20 @@ private fun MainScreen(
         }
 
         androidx.compose.animation.AnimatedVisibility(
-            visible = editingAppRules != null,
+            visible = editingAppSettings != null,
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            editingAppRules?.let { app ->
-                BackHandler { editingAppRules = null }
-                val targets by TargetsCache.snapshot.collectAsState()
-                PortRulesScreen(
-                    app = app,
-                    massRules = localMassRules ?: targets?.massPortRules ?: emptyList(),
-                    onBack = { editingAppRules = null },
-                    onSave = { updatedRules ->
-                        if (updatedRules != app.portRules) {
-                            rulesUpdatedApp = app.copy(portRules = updatedRules)
-                        }
-                        editingAppRules = null
-                    },
-                    modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-                )
-            }
-        }
-
-        androidx.compose.animation.AnimatedVisibility(
-            visible = editingHookIsolation != null,
-            enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            editingHookIsolation?.let { app ->
+            editingAppSettings?.let { app ->
                 BackHandler {
-                    editingHookIsolation = null
+                    editingAppSettings = null
                     TargetsCache.refresh(scope, context)
                 }
-                AppHookIsolationScreen(
+                AppSettingsScreen(
                     app = app,
                     onBack = {
-                        editingHookIsolation = null
+                        editingAppSettings = null
                         TargetsCache.refresh(scope, context)
                     },
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -692,52 +649,54 @@ private fun MainScreen(
         }
 
         androidx.compose.animation.AnimatedVisibility(
-            visible = showBulkRules,
+            visible = showGlobalAppSettings,
             enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            BackHandler { showBulkRules = false }
-            val targets by TargetsCache.snapshot.collectAsState()
-            BulkRulesScreen(
-                initialRules = localMassRules ?: targets?.massPortRules ?: emptyList(),
-                onBack = { showBulkRules = false },
-                onSave = { updatedRules ->
-                    localMassRules = updatedRules
-                    showBulkRules = false
+            BackHandler {
+                showGlobalAppSettings = false
+                TargetsCache.refresh(scope, context)
+            }
+            AppSettingsScreen(
+                app = null,
+                onBack = {
+                    showGlobalAppSettings = false
+                    TargetsCache.refresh(scope, context)
                 },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
 
+        // Settings, and the sub-screen it opens (Diagnostics detail), must
+        // render in this order — Box stacks children in z-order, and the
+        // sub-screen is only ever opened while Settings is still showing
+        // underneath, so it needs to paint on top of it.
         androidx.compose.animation.AnimatedVisibility(
-            visible = showIfacePrefixes,
+            visible = showSettings,
             enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            BackHandler { showIfacePrefixes = false }
-            val targets by TargetsCache.snapshot.collectAsState()
-            IfacePrefixScreen(
-                initialPrefixes = localIfacePrefixes ?: targets?.ifacePrefixes ?: emptyList(),
-                onBack = { showIfacePrefixes = false },
-                onSave = { updatedPrefixes ->
-                    localIfacePrefixes = updatedPrefixes
-                    showIfacePrefixes = false
-                },
+            BackHandler { showSettings = false }
+            SettingsScreen(
+                onBack = { showSettings = false },
+                onOpenDiagnosticsDetail = { showDiagnosticsDetail = true },
+                selfNeedsRestart = refreshRestart,
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
 
         androidx.compose.animation.AnimatedVisibility(
-            visible = showHookTesting,
+            visible = showDiagnosticsDetail,
             enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            BackHandler { showHookTesting = false }
-            HookTestingScreen(
-                onBack = { showHookTesting = false },
+            BackHandler { showDiagnosticsDetail = false }
+            DiagnosticsDetailScreen(
+                selfNeedsRestart = refreshRestart,
+                onBack = { showDiagnosticsDetail = false },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
@@ -866,6 +825,7 @@ private fun RefreshActionIcon(
     val dashboardLoading by DashboardCache.loading.collectAsState()
     val appListLoading by AppListCache.loading.collectAsState()
     val targetsLoading by TargetsCache.loading.collectAsState()
+    val statsLoading by InterceptStatsCache.loading.collectAsState()
 
     val refreshContext =
         when (currentTab) {
@@ -889,8 +849,13 @@ private fun RefreshActionIcon(
                 )
             }
 
-            Tab.Diagnostics -> {
-                null
+            Tab.Statistics -> {
+                RefreshContext(
+                    loading = statsLoading,
+                    onRefresh = {
+                        InterceptStatsCache.refresh(scope, context)
+                    },
+                )
             }
         }
 

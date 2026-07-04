@@ -5,12 +5,9 @@
     <!-- Navigation -->
     <string name="tab_dashboard">Dashboard</string>
     <string name="tab_protection">Protection</string>
-    <string name="tab_diagnostics">Diagnostics</string>
+    <string name="tab_statistics">Statistics</string>
 
     <!-- Protection modes (segmented button) -->
-    <string name="mode_vpn_targets">Tun</string>
-    <string name="mode_port_hiding">Ports</string>
-    <string name="port_hiding_coming_soon">Coming soon</string>
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>
@@ -241,10 +238,22 @@
     <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
 
-    <!-- Hook Isolation Diagnostics -->
-    <string name="diag_hook_isolation_title">Hook Isolation</string>
-    <string name="diag_hook_isolation_description">Test and isolate individual kernel-level and framework-level hooks. Helpful for pinpointing which specific hook is causing system or app instability.</string>
-    <string name="diag_hook_isolation_configure_btn">Configure Hooks</string>
+    <string name="diag_open_details_btn">More details</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_diagnostics">Diagnostics</string>
+    <string name="settings_section_statistics">Statistics</string>
+    <string name="settings_section_testing">Testing</string>
+    <string name="settings_section_experimental">Experimental features</string>
+    <string name="settings_stats_retention_title">Statistics retention</string>
+    <string name="settings_stats_retention_desc">How far back interception stats are kept and displayed.</string>
+    <string name="settings_diagnostics_detail_title">Diagnostics details</string>
+    <string name="settings_diagnostics_detail_desc">Full list of network and Java diagnostics check results.</string>
+    <string name="settings_toggle_hide_vpn_apps_title">Auto-hide VPN apps</string>
+    <string name="settings_toggle_hide_vpn_apps_desc">Automatically hides installed VPN apps from other protected apps.</string>
+    <string name="settings_toggle_hide_self_title">Auto-hide VPNHide Next</string>
+    <string name="settings_toggle_hide_self_desc">Hides the VPNHide Next package itself from protected apps.</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Hook Isolation</string>
@@ -271,9 +280,14 @@
     <string name="hook_testing_list_java">Java Hooks List</string>
 
     <!-- Per-App Hook Isolation Screen -->
-    <string name="app_hook_isolation_title">Hook Isolation</string>
     <string name="app_hook_isolation_use_global">Use global settings</string>
     <string name="app_hook_isolation_use_global_desc">When off, this app uses its own custom hook mask instead of the global one on the Dashboard.</string>
+
+    <!-- App Settings Screen (global + per-app hooks/ports) -->
+    <string name="app_settings_title_global">Global settings</string>
+    <string name="app_settings_tab_hooks">Hooks</string>
+    <string name="app_settings_tab_ports">Ports</string>
+    <string name="app_settings_port_hiding_off_hint">Port hiding is currently off for this app — turn on the \"P\" toggle in the app list for these rules to take effect.</string>
 
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Filters LinkProperties serialization to remove VPN interfaces, routes, and DNS servers.</string>
@@ -283,6 +297,7 @@
     <string name="hook_desc_connectivity_service">Filters VPN network out of global network lists and blocks leakage of active VPN callbacks.</string>
     <string name="hook_desc_package_manager">Filters VpnServices and hides VPN packages from targeted apps.</string>
     <string name="hook_desc_user_manager">Filters user profiles and spoof isManagedProfile checks to hide work profiles.</string>
+    <string name="hook_desc_self_hide">Hides the VPNHide Next package itself from PackageManager queries made by targeted apps.</string>
 
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Backup &amp; Restore</string>
@@ -294,8 +309,15 @@
     <string name="import_success">Settings imported and applied successfully</string>
     <string name="import_failed">Import failed: %1$s</string>
     <string name="dashboard_intercept_statistics">Intercept Statistics</string>
-    <string name="dashboard_stats_lifetime_hint">Showing rolling telemetry for the last 30 minutes</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">Showing rolling telemetry for the last %1$s</string>
     <string name="btn_clear">Clear</string>
+
+    <!-- Statistics retention period -->
+    <string name="stats_period_30m">30 minutes</string>
+    <string name="stats_period_1h">1 hour</string>
+    <string name="stats_period_6h">6 hours</string>
+    <string name="stats_period_24h">24 hours</string>
+    <string name="stats_period_unlimited">Unlimited</string>
 
     <!-- Hook Isolation Labels -->
     <string name="hook_testing_idx_format">Idx %1$d</string>
@@ -386,6 +408,7 @@
     <string name="hook_name_connectivity_service">Active network list</string>
     <string name="hook_name_package_manager">Hiding VPN apps</string>
     <string name="hook_name_user_manager">Hiding work profiles</string>
+    <string name="hook_name_self_hide">Hiding VPNHide Next itself</string>
 
     <!-- Java Hook Symbols -->
     <string name="hook_symbol_link_properties" translatable="false">android.net.LinkProperties</string>
@@ -395,6 +418,7 @@
     <string name="hook_symbol_connectivity_service" translatable="false">com.android.server.ConnectivityService</string>
     <string name="hook_symbol_package_manager" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
     <string name="hook_symbol_user_manager" translatable="false">com.android.server.pm.UserManagerService</string>
+    <string name="hook_symbol_self_hide" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
 
 
     <!-- Intercepts Statistics Dashboard -->
@@ -402,6 +426,7 @@
     <string name="dashboard_stats_empty_desc">Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.</string>
     <string name="dashboard_stats_framework_title">Framework Intercepts</string>
     <string name="dashboard_stats_native_title">Native Intercepts</string>
+    <string name="dashboard_stats_ports_title">Port Intercepts</string>
 
     <!-- Vector Labels -->
     <string name="vector_label_ioctl">ioctl SIOCGIF*</string>
@@ -410,6 +435,16 @@
     <string name="vector_label_sockopt">setsockopt / getsockopt</string>
     <string name="vector_label_connect">connect / bind</string>
     <string name="vector_label_getname">getsockname spoof</string>
+    <string name="vector_label_port">port hiding</string>
+
+    <!-- Intercept Summary Dashboard Card -->
+    <string name="dashboard_summary_title">Intercept Summary</string>
+    <string name="dashboard_summary_total_label">Total intercepted</string>
+    <string name="dashboard_summary_native">Native</string>
+    <string name="dashboard_summary_lsposed">LSPosed</string>
+    <string name="dashboard_summary_ports">Ports</string>
+    <string name="dashboard_summary_top_hooks">Top hooks</string>
+    <string name="dashboard_summary_empty">No intercepts recorded yet</string>
 
     <!-- Port Rules Screen -->
     <string name="ports_mass_rules_title">Mass Rules (Global)</string>

@@ -211,6 +211,7 @@ class HookEntry : IXposedHookLoadPackage {
                         val appJavaHookMasks = mutableMapOf<Int, UInt>()
                         var coverIface: String? = null
                         var statsClearGen: Int? = null
+                        var statsBucketSecs: Int? = null
 
                         while (true) {
                             val line = reader.readLine() ?: break
@@ -231,6 +232,12 @@ class HookEntry : IXposedHookLoadPackage {
                                             HookLog.i("VpnHide: cleared java stats (gen=$gen)")
                                         }
                                     }
+                                    // RollingCounter reads statsBucketDurationMs live and
+                                    // stores raw timestamps, so existing stats stay valid
+                                    // across a duration change — just update it, no clear.
+                                    statsBucketSecs?.let { secs ->
+                                        HookContext.statsBucketDurationMs = secs * 1000L
+                                    }
                                 }
                                 uids.clear()
                                 prefixes.clear()
@@ -238,6 +245,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 javaHookMask = 0xFFFFFFFFu
                                 coverIface = null
                                 statsClearGen = null
+                                statsBucketSecs = null
                                 continue
                             }
 
@@ -259,6 +267,8 @@ class HookEntry : IXposedHookLoadPackage {
                                 javaHookMask = line.substringAfter("java_hook_mask:").trim().toUIntOrNull() ?: 0xFFFFFFFFu
                             } else if (line.startsWith("java_stats_clear_gen:")) {
                                 statsClearGen = line.substringAfter("java_stats_clear_gen:").trim().toIntOrNull()
+                            } else if (line.startsWith("stats_bucket_secs:")) {
+                                statsBucketSecs = line.substringAfter("stats_bucket_secs:").trim().toIntOrNull()
                             } else if (line.startsWith("lsposed_targets:")) {
                                 val targetStr = line.substringAfter("lsposed_targets:").trim()
                                 if (targetStr.isNotEmpty()) {

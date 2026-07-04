@@ -31,7 +31,8 @@ internal fun AppRow(
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
-    onHookIsolationClick: () -> Unit,
+    onTogglePort: () -> Unit,
+    onSettingsClick: () -> Unit,
 ) {
     Surface(
         modifier =
@@ -85,12 +86,12 @@ internal fun AppRow(
                 )
             }
 
-            IconButton(onClick = onHookIsolationClick) {
+            IconButton(onClick = onSettingsClick) {
                 Icon(
                     Icons.Default.Settings,
                     contentDescription = null,
                     tint =
-                        if (app.hasHookOverride) {
+                        if (app.hasHookOverride || app.portRules.isNotEmpty()) {
                             if (app.userId != 0) Color(0xFF2196F3) else MaterialTheme.colorScheme.primary
                         } else {
                             MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
@@ -104,6 +105,7 @@ internal fun AppRow(
                 }
 
                 ProtectionChip("F", app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
+                ProtectionChip("P", app.portHiding, true, app.userId) { onTogglePort() }
             }
         }
     }
@@ -134,100 +136,6 @@ private fun ProtectionChip(
             contentAlignment = Alignment.Center,
         ) {
             Text(label, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-        }
-    }
-}
-
-@Composable
-internal fun PortAppRow(
-    app: AppEntry,
-    onToggle: () -> Unit,
-    onConfigClick: () -> Unit,
-) {
-    Surface(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 4.dp)
-                .clip(RoundedCornerShape(16.dp))
-                .clickable { onToggle() },
-        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-    ) {
-        Row(
-            modifier = Modifier.padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Box(modifier = Modifier.size(40.dp)) {
-                app.icon?.let {
-                    Image(
-                        bitmap = it.toBitmap(48, 48).asImageBitmap(),
-                        contentDescription = null,
-                        modifier = Modifier.fillMaxSize(),
-                    )
-                } ?: Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface, CircleShape))
-
-                ProfileIconBadge(app.userId)
-            }
-
-            Spacer(Modifier.width(12.dp))
-
-            Column(modifier = Modifier.weight(1f)) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    Text(
-                        text = app.label,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 16.sp,
-                        color = if (app.userId != 0) Color(0xFF2196F3) else Color.Unspecified,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f, fill = false),
-                    )
-                    ProfileNameChip(app.userId)
-                }
-                Text(
-                    text = app.packageName,
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            }
-
-            IconButton(
-                onClick = onConfigClick,
-                enabled = app.portHiding,
-            ) {
-                Icon(
-                    Icons.Default.Settings,
-                    contentDescription = null,
-                    tint =
-                        if (app.portHiding) {
-                            if (app.userId != 0) Color(0xFF2196F3) else MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                alpha = 0.3f,
-                            )
-                        },
-                )
-            }
-
-            Switch(
-                checked = app.portHiding,
-                onCheckedChange = { onToggle() },
-                colors =
-                    if (app.userId != 0) {
-                        SwitchDefaults.colors(
-                            checkedThumbColor = Color.White,
-                            checkedTrackColor = Color(0xFF2196F3),
-                            checkedBorderColor = Color(0xFF2196F3),
-                        )
-                    } else {
-                        SwitchDefaults.colors()
-                    },
-            )
         }
     }
 }

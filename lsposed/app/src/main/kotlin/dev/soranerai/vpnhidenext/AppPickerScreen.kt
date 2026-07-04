@@ -56,7 +56,7 @@ internal fun AppPickerScreen(
     onUpdate: (List<AppEntry>) -> Unit,
     sortedIds: List<String>,
     onRefresh: () -> Unit,
-    onHookIsolationClick: (AppEntry) -> Unit,
+    onOpenAppSettings: (AppEntry) -> Unit,
     listState: LazyListState,
     modifier: Modifier = Modifier,
 ) {
@@ -137,7 +137,7 @@ internal fun AppPickerScreen(
                                     onUpdate(newList)
                                 },
                                 onToggleAll = {
-                                    val newState = !(app.kmod || app.lsposed)
+                                    val newState = !(app.kmod || app.lsposed || app.portHiding)
                                     val newList =
                                         apps.map {
                                             if (it.packageName != app.packageName || it.userId != app.userId) {
@@ -146,12 +146,24 @@ internal fun AppPickerScreen(
                                                 it.copy(
                                                     kmod = if (installed.kmod) newState else false,
                                                     lsposed = newState,
+                                                    portHiding = newState,
                                                 )
                                             }
                                         }
                                     onUpdate(newList)
                                 },
-                                onHookIsolationClick = { onHookIsolationClick(app) },
+                                onTogglePort = {
+                                    val newList =
+                                        apps.map {
+                                            if (it.packageName != app.packageName || it.userId != app.userId) {
+                                                it
+                                            } else {
+                                                it.copy(portHiding = !it.portHiding)
+                                            }
+                                        }
+                                    onUpdate(newList)
+                                },
+                                onSettingsClick = { onOpenAppSettings(app) },
                             )
                         }
                     }

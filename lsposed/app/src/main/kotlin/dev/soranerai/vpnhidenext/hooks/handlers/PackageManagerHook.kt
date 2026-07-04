@@ -14,11 +14,12 @@ object PackageManagerHook {
         val callerPackages: Array<String>?,
     )
 
+    // Bit 5 = hide VPN apps ("Hiding VPN apps" in the Hook Isolation screen);
+    // bit 7 = hide our own package ("Hiding VPNHide Next itself"). Both bits
+    // reuse the same hook install points below, so the bit checks live at
+    // each call site rather than baked into this shared precondition check.
     private fun guardCheck(param: XC_MethodHook.MethodHookParam): CallerContext? {
-        if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid()) ||
-            HookContext.isInternalCheck.get() == true ||
-            !HookContext.isTargetCaller()
-        ) {
+        if (HookContext.isInternalCheck.get() == true || !HookContext.isTargetCaller()) {
             return null
         }
 
@@ -98,6 +99,8 @@ object PackageManagerHook {
         sliceClass: Class<*>,
         userId: Int,
         callerPackages: Array<String>?,
+        hideVpnApps: Boolean,
+        hideSelf: Boolean,
         logTag: String,
         itemToPackageName: (Any) -> String?,
     ) {
@@ -119,13 +122,11 @@ object PackageManagerHook {
         val filteredList =
             list.filter { item ->
                 if (item == null) return@filter true
-                val packageName = itemToPackageName(item)
-                if (packageName != null) {
-                    val isOwn = callerPackages?.contains(packageName) == true
-                    isOwn || !isVpnApp(packageName, param.thisObject, userId)
-                } else {
-                    true
-                }
+                val packageName = itemToPackageName(item) ?: return@filter true
+                if (callerPackages?.contains(packageName) == true) return@filter true
+                val hiddenAsVpn = hideVpnApps && isVpnApp(packageName, param.thisObject, userId)
+                val hiddenAsSelf = hideSelf && packageName == HookContext.OWN_PACKAGE_NAME
+                !hiddenAsVpn && !hiddenAsSelf
             }
 
         if (filteredList.size != list.size) {
@@ -136,7 +137,7 @@ object PackageManagerHook {
                 param.result = filteredList
             }
             HookLog.i(
-                "VpnHide: Filtered ${list.size - filteredList.size} VPN items from $logTag (Original: ${list.size})",
+                "VpnHide: Filtered ${list.size - filteredList.size} items from $logTag (Original: ${list.size})",
             )
         }
     }
@@ -182,6 +183,8 @@ object PackageManagerHook {
                 "queryIntentServices",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        val hideVpnApps = HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid())
+                        if (!hideVpnApps) return
                         val callerCtx = guardCheck(param) ?: return
                         val intent = param.args.getOrNull(0) as? Intent ?: return
 
@@ -194,6 +197,8 @@ object PackageManagerHook {
                                 sliceClass = sliceClass,
                                 userId = userId,
                                 callerPackages = callerCtx.callerPackages,
+                                hideVpnApps = hideVpnApps,
+                                hideSelf = false,
                                 logTag = "queryIntentServices",
                             ) { item ->
                                 try {
@@ -208,13 +213,16 @@ object PackageManagerHook {
                 },
             )
 
-            // --- STAGE 2: getPackageInfo
+            // --- STAGE 2: getPackageInfo — hides VPN apps (bit 5) and/or our own package (bit 7)
             XposedBridge.hookAllMethods(
                 targetClass,
                 "getPackageInfo",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid()) ||
+                        val uid = HookContext.resolveEffectiveUid()
+                        val hideVpnApps = HookContext.isJavaHookActive(5, uid)
+                        val hideSelf = HookContext.isJavaHookActive(7, uid)
+                        if ((!hideVpnApps && !hideSelf) ||
                             HookContext.isInternalCheck.get() == true ||
                             !HookContext.isTargetCaller()
                         ) {
@@ -225,8 +233,11 @@ object PackageManagerHook {
                         val requestedPackage = param.args.getOrNull(0) as? String ?: return
                         val userId = param.args.getOrNull(2) as? Int ?: return
 
-                        if (isVpnApp(requestedPackage, param.thisObject, userId)) {
-                            if (HookContext.isOwnApp(param.thisObject, requestedPackage)) return
+                        if (HookContext.isOwnApp(param.thisObject, requestedPackage)) return
+
+                        val hiddenAsVpn = hideVpnApps && isVpnApp(requestedPackage, param.thisObject, userId)
+                        val hiddenAsSelf = hideSelf && requestedPackage == HookContext.OWN_PACKAGE_NAME
+                        if (hiddenAsVpn || hiddenAsSelf) {
                             HookContext.recordIntercept("PackageManager")
                             param.result = null
                             HookLog.i(
@@ -245,6 +256,10 @@ object PackageManagerHook {
                     methodName,
                     object : XC_MethodHook() {
                         override fun afterHookedMethod(param: MethodHookParam) {
+                            val uid = HookContext.resolveEffectiveUid()
+                            val hideVpnApps = HookContext.isJavaHookActive(5, uid)
+                            val hideSelf = HookContext.isJavaHookActive(7, uid)
+                            if (!hideVpnApps && !hideSelf) return
                             val callerCtx = guardCheck(param) ?: return
                             val userId = param.args.getOrNull(1) as? Int ?: 0
                             filterParceledList(
@@ -252,6 +267,8 @@ object PackageManagerHook {
                                 sliceClass = sliceClass,
                                 userId = userId,
                                 callerPackages = callerCtx.callerPackages,
+                                hideVpnApps = hideVpnApps,
+                                hideSelf = hideSelf,
                                 logTag = methodName,
                             ) { item ->
                                 try {
@@ -271,6 +288,8 @@ object PackageManagerHook {
                 "resolveService",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        val hideVpnApps = HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid())
+                        if (!hideVpnApps) return
                         val callerCtx = guardCheck(param) ?: return
                         val intent = param.args.getOrNull(0) as? Intent ?: return
 
@@ -306,6 +325,8 @@ object PackageManagerHook {
                 "queryIntentActivities",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
+                        val hideVpnApps = HookContext.isJavaHookActive(5, HookContext.resolveEffectiveUid())
+                        if (!hideVpnApps) return
                         val callerCtx = guardCheck(param) ?: return
                         val intent = param.args.getOrNull(0) as? Intent ?: return
 
@@ -318,6 +339,8 @@ object PackageManagerHook {
                                 sliceClass = sliceClass,
                                 userId = userId,
                                 callerPackages = callerCtx.callerPackages,
+                                hideVpnApps = hideVpnApps,
+                                hideSelf = false,
                                 logTag = "queryIntentActivities",
                             ) { item ->
                                 try {

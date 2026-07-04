@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 object HookContext {
+    const val OWN_PACKAGE_NAME = "dev.soranerai.vpnhidenext"
+
     @Volatile
     var csInstance: Any? = null
 
@@ -35,6 +37,9 @@ object HookContext {
 
     @Volatile
     var appJavaHookMasks: Map<Int, UInt>? = null
+
+    @Volatile
+    var statsBucketDurationMs: Long = 60_000L
 
     // Cache: packageName -> is package VPN?
     val vpnPackageCache = ConcurrentHashMap<String, Boolean>()
@@ -108,7 +113,7 @@ object HookContext {
             if (pm != null) {
                 synchronized(uidLock) {
                     if (selfUid == -1) {
-                        selfUid = getPackageUid(pm, "dev.soranerai.vpnhidenext", 0)
+                        selfUid = getPackageUid(pm, OWN_PACKAGE_NAME, 0)
                         if (selfUid != -1) {
                             systemServerTargetUids = null
                         }
@@ -241,20 +246,22 @@ object HookContext {
         return null
     }
 
-    class RollingCounter(
-        private val windowMinutes: Int = 30,
-    ) {
-        private val bucketCounts = IntArray(windowMinutes)
-        private val bucketTimes = LongArray(windowMinutes)
+    class RollingCounter {
+        private val bucketCounts = IntArray(NUM_BUCKETS)
+        private val bucketTimes = LongArray(NUM_BUCKETS)
 
+        // Reads HookContext.statsBucketDurationMs live on every call (instead of
+        // capturing it once at construction) and stores raw timestamps rather than
+        // pre-divided bucket numbers, so a retention-period change is reflected
+        // immediately without invalidating/clearing already-recorded data.
         @Synchronized
         fun increment() {
+            val durationMs = statsBucketDurationMs
             val nowMs = System.currentTimeMillis()
-            val nowMin = nowMs / 60000L
-            val idx = (nowMin % windowMinutes).toInt()
-            if (bucketTimes[idx] != nowMin) {
+            val idx = ((nowMs / durationMs) % NUM_BUCKETS).toInt()
+            if (bucketTimes[idx] / durationMs != nowMs / durationMs) {
                 bucketCounts[idx] = 1
-                bucketTimes[idx] = nowMin
+                bucketTimes[idx] = nowMs
             } else {
                 bucketCounts[idx]++
             }
@@ -262,11 +269,12 @@ object HookContext {
 
         @Synchronized
         fun getSum(): Int {
+            val durationMs = statsBucketDurationMs
             val nowMs = System.currentTimeMillis()
-            val nowMin = nowMs / 60000L
+            val windowMs = NUM_BUCKETS * durationMs
             var sum = 0
-            for (i in 0 until windowMinutes) {
-                if (nowMin - bucketTimes[i] < windowMinutes) {
+            for (i in 0 until NUM_BUCKETS) {
+                if (nowMs - bucketTimes[i] < windowMs) {
                     sum += bucketCounts[i]
                 }
             }
@@ -277,6 +285,10 @@ object HookContext {
         fun clear() {
             bucketCounts.fill(0)
             bucketTimes.fill(0)
+        }
+
+        companion object {
+            const val NUM_BUCKETS = 30
         }
     }
 }
