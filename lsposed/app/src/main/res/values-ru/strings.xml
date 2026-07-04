@@ -148,6 +148,8 @@
     <string name="btn_export_debug_running">Собираю отладочную информацию&#8230;</string>
     <string name="btn_save_debug">Сохранить</string>
     <string name="btn_share_debug">Поделиться</string>
+    <string name="debug_log_export_title">Экспорт отладочного лога</string>
+    <string name="debug_log_export_desc">Собирает логи приложения, ядра и LSPosed в архив для отправки.</string>
     <string name="diag_debug_logging_title">Отладочные логи</string>
     <string name="diag_debug_logging_description">Подробное логирование в logcat и dmesg. Не включать без необходимости.</string>
 
@@ -236,6 +238,8 @@
     <string name="app_settings_tab_hooks">Хуки</string>
     <string name="app_settings_tab_ports">Порты</string>
     <string name="app_settings_port_hiding_off_hint">Скрытие портов сейчас выключено для этого приложения — включите переключатель «P» в списке приложений, чтобы правила вступили в силу.</string>
+    <string name="app_settings_fab_global_desc">Правила скрытия по умолчанию для всех приложений</string>
+    <string name="app_row_settings_desc">Настройки скрытия для этого приложения</string>
 
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Фильтрует сериализацию LinkProperties для удаления VPN-интерфейсов, маршрутов и DNS-серверов.</string>
@@ -351,7 +355,7 @@
     <string name="dashboard_summary_title">Сводка перехватов</string>
     <string name="dashboard_summary_total_label">Всего перехвачено</string>
     <string name="dashboard_summary_native">Native</string>
-    <string name="dashboard_summary_lsposed">LSPosed</string>
+    <string name="dashboard_summary_lsposed">Framework</string>
     <string name="dashboard_summary_ports">Порты</string>
     <string name="dashboard_summary_top_hooks">Топ хуков</string>
     <string name="dashboard_summary_empty">Перехватов пока не зафиксировано</string>

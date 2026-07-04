@@ -79,6 +79,8 @@
     <string name="btn_export_debug_running">Collecting debug info&#8230;</string>
     <string name="btn_save_debug">Save</string>
     <string name="btn_share_debug">Share</string>
+    <string name="debug_log_export_title">Debug log export</string>
+    <string name="debug_log_export_desc">Bundles app, kernel and LSPosed logs into a shareable zip archive.</string>
     <string name="diag_debug_logging_title">Debug logging</string>
     <string name="diag_debug_logging_description">Detailed logging in logcat and dmesg. Do not enable unless necessary.</string>
 
@@ -288,6 +290,9 @@
     <string name="app_settings_tab_hooks">Hooks</string>
     <string name="app_settings_tab_ports">Ports</string>
     <string name="app_settings_port_hiding_off_hint">Port hiding is currently off for this app — turn on the \"P\" toggle in the app list for these rules to take effect.</string>
+    <string name="app_settings_fab_global_desc">Default hiding rules for all apps</string>
+    <string name="app_row_settings_desc">Hiding settings for this app</string>
+    <string name="app_row_uid_format" translatable="false">uid: %1$d</string>
 
     <!-- Java Hook Descriptions -->
     <string name="hook_desc_link_properties">Filters LinkProperties serialization to remove VPN interfaces, routes, and DNS servers.</string>
@@ -441,7 +446,7 @@
     <string name="dashboard_summary_title">Intercept Summary</string>
     <string name="dashboard_summary_total_label">Total intercepted</string>
     <string name="dashboard_summary_native">Native</string>
-    <string name="dashboard_summary_lsposed">LSPosed</string>
+    <string name="dashboard_summary_lsposed">Framework</string>
     <string name="dashboard_summary_ports">Ports</string>
     <string name="dashboard_summary_top_hooks">Top hooks</string>
     <string name="dashboard_summary_empty">No intercepts recorded yet</string>

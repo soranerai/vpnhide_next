@@ -12,17 +12,26 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Article
+import androidx.compose.material.icons.filled.Assessment
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.BugReport
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Save
+import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Troubleshoot
+import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -45,6 +54,10 @@ import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.db.JAVA_HOOK_BIT_HIDE_VPN_APPS
 import dev.soranerai.vpnhidenext.db.JAVA_HOOK_BIT_SELF_HIDE
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
+import dev.soranerai.vpnhidenext.ui.theme.TelBlue
+import dev.soranerai.vpnhidenext.ui.theme.TelGreen
+import dev.soranerai.vpnhidenext.ui.theme.TelOrange
+import dev.soranerai.vpnhidenext.ui.theme.TelPurple
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -105,14 +118,24 @@ fun SettingsScreen(
             item(key = "spacer_top") { Spacer(Modifier.height(8.dp)) }
 
             item(key = "section_diagnostics") {
-                SectionHeader(stringResource(R.string.settings_section_diagnostics))
+                SectionHeader(
+                    stringResource(R.string.settings_section_diagnostics),
+                    icon = Icons.Default.Troubleshoot,
+                    tint = TelBlue,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "backup_restore_card") { BackupRestoreCard() }
             item(key = "debug_logging_card") { DebugLoggingCard() }
             item(key = "debug_log_export_card") { DebugLogExportCard(selfNeedsRestart) }
 
             item(key = "section_statistics") {
-                SectionHeader(stringResource(R.string.settings_section_statistics))
+                SectionHeader(
+                    stringResource(R.string.settings_section_statistics),
+                    icon = Icons.Default.BarChart,
+                    tint = TelGreen,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "group_statistics") {
                 val labelsByPeriod = StatsRetentionPeriod.entries.associateWith { it.displayLabel() }
@@ -122,6 +145,8 @@ fun SettingsScreen(
                         subtitle = stringResource(R.string.settings_stats_retention_desc),
                         options = labelsByPeriod.values.toList(),
                         selected = labelsByPeriod.getValue(statsRetentionPeriod),
+                        icon = Icons.Default.Schedule,
+                        iconTint = TelGreen,
                         onSelect = { label ->
                             val newPeriod = labelsByPeriod.entries.first { it.value == label }.key
                             val previous = statsRetentionPeriod
@@ -138,20 +163,32 @@ fun SettingsScreen(
             }
 
             item(key = "section_testing") {
-                SectionHeader(stringResource(R.string.settings_section_testing))
+                SectionHeader(
+                    stringResource(R.string.settings_section_testing),
+                    icon = Icons.Default.Science,
+                    tint = TelPurple,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "group_testing") {
                 SettingsGroup {
                     SettingsNavRow(
                         title = stringResource(R.string.settings_diagnostics_detail_title),
                         subtitle = stringResource(R.string.settings_diagnostics_detail_desc),
+                        icon = Icons.Default.Assessment,
+                        iconTint = TelPurple,
                         onClick = onOpenDiagnosticsDetail,
                     )
                 }
             }
 
             item(key = "section_experimental") {
-                SectionHeader(stringResource(R.string.settings_section_experimental))
+                SectionHeader(
+                    stringResource(R.string.settings_section_experimental),
+                    icon = Icons.Default.Whatshot,
+                    tint = TelOrange,
+                    modifier = Modifier.padding(start = 16.dp),
+                )
             }
             item(key = "group_experimental") {
                 SettingsGroup {
@@ -159,6 +196,8 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_toggle_hide_vpn_apps_title),
                         subtitle = stringResource(R.string.settings_toggle_hide_vpn_apps_desc),
                         checked = hideVpnApps,
+                        icon = Icons.Default.VisibilityOff,
+                        iconTint = TelOrange,
                         onCheckedChange = { newValue ->
                             val previous = hideVpnApps
                             hideVpnApps = newValue
@@ -175,6 +214,8 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_toggle_hide_self_title),
                         subtitle = stringResource(R.string.settings_toggle_hide_self_desc),
                         checked = hideSelf,
+                        icon = Icons.Default.Shield,
+                        iconTint = TelOrange,
                         onCheckedChange = { newValue ->
                             val previous = hideSelf
                             hideSelf = newValue
@@ -296,18 +337,23 @@ private fun BackupRestoreCard() {
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween,
         ) {
-            Text(
-                text = stringResource(R.string.backup_restore_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
+            Row(modifier = Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically) {
+                SettingsRowIcon(icon = Icons.Default.SettingsBackupRestore, tint = TelBlue)
+                Spacer(Modifier.width(12.dp))
+                Text(
+                    text = stringResource(R.string.backup_restore_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
             Spacer(Modifier.width(8.dp))
             Row(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                OutlinedButton(
+                SettingsSquareIconButton(
+                    icon = Icons.Default.Save,
+                    contentDescription = stringResource(R.string.btn_export),
                     onClick = {
                         val timestamp =
                             java.text
@@ -317,59 +363,23 @@ private fun BackupRestoreCard() {
                                 ).format(java.util.Date())
                         exportLauncher.launch("vpnhide_backup_$timestamp.json")
                     },
+                    tint = TelBlue,
                     enabled = !exporting && !importing,
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.height(36.dp).width(110.dp),
-                ) {
-                    if (exporting) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Save,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.btn_export),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                }
+                    loading = exporting,
+                )
 
-                OutlinedButton(
+                SettingsSquareIconButton(
+                    icon = Icons.Default.Share,
+                    contentDescription = stringResource(R.string.btn_import),
                     onClick = {
                         importLauncher.launch(
                             arrayOf("application/json", "application/octet-stream"),
                         )
                     },
+                    tint = TelBlue,
                     enabled = !exporting && !importing,
-                    contentPadding = PaddingValues(horizontal = 12.dp),
-                    modifier = Modifier.height(36.dp).width(110.dp),
-                ) {
-                    if (importing) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(16.dp),
-                            strokeWidth = 2.dp,
-                            color = MaterialTheme.colorScheme.primary,
-                        )
-                    } else {
-                        Icon(
-                            Icons.Default.Share,
-                            contentDescription = null,
-                            modifier = Modifier.size(16.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
-                        Text(
-                            text = stringResource(R.string.btn_import),
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                }
+                    loading = importing,
+                )
             }
         }
     }
@@ -395,9 +405,11 @@ private fun DebugLoggingCard() {
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
-            modifier = Modifier.padding(20.dp).fillMaxWidth(),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            SettingsRowIcon(icon = Icons.Default.BugReport, tint = TelBlue)
+            Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(
                     text = stringResource(R.string.diag_debug_logging_title),
@@ -443,76 +455,88 @@ private fun DebugLogExportCard(selfNeedsRestart: Boolean) {
             }
         }
 
-    if (debugZipFile == null) {
-        Button(
-            onClick = {
-                exporting = true
-                scope.launch {
-                    debugZipFile = exportDebugZip(cm, context, selfNeedsRestart)
-                    exporting = false
-                }
-            },
-            enabled = !exporting,
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            if (exporting) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(18.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimary,
-                )
-                Spacer(Modifier.width(8.dp))
-            }
-            Text(
-                if (exporting) {
-                    stringResource(R.string.btn_export_debug_running)
-                } else {
-                    stringResource(R.string.btn_export_debug)
-                },
-            )
-        }
-    } else {
+    Card(
+        shape = RoundedCornerShape(16.dp),
+        colors =
+            CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surface,
+            ),
+        border =
+            BorderStroke(
+                1.dp,
+                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
+            ),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            OutlinedButton(
-                onClick = { saveLauncher.launch(debugZipFile!!.name) },
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(
-                    Icons.Default.Save,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+            SettingsRowIcon(icon = Icons.AutoMirrored.Filled.Article, tint = TelBlue)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.debug_log_export_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.btn_save_debug))
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    text =
+                        if (exporting) {
+                            stringResource(R.string.btn_export_debug_running)
+                        } else {
+                            stringResource(R.string.debug_log_export_desc)
+                        },
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            Button(
-                onClick = {
-                    val uri =
-                        FileProvider.getUriForFile(
-                            context,
-                            "${context.packageName}.fileprovider",
-                            debugZipFile!!,
-                        )
-                    val intent =
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = "application/zip"
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            Spacer(Modifier.width(12.dp))
+            if (debugZipFile == null) {
+                SettingsSquareIconButton(
+                    icon = Icons.Default.Download,
+                    contentDescription = stringResource(R.string.btn_export_debug),
+                    onClick = {
+                        exporting = true
+                        scope.launch {
+                            debugZipFile = exportDebugZip(cm, context, selfNeedsRestart)
+                            exporting = false
                         }
-                    context.startActivity(Intent.createChooser(intent, null))
-                },
-                modifier = Modifier.weight(1f),
-            ) {
-                Icon(
-                    Icons.Default.Share,
-                    contentDescription = null,
-                    modifier = Modifier.size(18.dp),
+                    },
+                    tint = TelBlue,
+                    enabled = !exporting,
+                    loading = exporting,
                 )
-                Spacer(Modifier.width(8.dp))
-                Text(stringResource(R.string.btn_share_debug))
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    SettingsSquareIconButton(
+                        icon = Icons.Default.Save,
+                        contentDescription = stringResource(R.string.btn_save_debug),
+                        onClick = { saveLauncher.launch(debugZipFile!!.name) },
+                        tint = TelBlue,
+                    )
+                    SettingsSquareIconButton(
+                        icon = Icons.Default.Share,
+                        contentDescription = stringResource(R.string.btn_share_debug),
+                        onClick = {
+                            val uri =
+                                FileProvider.getUriForFile(
+                                    context,
+                                    "${context.packageName}.fileprovider",
+                                    debugZipFile!!,
+                                )
+                            val intent =
+                                Intent(Intent.ACTION_SEND).apply {
+                                    type = "application/zip"
+                                    putExtra(Intent.EXTRA_STREAM, uri)
+                                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                                }
+                            context.startActivity(Intent.createChooser(intent, null))
+                        },
+                        tint = TelBlue,
+                    )
+                }
             }
         }
     }

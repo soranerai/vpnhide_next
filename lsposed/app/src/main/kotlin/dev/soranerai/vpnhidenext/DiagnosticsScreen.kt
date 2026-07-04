@@ -146,13 +146,29 @@ internal data class CheckResults(
 }
 
 @Composable
-internal fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-    )
+internal fun SectionHeader(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector? = null,
+    tint: androidx.compose.ui.graphics.Color = MaterialTheme.colorScheme.primary,
+    modifier: Modifier = Modifier,
+) {
+    Row(modifier = modifier, verticalAlignment = Alignment.CenterVertically) {
+        if (icon != null) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = tint,
+                modifier = Modifier.size(16.dp),
+            )
+            Spacer(Modifier.width(6.dp))
+        }
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleSmall,
+            fontWeight = FontWeight.Bold,
+            color = tint,
+        )
+    }
 }
 
 // ==========================================================================
