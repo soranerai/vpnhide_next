@@ -5,7 +5,7 @@
     <!-- Navigation -->
     <string name="tab_dashboard">Обзор</string>
     <string name="tab_protection">Защита</string>
-    <string name="tab_diagnostics">Диагностика</string>
+    <string name="tab_statistics">Статистика</string>
 
     <!-- Protection modes (segmented button) -->
     <string name="mode_vpn_targets">Туннели</string>
@@ -197,6 +197,7 @@
 
     <!-- Settings Screen -->
     <string name="settings_title">Настройки</string>
+    <string name="settings_section_diagnostics">Диагностика</string>
     <string name="settings_section_testing">Тестирование</string>
     <string name="settings_section_experimental">Экспериментальные возможности</string>
     <string name="settings_diagnostics_detail_title">Подробнее о диагностике</string>

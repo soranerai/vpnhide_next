@@ -5,7 +5,7 @@
     <!-- Navigation -->
     <string name="tab_dashboard">Dashboard</string>
     <string name="tab_protection">Protection</string>
-    <string name="tab_diagnostics">Diagnostics</string>
+    <string name="tab_statistics">Statistics</string>
 
     <!-- Protection modes (segmented button) -->
     <string name="mode_vpn_targets">Tun</string>
@@ -249,6 +249,7 @@
 
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
+    <string name="settings_section_diagnostics">Diagnostics</string>
     <string name="settings_section_testing">Testing</string>
     <string name="settings_section_experimental">Experimental features</string>
     <string name="settings_diagnostics_detail_title">Diagnostics details</string>

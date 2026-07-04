@@ -129,7 +129,7 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
     }
 }
 
-private enum class Tab { Dashboard, Protection, Diagnostics }
+private enum class Tab { Dashboard, Protection, Statistics }
 
 private data class RefreshContext(
     val loading: Boolean,
@@ -281,7 +281,7 @@ private fun MainScreen(
                                 scope = scope,
                                 context = context,
                             )
-                            if (currentTab == Tab.Diagnostics) {
+                            if (currentTab == Tab.Statistics) {
                                 IconButton(onClick = { showSettings = true }) {
                                     Icon(
                                         Icons.Default.Settings,
@@ -459,9 +459,8 @@ private fun MainScreen(
                                 )
                             }
 
-                            Tab.Diagnostics -> {
-                                DiagnosticsScreen(
-                                    selfNeedsRestart = restart,
+                            Tab.Statistics -> {
+                                StatisticsScreen(
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -513,7 +512,7 @@ private fun MainScreen(
                         listOf(
                             Tab.Dashboard to Icons.Default.Home,
                             Tab.Protection to Icons.Default.Shield,
-                            Tab.Diagnostics to Icons.Default.CheckCircle,
+                            Tab.Statistics to Icons.Default.BarChart,
                         )
 
                     // The bounding box for the entire Pill + Save FAB combo
@@ -753,6 +752,7 @@ private fun MainScreen(
                 onBack = { showSettings = false },
                 onOpenHookTesting = { showHookTesting = true },
                 onOpenDiagnosticsDetail = { showDiagnosticsDetail = true },
+                selfNeedsRestart = refreshRestart,
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
@@ -908,6 +908,7 @@ private fun RefreshActionIcon(
     val dashboardLoading by DashboardCache.loading.collectAsState()
     val appListLoading by AppListCache.loading.collectAsState()
     val targetsLoading by TargetsCache.loading.collectAsState()
+    val statsLoading by InterceptStatsCache.loading.collectAsState()
 
     val refreshContext =
         when (currentTab) {
@@ -931,8 +932,13 @@ private fun RefreshActionIcon(
                 )
             }
 
-            Tab.Diagnostics -> {
-                null
+            Tab.Statistics -> {
+                RefreshContext(
+                    loading = statsLoading,
+                    onRefresh = {
+                        InterceptStatsCache.refresh(scope, context)
+                    },
+                )
             }
         }
 
