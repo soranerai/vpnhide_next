@@ -63,11 +63,13 @@ fun SettingsScreen(
 
     var hideVpnApps by remember { mutableStateOf(false) }
     var hideSelf by remember { mutableStateOf(false) }
+    var statsRetentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             hideVpnApps = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_HIDE_VPN_APPS)
             hideSelf = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_SELF_HIDE)
+            statsRetentionPeriod = getStatsRetentionPeriod(context)
         }
     }
 
@@ -108,6 +110,32 @@ fun SettingsScreen(
             item(key = "backup_restore_card") { BackupRestoreCard() }
             item(key = "debug_logging_card") { DebugLoggingCard() }
             item(key = "debug_log_export_card") { DebugLogExportCard(selfNeedsRestart) }
+
+            item(key = "section_statistics") {
+                SectionHeader(stringResource(R.string.settings_section_statistics))
+            }
+            item(key = "group_statistics") {
+                val labelsByPeriod = StatsRetentionPeriod.entries.associateWith { it.displayLabel() }
+                SettingsGroup {
+                    SettingsDropdownRow(
+                        title = stringResource(R.string.settings_stats_retention_title),
+                        subtitle = stringResource(R.string.settings_stats_retention_desc),
+                        options = labelsByPeriod.values.toList(),
+                        selected = labelsByPeriod.getValue(statsRetentionPeriod),
+                        onSelect = { label ->
+                            val newPeriod = labelsByPeriod.entries.first { it.value == label }.key
+                            val previous = statsRetentionPeriod
+                            statsRetentionPeriod = newPeriod
+                            scope.launch(Dispatchers.IO) {
+                                val success = setStatsRetentionPeriod(context, newPeriod)
+                                if (!success) {
+                                    withContext(Dispatchers.Main) { statsRetentionPeriod = previous }
+                                }
+                            }
+                        },
+                    )
+                }
+            }
 
             item(key = "section_testing") {
                 SectionHeader(stringResource(R.string.settings_section_testing))

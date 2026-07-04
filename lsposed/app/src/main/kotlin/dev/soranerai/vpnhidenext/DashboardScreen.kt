@@ -107,6 +107,7 @@ fun DashboardScreen(
                 refreshing = true
                 DashboardCache.refresh(scope, context, selfNeedsRestart)
                 DiagnosticsCache.retry(scope, context)
+                InterceptStatsCache.refresh(scope, context)
 
                 val startTime = System.currentTimeMillis()
                 kotlinx.coroutines.delay(50) // Allow loading flags to transition to true
@@ -114,8 +115,9 @@ fun DashboardScreen(
                 combine(
                     DashboardCache.loading,
                     DiagnosticsCache.state,
-                ) { dashboard, diag ->
-                    dashboard || (diag is DiagnosticsCache.State.Running)
+                    InterceptStatsCache.loading,
+                ) { dashboard, diag, statsLoading ->
+                    dashboard || (diag is DiagnosticsCache.State.Running) || statsLoading
                 }.first { !it }
 
                 val elapsed = System.currentTimeMillis() - startTime
@@ -313,6 +315,9 @@ private fun DashboardContent(
             UpdateAvailableCard(info)
         }
 
+        Spacer(Modifier.height(12.dp))
+        InterceptionStatsCard()
+
         // Issues
         val (errors, warnings) = s.issues.partition { it.severity == IssueSeverity.ERROR }
 
@@ -353,7 +358,6 @@ private fun DashboardContent(
                 Spacer(Modifier.height(8.dp))
             }
         }
-
     }
 }
 

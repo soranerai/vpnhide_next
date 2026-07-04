@@ -38,6 +38,9 @@ object HookContext {
     @Volatile
     var appJavaHookMasks: Map<Int, UInt>? = null
 
+    @Volatile
+    var statsBucketDurationMs: Long = 60_000L
+
     // Cache: packageName -> is package VPN?
     val vpnPackageCache = ConcurrentHashMap<String, Boolean>()
 
@@ -100,7 +103,7 @@ object HookContext {
         if (targetUid == selfUid) return
 
         val appStats = hookStats.computeIfAbsent(targetUid) { ConcurrentHashMap() }
-        appStats.computeIfAbsent(hookName) { RollingCounter() }.increment()
+        appStats.computeIfAbsent(hookName) { RollingCounter(statsBucketDurationMs) }.increment()
         hookStatsChanged.set(true)
     }
 
@@ -244,19 +247,18 @@ object HookContext {
     }
 
     class RollingCounter(
-        private val windowMinutes: Int = 30,
+        private val bucketDurationMs: Long = 60_000L,
     ) {
-        private val bucketCounts = IntArray(windowMinutes)
-        private val bucketTimes = LongArray(windowMinutes)
+        private val bucketCounts = IntArray(NUM_BUCKETS)
+        private val bucketTimes = LongArray(NUM_BUCKETS)
 
         @Synchronized
         fun increment() {
-            val nowMs = System.currentTimeMillis()
-            val nowMin = nowMs / 60000L
-            val idx = (nowMin % windowMinutes).toInt()
-            if (bucketTimes[idx] != nowMin) {
+            val nowBucket = System.currentTimeMillis() / bucketDurationMs
+            val idx = (nowBucket % NUM_BUCKETS).toInt()
+            if (bucketTimes[idx] != nowBucket) {
                 bucketCounts[idx] = 1
-                bucketTimes[idx] = nowMin
+                bucketTimes[idx] = nowBucket
             } else {
                 bucketCounts[idx]++
             }
@@ -264,11 +266,10 @@ object HookContext {
 
         @Synchronized
         fun getSum(): Int {
-            val nowMs = System.currentTimeMillis()
-            val nowMin = nowMs / 60000L
+            val nowBucket = System.currentTimeMillis() / bucketDurationMs
             var sum = 0
-            for (i in 0 until windowMinutes) {
-                if (nowMin - bucketTimes[i] < windowMinutes) {
+            for (i in 0 until NUM_BUCKETS) {
+                if (nowBucket - bucketTimes[i] < NUM_BUCKETS) {
                     sum += bucketCounts[i]
                 }
             }
@@ -279,6 +280,10 @@ object HookContext {
         fun clear() {
             bucketCounts.fill(0)
             bucketTimes.fill(0)
+        }
+
+        companion object {
+            const val NUM_BUCKETS = 30
         }
     }
 }

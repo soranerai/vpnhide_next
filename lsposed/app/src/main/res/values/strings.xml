@@ -243,8 +243,11 @@
     <!-- Settings Screen -->
     <string name="settings_title">Settings</string>
     <string name="settings_section_diagnostics">Diagnostics</string>
+    <string name="settings_section_statistics">Statistics</string>
     <string name="settings_section_testing">Testing</string>
     <string name="settings_section_experimental">Experimental features</string>
+    <string name="settings_stats_retention_title">Statistics retention</string>
+    <string name="settings_stats_retention_desc">How far back interception stats are kept and displayed.</string>
     <string name="settings_diagnostics_detail_title">Diagnostics details</string>
     <string name="settings_diagnostics_detail_desc">Full list of network and Java diagnostics check results.</string>
     <string name="settings_toggle_hide_vpn_apps_title">Auto-hide VPN apps</string>
@@ -306,8 +309,15 @@
     <string name="import_success">Settings imported and applied successfully</string>
     <string name="import_failed">Import failed: %1$s</string>
     <string name="dashboard_intercept_statistics">Intercept Statistics</string>
-    <string name="dashboard_stats_lifetime_hint">Showing rolling telemetry for the last 30 minutes</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">Showing rolling telemetry for the last %1$s</string>
     <string name="btn_clear">Clear</string>
+
+    <!-- Statistics retention period -->
+    <string name="stats_period_30m">30 minutes</string>
+    <string name="stats_period_1h">1 hour</string>
+    <string name="stats_period_6h">6 hours</string>
+    <string name="stats_period_24h">24 hours</string>
+    <string name="stats_period_unlimited">Unlimited</string>
 
     <!-- Hook Isolation Labels -->
     <string name="hook_testing_idx_format">Idx %1$d</string>
@@ -416,6 +426,7 @@
     <string name="dashboard_stats_empty_desc">Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.</string>
     <string name="dashboard_stats_framework_title">Framework Intercepts</string>
     <string name="dashboard_stats_native_title">Native Intercepts</string>
+    <string name="dashboard_stats_ports_title">Port Intercepts</string>
 
     <!-- Vector Labels -->
     <string name="vector_label_ioctl">ioctl SIOCGIF*</string>
@@ -424,6 +435,16 @@
     <string name="vector_label_sockopt">setsockopt / getsockopt</string>
     <string name="vector_label_connect">connect / bind</string>
     <string name="vector_label_getname">getsockname spoof</string>
+    <string name="vector_label_port">port hiding</string>
+
+    <!-- Intercept Summary Dashboard Card -->
+    <string name="dashboard_summary_title">Intercept Summary</string>
+    <string name="dashboard_summary_total_label">Total intercepted</string>
+    <string name="dashboard_summary_native">Native</string>
+    <string name="dashboard_summary_lsposed">LSPosed</string>
+    <string name="dashboard_summary_ports">Ports</string>
+    <string name="dashboard_summary_top_hooks">Top hooks</string>
+    <string name="dashboard_summary_empty">No intercepts recorded yet</string>
 
     <!-- Port Rules Screen -->
     <string name="ports_mass_rules_title">Mass Rules (Global)</string>

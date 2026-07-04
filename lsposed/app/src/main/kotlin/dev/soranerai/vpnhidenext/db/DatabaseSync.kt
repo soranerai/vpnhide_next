@@ -29,6 +29,10 @@ internal object DatabaseSync {
             parts += "$KMOD_CTL active_hooks ${config.kernelHookMask}"
             parts += "$KMOD_CTL java_hooks ${config.javaHookMask}"
 
+            val statsBucketSeconds =
+                StatsRetentionPeriod.fromConfigValue(config.statsRetentionPeriod).bucketSeconds
+            parts += "$KMOD_CTL stats_window $statsBucketSeconds"
+
             // 2. Build and apply VPN targets directly to the kernel module
             val kmodUids = (apps.filter { it.kmod }.map { it.uid } + selfUid).distinct().sorted()
             parts += buildKmodApplyCommand(kmodUids, targetType = "targets")

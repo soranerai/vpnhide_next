@@ -81,8 +81,14 @@ internal fun ProtectionScreen(
                         (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
                 }.let { list ->
                     when (sortOrder) {
-                        AppSortOrder.NAME_ASC -> list.sortedBy { it.label.lowercase() }
-                        AppSortOrder.NAME_DESC -> list.sortedByDescending { it.label.lowercase() }
+                        AppSortOrder.NAME_ASC -> {
+                            list.sortedBy { it.label.lowercase() }
+                        }
+
+                        AppSortOrder.NAME_DESC -> {
+                            list.sortedByDescending { it.label.lowercase() }
+                        }
+
                         AppSortOrder.SELECTED_FIRST -> {
                             list.sortedWith(
                                 compareByDescending<AppSummary> { isProtected(it) }.thenBy { it.label.lowercase() },
@@ -224,7 +230,9 @@ internal fun ProtectionScreen(
                         }
                     }
 
-                    val success = dev.soranerai.vpnhidenext.db.DatabaseSync.sync(context)
+                    val success =
+                        dev.soranerai.vpnhidenext.db.DatabaseSync
+                            .sync(context)
                     if (success) {
                         DashboardCache.invalidate()
                         DiagnosticsCache.reset()

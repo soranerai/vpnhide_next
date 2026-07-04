@@ -14,6 +14,7 @@ internal data class DbGlobalConfig(
     val javaHookMask: Long = DEFAULT_JAVA_HOOK_MASK,
     val debugLogging: Int = 0,
     val simSpoofMode: String = "none",
+    val statsRetentionPeriod: String = "30m",
 )
 
 internal interface GlobalConfigDao {

@@ -105,9 +105,48 @@ data class AppInterceptStats(
     val nativeTotal: Int,
     val frameworkBreakdown: Map<String, Int>,
     val nativeBreakdown: Map<String, Int>,
+    val portsCount: Int = 0,
     val userId: Int = 0,
     val uid: Int = 0,
 )
+
+data class HookCount(
+    val name: String,
+    val count: Int,
+)
+
+data class InterceptStatsSummary(
+    val totalIntercepts: Int,
+    val nativeTotal: Int,
+    val lsposedTotal: Int,
+    val portsTotal: Int,
+    val topHooks: List<HookCount>,
+)
+
+fun List<AppInterceptStats>.summarize(topHooksLimit: Int = 5): InterceptStatsSummary {
+    val portsTotal = sumOf { it.portsCount }
+    val nativeTotal = sumOf { it.nativeTotal }
+    val lsposedTotal = sumOf { it.frameworkTotal }
+
+    val hookCounts = mutableMapOf<String, Int>()
+    forEach { app ->
+        app.frameworkBreakdown.forEach { (hook, count) -> hookCounts[hook] = (hookCounts[hook] ?: 0) + count }
+        app.nativeBreakdown.forEach { (hook, count) -> hookCounts[hook] = (hookCounts[hook] ?: 0) + count }
+    }
+    val topHooks =
+        hookCounts.entries
+            .sortedByDescending { it.value }
+            .take(topHooksLimit)
+            .map { HookCount(it.key, it.value) }
+
+    return InterceptStatsSummary(
+        totalIntercepts = nativeTotal + lsposedTotal + portsTotal,
+        nativeTotal = nativeTotal,
+        lsposedTotal = lsposedTotal,
+        portsTotal = portsTotal,
+        topHooks = topHooks,
+    )
+}
 
 data class DashboardState(
     val kmod: ModuleState,

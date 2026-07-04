@@ -625,10 +625,11 @@ class DashboardRepository(
 
         val nativeStatsRaw = decodeBase64String(props["native_stats"] ?: "")
         val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
+        val uidPortsMap = mutableMapOf<Int, Int>()
         if (nativeStatsRaw.isNotBlank()) {
             nativeStatsRaw.lines().forEach { line ->
                 val parts = line.split(';')
-                if (parts.size == 7) {
+                if (parts.size == 8) {
                     val uid = parts[0].toIntOrNull()
                     val ioctl = parts[1].toIntOrNull() ?: 0
                     val netlink = parts[2].toIntOrNull() ?: 0
@@ -636,9 +637,10 @@ class DashboardRepository(
                     val sockopt = parts[4].toIntOrNull() ?: 0
                     val connect = parts[5].toIntOrNull() ?: 0
                     val getname = parts[6].toIntOrNull() ?: 0
+                    val port = parts[7].toIntOrNull() ?: 0
                     if (uid != null && (
                             ioctl > 0 || netlink > 0 || proc > 0 ||
-                                sockopt > 0 || connect > 0 || getname > 0
+                                sockopt > 0 || connect > 0 || getname > 0 || port > 0
                         )
                     ) {
                         val hookMap = uidNativeMap.computeIfAbsent(uid) { mutableMapOf() }
@@ -648,13 +650,15 @@ class DashboardRepository(
                         if (sockopt > 0) hookMap["sockopt"] = sockopt
                         if (connect > 0) hookMap["connect"] = connect
                         if (getname > 0) hookMap["getname"] = getname
+                        if (port > 0) uidPortsMap[uid] = (uidPortsMap[uid] ?: 0) + port
                     }
                 }
             }
         }
 
         val selfUid = context.applicationInfo.uid
-        val allUids = (uidFrameworkMap.keys + uidNativeMap.keys).filter { it != selfUid }
+        val allUids =
+            (uidFrameworkMap.keys + uidNativeMap.keys + uidPortsMap.keys).filter { it != selfUid }
 
         val uidsToResolveRoot = mutableListOf<Int>()
         for (uid in allUids) {
@@ -711,6 +715,7 @@ class DashboardRepository(
                 val (pkg, label) = uidToAppMap[uid] ?: Pair("uid.$uid", "UID $uid")
                 val fBreakdown = uidFrameworkMap[uid] ?: emptyMap()
                 val nBreakdown = uidNativeMap[uid] ?: emptyMap()
+                val portsCount = uidPortsMap[uid] ?: 0
                 AppInterceptStats(
                     packageName = pkg,
                     appLabel = label,
@@ -718,11 +723,12 @@ class DashboardRepository(
                     nativeTotal = nBreakdown.values.sum(),
                     frameworkBreakdown = fBreakdown,
                     nativeBreakdown = nBreakdown,
+                    portsCount = portsCount,
                     userId = uid / 100000,
                     uid = uid,
                 )
-            }.filter { it.frameworkTotal > 0 || it.nativeTotal > 0 }
-            .sortedByDescending { it.frameworkTotal + it.nativeTotal }
+            }.filter { it.frameworkTotal > 0 || it.nativeTotal > 0 || it.portsCount > 0 }
+            .sortedByDescending { it.frameworkTotal + it.nativeTotal + it.portsCount }
     }
 
     fun resetInterceptStats() {

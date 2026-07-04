@@ -191,8 +191,11 @@
     <!-- Settings Screen -->
     <string name="settings_title">Настройки</string>
     <string name="settings_section_diagnostics">Диагностика</string>
+    <string name="settings_section_statistics">Статистика</string>
     <string name="settings_section_testing">Тестирование</string>
     <string name="settings_section_experimental">Экспериментальные возможности</string>
+    <string name="settings_stats_retention_title">Хранение статистики</string>
+    <string name="settings_stats_retention_desc">За какой период хранится и отображается статистика перехватов.</string>
     <string name="settings_diagnostics_detail_title">Подробнее о диагностике</string>
     <string name="settings_diagnostics_detail_desc">Полный список результатов сетевых и Java-проверок диагностики.</string>
     <string name="settings_toggle_hide_vpn_apps_title">Скрывать VPN-приложения автоматически</string>
@@ -254,7 +257,14 @@
     <string name="import_success">Настройки успешно импортированы и применены</string>
     <string name="import_failed">Ошибка импорта: %1$s</string>
     <string name="dashboard_intercept_statistics">Статистика перехватов</string>
-    <string name="dashboard_stats_lifetime_hint">Показывается скользящая статистика за последние 30 минут</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">Показывается скользящая статистика за последние: %1$s</string>
+
+    <!-- Statistics retention period -->
+    <string name="stats_period_30m">30 минут</string>
+    <string name="stats_period_1h">1 час</string>
+    <string name="stats_period_6h">6 часов</string>
+    <string name="stats_period_24h">24 часа</string>
+    <string name="stats_period_unlimited">Без ограничений</string>
     <string name="btn_clear">Сбросить</string>
 
     <!-- Hook Isolation Labels -->
@@ -326,6 +336,7 @@
     <string name="dashboard_stats_empty_desc">Активный VPN-трафик от целевых приложений будет отслеживаться, перехватываться и записываться здесь в реальном времени.</string>
     <string name="dashboard_stats_framework_title">Перехваты Framework</string>
     <string name="dashboard_stats_native_title">Перехваты Native</string>
+    <string name="dashboard_stats_ports_title">Перехваты портов</string>
 
     <!-- Vector Labels -->
     <string name="vector_label_ioctl">ioctl SIOCGIF*</string>
@@ -334,6 +345,16 @@
     <string name="vector_label_sockopt">setsockopt / getsockopt</string>
     <string name="vector_label_connect">connect / bind</string>
     <string name="vector_label_getname">getsockname spoof</string>
+    <string name="vector_label_port">скрытие портов</string>
+
+    <!-- Intercept Summary Dashboard Card -->
+    <string name="dashboard_summary_title">Сводка перехватов</string>
+    <string name="dashboard_summary_total_label">Всего перехвачено</string>
+    <string name="dashboard_summary_native">Native</string>
+    <string name="dashboard_summary_lsposed">LSPosed</string>
+    <string name="dashboard_summary_ports">Порты</string>
+    <string name="dashboard_summary_top_hooks">Топ хуков</string>
+    <string name="dashboard_summary_empty">Перехватов пока не зафиксировано</string>
 
     <!-- Port Rules Screen -->
     <string name="ports_mass_rules_title">Массовые правила (глобальные)</string>

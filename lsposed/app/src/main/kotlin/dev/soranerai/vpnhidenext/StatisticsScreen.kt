@@ -43,8 +43,12 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
     val stats by InterceptStatsCache.stats.collectAsState()
     val appsList by AppListCache.apps.collectAsState()
     var refreshing by remember { mutableStateOf(false) }
+    var retentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
 
-    LaunchedEffect(Unit) { InterceptStatsCache.ensureLoaded(scope, context) }
+    LaunchedEffect(Unit) {
+        InterceptStatsCache.ensureLoaded(scope, context)
+        retentionPeriod = withContext(Dispatchers.IO) { getStatsRetentionPeriod(context) }
+    }
 
     PullToRefreshBox(
         isRefreshing = refreshing,
@@ -65,7 +69,7 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
         ) {
-            InterceptStatisticsSection(stats = stats, appsList = appsList)
+            InterceptStatisticsSection(stats = stats, appsList = appsList, retentionPeriod = retentionPeriod)
 
             val bottomNavPadding =
                 WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -78,6 +82,7 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
 private fun InterceptStatisticsSection(
     stats: List<AppInterceptStats>?,
     appsList: List<AppSummary>?,
+    retentionPeriod: StatsRetentionPeriod,
 ) {
     var expandedApps by remember { mutableStateOf(setOf<Int>()) }
 
@@ -100,7 +105,11 @@ private fun InterceptStatisticsSection(
             )
             Spacer(Modifier.height(2.dp))
             Text(
-                text = stringResource(R.string.dashboard_stats_lifetime_hint),
+                text =
+                    stringResource(
+                        R.string.dashboard_stats_lifetime_hint_fmt,
+                        retentionPeriod.displayLabel(),
+                    ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
@@ -310,6 +319,25 @@ private fun InterceptStatisticsSection(
                                         )
                                     }
                                 }
+                                if (appStat.portsCount > 0) {
+                                    Surface(
+                                        shape = RoundedCornerShape(8.dp),
+                                        color = MaterialTheme.colorScheme.secondaryContainer,
+                                        contentColor =
+                                            MaterialTheme.colorScheme.onSecondaryContainer,
+                                    ) {
+                                        Text(
+                                            text = "P: ${appStat.portsCount}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = FontWeight.Bold,
+                                            modifier =
+                                                Modifier.padding(
+                                                    horizontal = 6.dp,
+                                                    vertical = 3.dp,
+                                                ),
+                                        )
+                                    }
+                                }
 
                                 Icon(
                                     imageVector =
@@ -420,6 +448,38 @@ private fun InterceptStatisticsSection(
                                                     color = MaterialTheme.colorScheme.onSurface,
                                                 )
                                             }
+                                        }
+                                    }
+                                }
+
+                                // Ports Breakdown Column
+                                if (appStat.portsCount > 0) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = stringResource(R.string.dashboard_stats_ports_title),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                        )
+                                        Spacer(Modifier.height(4.dp))
+                                        Row(
+                                            modifier =
+                                                Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(vertical = 2.dp),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                        ) {
+                                            Text(
+                                                text = stringResource(R.string.vector_label_port),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            )
+                                            Text(
+                                                text = appStat.portsCount.toString(),
+                                                style = MaterialTheme.typography.bodySmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface,
+                                            )
                                         }
                                     }
                                 }

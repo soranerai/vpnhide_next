@@ -786,6 +786,7 @@ private fun DbGlobalConfig.toJson(): JSONObject =
         put("javaHookMask", javaHookMask)
         put("debugLogging", debugLogging)
         put("simSpoofMode", simSpoofMode)
+        put("statsRetentionPeriod", statsRetentionPeriod)
     }
 
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
@@ -795,4 +796,5 @@ private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
         javaHookMask = optLong("javaHookMask", DEFAULT_JAVA_HOOK_MASK),
         debugLogging = optInt("debugLogging", 0),
         simSpoofMode = optString("simSpoofMode", "none"),
+        statsRetentionPeriod = optString("statsRetentionPeriod", "30m"),
     )

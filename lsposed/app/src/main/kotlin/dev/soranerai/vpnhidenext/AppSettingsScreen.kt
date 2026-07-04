@@ -1,26 +1,26 @@
 package dev.soranerai.vpnhidenext
 
 import androidx.compose.animation.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -99,9 +99,10 @@ internal fun AppSettingsScreen(
         modifier = modifier,
     ) { innerPadding ->
         Box(
-            modifier = Modifier
-                .padding(top = innerPadding.calculateTopPadding())
-                .fillMaxSize()
+            modifier =
+                Modifier
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .fillMaxSize(),
         ) {
             Box(modifier = Modifier.fillMaxSize()) {
                 if (selectedTab == 0) {
@@ -110,18 +111,19 @@ internal fun AppSettingsScreen(
                     PortsTab(
                         app = app,
                         showAddDialog = showAddPortDialog,
-                        onDismissAddDialog = { showAddPortDialog = false }
+                        onDismissAddDialog = { showAddPortDialog = false },
                     )
                 }
             }
 
             Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
-                    .padding(bottom = 20.dp)
-                    .fillMaxWidth(),
-                contentAlignment = Alignment.Center
+                modifier =
+                    Modifier
+                        .align(Alignment.BottomCenter)
+                        .navigationBarsPadding()
+                        .padding(bottom = 20.dp)
+                        .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
             ) {
                 Surface(
                     shape = RoundedCornerShape(20.dp),
@@ -131,48 +133,51 @@ internal fun AppSettingsScreen(
                     modifier = Modifier.height(60.dp),
                 ) {
                     Row(
-                        modifier = Modifier
-                            .padding(horizontal = 4.dp, vertical = 4.dp)
-                            .width(240.dp),
+                        modifier =
+                            Modifier
+                                .padding(horizontal = 4.dp, vertical = 4.dp)
+                                .width(240.dp),
                         verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        val tabs = listOf<Triple<Int, ImageVector, Int>>(
-                            Triple(0, Icons.Filled.Tune, R.string.app_settings_tab_hooks),
-                            Triple(1, Icons.Filled.Dns, R.string.app_settings_tab_ports)
-                        )
+                        val tabs =
+                            listOf<Triple<Int, ImageVector, Int>>(
+                                Triple(0, Icons.Filled.Tune, R.string.app_settings_tab_hooks),
+                                Triple(1, Icons.Filled.Dns, R.string.app_settings_tab_ports),
+                            )
                         tabs.forEach { (index: Int, icon: ImageVector, labelRes: Int) ->
                             val selected = selectedTab == index
                             Box(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight()
-                                    .clip(RoundedCornerShape(16.dp))
-                                    .background(
-                                        if (selected) {
-                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                        } else {
-                                            Color.Transparent
-                                        }
-                                    )
-                                    .clickable(
-                                        interactionSource = remember { MutableInteractionSource() },
-                                        indication = null,
-                                    ) { selectedTab = index },
+                                modifier =
+                                    Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight()
+                                        .clip(RoundedCornerShape(16.dp))
+                                        .background(
+                                            if (selected) {
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                            } else {
+                                                Color.Transparent
+                                            },
+                                        ).clickable(
+                                            interactionSource = remember { MutableInteractionSource() },
+                                            indication = null,
+                                        ) { selectedTab = index },
                                 contentAlignment = Alignment.Center,
                             ) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
                                     horizontalArrangement = Arrangement.Center,
-                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                    modifier = Modifier.padding(horizontal = 8.dp),
                                 ) {
                                     Icon(
                                         imageVector = icon,
                                         contentDescription = null,
-                                        tint = if (selected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
+                                        tint =
+                                            if (selected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
                                         modifier = Modifier.size(20.dp),
                                     )
                                     Spacer(Modifier.width(6.dp))
@@ -180,11 +185,12 @@ internal fun AppSettingsScreen(
                                         text = stringResource(labelRes),
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 13.sp,
-                                        color = if (selected) {
-                                            MaterialTheme.colorScheme.primary
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
-                                        },
+                                        color =
+                                            if (selected) {
+                                                MaterialTheme.colorScheme.primary
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurfaceVariant
+                                            },
                                     )
                                 }
                             }
@@ -196,7 +202,7 @@ internal fun AppSettingsScreen(
                     visible = selectedTab == 1,
                     enter = fadeIn() + scaleIn(),
                     exit = fadeOut() + scaleOut(),
-                    modifier = Modifier.align(Alignment.Center).offset(x = 162.dp)
+                    modifier = Modifier.align(Alignment.Center).offset(x = 162.dp),
                 ) {
                     FloatingActionButton(
                         onClick = { showAddPortDialog = true },
@@ -204,7 +210,7 @@ internal fun AppSettingsScreen(
                         contentColor = Color.White,
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.size(60.dp),
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
+                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp),
                     ) {
                         Icon(Icons.Filled.Add, contentDescription = null)
                     }
@@ -849,7 +855,14 @@ private fun PortRuleDialog(
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
                 Text(
-                    text = if (initialRule == null) stringResource(R.string.ports_new_rule_title) else stringResource(R.string.ports_edit_rule_title),
+                    text =
+                        if (initialRule ==
+                            null
+                        ) {
+                            stringResource(R.string.ports_new_rule_title)
+                        } else {
+                            stringResource(R.string.ports_edit_rule_title)
+                        },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
@@ -930,7 +943,10 @@ private fun PortRuleDialog(
                 if (violation.type != RuleViolationType.NONE) {
                     val msg =
                         when (violation.type) {
-                            RuleViolationType.DUPLICATE -> stringResource(R.string.err_rule_exists)
+                            RuleViolationType.DUPLICATE -> {
+                                stringResource(R.string.err_rule_exists)
+                            }
+
                             RuleViolationType.REDUNDANT -> {
                                 val target = violation.coveringRule
                                 if (target?.label?.isNotEmpty() == true) {
@@ -939,7 +955,10 @@ private fun PortRuleDialog(
                                     stringResource(R.string.err_rule_redundant, "${target?.startPort}-${target?.endPort}")
                                 }
                             }
-                            else -> ""
+
+                            else -> {
+                                ""
+                            }
                         }
                     Text(
                         text = msg,
@@ -976,7 +995,10 @@ private fun PortRuleDialog(
                         onClick = {
                             onConfirm(
                                 currentRule.copy(
-                                    id = initialRule?.id ?: java.util.UUID.randomUUID().toString(),
+                                    id =
+                                        initialRule?.id ?: java.util.UUID
+                                            .randomUUID()
+                                            .toString(),
                                     enabled = initialRule?.enabled ?: true,
                                 ),
                             )
