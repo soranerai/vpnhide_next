@@ -131,14 +131,13 @@ internal fun AppPickerScreen(
                                                 when (layer) {
                                                     Layer.KMOD -> it.copy(kmod = !it.kmod)
                                                     Layer.LSPOSED -> it.copy(lsposed = !it.lsposed)
-                                                    Layer.PORTS -> it.copy(ports = !it.ports)
                                                 }
                                             }
                                         }
                                     onUpdate(newList)
                                 },
                                 onToggleAll = {
-                                    val newState = !(app.kmod || app.lsposed)
+                                    val newState = !(app.kmod || app.lsposed || app.portHiding)
                                     val newList =
                                         apps.map {
                                             if (it.packageName != app.packageName || it.userId != app.userId) {
@@ -147,6 +146,7 @@ internal fun AppPickerScreen(
                                                 it.copy(
                                                     kmod = if (installed.kmod) newState else false,
                                                     lsposed = newState,
+                                                    portHiding = newState,
                                                 )
                                             }
                                         }

@@ -1,17 +1,24 @@
 package dev.soranerai.vpnhidenext
 
+import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -49,6 +56,7 @@ internal fun AppSettingsScreen(
     modifier: Modifier = Modifier,
 ) {
     var selectedTab by remember { mutableStateOf(0) }
+    var showAddPortDialog by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -90,26 +98,117 @@ internal fun AppSettingsScreen(
         },
         modifier = modifier,
     ) { innerPadding ->
-        Column(modifier = Modifier.padding(innerPadding).fillMaxSize()) {
-            TabRow(
-                selectedTabIndex = selectedTab,
-                containerColor = MaterialTheme.colorScheme.background,
-                contentColor = MaterialTheme.colorScheme.primary,
-            ) {
-                Tab(
-                    selected = selectedTab == 0,
-                    onClick = { selectedTab = 0 },
-                    text = { Text(stringResource(R.string.app_settings_tab_hooks), fontWeight = FontWeight.Bold) },
-                )
-                Tab(
-                    selected = selectedTab == 1,
-                    onClick = { selectedTab = 1 },
-                    text = { Text(stringResource(R.string.app_settings_tab_ports), fontWeight = FontWeight.Bold) },
-                )
+        Box(
+            modifier = Modifier
+                .padding(top = innerPadding.calculateTopPadding())
+                .fillMaxSize()
+        ) {
+            Box(modifier = Modifier.fillMaxSize()) {
+                if (selectedTab == 0) {
+                    HooksTab(app)
+                } else {
+                    PortsTab(
+                        app = app,
+                        showAddDialog = showAddPortDialog,
+                        onDismissAddDialog = { showAddPortDialog = false }
+                    )
+                }
             }
 
-            Box(modifier = Modifier.weight(1f).fillMaxSize()) {
-                if (selectedTab == 0) HooksTab(app) else PortsTab(app)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .navigationBarsPadding()
+                    .padding(bottom = 20.dp)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) {
+                Surface(
+                    shape = RoundedCornerShape(20.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                    tonalElevation = 12.dp,
+                    shadowElevation = 8.dp,
+                    modifier = Modifier.height(60.dp),
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .padding(horizontal = 4.dp, vertical = 4.dp)
+                            .width(240.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        val tabs = listOf<Triple<Int, ImageVector, Int>>(
+                            Triple(0, Icons.Filled.Tune, R.string.app_settings_tab_hooks),
+                            Triple(1, Icons.Filled.Dns, R.string.app_settings_tab_ports)
+                        )
+                        tabs.forEach { (index: Int, icon: ImageVector, labelRes: Int) ->
+                            val selected = selectedTab == index
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .fillMaxHeight()
+                                    .clip(RoundedCornerShape(16.dp))
+                                    .background(
+                                        if (selected) {
+                                            MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+                                        } else {
+                                            Color.Transparent
+                                        }
+                                    )
+                                    .clickable(
+                                        interactionSource = remember { MutableInteractionSource() },
+                                        indication = null,
+                                    ) { selectedTab = index },
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.Center,
+                                    modifier = Modifier.padding(horizontal = 8.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = icon,
+                                        contentDescription = null,
+                                        tint = if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                        modifier = Modifier.size(20.dp),
+                                    )
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(
+                                        text = stringResource(labelRes),
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.sp,
+                                        color = if (selected) {
+                                            MaterialTheme.colorScheme.primary
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        },
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = selectedTab == 1,
+                    enter = fadeIn() + scaleIn(),
+                    exit = fadeOut() + scaleOut(),
+                    modifier = Modifier.align(Alignment.Center).offset(x = 162.dp)
+                ) {
+                    FloatingActionButton(
+                        onClick = { showAddPortDialog = true },
+                        containerColor = Color(0xFF388E3C), // Premium Green
+                        contentColor = Color.White,
+                        shape = RoundedCornerShape(20.dp),
+                        modifier = Modifier.size(60.dp),
+                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp)
+                    ) {
+                        Icon(Icons.Filled.Add, contentDescription = null)
+                    }
+                }
             }
         }
     }
@@ -150,7 +249,7 @@ private fun HooksTab(app: AppEntry?) {
                 HookMaskSection(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false)
             }
             val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            Spacer(Modifier.height(bottomNavPadding + 32.dp))
+            Spacer(Modifier.height(bottomNavPadding + 100.dp))
         }
     }
 }
@@ -445,14 +544,17 @@ private fun DbMassPortRule.toPortRule() =
     PortRule(id = id.toString(), startPort = startPort, endPort = endPort, protocol = protocol, label = label, enabled = enabled)
 
 @Composable
-private fun PortsTab(app: AppEntry?) {
+private fun PortsTab(
+    app: AppEntry?,
+    showAddDialog: Boolean,
+    onDismissAddDialog: () -> Unit,
+) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var rules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
     var massRules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
     var loaded by remember { mutableStateOf(false) }
     var editingRule by remember { mutableStateOf<PortRule?>(null) }
-    var showAddDialog by remember { mutableStateOf(false) }
 
     suspend fun refresh() {
         val db = AppDatabase.getInstance(context)
@@ -573,25 +675,18 @@ private fun PortsTab(app: AppEntry?) {
             }
         }
 
-        FloatingActionButton(
-            onClick = { showAddDialog = true },
-            modifier = Modifier.align(Alignment.BottomEnd).padding(24.dp),
-        ) {
-            Icon(Icons.Default.Add, contentDescription = null)
-        }
-
         if (showAddDialog || editingRule != null) {
             PortRuleDialog(
                 initialRule = editingRule,
                 existingRules = rules,
                 massRules = if (app != null) massRules else emptyList(),
                 onDismiss = {
-                    showAddDialog = false
+                    onDismissAddDialog()
                     editingRule = null
                 },
                 onConfirm = { newRule ->
                     saveRule(newRule)
-                    showAddDialog = false
+                    onDismissAddDialog()
                     editingRule = null
                 },
             )
