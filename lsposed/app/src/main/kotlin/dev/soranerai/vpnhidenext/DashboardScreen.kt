@@ -29,8 +29,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -468,7 +470,7 @@ private fun ProtectionLevelCard(
                             horizontalArrangement = Arrangement.spacedBy(7.dp),
                         ) {
                             Icon(
-                                Icons.Filled.Visibility,
+                                ImageVector.vectorResource(R.drawable.ic_protection_max),
                                 contentDescription = null,
                                 tint = TelOrange,
                                 modifier = Modifier.size(15.dp),
@@ -512,7 +514,7 @@ private fun ProtectionLevelCard(
         listOf(
             Icons.Filled.VisibilityOff,
             Icons.Outlined.Visibility,
-            Icons.Filled.Visibility,
+            ImageVector.vectorResource(R.drawable.ic_protection_max),
         )
 
     val selectedIndex =
