@@ -785,12 +785,14 @@ private fun DbGlobalConfig.toJson(): JSONObject =
         put("kernelHookMask", kernelHookMask)
         put("javaHookMask", javaHookMask)
         put("debugLogging", debugLogging)
+        put("simSpoofMode", simSpoofMode)
     }
 
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
     DbGlobalConfig(
         id = optString("id", "default"),
         kernelHookMask = optLong("kernelHookMask", 0xFFFFFFFFL),
-        javaHookMask = optLong("javaHookMask", 0xFFFFFFFFL),
+        javaHookMask = optLong("javaHookMask", DEFAULT_JAVA_HOOK_MASK),
         debugLogging = optInt("debugLogging", 0),
+        simSpoofMode = optString("simSpoofMode", "none"),
     )

@@ -9,17 +9,9 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyListScope
-import androidx.compose.foundation.lazy.itemsIndexed
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -27,17 +19,11 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.RectangleShape
-import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.content.FileProvider
 import dev.soranerai.vpnhidenext.checks.CheckOutput
 import dev.soranerai.vpnhidenext.checks.CheckStatus
@@ -173,7 +159,6 @@ internal data class CheckResults(
 @Composable
 fun DiagnosticsScreen(
     selfNeedsRestart: Boolean,
-    onOpenHookTesting: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -183,7 +168,6 @@ fun DiagnosticsScreen(
     val diagState by DiagnosticsCache.state.collectAsState()
     var exporting by remember { mutableStateOf(false) }
     var debugZipFile by remember { mutableStateOf<File?>(null) }
-    var showAllChecks by remember { mutableStateOf(false) }
     var isRefreshing by remember { mutableStateOf(false) }
 
     // Kick off the diagnostics run once per process. If selfNeedsRestart
@@ -222,8 +206,6 @@ fun DiagnosticsScreen(
     val networkBlocked = results?.native?.any { it.passed == null && !it.isRunning } == true
     val hasFailed = results?.all?.any { !it.isSkipped && it.passed == false } == true
 
-    val failedNative = remember(results) { results?.native?.filter { !it.isSkipped && it.passed == false } ?: emptyList() }
-    val failedJava = remember(results) { results?.java?.filter { !it.isSkipped && it.passed == false } ?: emptyList() }
     val isChecking = remember(results) { results?.all?.any { it.isRunning } == true }
 
     PullToRefreshBox(
@@ -247,10 +229,9 @@ fun DiagnosticsScreen(
 
             item(key = "spacer_middle") { Spacer(Modifier.height(16.dp)) }
 
-            // Protection check section — its content depends on cache state,
-            // but the bottom debug-tools section always renders below so
-            // users can collect logs / toggle verbose logging even when
-            // VPN is off or a run is in flight.
+            // Compact pass/fail summary only — the full check-by-check
+            // breakdown moved to Settings → Testing → "Diagnostics details"
+            // (DiagnosticsDetailScreen), reachable via the gear icon above.
             if (selfNeedsRestart) {
                 item(key = "banner_restart") {
                     StatusBanner(
@@ -316,209 +297,115 @@ fun DiagnosticsScreen(
                     }
                 }
 
-                results?.let { r ->
-
-                    if (isChecking) {
-                        item {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
+                if (isChecking) {
+                    item(key = "diag_running_card") {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                ),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Column(modifier = Modifier.padding(20.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        CircularProgressIndicator(
-                                            modifier = Modifier.size(24.dp),
-                                            strokeWidth = 2.5.dp,
-                                            color = MaterialTheme.colorScheme.primary,
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.diag_running_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    strokeWidth = 2.5.dp,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.diag_running_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                     Text(
                                         text = stringResource(R.string.diag_running_desc),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        onClick = { showAllChecks = !showAllChecks },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors =
-                                            ButtonDefaults.buttonColors(
-                                                containerColor = MaterialTheme.colorScheme.primary,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                            ),
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (showAllChecks) {
-                                                    stringResource(R.string.diag_btn_hide_details)
-                                                } else {
-                                                    stringResource(R.string.diag_btn_show_details)
-                                                },
-                                        )
-                                    }
                                 }
                             }
                         }
-                    } else if (!hasFailed) {
-                        item {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = TelGreen.copy(alpha = 0.15f),
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        TelGreen.copy(alpha = 0.4f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
+                    }
+                } else if (!hasFailed) {
+                    item(key = "diag_all_good_card") {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = TelGreen.copy(alpha = 0.15f)),
+                            border = BorderStroke(1.dp, TelGreen.copy(alpha = 0.4f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Column(modifier = Modifier.padding(20.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.CheckCircle,
-                                            contentDescription = null,
-                                            tint = TelGreen,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.diag_all_good_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TelGreen,
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = null,
+                                    tint = TelGreen,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.diag_all_good_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TelGreen,
+                                    )
                                     Text(
                                         text = stringResource(R.string.diag_all_good_desc),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurface,
                                     )
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        onClick = { showAllChecks = !showAllChecks },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors =
-                                            ButtonDefaults.buttonColors(
-                                                containerColor = TelGreen,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                            ),
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (showAllChecks) {
-                                                    stringResource(R.string.diag_btn_hide_details)
-                                                } else {
-                                                    stringResource(R.string.diag_btn_show_details)
-                                                },
-                                        )
-                                    }
                                 }
                             }
                         }
-                    } else {
-                        item {
-                            Card(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.cardColors(
-                                        containerColor = MaterialTheme.colorScheme.surface,
-                                    ),
-                                border =
-                                    BorderStroke(
-                                        1.dp,
-                                        MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
+                    }
+                } else {
+                    item(key = "diag_some_failed_card") {
+                        Card(
+                            shape = RoundedCornerShape(16.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(20.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Column(modifier = Modifier.padding(20.dp)) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Cancel,
-                                            contentDescription = null,
-                                            tint = TelRed,
-                                            modifier = Modifier.size(24.dp),
-                                        )
-                                        Text(
-                                            text = stringResource(R.string.diag_some_failed_title),
-                                            style = MaterialTheme.typography.titleMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = TelRed,
-                                        )
-                                    }
-                                    Spacer(Modifier.height(8.dp))
+                                Icon(
+                                    imageVector = Icons.Default.Cancel,
+                                    contentDescription = null,
+                                    tint = TelRed,
+                                    modifier = Modifier.size(24.dp),
+                                )
+                                Column {
+                                    Text(
+                                        text = stringResource(R.string.diag_some_failed_title),
+                                        style = MaterialTheme.typography.titleMedium,
+                                        fontWeight = FontWeight.Bold,
+                                        color = TelRed,
+                                    )
                                     Text(
                                         text = stringResource(R.string.diag_some_failed_desc),
                                         style = MaterialTheme.typography.bodyMedium,
                                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                                     )
-                                    Spacer(Modifier.height(14.dp))
-                                    Button(
-                                        onClick = { showAllChecks = !showAllChecks },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        colors =
-                                            ButtonDefaults.buttonColors(
-                                                containerColor = TelGreen,
-                                                contentColor = MaterialTheme.colorScheme.onPrimary,
-                                            ),
-                                    ) {
-                                        Text(
-                                            text =
-                                                if (showAllChecks) {
-                                                    stringResource(R.string.diag_btn_hide_details)
-                                                } else {
-                                                    stringResource(R.string.diag_btn_show_details)
-                                                },
-                                        )
-                                    }
                                 }
                             }
                         }
                     }
-
-                    if (showAllChecks) {
-                        checksListCard(r.native)
-                        checksListCard(r.java)
-                    } else if (hasFailed && !isChecking) {
-                        if (failedNative.isNotEmpty()) {
-                            checksListCard(failedNative)
-                        }
-                        if (failedJava.isNotEmpty()) {
-                            checksListCard(failedJava)
-                        }
-                    }
                 }
             }
-
-            item { Spacer(Modifier.height(16.dp)) }
-
-            item { KernelHooksTestingCard(onOpenHookTesting) }
 
             item { Spacer(Modifier.height(16.dp)) }
 
@@ -662,6 +549,16 @@ private fun DebugLoggingCard() {
 }
 
 @Composable
+internal fun SectionHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleSmall,
+        fontWeight = FontWeight.Bold,
+        color = MaterialTheme.colorScheme.primary,
+    )
+}
+
+@Composable
 private fun StatusBanner(
     text: String,
     containerColor: Color,
@@ -678,214 +575,6 @@ private fun StatusBanner(
             color = contentColor,
             modifier = Modifier.padding(16.dp),
         )
-    }
-}
-
-@Composable
-private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        style = MaterialTheme.typography.titleSmall,
-        fontWeight = FontWeight.Bold,
-        color = MaterialTheme.colorScheme.primary,
-    )
-}
-
-private fun LazyListScope.checksListCard(checks: List<CheckResult>) {
-    itemsIndexed(checks, key = { _, c -> c.name }) { index, check ->
-        val isFirst = index == 0
-        val isLast = index == checks.lastIndex
-
-        val shape =
-            when {
-                isFirst && isLast -> RoundedCornerShape(16.dp)
-                isFirst -> RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp)
-                isLast -> RoundedCornerShape(bottomStart = 16.dp, bottomEnd = 16.dp)
-                else -> RectangleShape
-            }
-
-        Surface(
-            shape = shape,
-            color = MaterialTheme.colorScheme.surface,
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.08f)),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column {
-                CheckRow(check)
-                if (!isLast) {
-                    HorizontalDivider(
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.06f),
-                        thickness = 1.dp,
-                        modifier = Modifier.padding(horizontal = 14.dp),
-                    )
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalFoundationApi::class)
-@Composable
-private fun CheckRow(r: CheckResult) {
-    var userExpanded by remember { mutableStateOf<Boolean?>(null) }
-    val expanded = userExpanded ?: (r.passed == false)
-
-    val statusIcon =
-        when {
-            r.isRunning -> null
-            r.isSkipped -> Icons.Default.RemoveCircle
-            r.passed == true -> Icons.Default.CheckCircle
-            r.passed == false -> Icons.Default.Cancel
-            else -> Icons.Default.Info
-        }
-    val statusColor =
-        when {
-            r.isRunning -> MaterialTheme.colorScheme.primary
-            r.isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f)
-            r.passed == true -> TelGreen
-            r.passed == false -> TelRed
-            else -> MaterialTheme.colorScheme.onSurfaceVariant
-        }
-
-    val badgeText =
-        when {
-            r.isRunning -> {
-                stringResource(R.string.badge_running)
-            }
-
-            r.isSkipped -> {
-                stringResource(R.string.badge_skipped)
-            }
-
-            else -> {
-                stringResource(
-                    when (r.passed) {
-                        true -> R.string.badge_pass
-                        false -> R.string.badge_fail
-                        else -> R.string.badge_info
-                    },
-                )
-            }
-        }
-
-    val rowBgColor =
-        if (expanded) {
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)
-        } else {
-            Color.Transparent
-        }
-
-    val clipboardManager = LocalClipboardManager.current
-    val context = LocalContext.current
-    val toastMsg = stringResource(R.string.toast_copied_to_clipboard)
-
-    Column(
-        modifier =
-            Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(12.dp))
-                .background(rowBgColor)
-                .combinedClickable(
-                    enabled = !r.isRunning,
-                    onClick = {
-                        if (r.detail.isNotBlank()) {
-                            userExpanded = !expanded
-                        }
-                    },
-                    onLongClick = {
-                        val textToCopy =
-                            if (r.detail.isNotBlank()) {
-                                "${r.name}: $badgeText\n${r.detail}"
-                            } else {
-                                "${r.name}: $badgeText"
-                            }
-                        clipboardManager.setText(AnnotatedString(textToCopy))
-                        Toast.makeText(context, toastMsg, Toast.LENGTH_SHORT).show()
-                    },
-                ).padding(vertical = 10.dp, horizontal = 14.dp),
-    ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            if (r.isRunning) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = statusColor,
-                )
-            } else {
-                statusIcon?.let { icon ->
-                    Icon(
-                        imageVector = icon,
-                        contentDescription = null,
-                        tint = statusColor,
-                        modifier = Modifier.size(20.dp),
-                    )
-                }
-            }
-            Text(
-                text = r.name,
-                style = MaterialTheme.typography.bodyMedium,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.weight(1f),
-            )
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(6.dp),
-            ) {
-                Text(
-                    text = badgeText,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 12.sp,
-                    color = statusColor,
-                )
-                if (!r.isRunning && r.detail.isNotBlank()) {
-                    Icon(
-                        imageVector =
-                            if (expanded) {
-                                Icons.Default.KeyboardArrowUp
-                            } else {
-                                Icons.Default.KeyboardArrowDown
-                            },
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f),
-                        modifier = Modifier.size(16.dp),
-                    )
-                }
-            }
-        }
-        if (expanded && r.detail.isNotBlank()) {
-            Spacer(Modifier.height(8.dp))
-            val detailBgColor =
-                when {
-                    r.isSkipped -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    r.passed == true -> TelGreen.copy(alpha = 0.08f)
-                    r.passed == false -> TelRed.copy(alpha = 0.08f)
-                    else -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                }
-            val detailTextColor =
-                when {
-                    r.isSkipped -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
-                    r.passed == true -> TelGreen
-                    r.passed == false -> TelRed
-                    else -> MaterialTheme.colorScheme.onSurface
-                }
-            Surface(
-                color = detailBgColor,
-                shape = RoundedCornerShape(12.dp),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text = r.detail,
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = detailTextColor.copy(alpha = 0.9f),
-                    modifier = Modifier.padding(12.dp),
-                )
-            }
-        }
     }
 }
 
@@ -2061,42 +1750,6 @@ private suspend fun exportDebugZip(
             }
         }
     }
-
-@Composable
-private fun KernelHooksTestingCard(onOpenHookTesting: () -> Unit) {
-    Card(
-        shape = RoundedCornerShape(16.dp),
-        colors =
-            CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surface,
-            ),
-        border =
-            BorderStroke(
-                1.dp,
-                MaterialTheme.colorScheme.outline.copy(alpha = 0.08f),
-            ),
-        modifier = Modifier.fillMaxWidth(),
-    ) {
-        Column(modifier = Modifier.padding(20.dp)) {
-            Text(
-                text = stringResource(R.string.diag_hook_isolation_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-            )
-            Spacer(Modifier.height(4.dp))
-            Text(
-                text = stringResource(R.string.diag_hook_isolation_description),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-            Spacer(Modifier.height(14.dp))
-            Button(
-                onClick = onOpenHookTesting,
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text(stringResource(R.string.diag_hook_isolation_configure_btn)) }
-        }
-    }
-}
 
 @Composable
 private fun BackupRestoreCard() {

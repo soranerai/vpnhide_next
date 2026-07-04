@@ -225,6 +225,12 @@ val ALL_JAVA_HOOKS =
             R.string.hook_symbol_user_manager,
             R.string.hook_desc_user_manager,
         ),
+        HookInfo(
+            7,
+            R.string.hook_name_self_hide,
+            R.string.hook_symbol_self_hide,
+            R.string.hook_desc_self_hide,
+        ),
     )
 
 @OptIn(ExperimentalMaterial3Api::class)

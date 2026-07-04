@@ -193,6 +193,21 @@
     <string name="diag_hook_isolation_title">Изоляция хуков</string>
     <string name="diag_hook_isolation_description">Тестирование и отключение отдельных хуков на уровне ядра и фреймворка. Полезно для точного выявления конкретного хука, вызывающего перезагрузку или нестабильность системы/приложений.</string>
     <string name="diag_hook_isolation_configure_btn">Настроить хуки</string>
+    <string name="diag_open_details_btn">Подробнее</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_section_testing">Тестирование</string>
+    <string name="settings_section_experimental">Экспериментальные возможности</string>
+    <string name="settings_diagnostics_detail_title">Подробнее о диагностике</string>
+    <string name="settings_diagnostics_detail_desc">Полный список результатов сетевых и Java-проверок диагностики.</string>
+    <string name="settings_toggle_hide_vpn_apps_title">Скрывать VPN-приложения автоматически</string>
+    <string name="settings_toggle_hide_vpn_apps_desc">Автоматически скрывает установленные VPN-приложения от других защищаемых приложений.</string>
+    <string name="settings_toggle_hide_self_title">Скрывать VPNHide Next автоматически</string>
+    <string name="settings_toggle_hide_self_desc">Скрывает пакет самого VPNHide Next от защищаемых приложений.</string>
+    <string name="settings_sim_spoof_title">Активировать подмену данных SIM</string>
+    <string name="settings_sim_spoof_desc">Заглушка для будущей функции подмены данных SIM-карты.</string>
+    <string name="settings_sim_spoof_option_none">Нет</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Изоляция хуков</string>
@@ -231,6 +246,7 @@
     <string name="hook_desc_connectivity_service">Скрывает VPN-сеть из общих списков сетей и блокирует утечку обратных вызовов (callbacks) о VPN.</string>
     <string name="hook_desc_package_manager">Фильтрует VpnServices и скрывает VPN приложения для целевых приложений.</string>
     <string name="hook_desc_user_manager">Фильтрует профили пользователей и подменяет проверки isManagedProfile для сокрытия рабочего профиля.</string>
+    <string name="hook_desc_self_hide">Скрывает пакет самого VPNHide Next из результатов PackageManager для целевых приложений.</string>
 
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Резервное копирование</string>
@@ -307,6 +323,7 @@
     <string name="hook_name_connectivity_service">Список активных сетей</string>
     <string name="hook_name_package_manager">Сокрытие VPN-приложений</string>
     <string name="hook_name_user_manager">Сокрытие рабочего профиля</string>
+    <string name="hook_name_self_hide">Сокрытие самого VPNHide Next</string>
 
     <!-- Intercepts Statistics Dashboard -->
     <string name="dashboard_stats_empty_title">Перехваты отсутствуют</string>

@@ -245,6 +245,21 @@
     <string name="diag_hook_isolation_title">Hook Isolation</string>
     <string name="diag_hook_isolation_description">Test and isolate individual kernel-level and framework-level hooks. Helpful for pinpointing which specific hook is causing system or app instability.</string>
     <string name="diag_hook_isolation_configure_btn">Configure Hooks</string>
+    <string name="diag_open_details_btn">More details</string>
+
+    <!-- Settings Screen -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_testing">Testing</string>
+    <string name="settings_section_experimental">Experimental features</string>
+    <string name="settings_diagnostics_detail_title">Diagnostics details</string>
+    <string name="settings_diagnostics_detail_desc">Full list of network and Java diagnostics check results.</string>
+    <string name="settings_toggle_hide_vpn_apps_title">Auto-hide VPN apps</string>
+    <string name="settings_toggle_hide_vpn_apps_desc">Automatically hides installed VPN apps from other protected apps.</string>
+    <string name="settings_toggle_hide_self_title">Auto-hide VPNHide Next</string>
+    <string name="settings_toggle_hide_self_desc">Hides the VPNHide Next package itself from protected apps.</string>
+    <string name="settings_sim_spoof_title">Enable SIM data spoofing</string>
+    <string name="settings_sim_spoof_desc">Placeholder for an upcoming SIM data spoofing feature.</string>
+    <string name="settings_sim_spoof_option_none">None</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Hook Isolation</string>
@@ -283,6 +298,7 @@
     <string name="hook_desc_connectivity_service">Filters VPN network out of global network lists and blocks leakage of active VPN callbacks.</string>
     <string name="hook_desc_package_manager">Filters VpnServices and hides VPN packages from targeted apps.</string>
     <string name="hook_desc_user_manager">Filters user profiles and spoof isManagedProfile checks to hide work profiles.</string>
+    <string name="hook_desc_self_hide">Hides the VPNHide Next package itself from PackageManager queries made by targeted apps.</string>
 
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Backup &amp; Restore</string>
@@ -386,6 +402,7 @@
     <string name="hook_name_connectivity_service">Active network list</string>
     <string name="hook_name_package_manager">Hiding VPN apps</string>
     <string name="hook_name_user_manager">Hiding work profiles</string>
+    <string name="hook_name_self_hide">Hiding VPNHide Next itself</string>
 
     <!-- Java Hook Symbols -->
     <string name="hook_symbol_link_properties" translatable="false">android.net.LinkProperties</string>
@@ -395,6 +412,7 @@
     <string name="hook_symbol_connectivity_service" translatable="false">com.android.server.ConnectivityService</string>
     <string name="hook_symbol_package_manager" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
     <string name="hook_symbol_user_manager" translatable="false">com.android.server.pm.UserManagerService</string>
+    <string name="hook_symbol_self_hide" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
 
 
     <!-- Intercepts Statistics Dashboard -->

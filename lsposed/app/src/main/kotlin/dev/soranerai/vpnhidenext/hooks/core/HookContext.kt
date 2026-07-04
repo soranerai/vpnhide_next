@@ -10,6 +10,8 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 object HookContext {
+    const val OWN_PACKAGE_NAME = "dev.soranerai.vpnhidenext"
+
     @Volatile
     var csInstance: Any? = null
 
@@ -108,7 +110,7 @@ object HookContext {
             if (pm != null) {
                 synchronized(uidLock) {
                     if (selfUid == -1) {
-                        selfUid = getPackageUid(pm, "dev.soranerai.vpnhidenext", 0)
+                        selfUid = getPackageUid(pm, OWN_PACKAGE_NAME, 0)
                         if (selfUid != -1) {
                             systemServerTargetUids = null
                         }

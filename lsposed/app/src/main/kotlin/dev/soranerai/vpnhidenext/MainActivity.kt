@@ -165,6 +165,8 @@ private fun MainScreen(
     var showIfacePrefixes by remember { mutableStateOf(false) }
     var localIfacePrefixes by remember { mutableStateOf<List<String>?>(null) }
     var showHookTesting by remember { mutableStateOf(false) }
+    var showSettings by remember { mutableStateOf(false) }
+    var showDiagnosticsDetail by remember { mutableStateOf(false) }
     var editingHookIsolation by remember { mutableStateOf<AppEntry?>(null) }
     val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
@@ -279,6 +281,14 @@ private fun MainScreen(
                                 scope = scope,
                                 context = context,
                             )
+                            if (currentTab == Tab.Diagnostics) {
+                                IconButton(onClick = { showSettings = true }) {
+                                    Icon(
+                                        Icons.Default.Settings,
+                                        contentDescription = stringResource(R.string.settings_title),
+                                    )
+                                }
+                            }
                             if (currentTab == Tab.Protection) {
                                 IconButton(onClick = { searchActive = true }) {
                                     Icon(
@@ -452,7 +462,6 @@ private fun MainScreen(
                             Tab.Diagnostics -> {
                                 DiagnosticsScreen(
                                     selfNeedsRestart = restart,
-                                    onOpenHookTesting = { showHookTesting = true },
                                     modifier = Modifier.fillMaxSize(),
                                 )
                             }
@@ -729,6 +738,25 @@ private fun MainScreen(
             )
         }
 
+        // Settings, and the two sub-screens it opens (Hook Testing / Diagnostics
+        // detail), must render in this order — Box stacks children in z-order,
+        // and both sub-screens are only ever opened while Settings is still
+        // showing underneath, so they need to paint on top of it.
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showSettings,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            BackHandler { showSettings = false }
+            SettingsScreen(
+                onBack = { showSettings = false },
+                onOpenHookTesting = { showHookTesting = true },
+                onOpenDiagnosticsDetail = { showDiagnosticsDetail = true },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
         androidx.compose.animation.AnimatedVisibility(
             visible = showHookTesting,
             enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
@@ -738,6 +766,20 @@ private fun MainScreen(
             BackHandler { showHookTesting = false }
             HookTestingScreen(
                 onBack = { showHookTesting = false },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
+        androidx.compose.animation.AnimatedVisibility(
+            visible = showDiagnosticsDetail,
+            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
+            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            BackHandler { showDiagnosticsDetail = false }
+            DiagnosticsDetailScreen(
+                selfNeedsRestart = refreshRestart,
+                onBack = { showDiagnosticsDetail = false },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
