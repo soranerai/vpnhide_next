@@ -48,6 +48,9 @@
     <string name="filter_system">Системные</string>
     <string name="filter_show_system">Показать системные приложения</string>
     <string name="filter_russian_only">Только российские</string>
+    <string name="protect_all_shown">Защитить все показанные</string>
+    <string name="bulk_protect_added">Добавлено в защиту: %1$d — нажмите «Сохранить», чтобы применить</string>
+    <string name="bulk_protect_none_added">Все показанные приложения уже защищены</string>
     <string name="filter_only_selected">Только выбранные</string>
     <string name="filter_only_work_profile">Только рабочий профиль</string>
     <string name="sort_name_asc">По названию (А-Я)</string>

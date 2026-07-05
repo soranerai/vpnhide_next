@@ -164,6 +164,7 @@ private fun MainScreen(
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }
+    var bulkProtectTrigger by remember { mutableStateOf(0) }
     var showGlobalAppSettings by remember { mutableStateOf(false) }
     // Identity and visibility are tracked separately: while the predictive-back
     // gesture is held (or the exit animation is running), editingAppSettingsTarget
@@ -362,6 +363,18 @@ private fun MainScreen(
                                                 )
                                             },
                                         )
+                                        if (showRussianOnly) {
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.protect_all_shown)) },
+                                                onClick = {
+                                                    bulkProtectTrigger++
+                                                    showFilterMenu = false
+                                                },
+                                                leadingIcon = {
+                                                    Icon(Icons.Default.PlaylistAddCheck, contentDescription = null)
+                                                },
+                                            )
+                                        }
                                         DropdownMenuItem(
                                             text = { Text(stringResource(R.string.filter_only_selected)) },
                                             onClick = { showOnlySelected = !showOnlySelected },
@@ -486,6 +499,7 @@ private fun MainScreen(
                                         },
                                         selfNeedsRestart = refreshRestart,
                                         saveTrigger = saveTrigger,
+                                        bulkProtectTrigger = bulkProtectTrigger,
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }

@@ -23,6 +23,7 @@ internal fun ProtectionScreen(
     selfNeedsRestart: Boolean,
     saveTrigger: Int,
     modifier: Modifier = Modifier,
+    bulkProtectTrigger: Int = 0,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -147,6 +148,37 @@ internal fun ProtectionScreen(
         TargetsCache.refresh(scope, context)
         refreshTrigger++
         Unit
+    }
+
+    // Bulk "protect all shown" action from the filter menu — only ever adds
+    // protection for whichever apps are currently filtered/visible
+    // (sortedIds), never removes it, so it's safe to fire repeatedly.
+    // Just stages the change into `apps`, same as a per-row toggle — Save
+    // still needs to be tapped to persist it.
+    LaunchedEffect(bulkProtectTrigger) {
+        if (bulkProtectTrigger == 0) return@LaunchedEffect
+        val kmodInstalled = targets?.kmodModuleInstalled == true
+        val visibleKeys = sortedIds.toSet()
+        var addedCount = 0
+        apps =
+            apps.map { entry ->
+                val key = "${entry.packageName}:${entry.userId}"
+                if (key !in visibleKeys) return@map entry
+                val alreadyFull = entry.lsposed && entry.portHiding && (entry.kmod || !kmodInstalled)
+                if (alreadyFull) return@map entry
+                addedCount++
+                entry.copy(
+                    kmod = kmodInstalled || entry.kmod,
+                    lsposed = true,
+                    portHiding = true,
+                )
+            }
+        snackMessage =
+            if (addedCount > 0) {
+                context.getString(R.string.bulk_protect_added, addedCount)
+            } else {
+                context.getString(R.string.bulk_protect_none_added)
+            }
     }
 
     val dirty = remember(apps, originalApps) { isDirty(apps, originalApps) }

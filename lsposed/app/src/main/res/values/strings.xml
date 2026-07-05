@@ -50,6 +50,9 @@
     <string name="filter_system">System</string>
     <string name="filter_show_system">Show system apps</string>
     <string name="filter_russian_only">Russian apps only</string>
+    <string name="protect_all_shown">Protect all shown</string>
+    <string name="bulk_protect_added">Added %1$d app(s) to protection — tap Save to apply</string>
+    <string name="bulk_protect_none_added">All shown apps are already protected</string>
     <string name="filter_only_selected">Only selected</string>
     <string name="filter_only_work_profile">Only work profile</string>
     <string name="sort_name_asc">Name (A-Z)</string>
