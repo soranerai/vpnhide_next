@@ -123,10 +123,11 @@ fun VpnHideTheme(
 
     val currentDensity = LocalDensity.current
     CompositionLocalProvider(
-        LocalDensity provides Density(
-            density = currentDensity.density,
-            fontScale = 1.0f,
-        ),
+        LocalDensity provides
+            Density(
+                density = currentDensity.density,
+                fontScale = 1.0f,
+            ),
     ) {
         MaterialTheme(
             colorScheme = colorScheme,
