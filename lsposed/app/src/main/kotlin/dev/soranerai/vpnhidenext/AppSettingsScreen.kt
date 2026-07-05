@@ -30,7 +30,6 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
 import dev.soranerai.vpnhidenext.db.DatabaseSync
@@ -60,9 +59,96 @@ internal fun AppSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val pagerState = rememberPagerState(initialPage = 0) { 3 }
-    var showAddPortDialog by remember { mutableStateOf(false) }
+
+    var rules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
+    var massRules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
+    var rulesLoaded by remember { mutableStateOf(false) }
+
+    // Identity and visibility are tracked separately: while the predictive-back
+    // gesture is held (or the exit animation is running), ruleScreenIdentity
+    // must keep pointing at the rule being edited (or null for "add new") so
+    // the screen doesn't blank out or flash to "add" mode mid-gesture — it's
+    // only ever overwritten by the next open, never reset on close.
+    var ruleScreenIdentity by remember { mutableStateOf<PortRule?>(null) }
+    var ruleScreenOpen by remember { mutableStateOf(false) }
+
+    suspend fun refreshRules() {
+        val db = AppDatabase.getInstance(context)
+        val mass = db.massPortRuleDao().getMassRulesSync().map { it.toPortRule() }
+        massRules = mass
+        rules =
+            if (app != null) {
+                db.portRuleDao().getRulesForAppSync(app.packageName, app.userId).map { it.toPortRule() }
+            } else {
+                mass
+            }
+        rulesLoaded = true
+    }
+
+    LaunchedEffect(app?.packageName, app?.userId) {
+        withContext(Dispatchers.IO) { refreshRules() }
+    }
+
+    fun mutateRules(action: suspend (AppDatabase) -> Unit) {
+        scope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getInstance(context)
+            action(db)
+            DatabaseSync.sync(context)
+            refreshRules()
+        }
+    }
+
+    fun saveRule(newRule: PortRule) {
+        mutateRules { db ->
+            if (app != null) {
+                db.portRuleDao().insertRule(
+                    DbPortRule(
+                        id = newRule.id.toLongOrNull() ?: 0L,
+                        packageName = app.packageName,
+                        userId = app.userId,
+                        startPort = newRule.startPort,
+                        endPort = newRule.endPort,
+                        protocol = newRule.protocol,
+                        label = newRule.label,
+                        enabled = newRule.enabled,
+                    ),
+                )
+            } else {
+                db.massPortRuleDao().insertMassRule(
+                    DbMassPortRule(
+                        id = newRule.id.toLongOrNull() ?: 0L,
+                        startPort = newRule.startPort,
+                        endPort = newRule.endPort,
+                        protocol = newRule.protocol,
+                        label = newRule.label,
+                        enabled = newRule.enabled,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun deleteRule(rule: PortRule) {
+        val id = rule.id.toLongOrNull() ?: return
+        mutateRules { db -> if (app != null) db.portRuleDao().deleteRule(id) else db.massPortRuleDao().deleteMassRule(id) }
+    }
+
+    fun toggleRule(rule: PortRule) {
+        saveRule(rule.copy(enabled = !rule.enabled))
+    }
+
+    fun openAddRule() {
+        ruleScreenIdentity = null
+        ruleScreenOpen = true
+    }
+
+    fun openEditRule(rule: PortRule) {
+        ruleScreenIdentity = rule
+        ruleScreenOpen = true
+    }
 
     Scaffold(
         topBar = {
@@ -131,8 +217,12 @@ internal fun AppSettingsScreen(
                     else -> {
                         PortsTab(
                             app = app,
-                            showAddDialog = showAddPortDialog,
-                            onDismissAddDialog = { showAddPortDialog = false },
+                            rules = rules,
+                            massRules = massRules,
+                            loaded = rulesLoaded,
+                            onEditRule = ::openEditRule,
+                            onDeleteRule = ::deleteRule,
+                            onToggleRule = ::toggleRule,
                         )
                     }
                 }
@@ -174,7 +264,7 @@ internal fun AppSettingsScreen(
                     modifier = Modifier.align(Alignment.Center).offset(x = 152.dp),
                 ) {
                     FloatingActionButton(
-                        onClick = { showAddPortDialog = true },
+                        onClick = { openAddRule() },
                         containerColor = TelPink,
                         contentColor = Color.White,
                         shape = RoundedCornerShape(20.dp),
@@ -184,6 +274,27 @@ internal fun AppSettingsScreen(
                         Icon(Icons.Filled.Add, contentDescription = null)
                     }
                 }
+            }
+
+            // Hoisted above the pill/FAB (rendered after them in this Box, so
+            // it paints on top) — the rule screen must cover the whole tab
+            // bar too, the same way MainActivity's overlays cover its own
+            // bottom nav.
+            PredictiveBackOverlay(
+                visible = ruleScreenOpen,
+                onBack = { ruleScreenOpen = false },
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                PortRuleScreen(
+                    initialRule = ruleScreenIdentity,
+                    existingRules = rules,
+                    massRules = if (app != null) massRules else emptyList(),
+                    onBack = { ruleScreenOpen = false },
+                    onConfirm = { newRule ->
+                        saveRule(newRule)
+                        ruleScreenOpen = false
+                    },
+                )
             }
         }
     }
@@ -542,84 +653,17 @@ private fun InlineHintBanner(
     }
 }
 
+/** Purely presentational — rule data/mutations live in [AppSettingsScreen] so the rule editor can overlay the whole tab bar. */
 @Composable
 private fun PortsTab(
     app: AppEntry?,
-    showAddDialog: Boolean,
-    onDismissAddDialog: () -> Unit,
+    rules: List<PortRule>,
+    massRules: List<PortRule>,
+    loaded: Boolean,
+    onEditRule: (PortRule) -> Unit,
+    onDeleteRule: (PortRule) -> Unit,
+    onToggleRule: (PortRule) -> Unit,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var rules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
-    var massRules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
-    var loaded by remember { mutableStateOf(false) }
-    var editingRule by remember { mutableStateOf<PortRule?>(null) }
-
-    suspend fun refresh() {
-        val db = AppDatabase.getInstance(context)
-        val mass = db.massPortRuleDao().getMassRulesSync().map { it.toPortRule() }
-        massRules = mass
-        rules =
-            if (app != null) {
-                db.portRuleDao().getRulesForAppSync(app.packageName, app.userId).map { it.toPortRule() }
-            } else {
-                mass
-            }
-        loaded = true
-    }
-
-    LaunchedEffect(app?.packageName, app?.userId) {
-        withContext(Dispatchers.IO) { refresh() }
-    }
-
-    fun mutate(action: suspend (AppDatabase) -> Unit) {
-        scope.launch(Dispatchers.IO) {
-            val db = AppDatabase.getInstance(context)
-            action(db)
-            DatabaseSync.sync(context)
-            refresh()
-        }
-    }
-
-    fun saveRule(newRule: PortRule) {
-        mutate { db ->
-            if (app != null) {
-                db.portRuleDao().insertRule(
-                    DbPortRule(
-                        id = newRule.id.toLongOrNull() ?: 0L,
-                        packageName = app.packageName,
-                        userId = app.userId,
-                        startPort = newRule.startPort,
-                        endPort = newRule.endPort,
-                        protocol = newRule.protocol,
-                        label = newRule.label,
-                        enabled = newRule.enabled,
-                    ),
-                )
-            } else {
-                db.massPortRuleDao().insertMassRule(
-                    DbMassPortRule(
-                        id = newRule.id.toLongOrNull() ?: 0L,
-                        startPort = newRule.startPort,
-                        endPort = newRule.endPort,
-                        protocol = newRule.protocol,
-                        label = newRule.label,
-                        enabled = newRule.enabled,
-                    ),
-                )
-            }
-        }
-    }
-
-    fun deleteRule(rule: PortRule) {
-        val id = rule.id.toLongOrNull() ?: return
-        mutate { db -> if (app != null) db.portRuleDao().deleteRule(id) else db.massPortRuleDao().deleteMassRule(id) }
-    }
-
-    fun toggleRule(rule: PortRule) {
-        saveRule(rule.copy(enabled = !rule.enabled))
-    }
-
     val showEmpty = rules.isEmpty() && (app == null || massRules.isEmpty())
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -660,29 +704,12 @@ private fun PortsTab(
                         app = app,
                         rules = rules,
                         massRules = massRules,
-                        onEdit = { editingRule = it },
-                        onDelete = ::deleteRule,
-                        onToggle = ::toggleRule,
+                        onEdit = onEditRule,
+                        onDelete = onDeleteRule,
+                        onToggle = onToggleRule,
                     )
                 }
             }
-        }
-
-        if (showAddDialog || editingRule != null) {
-            PortRuleDialog(
-                initialRule = editingRule,
-                existingRules = rules,
-                massRules = if (app != null) massRules else emptyList(),
-                onDismiss = {
-                    onDismissAddDialog()
-                    editingRule = null
-                },
-                onConfirm = { newRule ->
-                    saveRule(newRule)
-                    onDismissAddDialog()
-                    editingRule = null
-                },
-            )
         }
     }
 }
@@ -821,11 +848,11 @@ private fun PortRuleCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PortRuleDialog(
-    initialRule: PortRule? = null,
+private fun PortRuleScreen(
+    initialRule: PortRule?,
     existingRules: List<PortRule>,
     massRules: List<PortRule>,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
     onConfirm: (PortRule) -> Unit,
 ) {
     var label by remember { mutableStateOf(initialRule?.label ?: "") }
@@ -833,181 +860,206 @@ private fun PortRuleDialog(
     var endPort by remember { mutableStateOf(initialRule?.endPort?.toString() ?: "") }
     var protocol by remember { mutableStateOf(initialRule?.protocol ?: PortProtocol.BOTH) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(24.dp),
-            tonalElevation = 6.dp,
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(20.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SettingsRowIcon(icon = Icons.Default.Dns, tint = TelPink)
-                    Spacer(Modifier.width(12.dp))
+    val fieldColors =
+        OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = TelPink,
+            focusedLabelColor = TelPink,
+            cursorColor = TelPink,
+        )
+
+    val currentRule =
+        PortRule(
+            id = initialRule?.id ?: "",
+            startPort = startPort.toIntOrNull() ?: (endPort.toIntOrNull() ?: 1),
+            endPort = endPort.toIntOrNull() ?: (startPort.toIntOrNull() ?: 65535),
+            protocol = protocol,
+            label = label,
+            enabled = true,
+        )
+
+    val violationLocal = validateRule(currentRule, existingRules)
+    val violationMass = validateRule(currentRule, massRules)
+    val violation = if (violationMass.type != RuleViolationType.NONE) violationMass else violationLocal
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
                     Text(
-                        text =
-                            if (initialRule == null) {
-                                stringResource(R.string.ports_new_rule_title)
-                            } else {
-                                stringResource(R.string.ports_edit_rule_title)
-                            },
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                    )
-                }
-
-                val fieldColors =
-                    OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = TelPink,
-                        focusedLabelColor = TelPink,
-                        cursorColor = TelPink,
-                    )
-
-                OutlinedTextField(
-                    value = label,
-                    onValueChange = { label = it },
-                    label = { Text(stringResource(R.string.label_optional)) },
-                    placeholder = { Text(stringResource(R.string.ports_label_placeholder)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = fieldColors,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = startPort,
-                        onValueChange = { if (it.length <= 5) startPort = it.filter { c -> c.isDigit() } },
-                        label = { Text(stringResource(R.string.port_start)) },
-                        placeholder = { Text("1") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = fieldColors,
-                        modifier = Modifier.weight(1f),
-                    )
-                    OutlinedTextField(
-                        value = endPort,
-                        onValueChange = { if (it.length <= 5) endPort = it.filter { c -> c.isDigit() } },
-                        label = { Text(stringResource(R.string.port_end)) },
-                        placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = fieldColors,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-
-                Text(
-                    stringResource(R.string.ports_default_range_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        stringResource(R.string.protocol),
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    val protocolLabels =
-                        mapOf(
-                            PortProtocol.TCP to "TCP",
-                            PortProtocol.UDP to "UDP",
-                            PortProtocol.BOTH to stringResource(R.string.protocol_both),
-                        )
-                    PillTabSelector(
-                        tabs =
-                            PortProtocol.values().map { p ->
-                                PillTab(icon = null, label = protocolLabels.getValue(p), accent = TelPink)
-                            },
-                        selectedIndex = PortProtocol.values().indexOf(protocol),
-                        onSelect = { index -> protocol = PortProtocol.values()[index] },
-                        modifier = Modifier.fillMaxWidth(),
-                        height = 44.dp,
-                    )
-                }
-
-                val currentRule =
-                    PortRule(
-                        id = initialRule?.id ?: "",
-                        startPort = startPort.toIntOrNull() ?: (endPort.toIntOrNull() ?: 1),
-                        endPort = endPort.toIntOrNull() ?: (startPort.toIntOrNull() ?: 65535),
-                        protocol = protocol,
-                        label = label,
-                        enabled = true,
-                    )
-
-                val violationLocal = validateRule(currentRule, existingRules)
-                val violationMass = validateRule(currentRule, massRules)
-                val violation = if (violationMass.type != RuleViolationType.NONE) violationMass else violationLocal
-
-                if (violation.type != RuleViolationType.NONE) {
-                    val msg =
-                        when (violation.type) {
-                            RuleViolationType.DUPLICATE -> {
-                                stringResource(R.string.err_rule_exists)
-                            }
-
-                            RuleViolationType.REDUNDANT -> {
-                                val target = violation.coveringRule
-                                if (target?.label?.isNotEmpty() == true) {
-                                    stringResource(R.string.err_rule_redundant, target.label)
-                                } else {
-                                    stringResource(R.string.err_rule_redundant, "${target?.startPort}-${target?.endPort}")
-                                }
-                            }
-
-                            else -> {
-                                ""
-                            }
-                        }
-                    InlineHintBanner(text = msg, icon = Icons.Filled.ErrorOutline, tint = MaterialTheme.colorScheme.error)
-                } else {
-                    val rulesToRemove =
-                        existingRules.filter { e ->
-                            e.id != initialRule?.id &&
-                                currentRule.startPort <= e.startPort && currentRule.endPort >= e.endPort &&
-                                (protocol == PortProtocol.BOTH || protocol == e.protocol)
-                        }
-                    if (rulesToRemove.isNotEmpty()) {
-                        InlineHintBanner(
-                            text = stringResource(R.string.ports_redundant_rules_removed_warning, rulesToRemove.size),
-                            icon = Icons.Filled.Info,
-                            tint = TelPink,
-                        )
-                    }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        enabled = violation.type == RuleViolationType.NONE,
-                        onClick = {
-                            onConfirm(
-                                currentRule.copy(
-                                    id =
-                                        initialRule?.id ?: java.util.UUID
-                                            .randomUUID()
-                                            .toString(),
-                                    enabled = initialRule?.enabled ?: true,
-                                ),
-                            )
+                        if (initialRule == null) {
+                            stringResource(R.string.ports_new_rule_title)
+                        } else {
+                            stringResource(R.string.ports_edit_rule_title)
                         },
-                        colors = ButtonDefaults.buttonColors(containerColor = TelPink, contentColor = Color.White),
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text(if (initialRule == null) stringResource(R.string.add_rule) else stringResource(R.string.btn_save))
+                    )
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
+                        )
                     }
+                },
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+            )
+        },
+        bottomBar = {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onBack,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    enabled = violation.type == RuleViolationType.NONE,
+                    onClick = {
+                        onConfirm(
+                            currentRule.copy(
+                                id =
+                                    initialRule?.id ?: java.util.UUID
+                                        .randomUUID()
+                                        .toString(),
+                                enabled = initialRule?.enabled ?: true,
+                            ),
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TelPink, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (initialRule == null) stringResource(R.string.add_rule) else stringResource(R.string.btn_save))
                 }
             }
+        },
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+    ) { innerPadding ->
+        Column(
+            modifier =
+                Modifier
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Spacer(Modifier.height(4.dp))
+
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it },
+                label = { Text(stringResource(R.string.label_optional)) },
+                placeholder = { Text(stringResource(R.string.ports_label_placeholder)) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = startPort,
+                    onValueChange = { if (it.length <= 5) startPort = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.port_start)) },
+                    placeholder = { Text("1") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = endPort,
+                    onValueChange = { if (it.length <= 5) endPort = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.port_end)) },
+                    placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Text(
+                stringResource(R.string.ports_default_range_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.protocol),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                val protocolLabels =
+                    mapOf(
+                        PortProtocol.TCP to "TCP",
+                        PortProtocol.UDP to "UDP",
+                        PortProtocol.BOTH to stringResource(R.string.protocol_both),
+                    )
+                PillTabSelector(
+                    tabs =
+                        PortProtocol.values().map { p ->
+                            PillTab(icon = null, label = protocolLabels.getValue(p), accent = TelPink)
+                        },
+                    selectedIndex = PortProtocol.values().indexOf(protocol),
+                    onSelect = { index -> protocol = PortProtocol.values()[index] },
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 44.dp,
+                )
+            }
+
+            if (violation.type != RuleViolationType.NONE) {
+                val msg =
+                    when (violation.type) {
+                        RuleViolationType.DUPLICATE -> {
+                            stringResource(R.string.err_rule_exists)
+                        }
+
+                        RuleViolationType.REDUNDANT -> {
+                            val target = violation.coveringRule
+                            if (target?.label?.isNotEmpty() == true) {
+                                stringResource(R.string.err_rule_redundant, target.label)
+                            } else {
+                                stringResource(R.string.err_rule_redundant, "${target?.startPort}-${target?.endPort}")
+                            }
+                        }
+
+                        else -> {
+                            ""
+                        }
+                    }
+                InlineHintBanner(text = msg, icon = Icons.Filled.ErrorOutline, tint = MaterialTheme.colorScheme.error)
+            } else {
+                val rulesToRemove =
+                    existingRules.filter { e ->
+                        e.id != initialRule?.id &&
+                            currentRule.startPort <= e.startPort && currentRule.endPort >= e.endPort &&
+                            (protocol == PortProtocol.BOTH || protocol == e.protocol)
+                    }
+                if (rulesToRemove.isNotEmpty()) {
+                    InlineHintBanner(
+                        text = stringResource(R.string.ports_redundant_rules_removed_warning, rulesToRemove.size),
+                        icon = Icons.Filled.Info,
+                        tint = TelPink,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
