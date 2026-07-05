@@ -1,6 +1,70 @@
 {
   "history": [
     {
+      "version": "2.1.0",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "App Picker: with the \"Russian apps only\" filter active, a new \"Protect all shown\" action stages full protection (kmod+LSPosed+port hiding) for every filtered app in one tap instead of toggling each one by hand.",
+              "ru": "App Picker: при активном фильтре «Только российские» новое действие «Защитить все показанные» одним тапом ставит полную защиту (kmod+LSPosed+скрытие портов) для всех отфильтрованных приложений вместо ручного переключения каждого."
+            },
+            {
+              "en": "App Settings' per-app Hook Isolation screen now has Min/Standard/Max quick-preset buttons for the kernel hook mask, matching the levels already on the Dashboard, instead of only raw per-checkbox editing or all-on/all-off.",
+              "ru": "В экране изоляции хуков для конкретного приложения теперь есть кнопки-пресеты Мин/Сред/Макс для маски хуков ядра — те же уровни, что и на дашборде, а не только ручные чекбоксы или всё вкл/выкл."
+            },
+            {
+              "en": "Background protection health check: notifies if the kernel module or LSPosed hooks fail to activate after a reboot for apps you've already configured.",
+              "ru": "Фоновая проверка работоспособности защиты: уведомляет, если модуль ядра или хуки LSPosed не активировались после перезагрузки для уже настроенных приложений."
+            },
+            {
+              "en": "Diagnostics can now run its full 44-check battery without a real VPN connected: when none is active, it silently raises a local-only test tunnel (own traffic only, no real packets sent, auto-stops right after the run) just for the duration of the check, then tears it down — no button, no prompt of our own.",
+              "ru": "Диагностику теперь можно полностью прогнать (все 44 проверки) без подключённого VPN: если VPN не активен, приложение само на время проверки поднимает локальный тестовый туннель (трафик только своего приложения, реальные пакеты никуда не уходят, автоотключение сразу после проверки) — без отдельной кнопки и вопросов."
+            },
+            {
+              "en": "New Settings toggle: \"Auto-test without VPN\" lets you opt out of the automatic self-test tunnel diagnostics raises when no real VPN is connected.",
+              "ru": "Новый переключатель в настройках: «Автотест без VPN» позволяет отключить автоматический тестовый туннель, который диагностика поднимает при отсутствии подключённого VPN."
+            },
+            {
+              "en": "Settings now flags when the app isn't exempt from battery optimization and links to the system dialog to fix it, so background update/health checks aren't silently delayed or killed by OEM battery management.",
+              "ru": "В настройках теперь видно, если приложение не в исключениях батарейной оптимизации, с ссылкой на системный диалог — иначе фоновые проверки обновлений и работоспособности могут тихо не срабатывать из-за управления батареей прошивки."
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Make hook status cards always clickable, scroll to bottom for Framework checks, and change status indicator to help icon",
+              "ru": "Сделать карточки со статусами хуков всегда кликабельными, пролистывать к разделу Framework при переходе, и заменить индикатор на иконку вопроса"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Lock UI font scale to 1.0 to prevent layout issues on devices with large font scaling settings",
+              "ru": "Фиксация масштаба шрифта на 1.0 для предотвращения проблем с версткой при увеличенном системном тексте"
+            },
+            {
+              "en": "Clip statistics cards to rounded shape to fix tap animation boundaries",
+              "ru": "Ограничение области отображения карточек статистики скругленной формой для корректной анимации тапа"
+            },
+            {
+              "en": "Refresh dashboard and diagnostics cache when targets are saved on the protection tab",
+              "ru": "Обновление кэша дашборда и диагностики при сохранении целей на вкладке защиты"
+            },
+            {
+              "en": "Truncate long hook/vector labels with ellipsis in stats, and disable expand behavior for cards with only port triggers",
+              "ru": "Сокращение длинных названий хуков троеточием в статистике и отключение раскрытия карточек только с триггерами портов"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.0.0",
       "sections": [
         {
