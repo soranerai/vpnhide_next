@@ -9,10 +9,13 @@ import androidx.compose.animation.scaleIn
 import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -43,7 +46,7 @@ private data class GreenSlice(
 )
 
 @Composable
-fun InterceptionStatsCard() {
+fun InterceptionStatsCard(onOpenDetails: () -> Unit = {}) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val stats by InterceptStatsCache.stats.collectAsState()
@@ -65,6 +68,7 @@ fun InterceptionStatsCard() {
                 summary = summary,
                 containerColor = containerColor,
                 contentColor = contentColor,
+                onOpenDetails = onOpenDetails,
             )
         }
     }
@@ -75,6 +79,7 @@ private fun InterceptionStatsCardContent(
     summary: InterceptStatsSummary,
     containerColor: Color,
     contentColor: Color,
+    onOpenDetails: () -> Unit,
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
@@ -82,12 +87,35 @@ private fun InterceptionStatsCardContent(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp).fillMaxWidth()) {
-            Text(
-                text = stringResource(R.string.dashboard_summary_title),
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold,
-                color = contentColor,
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = stringResource(R.string.dashboard_summary_title),
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = contentColor,
+                )
+                Row(
+                    modifier = Modifier.clickable(onClick = onOpenDetails),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        text = stringResource(R.string.dashboard_summary_details_btn),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor.copy(alpha = 0.8f),
+                    )
+                    Icon(
+                        Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                        contentDescription = null,
+                        tint = contentColor.copy(alpha = 0.8f),
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+            }
             Spacer(Modifier.height(2.dp))
             Text(
                 text = "${summary.totalIntercepts}",

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -32,6 +33,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -79,6 +81,21 @@ fun DiagnosticsDetailScreen(
     val networkBlocked = results?.native?.any { it.passed == null && !it.isRunning } == true
     val hasFailed = results?.all?.any { !it.isSkipped && it.passed == false } == true
     val isChecking = remember(results) { results?.all?.any { it.isRunning } == true }
+    val nativeByTier = groupNativeChecksByTier(context, results?.native.orEmpty())
+
+    val listState = rememberLazyListState()
+    // Jump straight to the first failed check whenever the results settle
+    // with at least one failure — this screen is most often opened *because*
+    // something is wrong (either from here directly or via a Dashboard card
+    // tap), so scrolling past a wall of passing checks to find it is wasted
+    // motion. Ready is a terminal state (DiagnosticsCache never re-runs), so
+    // this fires exactly once per screen visit.
+    LaunchedEffect(diagState) {
+        if (diagState is DiagnosticsCache.State.Ready && hasFailed) {
+            val index = firstFailedItemIndex(networkBlocked, nativeByTier, results?.java.orEmpty())
+            if (index != null) listState.animateScrollToItem(index)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -102,6 +119,7 @@ fun DiagnosticsDetailScreen(
         modifier = modifier,
     ) { innerPadding ->
         LazyColumn(
+            state = listState,
             modifier =
                 Modifier
                     .padding(innerPadding)
@@ -300,7 +318,6 @@ fun DiagnosticsDetailScreen(
                             modifier = Modifier.padding(bottom = 4.dp),
                         )
                     }
-                    val nativeByTier = groupNativeChecksByTier(context, r.native)
                     for (tier in NativeCheckTier.entries) {
                         val tierChecks = nativeByTier[tier].orEmpty()
                         if (tierChecks.isEmpty()) continue
@@ -349,6 +366,39 @@ private fun StatusBanner(
             modifier = Modifier.padding(16.dp),
         )
     }
+}
+
+/**
+ * Flat LazyColumn index of the first failed check, or null if there isn't
+ * one. Mirrors the item order emitted in the `results?.let { r -> ... }`
+ * branch above — keep the two in sync if that layout changes.
+ */
+private fun firstFailedItemIndex(
+    networkBlocked: Boolean,
+    nativeByTier: Map<NativeCheckTier, List<CheckResult>>,
+    java: List<CheckResult>,
+): Int? {
+    var index = 1 // spacer_top
+    if (networkBlocked) index++ // banner_network_blocked
+    index++ // status card (diag_running/all_good/some_failed)
+    index++ // spacer_before_lists
+    index++ // header_native
+    for (tier in NativeCheckTier.entries) {
+        val tierChecks = nativeByTier[tier].orEmpty()
+        if (tierChecks.isEmpty()) continue
+        index++ // tier_header
+        for (check in tierChecks) {
+            if (!check.isSkipped && check.passed == false) return index
+            index++
+        }
+    }
+    index++ // spacer_between_sections
+    index++ // header_framework
+    for (check in java) {
+        if (!check.isSkipped && check.passed == false) return index
+        index++
+    }
+    return null
 }
 
 private fun nativeTierTitleRes(tier: NativeCheckTier): Int =

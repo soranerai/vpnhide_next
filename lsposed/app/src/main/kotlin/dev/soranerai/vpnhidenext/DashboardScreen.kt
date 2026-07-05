@@ -66,6 +66,8 @@ private fun UInt.toProtectionLevel(): ProtectionLevel? =
 @Composable
 fun DashboardScreen(
     selfNeedsRestart: Boolean,
+    onOpenInterceptStats: () -> Unit = {},
+    onOpenDiagnosticsDetail: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -148,6 +150,8 @@ fun DashboardScreen(
                     updateInfo = updateInfo,
                     scope = scope,
                     context = context,
+                    onOpenInterceptStats = onOpenInterceptStats,
+                    onOpenDiagnosticsDetail = onOpenDiagnosticsDetail,
                 )
             }
 
@@ -214,6 +218,8 @@ private fun DashboardContent(
     updateInfo: UpdateInfo?,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
+    onOpenInterceptStats: () -> Unit,
+    onOpenDiagnosticsDetail: () -> Unit,
 ) {
     val darkTheme = isSystemInDarkTheme()
     val errorBg = if (darkTheme) Color(0xFFB71C1C).copy(alpha = 0.3f) else Color(0xFFFFEBEE)
@@ -281,6 +287,7 @@ private fun DashboardContent(
                     state = s.lsposed,
                     javaResult = javaResult,
                     selfNeedsRestart = selfNeedsRestart,
+                    onOpenDiagnosticsDetail = onOpenDiagnosticsDetail,
                 )
             }
             Box(modifier = Modifier.weight(1f)) {
@@ -289,6 +296,7 @@ private fun DashboardContent(
                     state = s.kmod,
                     nativeResult = nativeResult,
                     selfNeedsRestart = selfNeedsRestart,
+                    onOpenDiagnosticsDetail = onOpenDiagnosticsDetail,
                 )
             }
         }
@@ -316,7 +324,7 @@ private fun DashboardContent(
         }
 
         Spacer(Modifier.height(12.dp))
-        InterceptionStatsCard()
+        InterceptionStatsCard(onOpenDetails = onOpenInterceptStats)
 
         // Issues
         val (errors, warnings) = s.issues.partition { it.severity == IssueSeverity.ERROR }

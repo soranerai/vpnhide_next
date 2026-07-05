@@ -434,6 +434,10 @@ private fun MainScreen(
                                 Tab.Dashboard -> {
                                     DashboardScreen(
                                         selfNeedsRestart = restart,
+                                        onOpenInterceptStats = {
+                                            scope.launch { pagerState.animateScrollToPage(Tab.Statistics.ordinal) }
+                                        },
+                                        onOpenDiagnosticsDetail = { showDiagnosticsDetail = true },
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }

@@ -443,6 +443,7 @@
 
     <!-- Intercept Summary Dashboard Card -->
     <string name="dashboard_summary_title">Intercept Summary</string>
+    <string name="dashboard_summary_details_btn">Details</string>
     <string name="dashboard_summary_total_label">Total intercepted</string>
     <string name="dashboard_summary_native">Native</string>
     <string name="dashboard_summary_lsposed">Framework</string>

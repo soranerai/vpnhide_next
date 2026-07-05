@@ -352,6 +352,7 @@
 
     <!-- Intercept Summary Dashboard Card -->
     <string name="dashboard_summary_title">Сводка перехватов</string>
+    <string name="dashboard_summary_details_btn">Подробнее</string>
     <string name="dashboard_summary_total_label">Всего перехвачено</string>
     <string name="dashboard_summary_native">Native</string>
     <string name="dashboard_summary_lsposed">Framework</string>

@@ -1,6 +1,7 @@
 package dev.soranerai.vpnhidenext.ui.dashboard.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -73,6 +74,7 @@ fun ModuleCard(
     state: ModuleState,
     nativeResult: NativeResult?,
     selfNeedsRestart: Boolean = false,
+    onOpenDiagnosticsDetail: (() -> Unit)? = null,
 ) {
     val darkTheme = isSystemInDarkTheme()
     when (state) {
@@ -190,6 +192,8 @@ fun ModuleCard(
                     darkTheme = darkTheme,
                 )
 
+            val hasFailures = nativeResult is NativeResult.Fail || nativeResult is NativeResult.Partial
+
             ModuleCardShell(
                 name = name,
                 version = state.version,
@@ -198,6 +202,7 @@ fun ModuleCard(
                 containerColor = containerColor,
                 contentColor = contentColor,
                 showLoading = active && nativeResult is NativeResult.Checking,
+                onClick = if (hasFailures) onOpenDiagnosticsDetail else null,
             )
         }
     }
@@ -208,6 +213,7 @@ fun LsposedCard(
     state: LsposedState,
     javaResult: JavaResult?,
     selfNeedsRestart: Boolean,
+    onOpenDiagnosticsDetail: (() -> Unit)? = null,
 ) {
     val darkTheme = isSystemInDarkTheme()
     val moduleName = stringResource(R.string.dashboard_lsposed_module)
@@ -317,6 +323,8 @@ fun LsposedCard(
                     darkTheme = darkTheme,
                 )
 
+            val hasFailures = javaResult is JavaResult.Fail || javaResult is JavaResult.Partial
+
             ModuleCardShell(
                 name = moduleName,
                 version = installedVersion,
@@ -325,6 +333,7 @@ fun LsposedCard(
                 containerColor = containerColor,
                 contentColor = contentColor,
                 showLoading = javaResult is JavaResult.Checking,
+                onClick = if (hasFailures) onOpenDiagnosticsDetail else null,
             )
         }
     }
@@ -339,11 +348,15 @@ fun ModuleCardShell(
     containerColor: Color,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     showLoading: Boolean = false,
+    onClick: (() -> Unit)? = null,
 ) {
     ElevatedCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier.fillMaxWidth().let { m ->
+                if (onClick != null) m.clickable(onClick = onClick) else m
+            },
     ) {
         Column(
             modifier = Modifier.padding(14.dp).fillMaxWidth(),
