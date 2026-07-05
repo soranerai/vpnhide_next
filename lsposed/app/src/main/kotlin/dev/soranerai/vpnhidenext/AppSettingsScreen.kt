@@ -471,7 +471,11 @@ private fun HookMaskSection(
         editable = editable,
         applying = applying,
         accent = accent,
-        isKernel = isKernel,
+        // Presets are per-app only — the global mask already has its own
+        // Min/Standard/Max control (ProtectionLevelCard on the Dashboard),
+        // so showing them again here too would be a redundant, confusing
+        // second control for the same global value.
+        showPresets = isKernel && app != null,
         onMaskChange = { newMask -> apply(true, newMask) },
     )
 }
@@ -483,7 +487,7 @@ private fun HookMaskEditor(
     editable: Boolean,
     applying: Boolean,
     accent: Color,
-    isKernel: Boolean,
+    showPresets: Boolean,
     onMaskChange: (UInt) -> Unit,
 ) {
     Card(
@@ -519,7 +523,7 @@ private fun HookMaskEditor(
             // the Dashboard (PROTECTION_MASK_MIN/AVG/MAX) — the Java mask has
             // no such tiering, its hooks are flat reflection-based checks
             // with no meaningful coverage/perf tradeoff between them.
-            if (isKernel) {
+            if (showPresets) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
