@@ -1,12 +1,14 @@
 package dev.soranerai.vpnhidenext
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.draw.clip
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -193,11 +195,36 @@ private fun InterceptStatisticsSection(
                         val icon = appSummary?.icon
                         val canExpand = appStat.frameworkTotal > 0 || appStat.nativeTotal > 0
 
-                        val cardContent = @Composable {
-                            Column(modifier = Modifier.padding(14.dp)) {
+                        ElevatedCard(
+                            shape = RoundedCornerShape(16.dp),
+                            colors =
+                                CardDefaults.elevatedCardColors(
+                                    containerColor = innerCardColor,
+                                ),
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(modifier = Modifier.fillMaxWidth()) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth(),
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .then(
+                                                if (canExpand) {
+                                                    Modifier.clickable {
+                                                        expandedApps =
+                                                            if (isExpanded) {
+                                                                expandedApps - appStat.uid
+                                                            } else {
+                                                                expandedApps + appStat.uid
+                                                            }
+                                                    }
+                                                } else {
+                                                    Modifier
+                                                },
+                                            )
+                                            .padding(14.dp),
                                 ) {
                                     // App Icon
                                     Box(modifier = Modifier.size(40.dp)) {
@@ -347,105 +374,111 @@ private fun InterceptStatisticsSection(
 
                                 // Expandable breakdowns
                                 if (canExpand && isExpanded) {
-                                    Spacer(Modifier.height(12.dp))
-                                    HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
-                                    )
-                                    Spacer(Modifier.height(8.dp))
-
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    Column(
+                                        modifier =
+                                            Modifier
+                                                .fillMaxWidth()
+                                                .padding(start = 14.dp, end = 14.dp, bottom = 14.dp),
                                     ) {
-                                        // Framework Breakdown Column
-                                        if (appStat.frameworkTotal > 0) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = stringResource(R.string.dashboard_stats_framework_title),
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.primary,
-                                                )
-                                                Spacer(Modifier.height(4.dp))
-                                                for ((hook, count) in appStat.frameworkBreakdown) {
-                                                    Row(
-                                                        modifier =
-                                                            Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(vertical = 2.dp),
-                                                        horizontalArrangement =
-                                                            Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                    ) {
-                                                        Text(
-                                                            text = hook,
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color =
-                                                                MaterialTheme.colorScheme
-                                                                    .onSurfaceVariant,
-                                                            modifier = Modifier.weight(1f),
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis,
-                                                        )
-                                                        Spacer(Modifier.width(8.dp))
-                                                        Text(
-                                                            text = count.toString(),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.onSurface,
-                                                        )
+                                        HorizontalDivider(
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
+                                        )
+                                        Spacer(Modifier.height(8.dp))
+
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                        ) {
+                                            // Framework Breakdown Column
+                                            if (appStat.frameworkTotal > 0) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = stringResource(R.string.dashboard_stats_framework_title),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                    )
+                                                    Spacer(Modifier.height(4.dp))
+                                                    for ((hook, count) in appStat.frameworkBreakdown) {
+                                                        Row(
+                                                            modifier =
+                                                                Modifier
+                                                                    .fillMaxWidth()
+                                                                    .padding(vertical = 2.dp),
+                                                            horizontalArrangement =
+                                                                Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                        ) {
+                                                            Text(
+                                                                text = hook,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color =
+                                                                    MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant,
+                                                                modifier = Modifier.weight(1f),
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                            )
+                                                            Spacer(Modifier.width(8.dp))
+                                                            Text(
+                                                                text = count.toString(),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.onSurface,
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
-                                        }
 
-                                        // Native Breakdown Column
-                                        if (appStat.nativeTotal > 0) {
-                                            Column(modifier = Modifier.weight(1f)) {
-                                                Text(
-                                                    text = stringResource(R.string.dashboard_stats_native_title),
-                                                    style = MaterialTheme.typography.labelMedium,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = MaterialTheme.colorScheme.tertiary,
-                                                )
-                                                Spacer(Modifier.height(4.dp))
-                                                for ((vector, count) in appStat.nativeBreakdown) {
-                                                    Row(
-                                                        modifier =
-                                                            Modifier
-                                                                .fillMaxWidth()
-                                                                .padding(vertical = 2.dp),
-                                                        horizontalArrangement =
-                                                            Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.CenterVertically,
-                                                    ) {
-                                                        val vectorLabel =
-                                                            when (vector) {
-                                                                "ioctl" -> stringResource(R.string.vector_label_ioctl)
-                                                                "netlink" -> stringResource(R.string.vector_label_netlink)
-                                                                "proc" -> stringResource(R.string.vector_label_proc)
-                                                                "sockopt" -> stringResource(R.string.vector_label_sockopt)
-                                                                "connect" -> stringResource(R.string.vector_label_connect)
-                                                                "getname" -> stringResource(R.string.vector_label_getname)
-                                                                else -> vector
-                                                            }
-                                                        Text(
-                                                            text = vectorLabel,
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            color =
-                                                                MaterialTheme.colorScheme
-                                                                    .onSurfaceVariant,
-                                                            modifier = Modifier.weight(1f),
-                                                            maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis,
-                                                        )
-                                                        Spacer(Modifier.width(8.dp))
-                                                        Text(
-                                                            text = count.toString(),
-                                                            style = MaterialTheme.typography.bodySmall,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.onSurface,
-                                                        )
+                                            // Native Breakdown Column
+                                            if (appStat.nativeTotal > 0) {
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Text(
+                                                        text = stringResource(R.string.dashboard_stats_native_title),
+                                                        style = MaterialTheme.typography.labelMedium,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = MaterialTheme.colorScheme.tertiary,
+                                                    )
+                                                    Spacer(Modifier.height(4.dp))
+                                                    for ((vector, count) in appStat.nativeBreakdown) {
+                                                        Row(
+                                                            modifier =
+                                                                Modifier
+                                                                    .fillMaxWidth()
+                                                                    .padding(vertical = 2.dp),
+                                                            horizontalArrangement =
+                                                                Arrangement.SpaceBetween,
+                                                            verticalAlignment = Alignment.CenterVertically,
+                                                        ) {
+                                                            val vectorLabel =
+                                                                when (vector) {
+                                                                    "ioctl" -> stringResource(R.string.vector_label_ioctl)
+                                                                    "netlink" -> stringResource(R.string.vector_label_netlink)
+                                                                    "proc" -> stringResource(R.string.vector_label_proc)
+                                                                    "sockopt" -> stringResource(R.string.vector_label_sockopt)
+                                                                    "connect" -> stringResource(R.string.vector_label_connect)
+                                                                    "getname" -> stringResource(R.string.vector_label_getname)
+                                                                    else -> vector
+                                                                }
+                                                            Text(
+                                                                text = vectorLabel,
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color =
+                                                                    MaterialTheme.colorScheme
+                                                                        .onSurfaceVariant,
+                                                                modifier = Modifier.weight(1f),
+                                                                maxLines = 1,
+                                                                overflow = TextOverflow.Ellipsis,
+                                                            )
+                                                            Spacer(Modifier.width(8.dp))
+                                                            Text(
+                                                                text = count.toString(),
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = MaterialTheme.colorScheme.onSurface,
+                                                            )
+                                                        }
                                                     }
                                                 }
                                             }
@@ -453,36 +486,6 @@ private fun InterceptStatisticsSection(
                                     }
                                 }
                             }
-                        }
-
-                        if (canExpand) {
-                            ElevatedCard(
-                                onClick = {
-                                    expandedApps =
-                                        if (isExpanded) {
-                                            expandedApps - appStat.uid
-                                        } else {
-                                            expandedApps + appStat.uid
-                                        }
-                                },
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.elevatedCardColors(
-                                        containerColor = innerCardColor,
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
-                                content = { cardContent() }
-                            )
-                        } else {
-                            ElevatedCard(
-                                shape = RoundedCornerShape(16.dp),
-                                colors =
-                                    CardDefaults.elevatedCardColors(
-                                        containerColor = innerCardColor,
-                                    ),
-                                modifier = Modifier.fillMaxWidth(),
-                                content = { cardContent() }
-                            )
                         }
                     }
                 }
