@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Troubleshoot
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Whatshot
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -84,6 +85,7 @@ fun SettingsScreen(
     var hideSelf by remember { mutableStateOf(false) }
     var updateCheckEnabled by remember { mutableStateOf(true) }
     var healthCheckEnabled by remember { mutableStateOf(true) }
+    var selfTestVpnEnabled by remember { mutableStateOf(true) }
     var statsRetentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
     // Defaults to true (hidden) until the real check completes, so the row
     // doesn't flash in for a frame on every screen open.
@@ -95,6 +97,7 @@ fun SettingsScreen(
             hideSelf = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_SELF_HIDE)
             updateCheckEnabled = getUpdateCheckEnabled(context)
             healthCheckEnabled = getHealthCheckEnabled(context)
+            selfTestVpnEnabled = getSelfTestVpnEnabled(context)
             statsRetentionPeriod = getStatsRetentionPeriod(context)
         }
         batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
@@ -296,6 +299,20 @@ fun SettingsScreen(
                             healthCheckEnabled = newValue
                             scope.launch(Dispatchers.IO) {
                                 setHealthCheckEnabled(context, newValue)
+                            }
+                        },
+                    )
+                    SettingsRowDivider()
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_toggle_self_test_vpn_title),
+                        subtitle = stringResource(R.string.settings_toggle_self_test_vpn_desc),
+                        checked = selfTestVpnEnabled,
+                        icon = Icons.Default.VpnKey,
+                        iconTint = TelOrange,
+                        onCheckedChange = { newValue ->
+                            selfTestVpnEnabled = newValue
+                            scope.launch(Dispatchers.IO) {
+                                setSelfTestVpnEnabled(context, newValue)
                             }
                         },
                     )

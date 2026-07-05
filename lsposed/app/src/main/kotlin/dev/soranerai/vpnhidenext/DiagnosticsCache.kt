@@ -154,9 +154,11 @@ internal object DiagnosticsCache {
         // No real VPN — silently raise a local-only test tunnel (see
         // SelfTestVpnCoordinator) just for the duration of this run, so the
         // full check battery still executes instead of short-circuiting.
-        // No button, no prompt of our own.
+        // No button, no prompt of our own — opt-out via the "Auto-test
+        // without VPN" toggle in Settings.
         var usingSelfTest = false
-        if (!vpnActive) {
+        val selfTestEnabled = withContext(Dispatchers.IO) { getSelfTestVpnEnabled(appContext) }
+        if (!vpnActive && selfTestEnabled) {
             usingSelfTest = SelfTestVpnCoordinator.tryEstablish(appContext)
             if (usingSelfTest) {
                 // The interface itself is up as soon as establish() returns,

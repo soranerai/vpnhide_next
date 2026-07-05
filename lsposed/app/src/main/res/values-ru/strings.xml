@@ -216,6 +216,8 @@
     <string name="settings_toggle_health_check_desc">Уведомляет, если модуль ядра или хуки LSPosed не поднялись после перезагрузки, чтобы тихий отказ не остался незамеченным.</string>
     <string name="settings_battery_optimization_title">Отключить оптимизацию батареи</string>
     <string name="settings_battery_optimization_desc">Некоторые прошивки (MIUI, EMUI, ColorOS, One UI) откладывают или убивают фоновые проверки, если приложение не в исключениях — это нужно, чтобы проверки ниже действительно работали.</string>
+    <string name="settings_toggle_self_test_vpn_title">Автотест без VPN</string>
+    <string name="settings_toggle_self_test_vpn_desc">Если VPN не подключён, на время полной диагностики незаметно поднимает локальный тестовый туннель, а затем убирает его. Выключите, чтобы проверки запускались только при реально подключённом VPN.</string>
 
     <!-- Уведомление о доступном обновлении -->
     <string name="update_notification_channel_name">Обновления приложения</string>

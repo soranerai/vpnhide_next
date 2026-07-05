@@ -16,7 +16,9 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 
 /**
  * Establishes a tun interface scoped to *this app only* (via
@@ -119,7 +121,7 @@ internal class SelfTestVpnService : VpnService() {
                 }
             stopWatcherJob =
                 CoroutineScope(Dispatchers.Default).launch {
-                    _stopRequested.first { it }
+                    stopRequested.first { it }
                     teardown()
                 }
         }
@@ -146,7 +148,7 @@ internal class SelfTestVpnService : VpnService() {
         runCatching { tunFd?.close() }
         tunFd = null
         _established.value = false
-        _stopRequested.value = false
+        stopRequested.value = false
         stopSelf()
     }
 
@@ -155,7 +157,7 @@ internal class SelfTestVpnService : VpnService() {
         private const val AUTO_STOP_MS = 30_000L
 
         private val _established = MutableStateFlow(false)
-        private val _stopRequested = MutableStateFlow(false)
+        private val stopRequested = MutableStateFlow(false)
 
         /** True once `establish()` has actually returned a live tun fd —
          * the UI awaits this before triggering a diagnostics re-run, since
@@ -167,7 +169,7 @@ internal class SelfTestVpnService : VpnService() {
         /** Ask the running instance (if any) to tear down its tunnel right
          * away. A no-op if no test is in flight. */
         fun requestStop() {
-            _stopRequested.value = true
+            stopRequested.value = true
         }
     }
 }
@@ -182,7 +184,6 @@ internal class SelfTestVpnService : VpnService() {
  * a plain object with no Activity to host a launcher.
  */
 internal object SelfTestVpnCoordinator {
-    private const val CONSENT_POLL_MS = 300L
     private const val CONSENT_TIMEOUT_MS = 20_000L
     private const val ESTABLISH_TIMEOUT_MS = 5_000L
 
@@ -196,10 +197,17 @@ internal object SelfTestVpnCoordinator {
             runCatching {
                 context.startActivity(prepareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
             }.onFailure { return false }
+            // `prepare()` returns the same non-null intent whether the user
+            // hasn't answered yet or just tapped Deny — there's no distinct
+            // "denied" signal to poll for. Instead of polling blindly up to
+            // the full timeout, react the moment our activity resumes
+            // (i.e. the system consent dialog closed, either way) and
+            // re-check immediately — the timeout below is just a backstop
+            // in case that resume signal never arrives.
             val granted =
                 withTimeoutOrNull(CONSENT_TIMEOUT_MS) {
-                    while (VpnService.prepare(context) != null) delay(CONSENT_POLL_MS)
-                    true
+                    awaitNextResume(context)
+                    VpnService.prepare(context) == null
                 } ?: false
             if (!granted) return false
         }
@@ -215,5 +223,38 @@ internal object SelfTestVpnCoordinator {
 
     fun stop() {
         SelfTestVpnService.requestStop()
+    }
+
+    private suspend fun awaitNextResume(context: Context) {
+        val app = context.applicationContext as? Application ?: return
+        suspendCancellableCoroutine<Unit> { cont ->
+            val callbacks =
+                object : Application.ActivityLifecycleCallbacks {
+                    override fun onActivityResumed(activity: Activity) {
+                        app.unregisterActivityLifecycleCallbacks(this)
+                        if (cont.isActive) cont.resume(Unit)
+                    }
+
+                    override fun onActivityCreated(
+                        activity: Activity,
+                        savedInstanceState: Bundle?,
+                    ) {}
+
+                    override fun onActivityStarted(activity: Activity) {}
+
+                    override fun onActivityPaused(activity: Activity) {}
+
+                    override fun onActivityStopped(activity: Activity) {}
+
+                    override fun onActivitySaveInstanceState(
+                        activity: Activity,
+                        outState: Bundle,
+                    ) {}
+
+                    override fun onActivityDestroyed(activity: Activity) {}
+                }
+            app.registerActivityLifecycleCallbacks(callbacks)
+            cont.invokeOnCancellation { app.unregisterActivityLifecycleCallbacks(callbacks) }
+        }
     }
 }

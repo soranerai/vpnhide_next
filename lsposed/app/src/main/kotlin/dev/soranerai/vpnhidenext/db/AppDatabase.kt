@@ -788,6 +788,7 @@ private fun DbGlobalConfig.toJson(): JSONObject =
         put("statsRetentionPeriod", statsRetentionPeriod)
         put("updateCheckEnabled", updateCheckEnabled)
         put("healthCheckEnabled", healthCheckEnabled)
+        put("selfTestVpnEnabled", selfTestVpnEnabled)
     }
 
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
@@ -799,4 +800,5 @@ private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
         statsRetentionPeriod = optString("statsRetentionPeriod", "30m"),
         updateCheckEnabled = optBoolean("updateCheckEnabled", true),
         healthCheckEnabled = optBoolean("healthCheckEnabled", true),
+        selfTestVpnEnabled = optBoolean("selfTestVpnEnabled", true),
     )

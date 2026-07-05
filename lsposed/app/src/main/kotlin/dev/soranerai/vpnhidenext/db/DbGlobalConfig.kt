@@ -16,6 +16,7 @@ internal data class DbGlobalConfig(
     val statsRetentionPeriod: String = "30m",
     val updateCheckEnabled: Boolean = true,
     val healthCheckEnabled: Boolean = true,
+    val selfTestVpnEnabled: Boolean = true,
 )
 
 internal interface GlobalConfigDao {
