@@ -65,6 +65,7 @@ import dev.soranerai.vpnhidenext.ui.theme.TelRed
 @Composable
 fun DiagnosticsDetailScreen(
     selfNeedsRestart: Boolean,
+    scrollToBottom: Boolean = false,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -91,9 +92,14 @@ fun DiagnosticsDetailScreen(
     // motion. Ready is a terminal state (DiagnosticsCache never re-runs), so
     // this fires exactly once per screen visit.
     LaunchedEffect(diagState) {
-        if (diagState is DiagnosticsCache.State.Ready && hasFailed) {
-            val index = firstFailedItemIndex(networkBlocked, nativeByTier, results?.java.orEmpty())
-            if (index != null) listState.animateScrollToItem(index)
+        if (diagState is DiagnosticsCache.State.Ready) {
+            if (scrollToBottom) {
+                val index = frameworkHeaderIndex(networkBlocked, nativeByTier)
+                listState.animateScrollToItem(index)
+            } else if (hasFailed) {
+                val index = firstFailedItemIndex(networkBlocked, nativeByTier, results?.java.orEmpty())
+                if (index != null) listState.animateScrollToItem(index)
+            }
         }
     }
 
@@ -366,6 +372,25 @@ private fun StatusBanner(
             modifier = Modifier.padding(16.dp),
         )
     }
+}
+
+private fun frameworkHeaderIndex(
+    networkBlocked: Boolean,
+    nativeByTier: Map<NativeCheckTier, List<CheckResult>>,
+): Int {
+    var index = 1 // spacer_top
+    if (networkBlocked) index++ // banner_network_blocked
+    index++ // status card
+    index++ // spacer_before_lists
+    index++ // header_native
+    for (tier in NativeCheckTier.entries) {
+        val tierChecks = nativeByTier[tier].orEmpty()
+        if (tierChecks.isEmpty()) continue
+        index++ // tier_header
+        index += tierChecks.size // all checks in this tier
+    }
+    index++ // spacer_between_sections
+    return index // index of header_framework
 }
 
 /**

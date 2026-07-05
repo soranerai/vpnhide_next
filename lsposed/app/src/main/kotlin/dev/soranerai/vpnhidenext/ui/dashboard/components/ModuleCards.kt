@@ -6,6 +6,8 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.HelpOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -88,6 +90,7 @@ fun ModuleCard(
                 dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 containerColor = containerColor,
                 contentColor = contentColor,
+                onClick = onOpenDiagnosticsDetail,
             )
         }
 
@@ -191,9 +194,6 @@ fun ModuleCard(
                     active = active,
                     darkTheme = darkTheme,
                 )
-
-            val hasFailures = nativeResult is NativeResult.Fail || nativeResult is NativeResult.Partial
-
             ModuleCardShell(
                 name = name,
                 version = state.version,
@@ -202,7 +202,7 @@ fun ModuleCard(
                 containerColor = containerColor,
                 contentColor = contentColor,
                 showLoading = active && nativeResult is NativeResult.Checking,
-                onClick = if (hasFailures) onOpenDiagnosticsDetail else null,
+                onClick = onOpenDiagnosticsDetail,
             )
         }
     }
@@ -229,6 +229,7 @@ fun LsposedCard(
                 dotColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f),
                 containerColor = containerColor,
                 contentColor = contentColor,
+                onClick = onOpenDiagnosticsDetail,
             )
         }
 
@@ -242,6 +243,7 @@ fun LsposedCard(
                 dotColor = TelOrange,
                 containerColor = containerColor,
                 contentColor = contentColor,
+                onClick = onOpenDiagnosticsDetail,
             )
         }
 
@@ -322,9 +324,6 @@ fun LsposedCard(
                     active = true,
                     darkTheme = darkTheme,
                 )
-
-            val hasFailures = javaResult is JavaResult.Fail || javaResult is JavaResult.Partial
-
             ModuleCardShell(
                 name = moduleName,
                 version = installedVersion,
@@ -333,7 +332,7 @@ fun LsposedCard(
                 containerColor = containerColor,
                 contentColor = contentColor,
                 showLoading = javaResult is JavaResult.Checking,
-                onClick = if (hasFailures) onOpenDiagnosticsDetail else null,
+                onClick = onOpenDiagnosticsDetail,
             )
         }
     }
@@ -382,11 +381,11 @@ fun ModuleCardShell(
                         color = contentColor.copy(alpha = 0.6f),
                     )
                 } else {
-                    Box(
-                        modifier =
-                            Modifier
-                                .size(8.dp)
-                                .background(color = dotColor, shape = CircleShape),
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Outlined.HelpOutline,
+                        contentDescription = null,
+                        modifier = Modifier.size(17.dp),
+                        tint = dotColor,
                     )
                 }
             }

@@ -173,6 +173,7 @@ private fun MainScreen(
     var showEditingAppSettings by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDiagnosticsDetail by remember { mutableStateOf(false) }
+    var diagnosticsScrollToBottom by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
     val refreshRestart = selfNeedsRestart ?: false
     val searchFocusRequester = remember { FocusRequester() }
@@ -459,7 +460,10 @@ private fun MainScreen(
                                         onOpenInterceptStats = {
                                             scope.launch { pagerState.animateScrollToPage(Tab.Statistics.ordinal) }
                                         },
-                                        onOpenDiagnosticsDetail = { showDiagnosticsDetail = true },
+                                        onOpenDiagnosticsDetail = { scrollToBottom ->
+                                            diagnosticsScrollToBottom = scrollToBottom
+                                            showDiagnosticsDetail = true
+                                        },
                                         modifier = Modifier.fillMaxSize(),
                                     )
                                 }
@@ -477,6 +481,7 @@ private fun MainScreen(
                                             editingAppSettingsTarget = app
                                             showEditingAppSettings = true
                                         },
+                                        selfNeedsRestart = refreshRestart,
                                         saveTrigger = saveTrigger,
                                         modifier = Modifier.fillMaxSize(),
                                     )
@@ -722,7 +727,10 @@ private fun MainScreen(
         ) {
             SettingsScreen(
                 onBack = { showSettings = false },
-                onOpenDiagnosticsDetail = { showDiagnosticsDetail = true },
+                onOpenDiagnosticsDetail = {
+                    diagnosticsScrollToBottom = false
+                    showDiagnosticsDetail = true
+                },
                 selfNeedsRestart = refreshRestart,
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
@@ -735,6 +743,7 @@ private fun MainScreen(
         ) {
             DiagnosticsDetailScreen(
                 selfNeedsRestart = refreshRestart,
+                scrollToBottom = diagnosticsScrollToBottom,
                 onBack = { showDiagnosticsDetail = false },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )

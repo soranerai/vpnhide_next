@@ -67,7 +67,7 @@ private fun UInt.toProtectionLevel(): ProtectionLevel? =
 fun DashboardScreen(
     selfNeedsRestart: Boolean,
     onOpenInterceptStats: () -> Unit = {},
-    onOpenDiagnosticsDetail: () -> Unit = {},
+    onOpenDiagnosticsDetail: (scrollToBottom: Boolean) -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
@@ -219,7 +219,7 @@ private fun DashboardContent(
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
     onOpenInterceptStats: () -> Unit,
-    onOpenDiagnosticsDetail: () -> Unit,
+    onOpenDiagnosticsDetail: (scrollToBottom: Boolean) -> Unit,
 ) {
     val darkTheme = isSystemInDarkTheme()
     val errorBg = if (darkTheme) Color(0xFFB71C1C).copy(alpha = 0.3f) else Color(0xFFFFEBEE)
@@ -287,7 +287,7 @@ private fun DashboardContent(
                     state = s.lsposed,
                     javaResult = javaResult,
                     selfNeedsRestart = selfNeedsRestart,
-                    onOpenDiagnosticsDetail = onOpenDiagnosticsDetail,
+                    onOpenDiagnosticsDetail = { onOpenDiagnosticsDetail(true) },
                 )
             }
             Box(modifier = Modifier.weight(1f)) {
@@ -296,7 +296,7 @@ private fun DashboardContent(
                     state = s.kmod,
                     nativeResult = nativeResult,
                     selfNeedsRestart = selfNeedsRestart,
-                    onOpenDiagnosticsDetail = onOpenDiagnosticsDetail,
+                    onOpenDiagnosticsDetail = { onOpenDiagnosticsDetail(false) },
                 )
             }
         }

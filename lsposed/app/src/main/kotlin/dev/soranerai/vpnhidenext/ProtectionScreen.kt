@@ -20,6 +20,7 @@ internal fun ProtectionScreen(
     sortOrder: AppSortOrder,
     onDirtyChange: (Boolean) -> Unit,
     onOpenAppSettings: (AppEntry) -> Unit,
+    selfNeedsRestart: Boolean,
     saveTrigger: Int,
     modifier: Modifier = Modifier,
 ) {
@@ -234,8 +235,9 @@ internal fun ProtectionScreen(
                         dev.soranerai.vpnhidenext.db.DatabaseSync
                             .sync(context)
                     if (success) {
-                        DashboardCache.invalidate()
+                        DashboardCache.refresh(scope, context, selfNeedsRestart)
                         DiagnosticsCache.reset()
+                        DiagnosticsCache.run(scope, context)
                         TargetsCache.refresh(scope, context)
                         originalApps = apps
                         // Re-sort after save to reflect new selection state (jump once, but after save is done)

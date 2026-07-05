@@ -20,6 +20,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.graphics.drawable.toBitmap
 import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
@@ -190,23 +191,9 @@ private fun InterceptStatisticsSection(
                         val isExpanded = expandedApps.contains(appStat.uid)
                         val appSummary = appsList?.find { it.uid == appStat.uid }
                         val icon = appSummary?.icon
+                        val canExpand = appStat.frameworkTotal > 0 || appStat.nativeTotal > 0
 
-                        ElevatedCard(
-                            onClick = {
-                                expandedApps =
-                                    if (isExpanded) {
-                                        expandedApps - appStat.uid
-                                    } else {
-                                        expandedApps + appStat.uid
-                                    }
-                            },
-                            shape = RoundedCornerShape(16.dp),
-                            colors =
-                                CardDefaults.elevatedCardColors(
-                                    containerColor = innerCardColor,
-                                ),
-                            modifier = Modifier.fillMaxWidth(),
-                        ) {
+                        val cardContent = @Composable {
                             Column(modifier = Modifier.padding(14.dp)) {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
@@ -339,25 +326,27 @@ private fun InterceptStatisticsSection(
                                             }
                                         }
 
-                                        Icon(
-                                            imageVector =
-                                                if (isExpanded) {
-                                                    Icons.Default.KeyboardArrowUp
-                                                } else {
-                                                    Icons.Default.KeyboardArrowDown
-                                                },
-                                            contentDescription = null,
-                                            tint =
-                                                MaterialTheme.colorScheme.onSurfaceVariant.copy(
-                                                    alpha = 0.7f,
-                                                ),
-                                            modifier = Modifier.size(20.dp),
-                                        )
+                                        if (canExpand) {
+                                            Icon(
+                                                imageVector =
+                                                    if (isExpanded) {
+                                                        Icons.Default.KeyboardArrowUp
+                                                    } else {
+                                                        Icons.Default.KeyboardArrowDown
+                                                    },
+                                                contentDescription = null,
+                                                tint =
+                                                    MaterialTheme.colorScheme.onSurfaceVariant.copy(
+                                                        alpha = 0.7f,
+                                                    ),
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
                                     }
                                 }
 
                                 // Expandable breakdowns
-                                if (isExpanded) {
+                                if (canExpand && isExpanded) {
                                     Spacer(Modifier.height(12.dp))
                                     HorizontalDivider(
                                         color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f),
@@ -386,6 +375,7 @@ private fun InterceptStatisticsSection(
                                                                 .padding(vertical = 2.dp),
                                                         horizontalArrangement =
                                                             Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically,
                                                     ) {
                                                         Text(
                                                             text = hook,
@@ -393,7 +383,11 @@ private fun InterceptStatisticsSection(
                                                             color =
                                                                 MaterialTheme.colorScheme
                                                                     .onSurfaceVariant,
+                                                            modifier = Modifier.weight(1f),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
                                                         )
+                                                        Spacer(Modifier.width(8.dp))
                                                         Text(
                                                             text = count.toString(),
                                                             style = MaterialTheme.typography.bodySmall,
@@ -423,6 +417,7 @@ private fun InterceptStatisticsSection(
                                                                 .padding(vertical = 2.dp),
                                                         horizontalArrangement =
                                                             Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically,
                                                     ) {
                                                         val vectorLabel =
                                                             when (vector) {
@@ -440,7 +435,11 @@ private fun InterceptStatisticsSection(
                                                             color =
                                                                 MaterialTheme.colorScheme
                                                                     .onSurfaceVariant,
+                                                            modifier = Modifier.weight(1f),
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis,
                                                         )
+                                                        Spacer(Modifier.width(8.dp))
                                                         Text(
                                                             text = count.toString(),
                                                             style = MaterialTheme.typography.bodySmall,
@@ -454,6 +453,36 @@ private fun InterceptStatisticsSection(
                                     }
                                 }
                             }
+                        }
+
+                        if (canExpand) {
+                            ElevatedCard(
+                                onClick = {
+                                    expandedApps =
+                                        if (isExpanded) {
+                                            expandedApps - appStat.uid
+                                        } else {
+                                            expandedApps + appStat.uid
+                                        }
+                                },
+                                shape = RoundedCornerShape(16.dp),
+                                colors =
+                                    CardDefaults.elevatedCardColors(
+                                        containerColor = innerCardColor,
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                                content = { cardContent() }
+                            )
+                        } else {
+                            ElevatedCard(
+                                shape = RoundedCornerShape(16.dp),
+                                colors =
+                                    CardDefaults.elevatedCardColors(
+                                        containerColor = innerCardColor,
+                                    ),
+                                modifier = Modifier.fillMaxWidth(),
+                                content = { cardContent() }
+                            )
                         }
                     }
                 }
