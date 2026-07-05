@@ -13,7 +13,6 @@ internal data class DbGlobalConfig(
     val kernelHookMask: Long = 0xFFFFFFFFL,
     val javaHookMask: Long = DEFAULT_JAVA_HOOK_MASK,
     val debugLogging: Int = 0,
-    val simSpoofMode: String = "none",
     val statsRetentionPeriod: String = "30m",
     val updateCheckEnabled: Boolean = true,
     val healthCheckEnabled: Boolean = true,

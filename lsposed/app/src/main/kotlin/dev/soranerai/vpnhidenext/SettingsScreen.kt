@@ -1,8 +1,11 @@
 package dev.soranerai.vpnhidenext
 
+import android.content.Context
 import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Uri
+import android.os.PowerManager
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -15,6 +18,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Article
 import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.MonitorHeart
@@ -81,6 +85,9 @@ fun SettingsScreen(
     var updateCheckEnabled by remember { mutableStateOf(true) }
     var healthCheckEnabled by remember { mutableStateOf(true) }
     var statsRetentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
+    // Defaults to true (hidden) until the real check completes, so the row
+    // doesn't flash in for a frame on every screen open.
+    var batteryOptimizationIgnored by remember { mutableStateOf(true) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
@@ -90,7 +97,15 @@ fun SettingsScreen(
             healthCheckEnabled = getHealthCheckEnabled(context)
             statsRetentionPeriod = getStatsRetentionPeriod(context)
         }
+        batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
     }
+
+    // The system settings screen doesn't return a meaningful result code —
+    // just re-check the actual state whenever the user comes back from it.
+    val batteryOptimizationLauncher =
+        rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
+        }
 
     Scaffold(
         topBar = {
@@ -198,6 +213,27 @@ fun SettingsScreen(
             }
             item(key = "group_experimental") {
                 SettingsGroup {
+                    if (!batteryOptimizationIgnored) {
+                        SettingsNavRow(
+                            title = stringResource(R.string.settings_battery_optimization_title),
+                            subtitle = stringResource(R.string.settings_battery_optimization_desc),
+                            icon = Icons.Default.BatteryAlert,
+                            iconTint = TelOrange,
+                            onClick = {
+                                // Not distributed via Play Store (root/Xposed module), so
+                                // the Play Store content policy this lint check guards
+                                // against doesn't apply here.
+                                @Suppress("BatteryLife")
+                                val intent =
+                                    Intent(
+                                        Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+                                        Uri.parse("package:${context.packageName}"),
+                                    )
+                                batteryOptimizationLauncher.launch(intent)
+                            },
+                        )
+                        SettingsRowDivider()
+                    }
                     SettingsSwitchRow(
                         title = stringResource(R.string.settings_toggle_hide_vpn_apps_title),
                         subtitle = stringResource(R.string.settings_toggle_hide_vpn_apps_desc),
@@ -269,6 +305,11 @@ fun SettingsScreen(
             item(key = "spacer_bottom") { Spacer(Modifier.height(24.dp)) }
         }
     }
+}
+
+private fun isIgnoringBatteryOptimizations(context: Context): Boolean {
+    val pm = context.getSystemService(PowerManager::class.java) ?: return true
+    return pm.isIgnoringBatteryOptimizations(context.packageName)
 }
 
 @Composable

@@ -14,6 +14,10 @@
     <!-- Lets BootCompletedReceiver trigger an immediate one-off HealthCheckWorker
          run instead of waiting for the next hourly periodic slot. -->
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Lets Settings prompt the user to exempt the app from battery
+         optimization, so UpdateCheckWorker/HealthCheckWorker aren't delayed
+         or killed by OEM battery management (MIUI, EMUI, ColorOS, One UI). -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:label="@string/app_name"

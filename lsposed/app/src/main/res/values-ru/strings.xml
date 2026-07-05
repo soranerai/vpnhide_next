@@ -211,6 +211,8 @@
     <string name="settings_toggle_update_check_desc">Периодически проверяет GitHub Releases в фоне и присылает уведомление, когда выходит новая версия.</string>
     <string name="settings_toggle_health_check_title">Проверка работоспособности защиты</string>
     <string name="settings_toggle_health_check_desc">Уведомляет, если модуль ядра или хуки LSPosed не поднялись после перезагрузки, чтобы тихий отказ не остался незамеченным.</string>
+    <string name="settings_battery_optimization_title">Отключить оптимизацию батареи</string>
+    <string name="settings_battery_optimization_desc">Некоторые прошивки (MIUI, EMUI, ColorOS, One UI) откладывают или убивают фоновые проверки, если приложение не в исключениях — это нужно, чтобы проверки ниже действительно работали.</string>
 
     <!-- Уведомление о доступном обновлении -->
     <string name="update_notification_channel_name">Обновления приложения</string>
