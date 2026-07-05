@@ -7,6 +7,7 @@ core-ktx = "1.16.0"
 gobley = "0.3.7"
 room = "2.6.1"
 ksp = "2.1.20-1.0.31"
+work = "2.10.0"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
@@ -19,6 +20,7 @@ compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }
 room-ktx = { group = "androidx.room", name = "room-ktx", version.ref = "room" }
 room-compiler = { group = "androidx.room", name = "room-compiler", version.ref = "room" }
+work-runtime-ktx = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "work" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

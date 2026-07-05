@@ -15,6 +15,7 @@ internal data class DbGlobalConfig(
     val debugLogging: Int = 0,
     val simSpoofMode: String = "none",
     val statsRetentionPeriod: String = "30m",
+    val updateCheckEnabled: Boolean = true,
 )
 
 internal interface GlobalConfigDao {

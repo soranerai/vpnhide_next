@@ -787,6 +787,7 @@ private fun DbGlobalConfig.toJson(): JSONObject =
         put("debugLogging", debugLogging)
         put("simSpoofMode", simSpoofMode)
         put("statsRetentionPeriod", statsRetentionPeriod)
+        put("updateCheckEnabled", updateCheckEnabled)
     }
 
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
@@ -797,4 +798,5 @@ private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
         debugLogging = optInt("debugLogging", 0),
         simSpoofMode = optString("simSpoofMode", "none"),
         statsRetentionPeriod = optString("statsRetentionPeriod", "30m"),
+        updateCheckEnabled = optBoolean("updateCheckEnabled", true),
     )

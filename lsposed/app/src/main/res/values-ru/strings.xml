@@ -207,6 +207,13 @@
     <string name="settings_toggle_hide_vpn_apps_desc">Автоматически скрывает установленные VPN-приложения от других защищаемых приложений.</string>
     <string name="settings_toggle_hide_self_title">Скрывать VPNHide Next автоматически</string>
     <string name="settings_toggle_hide_self_desc">Скрывает пакет самого VPNHide Next от защищаемых приложений.</string>
+    <string name="settings_toggle_update_check_title">Проверять обновления в фоне</string>
+    <string name="settings_toggle_update_check_desc">Периодически проверяет GitHub Releases в фоне и присылает уведомление, когда выходит новая версия.</string>
+
+    <!-- Уведомление о доступном обновлении -->
+    <string name="update_notification_channel_name">Обновления приложения</string>
+    <string name="update_notification_title">Доступно обновление VPNHide Next</string>
+    <string name="update_notification_text">Доступна версия %1$s. Нажмите, чтобы скачать.</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Изоляция хуков</string>

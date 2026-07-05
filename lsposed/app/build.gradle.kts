@@ -132,6 +132,9 @@ dependencies {
     implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.profileinstaller:profileinstaller:1.4.1")
 
+    // Periodic background update-check job (see UpdateCheckWorker).
+    implementation(libs.work.runtime.ktx)
+
     // Compose UI
     implementation(libs.core.ktx)
     implementation(libs.activity.compose)

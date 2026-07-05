@@ -23,6 +23,7 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.SettingsBackupRestore
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.SystemUpdate
 import androidx.compose.material.icons.filled.Troubleshoot
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material.icons.filled.Whatshot
@@ -76,12 +77,14 @@ fun SettingsScreen(
 
     var hideVpnApps by remember { mutableStateOf(false) }
     var hideSelf by remember { mutableStateOf(false) }
+    var updateCheckEnabled by remember { mutableStateOf(true) }
     var statsRetentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
 
     LaunchedEffect(Unit) {
         withContext(Dispatchers.IO) {
             hideVpnApps = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_HIDE_VPN_APPS)
             hideSelf = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_SELF_HIDE)
+            updateCheckEnabled = getUpdateCheckEnabled(context)
             statsRetentionPeriod = getStatsRetentionPeriod(context)
         }
     }
@@ -224,6 +227,21 @@ fun SettingsScreen(
                                 if (!success) {
                                     withContext(Dispatchers.Main) { hideSelf = previous }
                                 }
+                            }
+                        },
+                    )
+                    SettingsRowDivider()
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_toggle_update_check_title),
+                        subtitle = stringResource(R.string.settings_toggle_update_check_desc),
+                        checked = updateCheckEnabled,
+                        icon = Icons.Default.SystemUpdate,
+                        iconTint = TelOrange,
+                        onCheckedChange = { newValue ->
+                            val previous = updateCheckEnabled
+                            updateCheckEnabled = newValue
+                            scope.launch(Dispatchers.IO) {
+                                setUpdateCheckEnabled(context, newValue)
                             }
                         },
                     )

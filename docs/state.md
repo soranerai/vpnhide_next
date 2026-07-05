@@ -158,6 +158,7 @@ Accessed via `context.getSharedPreferences("vpnhide_prefs", MODE_PRIVATE)`
 in Kotlin. Keys currently in use:
 - `debug_logging: Boolean` — Diagnostics toggle (`DebugLoggingPrefs.kt:21,27-30`).
 - `last_seen_version: String` — for "what's new" changelog dialog.
+- `last_notified_update_version: String` — de-dupe key so `UpdateCheckWorker` only posts the update-available notification once per new release, not on every periodic run (`UpdateCheckWorker.kt`).
 - `help_collapsed_apps_tun: Boolean` and similar — collapse state for help accordions.
 
 > ⚠️ **Vector LSPosed redirects this storage.**

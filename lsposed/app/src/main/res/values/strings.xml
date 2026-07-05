@@ -259,6 +259,13 @@
     <string name="settings_toggle_hide_vpn_apps_desc">Automatically hides installed VPN apps from other protected apps.</string>
     <string name="settings_toggle_hide_self_title">Auto-hide VPNHide Next</string>
     <string name="settings_toggle_hide_self_desc">Hides the VPNHide Next package itself from protected apps.</string>
+    <string name="settings_toggle_update_check_title">Check for updates in background</string>
+    <string name="settings_toggle_update_check_desc">Periodically checks GitHub Releases in the background and sends a notification when a new version is available.</string>
+
+    <!-- Update-available notification -->
+    <string name="update_notification_channel_name">App updates</string>
+    <string name="update_notification_title">VPNHide Next update available</string>
+    <string name="update_notification_text">Version %1$s is available. Tap to download.</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Hook Isolation</string>
