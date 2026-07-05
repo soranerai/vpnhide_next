@@ -94,8 +94,11 @@
     <string name="banner_added_self">Added VPNHide Next to the target list. Restart VPNHide Next (force-stop and reopen) for native-level checks to take effect — no device reboot needed.</string>
     <string name="banner_adding_self">Adding this app to target list&#8230;</string>
     <string name="banner_network_blocked">Network access is disabled for this app. ioctl checks (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) cannot run without it. Enable in Settings → Apps → VPNHide Next → Mobile data &amp; Wi-Fi.</string>
-    <string name="section_native">Native level (kmod)</string>
-    <string name="section_java">Java API level (LSPosed)</string>
+    <string name="section_native">Native (kmod)</string>
+    <string name="section_framework">Framework (LSPosed)</string>
+    <string name="native_tier_classic">Classic</string>
+    <string name="native_tier_advanced">Advanced</string>
+    <string name="native_tier_extreme">Extreme</string>
     <string name="diag_all_good_title">All Good!</string>
     <string name="diag_all_good_desc">All diagnostics checks passed successfully. Your protection is active and fully functional.</string>
     <string name="diag_some_failed_title">Checks Failed</string>

@@ -136,6 +136,74 @@ private fun isCheckSkipped(
     return bits.none { (hookMask and (1u shl it)) != 0u }
 }
 
+/**
+ * Depth tiers for native checks, shown as sub-groups under the "Native"
+ * section on the diagnostics detail screen:
+ * - [CLASSIC] — direct syscalls/proc reads any basic VPN detector checks
+ *   first (ioctl, getifaddrs, /proc/net files, /sys/class/net).
+ * - [ADVANCED] — targeted netlink queries and protocol-level introspection
+ *   less commonly probed (routing tables, rules, neighbor table, MSS/MTU).
+ * - [EXTREME] — timing/bruteforce/oracle side-channels and obscure kernel
+ *   features that only a determined, VPNHide-aware detector would try.
+ */
+internal enum class NativeCheckTier { CLASSIC, ADVANCED, EXTREME }
+
+private val NATIVE_CHECK_TIER: Map<Int, NativeCheckTier> =
+    mapOf(
+        R.string.check_ioctl_flags to NativeCheckTier.CLASSIC,
+        R.string.check_ioctl_mtu to NativeCheckTier.CLASSIC,
+        R.string.check_ioctl_conf to NativeCheckTier.CLASSIC,
+        R.string.check_getifaddrs to NativeCheckTier.CLASSIC,
+        R.string.check_netlink_getlink to NativeCheckTier.CLASSIC,
+        R.string.check_netlink_getroute to NativeCheckTier.ADVANCED,
+        R.string.check_netlink_anonymous_route to NativeCheckTier.EXTREME,
+        R.string.check_proc_route to NativeCheckTier.CLASSIC,
+        R.string.check_proc_ipv6_route to NativeCheckTier.CLASSIC,
+        R.string.check_proc_if_inet6 to NativeCheckTier.CLASSIC,
+        R.string.check_proc_tcp to NativeCheckTier.CLASSIC,
+        R.string.check_proc_tcp6 to NativeCheckTier.CLASSIC,
+        R.string.check_proc_udp to NativeCheckTier.CLASSIC,
+        R.string.check_proc_udp6 to NativeCheckTier.CLASSIC,
+        R.string.check_proc_dev to NativeCheckTier.CLASSIC,
+        R.string.check_proc_fib_trie to NativeCheckTier.ADVANCED,
+        R.string.check_bpf_iface_map to NativeCheckTier.ADVANCED,
+        R.string.check_sys_class_net to NativeCheckTier.CLASSIC,
+        R.string.check_net_iface_enum to NativeCheckTier.CLASSIC,
+        R.string.check_proc_route_java to NativeCheckTier.CLASSIC,
+        R.string.check_getsockopt_bind to NativeCheckTier.ADVANCED,
+        R.string.check_inet_diag to NativeCheckTier.ADVANCED,
+        R.string.check_getsockname_spoof to NativeCheckTier.ADVANCED,
+        R.string.check_netlink_getrule to NativeCheckTier.ADVANCED,
+        R.string.check_tcp_mss to NativeCheckTier.ADVANCED,
+        R.string.check_udp_pmtu to NativeCheckTier.ADVANCED,
+        R.string.check_netlink_getneigh to NativeCheckTier.ADVANCED,
+        R.string.check_proc_sys_net_conf to NativeCheckTier.CLASSIC,
+        R.string.check_udp_queue_pressure to NativeCheckTier.EXTREME,
+        R.string.check_gso_asymmetry to NativeCheckTier.EXTREME,
+        R.string.check_ipv6_link_local_bruteforce to NativeCheckTier.EXTREME,
+        R.string.check_uid_route_rules_leak to NativeCheckTier.ADVANCED,
+        R.string.check_tcp_info_mss to NativeCheckTier.EXTREME,
+        R.string.check_qdisc_by_ifindex to NativeCheckTier.EXTREME,
+        R.string.check_timestamping_hw to NativeCheckTier.EXTREME,
+        R.string.check_rtm_getlink_trim_oracle to NativeCheckTier.EXTREME,
+        R.string.check_traffic_stats to NativeCheckTier.EXTREME,
+    )
+
+/**
+ * Groups already-localized [CheckResult]s by [NativeCheckTier]. Keyed by
+ * name rather than resource ID since that's all [CheckResult] carries —
+ * safe because check names are unique within a run.
+ */
+internal fun groupNativeChecksByTier(
+    context: android.content.Context,
+    checks: List<CheckResult>,
+): Map<NativeCheckTier, List<CheckResult>> {
+    val res = context.resources
+    val nameToTier =
+        NATIVE_CHECK_TIER.entries.associate { (resId, tier) -> res.getString(resId) to tier }
+    return checks.groupBy { nameToTier[it.name] ?: NativeCheckTier.CLASSIC }
+}
+
 @androidx.compose.runtime.Immutable
 internal data class CheckResults(
     val native: List<CheckResult>,

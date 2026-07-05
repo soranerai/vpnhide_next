@@ -67,6 +67,7 @@ fun DiagnosticsDetailScreen(
     modifier: Modifier = Modifier,
 ) {
     val diagState by DiagnosticsCache.state.collectAsState()
+    val context = LocalContext.current
 
     val stateVal = diagState
     val results =
@@ -289,8 +290,34 @@ fun DiagnosticsDetailScreen(
                     // Always show the full check-by-check breakdown — this
                     // screen's whole purpose is "show me everything", so no
                     // expand/collapse gate here (unlike the compact summary
-                    // card on the main Diagnostics tab).
-                    checksListCard(r.native)
+                    // card on the main Diagnostics tab). Native checks are
+                    // further split by depth tier so the sheer count of
+                    // low-level kmod checks doesn't read as one undifferentiated
+                    // wall of rows.
+                    item(key = "header_native") {
+                        SectionHeader(
+                            title = stringResource(R.string.section_native),
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
+                    val nativeByTier = groupNativeChecksByTier(context, r.native)
+                    for (tier in NativeCheckTier.entries) {
+                        val tierChecks = nativeByTier[tier].orEmpty()
+                        if (tierChecks.isEmpty()) continue
+                        item(key = "tier_header_${tier.name}") {
+                            TierHeader(title = stringResource(nativeTierTitleRes(tier)))
+                        }
+                        checksListCard(tierChecks)
+                    }
+
+                    item(key = "spacer_between_sections") { Spacer(Modifier.height(20.dp)) }
+
+                    item(key = "header_framework") {
+                        SectionHeader(
+                            title = stringResource(R.string.section_framework),
+                            modifier = Modifier.padding(bottom = 4.dp),
+                        )
+                    }
                     checksListCard(r.java)
                 }
             }
@@ -322,6 +349,27 @@ private fun StatusBanner(
             modifier = Modifier.padding(16.dp),
         )
     }
+}
+
+private fun nativeTierTitleRes(tier: NativeCheckTier): Int =
+    when (tier) {
+        NativeCheckTier.CLASSIC -> R.string.native_tier_classic
+        NativeCheckTier.ADVANCED -> R.string.native_tier_advanced
+        NativeCheckTier.EXTREME -> R.string.native_tier_extreme
+    }
+
+@Composable
+private fun TierHeader(
+    title: String,
+    modifier: Modifier = Modifier,
+) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelLarge,
+        fontWeight = FontWeight.SemiBold,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = modifier.padding(top = 10.dp, bottom = 6.dp, start = 4.dp),
+    )
 }
 
 internal fun LazyListScope.checksListCard(checks: List<CheckResult>) {

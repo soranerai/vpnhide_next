@@ -179,8 +179,11 @@
     <string name="banner_added_self">VPNHide Next добавлен в список целевых приложений. Перезапустите VPNHide Next (force-stop и откройте заново) для работы нативных проверок — перезагрузка устройства не нужна.</string>
     <string name="banner_adding_self">Добавление приложения в список целевых&#8230;</string>
     <string name="banner_network_blocked">Доступ к сети отключён для этого приложения. Проверки ioctl (SIOCGIFFLAGS, SIOCGIFMTU, SIOCGIFCONF) не могут быть выполнены. Включите в Настройки → Приложения → VPNHide Next → Мобильный интернет и Wi-Fi.</string>
-    <string name="section_native">Нативный уровень (kmod)</string>
-    <string name="section_java">Java API уровень (LSPosed)</string>
+    <string name="section_native">Нативные (kmod)</string>
+    <string name="section_framework">Фреймворк (LSPosed)</string>
+    <string name="native_tier_classic">Классические</string>
+    <string name="native_tier_advanced">Углублённые</string>
+    <string name="native_tier_extreme">Экстремальные</string>
     <string name="diag_all_good_title">Все отлично!</string>
     <string name="diag_all_good_desc">Все проверки диагностики успешно пройдены. Ваша защита активна и работает исправно.</string>
     <string name="diag_some_failed_title">Проверки не пройдены</string>

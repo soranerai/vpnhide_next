@@ -280,13 +280,11 @@ private fun MainScreen(
                                 scope = scope,
                                 context = context,
                             )
-                            if (currentTab == Tab.Statistics) {
-                                IconButton(onClick = { showSettings = true }) {
-                                    Icon(
-                                        Icons.Default.Settings,
-                                        contentDescription = stringResource(R.string.settings_title),
-                                    )
-                                }
+                            IconButton(onClick = { showSettings = true }) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = stringResource(R.string.settings_title),
+                                )
                             }
                             if (currentTab == Tab.Protection) {
                                 IconButton(onClick = { searchActive = true }) {
