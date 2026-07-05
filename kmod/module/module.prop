@@ -1,6 +1,6 @@
 id=vpnhide_kmod
 name=VPNHide Next
-version=v1.12.1
-versionCode=11201
+version=v2.0.0
+versionCode=20000
 author=soranerai
 description=Hides VPN interfaces from selected apps at the kernel level. Manage targets via VPNHide Next app.
