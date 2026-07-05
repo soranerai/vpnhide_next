@@ -3,10 +3,11 @@ package dev.soranerai.vpnhidenext
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -20,7 +21,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -36,6 +36,10 @@ import dev.soranerai.vpnhidenext.db.DatabaseSync
 import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.db.DbPortRule
+import dev.soranerai.vpnhidenext.ui.theme.TelBlue
+import dev.soranerai.vpnhidenext.ui.theme.TelOrange
+import dev.soranerai.vpnhidenext.ui.theme.TelPink
+import dev.soranerai.vpnhidenext.ui.theme.TelPurple
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -55,7 +59,8 @@ internal fun AppSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = 0) { 3 }
     var showAddPortDialog by remember { mutableStateOf(false) }
 
     Scaffold(
@@ -104,15 +109,31 @@ internal fun AppSettingsScreen(
                     .padding(top = innerPadding.calculateTopPadding())
                     .fillMaxSize(),
         ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (selectedTab == 0) {
-                    HooksTab(app)
-                } else {
-                    PortsTab(
-                        app = app,
-                        showAddDialog = showAddPortDialog,
-                        onDismissAddDialog = { showAddPortDialog = false },
-                    )
+            // beyondViewportPageCount keeps all 3 pages composed at once (there
+            // are only 3 total) so switching pages — by swipe or by tapping
+            // the pill below — never disposes/reloads a page's state, which
+            // was the source of a visible blank-then-reload flicker.
+            HorizontalPager(
+                state = pagerState,
+                modifier = Modifier.fillMaxSize(),
+                beyondViewportPageCount = 2,
+            ) { page ->
+                when (page) {
+                    0 -> {
+                        HookPage(app = app, hooks = ALL_HOOKS, isKernel = true, accent = TelBlue)
+                    }
+
+                    1 -> {
+                        HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelPurple)
+                    }
+
+                    else -> {
+                        PortsTab(
+                            app = app,
+                            showAddDialog = showAddPortDialog,
+                            onDismissAddDialog = { showAddPortDialog = false },
+                        )
+                    }
                 }
             }
 
@@ -125,88 +146,31 @@ internal fun AppSettingsScreen(
                         .fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                PillTabSelector(
+                    tabs =
+                        listOf(
+                            PillTab(Icons.Filled.Memory, stringResource(R.string.hook_testing_tab_kernel), accent = TelBlue),
+                            PillTab(Icons.Filled.Code, stringResource(R.string.hook_testing_tab_framework), accent = TelPurple),
+                            PillTab(Icons.Filled.Dns, stringResource(R.string.app_settings_tab_ports), accent = TelPink),
+                        ),
+                    selectedIndex = pagerState.currentPage,
+                    onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+                    modifier = Modifier.width(300.dp),
+                    height = 60.dp,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
                     tonalElevation = 12.dp,
                     shadowElevation = 8.dp,
-                    modifier = Modifier.height(60.dp),
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .padding(horizontal = 4.dp, vertical = 4.dp)
-                                .width(240.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val tabs =
-                            listOf<Triple<Int, ImageVector, Int>>(
-                                Triple(0, Icons.Filled.Tune, R.string.app_settings_tab_hooks),
-                                Triple(1, Icons.Filled.Dns, R.string.app_settings_tab_ports),
-                            )
-                        tabs.forEach { (index: Int, icon: ImageVector, labelRes: Int) ->
-                            val selected = selectedTab == index
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                            } else {
-                                                Color.Transparent
-                                            },
-                                        ).clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) { selectedTab = index },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center,
-                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint =
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(labelRes),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color =
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                )
 
                 androidx.compose.animation.AnimatedVisibility(
-                    visible = selectedTab == 1,
+                    visible = pagerState.currentPage == 2,
                     enter = fadeIn() + scaleIn(),
                     exit = fadeOut() + scaleOut(),
-                    modifier = Modifier.align(Alignment.Center).offset(x = 162.dp),
+                    modifier = Modifier.align(Alignment.Center).offset(x = 192.dp),
                 ) {
                     FloatingActionButton(
                         onClick = { showAddPortDialog = true },
-                        containerColor = Color(0xFF388E3C), // Premium Green
+                        containerColor = TelPink,
                         contentColor = Color.White,
                         shape = RoundedCornerShape(20.dp),
                         modifier = Modifier.size(60.dp),
@@ -221,42 +185,23 @@ internal fun AppSettingsScreen(
 }
 
 @Composable
-private fun HooksTab(app: AppEntry?) {
-    var subTab by remember { mutableStateOf(0) }
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(
-            selectedTabIndex = subTab,
-            containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.primary,
-        ) {
-            Tab(
-                selected = subTab == 0,
-                onClick = { subTab = 0 },
-                text = { Text(stringResource(R.string.hook_testing_tab_kernel), fontWeight = FontWeight.Bold) },
-            )
-            Tab(
-                selected = subTab == 1,
-                onClick = { subTab = 1 },
-                text = { Text(stringResource(R.string.hook_testing_tab_framework), fontWeight = FontWeight.Bold) },
-            )
-        }
-
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
-        ) {
-            Spacer(Modifier.height(16.dp))
-            if (subTab == 0) {
-                HookMaskSection(app = app, hooks = ALL_HOOKS, isKernel = true)
-            } else {
-                HookMaskSection(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false)
-            }
-            val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            Spacer(Modifier.height(bottomNavPadding + 100.dp))
-        }
+private fun HookPage(
+    app: AppEntry?,
+    hooks: List<HookInfo>,
+    isKernel: Boolean,
+    accent: Color,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+    ) {
+        Spacer(Modifier.height(16.dp))
+        HookMaskSection(app = app, hooks = hooks, isKernel = isKernel, accent = accent)
+        val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        Spacer(Modifier.height(bottomNavPadding + 100.dp))
     }
 }
 
@@ -271,6 +216,7 @@ private fun HookMaskSection(
     app: AppEntry?,
     hooks: List<HookInfo>,
     isKernel: Boolean,
+    accent: Color,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -359,46 +305,42 @@ private fun HookMaskSection(
     val effectiveMask = if (editable) m else globalMask
 
     if (app != null) {
-        ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.app_hook_isolation_use_global),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        stringResource(R.string.app_hook_isolation_use_global_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Switch(
-                    checked = !hasOverride,
-                    enabled = !applying,
-                    onCheckedChange = { useGlobal -> apply(!useGlobal, if (useGlobal) m else globalMask) },
-                )
-            }
+        SettingsGroup {
+            SettingsSwitchRow(
+                title = stringResource(R.string.app_hook_isolation_use_global),
+                subtitle = stringResource(R.string.app_hook_isolation_use_global_desc),
+                checked = !hasOverride,
+                onCheckedChange = { useGlobal -> apply(!useGlobal, if (useGlobal) m else globalMask) },
+                icon = Icons.Filled.Public,
+                iconTint = accent,
+            )
         }
         Spacer(Modifier.height(16.dp))
     }
 
     if (error != null) {
         Card(
+            shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
-                text = error!!,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(16.dp),
-            )
+            Row(
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = error!!,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -408,6 +350,7 @@ private fun HookMaskSection(
         effectiveMask = effectiveMask,
         editable = editable,
         applying = applying,
+        accent = accent,
         onMaskChange = { newMask -> apply(true, newMask) },
     )
 }
@@ -418,9 +361,14 @@ private fun HookMaskEditor(
     effectiveMask: UInt,
     editable: Boolean,
     applying: Boolean,
+    accent: Color,
     onMaskChange: (UInt) -> Unit,
 ) {
-    ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = accent.copy(alpha = 0.08f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -432,10 +380,14 @@ private fun HookMaskEditor(
                     style = MaterialTheme.typography.headlineSmall,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = accent,
                 )
-                if (applying) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = applying,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = accent)
                 }
             }
 
@@ -447,8 +399,9 @@ private fun HookMaskEditor(
             ) {
                 Button(
                     onClick = { onMaskChange(0xFFFFFFFFu) },
-                    enabled = editable && !applying && effectiveMask != 0xFFFFFFFFu,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    enabled = editable && effectiveMask != 0xFFFFFFFFu,
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.ToggleOn, contentDescription = null)
@@ -458,8 +411,9 @@ private fun HookMaskEditor(
 
                 OutlinedButton(
                     onClick = { onMaskChange(0x0000u) },
-                    enabled = editable && !applying && effectiveMask != 0x0000u,
+                    enabled = editable && effectiveMask != 0x0000u,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.ToggleOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
@@ -476,12 +430,12 @@ private fun HookMaskEditor(
         for (hook in hooks) {
             val isEnabled = hook.allIndices.all { idx -> (effectiveMask and (1u shl idx)) != 0u }
             ElevatedCard(
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors =
                     CardDefaults.elevatedCardColors(
                         containerColor =
                             if (isEnabled) {
-                                MaterialTheme.colorScheme.surface
+                                accent.copy(alpha = 0.08f)
                             } else {
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             },
@@ -497,6 +451,12 @@ private fun HookMaskEditor(
                             SuggestionChip(
                                 onClick = {},
                                 label = { Text(stringResource(R.string.hook_testing_idx_format, hook.index)) },
+                                colors =
+                                    SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = accent.copy(alpha = if (isEnabled) 0.15f else 0.06f),
+                                        labelColor = if (isEnabled) accent else accent.copy(alpha = 0.5f),
+                                    ),
+                                border = null,
                                 modifier = Modifier.padding(end = 8.dp),
                             )
                             Text(
@@ -523,7 +483,7 @@ private fun HookMaskEditor(
 
                     Switch(
                         checked = isEnabled,
-                        enabled = editable && !applying,
+                        enabled = editable,
                         onCheckedChange = { checked ->
                             var newMask = effectiveMask
                             for (idx in hook.allIndices) {
@@ -638,16 +598,27 @@ private fun PortsTab(
             Column(modifier = Modifier.fillMaxSize()) {
                 if (app != null && !app.portHiding) {
                     Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+                        colors = CardDefaults.cardColors(containerColor = TelOrange.copy(alpha = 0.12f)),
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
                     ) {
-                        Text(
-                            text = stringResource(R.string.app_settings_port_hiding_off_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(12.dp),
-                        )
+                        Row(
+                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(
+                                Icons.Default.WarningAmber,
+                                contentDescription = null,
+                                tint = TelOrange,
+                                modifier = Modifier.size(18.dp),
+                            )
+                            Spacer(Modifier.width(10.dp))
+                            Text(
+                                text = stringResource(R.string.app_settings_port_hiding_off_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                        }
                     }
                 }
 
@@ -658,7 +629,7 @@ private fun PortsTab(
                                 Icons.Default.Dns,
                                 contentDescription = null,
                                 modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                tint = TelPink.copy(alpha = 0.4f),
                             )
                             Spacer(Modifier.height(16.dp))
                             Text(
@@ -720,7 +691,7 @@ private fun LazyColumnPortRules(
                     stringResource(R.string.ports_mass_rules_title),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
@@ -763,6 +734,7 @@ private fun PortRuleCard(
     onDelete: () -> Unit,
     onToggle: () -> Unit,
 ) {
+    val accent = if (isReadOnly) MaterialTheme.colorScheme.secondary else TelPink
     ElevatedCard(
         onClick = if (isReadOnly) ({}) else onEdit,
         shape = RoundedCornerShape(12.dp),
@@ -772,7 +744,7 @@ private fun PortRuleCard(
                     if (isReadOnly) {
                         MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
                     } else {
-                        MaterialTheme.colorScheme.surfaceVariant
+                        TelPink.copy(alpha = 0.08f)
                     },
             ),
     ) {
@@ -780,13 +752,15 @@ private fun PortRuleCard(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            SettingsRowIcon(icon = Icons.Default.Dns, tint = accent)
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 if (rule.label.isNotEmpty()) {
                     Text(
                         text = rule.label,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (isReadOnly) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                        color = accent,
                     )
                 }
                 Text(
@@ -808,7 +782,7 @@ private fun PortRuleCard(
                 Text(
                     text = stringResource(R.string.port_rule_protocol_format, protoLabel),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isReadOnly) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                    color = accent,
                 )
             }
             if (!isReadOnly) {
@@ -865,8 +839,15 @@ private fun PortRuleDialog(
                         },
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = TelPink,
                 )
+
+                val fieldColors =
+                    OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = TelPink,
+                        focusedLabelColor = TelPink,
+                        cursorColor = TelPink,
+                    )
 
                 OutlinedTextField(
                     value = label,
@@ -875,6 +856,7 @@ private fun PortRuleDialog(
                     placeholder = { Text(stringResource(R.string.ports_label_placeholder)) },
                     singleLine = true,
                     shape = RoundedCornerShape(12.dp),
+                    colors = fieldColors,
                     modifier = Modifier.fillMaxWidth(),
                 )
 
@@ -886,6 +868,7 @@ private fun PortRuleDialog(
                         placeholder = { Text("1") },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(12.dp),
+                        colors = fieldColors,
                         modifier = Modifier.weight(1f),
                     )
                     OutlinedTextField(
@@ -895,6 +878,7 @@ private fun PortRuleDialog(
                         placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                         shape = RoundedCornerShape(12.dp),
+                        colors = fieldColors,
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -919,6 +903,12 @@ private fun PortRuleDialog(
                                 selected = protocol == p,
                                 onClick = { protocol = p },
                                 shape = SegmentedButtonDefaults.itemShape(index = index, count = PortProtocol.values().size),
+                                colors =
+                                    SegmentedButtonDefaults.colors(
+                                        activeContainerColor = TelPink.copy(alpha = 0.15f),
+                                        activeContentColor = TelPink,
+                                        activeBorderColor = TelPink,
+                                    ),
                             ) {
                                 Text(pLabel, fontSize = 10.sp)
                             }
@@ -977,7 +967,7 @@ private fun PortRuleDialog(
                         Text(
                             text = stringResource(R.string.ports_redundant_rules_removed_warning, rulesToRemove.size),
                             style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = TelPink,
                             modifier = Modifier.padding(top = 4.dp),
                         )
                     }
@@ -1003,6 +993,7 @@ private fun PortRuleDialog(
                                 ),
                             )
                         },
+                        colors = ButtonDefaults.buttonColors(containerColor = TelPink, contentColor = Color.White),
                         shape = RoundedCornerShape(12.dp),
                     ) {
                         Text(if (initialRule == null) stringResource(R.string.add_rule) else stringResource(R.string.btn_save))

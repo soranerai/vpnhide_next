@@ -2,12 +2,17 @@ package dev.soranerai.vpnhidenext
 
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -36,11 +41,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.isUnspecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
  * Single rounded card grouping a fixed set of settings rows. Simpler
@@ -315,6 +324,82 @@ internal fun SettingsDropdownRow(
                             expanded = false
                         },
                     )
+                }
+            }
+        }
+    }
+}
+
+/** One entry in a [PillTabSelector]. [accent] defaults to the theme primary when unspecified. */
+internal data class PillTab(
+    val icon: ImageVector,
+    val label: String,
+    val accent: Color = Color.Unspecified,
+)
+
+/**
+ * Rounded pill-shaped tab switcher — the same visual language as the
+ * floating Hooks/Ports tab bar in AppSettingsScreen.kt, extracted so every
+ * tab switcher in the app (top-level and sub-tabs) looks identical instead
+ * of each screen rolling its own segmented control.
+ */
+@Composable
+internal fun PillTabSelector(
+    tabs: List<PillTab>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+    height: Dp = 48.dp,
+    containerColor: Color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    tonalElevation: Dp = 0.dp,
+    shadowElevation: Dp = 0.dp,
+) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = containerColor,
+        tonalElevation = tonalElevation,
+        shadowElevation = shadowElevation,
+        modifier = modifier.height(height),
+    ) {
+        Row(
+            modifier = Modifier.padding(4.dp).fillMaxSize(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            tabs.forEachIndexed { index, tab ->
+                val selected = index == selectedIndex
+                val accent = if (tab.accent.isUnspecified) MaterialTheme.colorScheme.primary else tab.accent
+                Box(
+                    modifier =
+                        Modifier
+                            .weight(1f)
+                            .fillMaxHeight()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(if (selected) accent.copy(alpha = 0.15f) else Color.Transparent)
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                            ) { onSelect(index) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.Center,
+                        modifier = Modifier.padding(horizontal = 8.dp),
+                    ) {
+                        Icon(
+                            imageVector = tab.icon,
+                            contentDescription = null,
+                            tint = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(20.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            text = tab.label,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = 13.sp,
+                            color = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
         }

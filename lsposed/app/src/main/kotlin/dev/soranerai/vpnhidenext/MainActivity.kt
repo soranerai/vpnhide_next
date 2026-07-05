@@ -11,6 +11,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -144,7 +146,8 @@ private fun MainScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var currentTab by remember { mutableStateOf(Tab.Dashboard) }
+    val pagerState = rememberPagerState(initialPage = Tab.Dashboard.ordinal) { Tab.values().size }
+    val currentTab = Tab.values()[pagerState.currentPage]
     var selfNeedsRestart by remember { mutableStateOf<Boolean?>(startup.addedToTargets) }
     var searchQuery by remember { mutableStateOf("") }
     var searchActive by remember { mutableStateOf(false) }
@@ -415,33 +418,44 @@ private fun MainScreen(
                     TabLoadingBar()
 
                     if (restart != null) {
-                        when (currentTab) {
-                            Tab.Dashboard -> {
-                                DashboardScreen(
-                                    selfNeedsRestart = restart,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
+                        // beyondViewportPageCount keeps neighboring tabs composed
+                        // so a swipe never shows a blank frame mid-drag; each
+                        // screen's own cache (DashboardCache, AppListCache, ...)
+                        // already survives dispose/recompose, so this is purely
+                        // for swipe smoothness, not state preservation.
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            beyondViewportPageCount = 1,
+                        ) { page ->
+                            when (Tab.values()[page]) {
+                                Tab.Dashboard -> {
+                                    DashboardScreen(
+                                        selfNeedsRestart = restart,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
 
-                            Tab.Protection -> {
-                                ProtectionScreen(
-                                    searchQuery = searchQuery,
-                                    showSystem = showSystem,
-                                    showRussianOnly = showRussianOnly,
-                                    showOnlySelected = showOnlySelected,
-                                    showOnlyWorkProfile = showOnlyWorkProfile,
-                                    sortOrder = sortOrder,
-                                    onDirtyChange = { isProtectionDirty = it },
-                                    onOpenAppSettings = { editingAppSettings = it },
-                                    saveTrigger = saveTrigger,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
+                                Tab.Protection -> {
+                                    ProtectionScreen(
+                                        searchQuery = searchQuery,
+                                        showSystem = showSystem,
+                                        showRussianOnly = showRussianOnly,
+                                        showOnlySelected = showOnlySelected,
+                                        showOnlyWorkProfile = showOnlyWorkProfile,
+                                        sortOrder = sortOrder,
+                                        onDirtyChange = { isProtectionDirty = it },
+                                        onOpenAppSettings = { editingAppSettings = it },
+                                        saveTrigger = saveTrigger,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
 
-                            Tab.Statistics -> {
-                                StatisticsScreen(
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                Tab.Statistics -> {
+                                    StatisticsScreen(
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
                             }
                         }
                     }
@@ -603,7 +617,7 @@ private fun MainScreen(
                                                 ).clickable(
                                                     interactionSource = remember { MutableInteractionSource() },
                                                     indication = null,
-                                                ) { currentTab = tab },
+                                                ) { scope.launch { pagerState.animateScrollToPage(tab.ordinal) } },
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
