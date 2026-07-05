@@ -17,6 +17,7 @@ import androidx.compose.material.icons.filled.Assessment
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Science
@@ -78,6 +79,7 @@ fun SettingsScreen(
     var hideVpnApps by remember { mutableStateOf(false) }
     var hideSelf by remember { mutableStateOf(false) }
     var updateCheckEnabled by remember { mutableStateOf(true) }
+    var healthCheckEnabled by remember { mutableStateOf(true) }
     var statsRetentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
 
     LaunchedEffect(Unit) {
@@ -85,6 +87,7 @@ fun SettingsScreen(
             hideVpnApps = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_HIDE_VPN_APPS)
             hideSelf = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_SELF_HIDE)
             updateCheckEnabled = getUpdateCheckEnabled(context)
+            healthCheckEnabled = getHealthCheckEnabled(context)
             statsRetentionPeriod = getStatsRetentionPeriod(context)
         }
     }
@@ -242,6 +245,21 @@ fun SettingsScreen(
                             updateCheckEnabled = newValue
                             scope.launch(Dispatchers.IO) {
                                 setUpdateCheckEnabled(context, newValue)
+                            }
+                        },
+                    )
+                    SettingsRowDivider()
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_toggle_health_check_title),
+                        subtitle = stringResource(R.string.settings_toggle_health_check_desc),
+                        checked = healthCheckEnabled,
+                        icon = Icons.Default.MonitorHeart,
+                        iconTint = TelOrange,
+                        onCheckedChange = { newValue ->
+                            val previous = healthCheckEnabled
+                            healthCheckEnabled = newValue
+                            scope.launch(Dispatchers.IO) {
+                                setHealthCheckEnabled(context, newValue)
                             }
                         },
                     )

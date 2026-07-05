@@ -261,11 +261,20 @@
     <string name="settings_toggle_hide_self_desc">Hides the VPNHide Next package itself from protected apps.</string>
     <string name="settings_toggle_update_check_title">Check for updates in background</string>
     <string name="settings_toggle_update_check_desc">Periodically checks GitHub Releases in the background and sends a notification when a new version is available.</string>
+    <string name="settings_toggle_health_check_title">Protection health check</string>
+    <string name="settings_toggle_health_check_desc">Notifies you if the kernel module or LSPosed hooks fail to activate after a reboot, so a silent failure doesn\'t go unnoticed.</string>
 
     <!-- Update-available notification -->
     <string name="update_notification_channel_name">App updates</string>
     <string name="update_notification_title">VPNHide Next update available</string>
     <string name="update_notification_text">Version %1$s is available. Tap to download.</string>
+
+    <!-- Protection health-check notification -->
+    <string name="health_notification_channel_name">Protection status</string>
+    <string name="health_notification_kmod_title">VPNHide Next: kernel module inactive</string>
+    <string name="health_notification_kmod_text">vpnhide_kmod is installed but didn\'t load after the last reboot. Configured apps are currently unprotected. Open the app to check details.</string>
+    <string name="health_notification_lsposed_title">VPNHide Next: LSPosed hooks inactive</string>
+    <string name="health_notification_lsposed_text">LSPosed hooks didn\'t activate after the last reboot. Configured apps are currently unprotected. Open the app to check details.</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Hook Isolation</string>

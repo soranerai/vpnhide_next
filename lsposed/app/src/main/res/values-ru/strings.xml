@@ -209,11 +209,20 @@
     <string name="settings_toggle_hide_self_desc">Скрывает пакет самого VPNHide Next от защищаемых приложений.</string>
     <string name="settings_toggle_update_check_title">Проверять обновления в фоне</string>
     <string name="settings_toggle_update_check_desc">Периодически проверяет GitHub Releases в фоне и присылает уведомление, когда выходит новая версия.</string>
+    <string name="settings_toggle_health_check_title">Проверка работоспособности защиты</string>
+    <string name="settings_toggle_health_check_desc">Уведомляет, если модуль ядра или хуки LSPosed не поднялись после перезагрузки, чтобы тихий отказ не остался незамеченным.</string>
 
     <!-- Уведомление о доступном обновлении -->
     <string name="update_notification_channel_name">Обновления приложения</string>
     <string name="update_notification_title">Доступно обновление VPNHide Next</string>
     <string name="update_notification_text">Доступна версия %1$s. Нажмите, чтобы скачать.</string>
+
+    <!-- Уведомление о состоянии защиты -->
+    <string name="health_notification_channel_name">Состояние защиты</string>
+    <string name="health_notification_kmod_title">VPNHide Next: модуль ядра не активен</string>
+    <string name="health_notification_kmod_text">vpnhide_kmod установлен, но не загрузился после последней перезагрузки. Настроенные приложения сейчас не защищены. Откройте приложение для подробностей.</string>
+    <string name="health_notification_lsposed_title">VPNHide Next: хуки LSPosed не активны</string>
+    <string name="health_notification_lsposed_text">Хуки LSPosed не активировались после последней перезагрузки. Настроенные приложения сейчас не защищены. Откройте приложение для подробностей.</string>
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Изоляция хуков</string>

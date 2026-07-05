@@ -216,7 +216,10 @@ private fun MainScreen(
         ) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
-        withContext(Dispatchers.IO) { UpdateCheckScheduler.scheduleIfEnabled(context) }
+        withContext(Dispatchers.IO) {
+            UpdateCheckScheduler.scheduleIfEnabled(context)
+            HealthCheckScheduler.scheduleIfEnabled(context)
+        }
     }
 
     // Kick the update check once (silently) on first launch, and again
