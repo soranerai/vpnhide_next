@@ -483,9 +483,9 @@ private fun HookMaskEditor(
     accent: Color,
     onMaskChange: (UInt) -> Unit,
 ) {
-    ElevatedCard(
+    Card(
         shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.elevatedCardColors(containerColor = accent.copy(alpha = 0.08f)),
+        colors = CardDefaults.cardColors(containerColor = accent.copy(alpha = 0.08f)),
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
@@ -548,10 +548,10 @@ private fun HookMaskEditor(
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         for (hook in hooks) {
             val isEnabled = hook.allIndices.all { idx -> (effectiveMask and (1u shl idx)) != 0u }
-            ElevatedCard(
+            Card(
                 shape = RoundedCornerShape(12.dp),
                 colors =
-                    CardDefaults.elevatedCardColors(
+                    CardDefaults.cardColors(
                         containerColor =
                             if (isEnabled) {
                                 accent.copy(alpha = 0.08f)
