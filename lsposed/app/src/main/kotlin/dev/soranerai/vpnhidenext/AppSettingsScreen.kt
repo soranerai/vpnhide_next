@@ -37,6 +37,7 @@ import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.db.DbPortRule
 import dev.soranerai.vpnhidenext.ui.theme.TelBlue
+import dev.soranerai.vpnhidenext.ui.theme.TelGreen
 import dev.soranerai.vpnhidenext.ui.theme.TelOrange
 import dev.soranerai.vpnhidenext.ui.theme.TelPink
 import dev.soranerai.vpnhidenext.ui.theme.TelPurple
@@ -470,6 +471,7 @@ private fun HookMaskSection(
         editable = editable,
         applying = applying,
         accent = accent,
+        isKernel = isKernel,
         onMaskChange = { newMask -> apply(true, newMask) },
     )
 }
@@ -481,6 +483,7 @@ private fun HookMaskEditor(
     editable: Boolean,
     applying: Boolean,
     accent: Color,
+    isKernel: Boolean,
     onMaskChange: (UInt) -> Unit,
 ) {
     Card(
@@ -511,6 +514,41 @@ private fun HookMaskEditor(
             }
 
             Spacer(Modifier.height(12.dp))
+
+            // Only the kernel mask maps to the Мин/Сред/Макс tiers shown on
+            // the Dashboard (PROTECTION_MASK_MIN/AVG/MAX) — the Java mask has
+            // no such tiering, its hooks are flat reflection-based checks
+            // with no meaningful coverage/perf tradeoff between them.
+            if (isKernel) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    val presets =
+                        listOf(
+                            Triple(PROTECTION_MASK_MIN, R.string.protection_level_min, TelBlue),
+                            Triple(PROTECTION_MASK_AVG, R.string.protection_level_avg, TelGreen),
+                            Triple(PROTECTION_MASK_MAX, R.string.protection_level_max, TelOrange),
+                        )
+                    for ((presetMask, labelRes, presetColor) in presets) {
+                        val selected = effectiveMask == presetMask
+                        OutlinedButton(
+                            onClick = { onMaskChange(presetMask) },
+                            enabled = editable && !selected,
+                            colors =
+                                ButtonDefaults.outlinedButtonColors(
+                                    containerColor = if (selected) presetColor.copy(alpha = 0.15f) else Color.Transparent,
+                                    contentColor = presetColor,
+                                ),
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Text(stringResource(labelRes), maxLines = 1)
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
 
             Row(
                 modifier = Modifier.fillMaxWidth(),

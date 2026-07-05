@@ -50,9 +50,9 @@ import kotlinx.coroutines.withContext
 
 private enum class ProtectionLevel { MIN, AVG, MAX }
 
-private val PROTECTION_MASK_MIN = 0x127FFu
-private val PROTECTION_MASK_AVG = 0x1FFFFu
-private val PROTECTION_MASK_MAX = 0xFFFFFFFFu
+internal val PROTECTION_MASK_MIN = 0x127FFu
+internal val PROTECTION_MASK_AVG = 0x1FFFFu
+internal val PROTECTION_MASK_MAX = 0xFFFFFFFFu
 
 private fun UInt.toProtectionLevel(): ProtectionLevel? =
     when (this) {

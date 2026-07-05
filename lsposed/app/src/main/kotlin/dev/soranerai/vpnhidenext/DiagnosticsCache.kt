@@ -150,8 +150,26 @@ internal object DiagnosticsCache {
         val initialResults = getPlaceholderResults(appContext, hookMask)
         _state.value = State.Running(initialResults)
 
-        val vpnActive = withContext(Dispatchers.IO) { hasActiveVpnInterface() }
+        var vpnActive = withContext(Dispatchers.IO) { hasActiveVpnInterface() }
+        // No real VPN — silently raise a local-only test tunnel (see
+        // SelfTestVpnCoordinator) just for the duration of this run, so the
+        // full check battery still executes instead of short-circuiting.
+        // No button, no prompt of our own.
+        var usingSelfTest = false
         if (!vpnActive) {
+            usingSelfTest = SelfTestVpnCoordinator.tryEstablish(appContext)
+            if (usingSelfTest) {
+                // The interface itself is up as soon as establish() returns,
+                // but ConnectivityManager needs a moment to register the new
+                // network — checks that read NetworkCapabilities right away
+                // used to see a half-registered VPN and report false
+                // failures.
+                delay(300)
+                vpnActive = withContext(Dispatchers.IO) { hasActiveVpnInterface() }
+            }
+        }
+        if (!vpnActive) {
+            if (usingSelfTest) SelfTestVpnCoordinator.stop()
             _state.value = State.VpnOff
             return
         }
@@ -210,6 +228,10 @@ internal object DiagnosticsCache {
                     }
                 _state.value = State.Ready(CheckResults(failedNative, failedJava))
                 VpnHideLog.w("VpnHide-Diag", "runAllChecks failed: ${e.message}")
+            } finally {
+                // Whether checks passed, failed, or threw — the test
+                // tunnel's only job was to get through this run.
+                if (usingSelfTest) SelfTestVpnCoordinator.stop()
             }
         }
     }

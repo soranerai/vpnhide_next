@@ -506,5 +506,6 @@
     <!-- VPN off diagnostics -->
     <string name="diag_no_vpn_title">Checks not run</string>
     <string name="diag_no_vpn_desc">No active VPN detected. Connect to a VPN to run diagnostic checks.</string>
+    <string name="self_test_vpn_session_name">VPNHide self-test (no real traffic)</string>
     <string name="dashboard_protection_vpn_off">-/-</string>
 </resources>
