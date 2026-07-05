@@ -18,10 +18,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.geometry.Offset
@@ -138,15 +136,25 @@ fun PredictiveBackOverlay(
     exit: ExitTransition = slideOutHorizontally(targetOffsetX = { it }) + fadeOut(),
     content: @Composable () -> Unit,
 ) {
-    var gestureProgress by remember { mutableFloatStateOf(0f) }
+    val progress = remember { Animatable(0f) }
 
-    PredictiveBackHandler(enabled = visible) { progress ->
+    // Reset for the next open. Deliberately NOT reset on close/commit (see
+    // below) — this only prepares the overlay for its next appearance.
+    LaunchedEffect(visible) {
+        if (visible) progress.snapTo(0f)
+    }
+
+    PredictiveBackHandler(enabled = visible) { events ->
         try {
-            progress.collect { event -> gestureProgress = event.progress }
-            gestureProgress = 0f
+            events.collect { event -> progress.snapTo(event.progress) }
+            // Gesture committed: leave progress wherever the drag ended and
+            // let AnimatedVisibility's exit transition continue from there.
+            // Snapping it back to 0 here used to make the screen visibly
+            // jump back to full size for a frame before sliding out.
             onBack()
         } catch (e: CancellationException) {
-            gestureProgress = 0f
+            // Released early: ease back to fully open instead of snapping.
+            progress.animateTo(0f, animationSpec = spring(stiffness = Spring.StiffnessMediumLow))
         }
     }
 
@@ -159,7 +167,7 @@ fun PredictiveBackOverlay(
         Box(
             modifier =
                 Modifier.fillMaxSize().graphicsLayer {
-                    val eased = gestureProgress
+                    val eased = progress.value
                     scaleX = 1f - eased * 0.1f
                     scaleY = 1f - eased * 0.1f
                     translationX = eased * size.width * 0.25f

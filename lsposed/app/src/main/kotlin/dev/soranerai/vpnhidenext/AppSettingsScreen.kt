@@ -150,152 +150,155 @@ internal fun AppSettingsScreen(
         ruleScreenOpen = true
     }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (app != null) {
-                        Column {
-                            Text(
-                                app.label,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                app.packageName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        if (app != null) {
+                            Column {
+                                Text(
+                                    app.label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    app.packageName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            Text(stringResource(R.string.app_settings_title_global))
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
                             )
                         }
-                    } else {
-                        Text(stringResource(R.string.app_settings_title_global))
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                        )
-                    }
-                },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-            )
-        },
-        modifier = modifier,
-    ) { innerPadding ->
-        Box(
-            modifier =
-                Modifier
-                    .padding(top = innerPadding.calculateTopPadding())
-                    .fillMaxSize(),
-        ) {
-            // beyondViewportPageCount keeps all 3 pages composed at once (there
-            // are only 3 total) so switching pages — by swipe or by tapping
-            // the pill below — never disposes/reloads a page's state, which
-            // was the source of a visible blank-then-reload flicker.
-            HorizontalPager(
-                state = pagerState,
-                modifier = Modifier.fillMaxSize(),
-                beyondViewportPageCount = 2,
-            ) { page ->
-                when (page) {
-                    0 -> {
-                        HookPage(app = app, hooks = ALL_HOOKS, isKernel = true, accent = TelBlue)
-                    }
-
-                    1 -> {
-                        HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelPurple)
-                    }
-
-                    else -> {
-                        PortsTab(
-                            app = app,
-                            rules = rules,
-                            massRules = massRules,
-                            loaded = rulesLoaded,
-                            onEditRule = ::openEditRule,
-                            onDeleteRule = ::deleteRule,
-                            onToggleRule = ::toggleRule,
-                        )
-                    }
-                }
-            }
-
+                    },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        ),
+                )
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) { innerPadding ->
             Box(
                 modifier =
                     Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(bottom = 20.dp)
-                        .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
+                        .padding(top = innerPadding.calculateTopPadding())
+                        .fillMaxSize(),
             ) {
-                PillTabSelector(
-                    // Single-letter labels reuse the N/F/P convention already
-                    // used for the per-app protection chips in AppRows.kt
-                    // (kernel/framework/port) — full words ("Framework")
-                    // don't fit three-across without wrapping.
-                    tabs =
-                        listOf(
-                            PillTab(Icons.Filled.Memory, "N", accent = TelBlue),
-                            PillTab(Icons.Filled.Code, "F", accent = TelPurple),
-                            PillTab(Icons.Filled.Dns, "P", accent = TelPink),
-                        ),
-                    selectedIndex = pagerState.currentPage,
-                    onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
-                    modifier = Modifier.width(220.dp),
-                    height = 60.dp,
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
-                    tonalElevation = 12.dp,
-                    shadowElevation = 8.dp,
-                )
+                // beyondViewportPageCount keeps all 3 pages composed at once (there
+                // are only 3 total) so switching pages — by swipe or by tapping
+                // the pill below — never disposes/reloads a page's state, which
+                // was the source of a visible blank-then-reload flicker.
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 2,
+                ) { page ->
+                    when (page) {
+                        0 -> {
+                            HookPage(app = app, hooks = ALL_HOOKS, isKernel = true, accent = TelBlue)
+                        }
 
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = pagerState.currentPage == 2,
-                    enter = fadeIn() + scaleIn(),
-                    exit = fadeOut() + scaleOut(),
-                    modifier = Modifier.align(Alignment.Center).offset(x = 152.dp),
+                        1 -> {
+                            HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelPurple)
+                        }
+
+                        else -> {
+                            PortsTab(
+                                app = app,
+                                rules = rules,
+                                massRules = massRules,
+                                loaded = rulesLoaded,
+                                onEditRule = ::openEditRule,
+                                onDeleteRule = ::deleteRule,
+                                onToggleRule = ::toggleRule,
+                            )
+                        }
+                    }
+                }
+
+                Box(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 20.dp)
+                            .fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    FloatingActionButton(
-                        onClick = { openAddRule() },
-                        containerColor = TelPink,
-                        contentColor = Color.White,
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.size(60.dp),
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp),
+                    PillTabSelector(
+                        // Single-letter labels reuse the N/F/P convention already
+                        // used for the per-app protection chips in AppRows.kt
+                        // (kernel/framework/port) — full words ("Framework")
+                        // don't fit three-across without wrapping.
+                        tabs =
+                            listOf(
+                                PillTab(Icons.Filled.Memory, "N", accent = TelBlue),
+                                PillTab(Icons.Filled.Code, "F", accent = TelPurple),
+                                PillTab(Icons.Filled.Dns, "P", accent = TelPink),
+                            ),
+                        selectedIndex = pagerState.currentPage,
+                        onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+                        modifier = Modifier.width(220.dp),
+                        height = 60.dp,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                        tonalElevation = 12.dp,
+                        shadowElevation = 8.dp,
+                    )
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = pagerState.currentPage == 2,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut(),
+                        modifier = Modifier.align(Alignment.Center).offset(x = 152.dp),
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
+                        FloatingActionButton(
+                            onClick = { openAddRule() },
+                            containerColor = TelPink,
+                            contentColor = Color.White,
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.size(60.dp),
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp),
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                        }
                     }
                 }
             }
+        }
 
-            // Hoisted above the pill/FAB (rendered after them in this Box, so
-            // it paints on top) — the rule screen must cover the whole tab
-            // bar too, the same way MainActivity's overlays cover its own
-            // bottom nav.
-            PredictiveBackOverlay(
-                visible = ruleScreenOpen,
+        // Rendered as a sibling of the Scaffold above, not nested inside its
+        // content Box — that content is pushed down by innerPadding for this
+        // screen's own top bar, so a rule screen nested in there would render
+        // its own TopAppBar starting below this screen's bar (looking like a
+        // second stacked header) instead of covering the whole screen.
+        PredictiveBackOverlay(
+            visible = ruleScreenOpen,
+            onBack = { ruleScreenOpen = false },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            PortRuleScreen(
+                initialRule = ruleScreenIdentity,
+                existingRules = rules,
+                massRules = if (app != null) massRules else emptyList(),
                 onBack = { ruleScreenOpen = false },
-                modifier = Modifier.fillMaxSize(),
-            ) {
-                PortRuleScreen(
-                    initialRule = ruleScreenIdentity,
-                    existingRules = rules,
-                    massRules = if (app != null) massRules else emptyList(),
-                    onBack = { ruleScreenOpen = false },
-                    onConfirm = { newRule ->
-                        saveRule(newRule)
-                        ruleScreenOpen = false
-                    },
-                )
-            }
+                onConfirm = { newRule ->
+                    saveRule(newRule)
+                    ruleScreenOpen = false
+                },
+            )
         }
     }
 }
@@ -612,6 +615,12 @@ private fun HookMaskEditor(
                             }
                             onMaskChange(newMask)
                         },
+                        colors =
+                            SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = accent,
+                                checkedBorderColor = accent,
+                            ),
                     )
                 }
             }
@@ -829,7 +838,16 @@ private fun PortRuleCard(
                 )
             }
             if (!isReadOnly) {
-                Switch(checked = rule.enabled, onCheckedChange = { onToggle() })
+                Switch(
+                    checked = rule.enabled,
+                    onCheckedChange = { onToggle() },
+                    colors =
+                        SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = accent,
+                            checkedBorderColor = accent,
+                        ),
+                )
                 Spacer(Modifier.width(8.dp))
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
