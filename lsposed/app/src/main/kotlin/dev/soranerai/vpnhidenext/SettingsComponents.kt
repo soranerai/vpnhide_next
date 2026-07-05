@@ -330,9 +330,13 @@ internal fun SettingsDropdownRow(
     }
 }
 
-/** One entry in a [PillTabSelector]. [accent] defaults to the theme primary when unspecified. */
+/**
+ * One entry in a [PillTabSelector]. [accent] defaults to the theme primary
+ * when unspecified. [icon] is optional — text-only tabs (e.g. a TCP/UDP/Both
+ * protocol selector) omit it rather than forcing a meaningless icon.
+ */
 internal data class PillTab(
-    val icon: ImageVector,
+    val icon: ImageVector?,
     val label: String,
     val accent: Color = Color.Unspecified,
 )
@@ -386,13 +390,15 @@ internal fun PillTabSelector(
                         horizontalArrangement = Arrangement.Center,
                         modifier = Modifier.padding(horizontal = 8.dp),
                     ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = null,
-                            tint = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.size(20.dp),
-                        )
-                        Spacer(Modifier.width(6.dp))
+                        if (tab.icon != null) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = null,
+                                tint = if (selected) accent else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                        }
                         Text(
                             text = tab.label,
                             fontWeight = FontWeight.Bold,

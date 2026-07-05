@@ -21,6 +21,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
@@ -147,15 +148,19 @@ internal fun AppSettingsScreen(
                 contentAlignment = Alignment.Center,
             ) {
                 PillTabSelector(
+                    // Single-letter labels reuse the N/F/P convention already
+                    // used for the per-app protection chips in AppRows.kt
+                    // (kernel/framework/port) — full words ("Framework")
+                    // don't fit three-across without wrapping.
                     tabs =
                         listOf(
-                            PillTab(Icons.Filled.Memory, stringResource(R.string.hook_testing_tab_kernel), accent = TelBlue),
-                            PillTab(Icons.Filled.Code, stringResource(R.string.hook_testing_tab_framework), accent = TelPurple),
-                            PillTab(Icons.Filled.Dns, stringResource(R.string.app_settings_tab_ports), accent = TelPink),
+                            PillTab(Icons.Filled.Memory, "N", accent = TelBlue),
+                            PillTab(Icons.Filled.Code, "F", accent = TelPurple),
+                            PillTab(Icons.Filled.Dns, "P", accent = TelPink),
                         ),
                     selectedIndex = pagerState.currentPage,
                     onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
-                    modifier = Modifier.width(300.dp),
+                    modifier = Modifier.width(220.dp),
                     height = 60.dp,
                     containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
                     tonalElevation = 12.dp,
@@ -166,7 +171,7 @@ internal fun AppSettingsScreen(
                     visible = pagerState.currentPage == 2,
                     enter = fadeIn() + scaleIn(),
                     exit = fadeOut() + scaleOut(),
-                    modifier = Modifier.align(Alignment.Center).offset(x = 192.dp),
+                    modifier = Modifier.align(Alignment.Center).offset(x = 152.dp),
                 ) {
                     FloatingActionButton(
                         onClick = { showAddPortDialog = true },
@@ -509,6 +514,34 @@ private fun DbPortRule.toPortRule() =
 private fun DbMassPortRule.toPortRule() =
     PortRule(id = id.toString(), startPort = startPort, endPort = endPort, protocol = protocol, label = label, enabled = enabled)
 
+/** Small tinted icon+text banner — shared by the port-hiding-off hint and the rule dialog's warnings. */
+@Composable
+private fun InlineHintBanner(
+    text: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.12f)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
 @Composable
 private fun PortsTab(
     app: AppEntry?,
@@ -597,29 +630,12 @@ private fun PortsTab(
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
                 if (app != null && !app.portHiding) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = TelOrange.copy(alpha = 0.12f)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp).fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                        ) {
-                            Icon(
-                                Icons.Default.WarningAmber,
-                                contentDescription = null,
-                                tint = TelOrange,
-                                modifier = Modifier.size(18.dp),
-                            )
-                            Spacer(Modifier.width(10.dp))
-                            Text(
-                                text = stringResource(R.string.app_settings_port_hiding_off_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                        }
-                    }
+                    InlineHintBanner(
+                        text = stringResource(R.string.app_settings_port_hiding_off_hint),
+                        icon = Icons.Default.WarningAmber,
+                        tint = TelOrange,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
                 }
 
                 if (showEmpty) {
@@ -819,28 +835,29 @@ private fun PortRuleDialog(
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
-            shape = RoundedCornerShape(28.dp),
+            shape = RoundedCornerShape(24.dp),
             tonalElevation = 6.dp,
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier.fillMaxWidth().padding(16.dp),
         ) {
             Column(
-                modifier = Modifier.padding(24.dp),
+                modifier = Modifier.padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp),
             ) {
-                Text(
-                    text =
-                        if (initialRule ==
-                            null
-                        ) {
-                            stringResource(R.string.ports_new_rule_title)
-                        } else {
-                            stringResource(R.string.ports_edit_rule_title)
-                        },
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = TelPink,
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SettingsRowIcon(icon = Icons.Default.Dns, tint = TelPink)
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        text =
+                            if (initialRule == null) {
+                                stringResource(R.string.ports_new_rule_title)
+                            } else {
+                                stringResource(R.string.ports_edit_rule_title)
+                            },
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                }
 
                 val fieldColors =
                     OutlinedTextFieldDefaults.colors(
@@ -890,30 +907,27 @@ private fun PortRuleDialog(
                 )
 
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.protocol), style = MaterialTheme.typography.labelMedium)
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        PortProtocol.values().forEachIndexed { index, p ->
-                            val pLabel =
-                                when (p) {
-                                    PortProtocol.TCP -> "TCP"
-                                    PortProtocol.UDP -> "UDP"
-                                    PortProtocol.BOTH -> stringResource(R.string.protocol_both)
-                                }
-                            SegmentedButton(
-                                selected = protocol == p,
-                                onClick = { protocol = p },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = PortProtocol.values().size),
-                                colors =
-                                    SegmentedButtonDefaults.colors(
-                                        activeContainerColor = TelPink.copy(alpha = 0.15f),
-                                        activeContentColor = TelPink,
-                                        activeBorderColor = TelPink,
-                                    ),
-                            ) {
-                                Text(pLabel, fontSize = 10.sp)
-                            }
-                        }
-                    }
+                    Text(
+                        stringResource(R.string.protocol),
+                        style = MaterialTheme.typography.labelMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    val protocolLabels =
+                        mapOf(
+                            PortProtocol.TCP to "TCP",
+                            PortProtocol.UDP to "UDP",
+                            PortProtocol.BOTH to stringResource(R.string.protocol_both),
+                        )
+                    PillTabSelector(
+                        tabs =
+                            PortProtocol.values().map { p ->
+                                PillTab(icon = null, label = protocolLabels.getValue(p), accent = TelPink)
+                            },
+                        selectedIndex = PortProtocol.values().indexOf(protocol),
+                        onSelect = { index -> protocol = PortProtocol.values()[index] },
+                        modifier = Modifier.fillMaxWidth(),
+                        height = 44.dp,
+                    )
                 }
 
                 val currentRule =
@@ -950,12 +964,7 @@ private fun PortRuleDialog(
                                 ""
                             }
                         }
-                    Text(
-                        text = msg,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
+                    InlineHintBanner(text = msg, icon = Icons.Filled.ErrorOutline, tint = MaterialTheme.colorScheme.error)
                 } else {
                     val rulesToRemove =
                         existingRules.filter { e ->
@@ -964,11 +973,10 @@ private fun PortRuleDialog(
                                 (protocol == PortProtocol.BOTH || protocol == e.protocol)
                         }
                     if (rulesToRemove.isNotEmpty()) {
-                        Text(
+                        InlineHintBanner(
                             text = stringResource(R.string.ports_redundant_rules_removed_warning, rulesToRemove.size),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = TelPink,
-                            modifier = Modifier.padding(top = 4.dp),
+                            icon = Icons.Filled.Info,
+                            tint = TelPink,
                         )
                     }
                 }
