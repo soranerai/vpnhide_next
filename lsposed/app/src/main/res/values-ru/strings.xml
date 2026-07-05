@@ -207,9 +207,7 @@
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Изоляция хуков</string>
-    <string name="hook_testing_tab_kernel">Хуки ядра</string>
-    <string name="hook_testing_tab_framework">Хуки фреймворка</string>
-    
+
     <string name="hook_testing_kernel_card_title">Изоляция причин краша (Ядро)</string>
     <string name="hook_testing_kernel_card_desc">Выключайте отдельные хуки ядра на лету, чтобы выяснить, какая функция вызывает перезагрузку или падение приложений. Выключенные хуки будут безопасно пропускать вызовы абсолютно без изменений.</string>
     <string name="hook_testing_kernel_err_parse">Не удалось разобрать маску хуков: \'%1$s\'</string>
@@ -224,8 +222,8 @@
     <string name="hook_testing_framework_err_set">Не удалось записать маску Java-хуков</string>
     <string name="hook_testing_framework_mask_title">Маска активных Java-хуков</string>
 
-    <string name="hook_testing_btn_enable_all">Включить все</string>
-    <string name="hook_testing_btn_disable_all">Выключить все</string>
+    <string name="hook_testing_btn_enable_all">Включить</string>
+    <string name="hook_testing_btn_disable_all">Выключить</string>
     <string name="hook_testing_list_kernel">Список хуков ядра</string>
     <string name="hook_testing_list_java">Список Java-хуков</string>
 
@@ -235,8 +233,6 @@
 
     <!-- App Settings Screen (глобальные + per-app хуки/порты) -->
     <string name="app_settings_title_global">Глобальные настройки</string>
-    <string name="app_settings_tab_hooks">Хуки</string>
-    <string name="app_settings_tab_ports">Порты</string>
     <string name="app_settings_port_hiding_off_hint">Скрытие портов сейчас выключено для этого приложения — включите переключатель «P» в списке приложений, чтобы правила вступили в силу.</string>
     <string name="app_settings_fab_global_desc">Правила скрытия по умолчанию для всех приложений</string>
     <string name="app_row_settings_desc">Настройки скрытия для этого приложения</string>

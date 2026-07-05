@@ -2,7 +2,6 @@ package dev.soranerai.vpnhidenext
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.*
@@ -11,6 +10,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -144,7 +145,8 @@ private fun MainScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    var currentTab by remember { mutableStateOf(Tab.Dashboard) }
+    val pagerState = rememberPagerState(initialPage = Tab.Dashboard.ordinal) { Tab.values().size }
+    val currentTab = Tab.values()[pagerState.currentPage]
     var selfNeedsRestart by remember { mutableStateOf<Boolean?>(startup.addedToTargets) }
     var searchQuery by remember { mutableStateOf("") }
     var searchActive by remember { mutableStateOf(false) }
@@ -157,7 +159,12 @@ private fun MainScreen(
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }
     var showGlobalAppSettings by remember { mutableStateOf(false) }
-    var editingAppSettings by remember { mutableStateOf<AppEntry?>(null) }
+    // Identity and visibility are tracked separately: while the predictive-back
+    // gesture is held (or the exit animation is running), editingAppSettingsTarget
+    // must keep pointing at the app being edited so the screen doesn't blank out
+    // mid-gesture — it's only ever overwritten by the next open, never nulled.
+    var editingAppSettingsTarget by remember { mutableStateOf<AppEntry?>(null) }
+    var showEditingAppSettings by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
     var showDiagnosticsDetail by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
@@ -415,33 +422,47 @@ private fun MainScreen(
                     TabLoadingBar()
 
                     if (restart != null) {
-                        when (currentTab) {
-                            Tab.Dashboard -> {
-                                DashboardScreen(
-                                    selfNeedsRestart = restart,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
+                        // beyondViewportPageCount keeps neighboring tabs composed
+                        // so a swipe never shows a blank frame mid-drag; each
+                        // screen's own cache (DashboardCache, AppListCache, ...)
+                        // already survives dispose/recompose, so this is purely
+                        // for swipe smoothness, not state preservation.
+                        HorizontalPager(
+                            state = pagerState,
+                            modifier = Modifier.fillMaxSize(),
+                            beyondViewportPageCount = 1,
+                        ) { page ->
+                            when (Tab.values()[page]) {
+                                Tab.Dashboard -> {
+                                    DashboardScreen(
+                                        selfNeedsRestart = restart,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
 
-                            Tab.Protection -> {
-                                ProtectionScreen(
-                                    searchQuery = searchQuery,
-                                    showSystem = showSystem,
-                                    showRussianOnly = showRussianOnly,
-                                    showOnlySelected = showOnlySelected,
-                                    showOnlyWorkProfile = showOnlyWorkProfile,
-                                    sortOrder = sortOrder,
-                                    onDirtyChange = { isProtectionDirty = it },
-                                    onOpenAppSettings = { editingAppSettings = it },
-                                    saveTrigger = saveTrigger,
-                                    modifier = Modifier.fillMaxSize(),
-                                )
-                            }
+                                Tab.Protection -> {
+                                    ProtectionScreen(
+                                        searchQuery = searchQuery,
+                                        showSystem = showSystem,
+                                        showRussianOnly = showRussianOnly,
+                                        showOnlySelected = showOnlySelected,
+                                        showOnlyWorkProfile = showOnlyWorkProfile,
+                                        sortOrder = sortOrder,
+                                        onDirtyChange = { isProtectionDirty = it },
+                                        onOpenAppSettings = { app ->
+                                            editingAppSettingsTarget = app
+                                            showEditingAppSettings = true
+                                        },
+                                        saveTrigger = saveTrigger,
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
 
-                            Tab.Statistics -> {
-                                StatisticsScreen(
-                                    modifier = Modifier.fillMaxSize(),
-                                )
+                                Tab.Statistics -> {
+                                    StatisticsScreen(
+                                        modifier = Modifier.fillMaxSize(),
+                                    )
+                                }
                             }
                         }
                     }
@@ -603,7 +624,7 @@ private fun MainScreen(
                                                 ).clickable(
                                                     interactionSource = remember { MutableInteractionSource() },
                                                     indication = null,
-                                                ) { currentTab = tab },
+                                                ) { scope.launch { pagerState.animateScrollToPage(tab.ordinal) } },
                                         contentAlignment = Alignment.Center,
                                     ) {
                                         Icon(
@@ -626,21 +647,21 @@ private fun MainScreen(
             }
         }
 
-        androidx.compose.animation.AnimatedVisibility(
-            visible = editingAppSettings != null,
+        PredictiveBackOverlay(
+            visible = showEditingAppSettings,
+            onBack = {
+                showEditingAppSettings = false
+                TargetsCache.refresh(scope, context)
+            },
             enter = androidx.compose.animation.slideInVertically(initialOffsetY = { it }) + androidx.compose.animation.fadeIn(),
             exit = androidx.compose.animation.slideOutVertically(targetOffsetY = { it }) + androidx.compose.animation.fadeOut(),
             modifier = Modifier.fillMaxSize(),
         ) {
-            editingAppSettings?.let { app ->
-                BackHandler {
-                    editingAppSettings = null
-                    TargetsCache.refresh(scope, context)
-                }
+            editingAppSettingsTarget?.let { app ->
                 AppSettingsScreen(
                     app = app,
                     onBack = {
-                        editingAppSettings = null
+                        showEditingAppSettings = false
                         TargetsCache.refresh(scope, context)
                     },
                     modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
@@ -648,16 +669,14 @@ private fun MainScreen(
             }
         }
 
-        androidx.compose.animation.AnimatedVisibility(
+        PredictiveBackOverlay(
             visible = showGlobalAppSettings,
-            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            BackHandler {
+            onBack = {
                 showGlobalAppSettings = false
                 TargetsCache.refresh(scope, context)
-            }
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
             AppSettingsScreen(
                 app = null,
                 onBack = {
@@ -672,13 +691,11 @@ private fun MainScreen(
         // render in this order — Box stacks children in z-order, and the
         // sub-screen is only ever opened while Settings is still showing
         // underneath, so it needs to paint on top of it.
-        androidx.compose.animation.AnimatedVisibility(
+        PredictiveBackOverlay(
             visible = showSettings,
-            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            onBack = { showSettings = false },
             modifier = Modifier.fillMaxSize(),
         ) {
-            BackHandler { showSettings = false }
             SettingsScreen(
                 onBack = { showSettings = false },
                 onOpenDiagnosticsDetail = { showDiagnosticsDetail = true },
@@ -687,13 +704,11 @@ private fun MainScreen(
             )
         }
 
-        androidx.compose.animation.AnimatedVisibility(
+        PredictiveBackOverlay(
             visible = showDiagnosticsDetail,
-            enter = androidx.compose.animation.slideInHorizontally(initialOffsetX = { it }) + androidx.compose.animation.fadeIn(),
-            exit = androidx.compose.animation.slideOutHorizontally(targetOffsetX = { it }) + androidx.compose.animation.fadeOut(),
+            onBack = { showDiagnosticsDetail = false },
             modifier = Modifier.fillMaxSize(),
         ) {
-            BackHandler { showDiagnosticsDetail = false }
             DiagnosticsDetailScreen(
                 selfNeedsRestart = refreshRestart,
                 onBack = { showDiagnosticsDetail = false },

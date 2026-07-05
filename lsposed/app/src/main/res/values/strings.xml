@@ -259,9 +259,7 @@
 
     <!-- Hook Testing Screen -->
     <string name="hook_testing_title">Hook Isolation</string>
-    <string name="hook_testing_tab_kernel">Kernel Hooks</string>
-    <string name="hook_testing_tab_framework">Framework Hooks</string>
-    
+
     <string name="hook_testing_kernel_card_title">Crash Isolation Tool (Kernel)</string>
     <string name="hook_testing_kernel_card_desc">Disable individual kernel hooks at runtime to find which function causes system or app crashes. Disabled hooks will safely let calls pass through completely unchanged.</string>
     <string name="hook_testing_kernel_err_parse">Failed to parse active hooks mask: \'%1$s\'</string>
@@ -276,8 +274,8 @@
     <string name="hook_testing_framework_err_set">Failed to write Java hooks mask</string>
     <string name="hook_testing_framework_mask_title">Active Java Hooks Mask</string>
 
-    <string name="hook_testing_btn_enable_all">Enable All</string>
-    <string name="hook_testing_btn_disable_all">Disable All</string>
+    <string name="hook_testing_btn_enable_all">Enable</string>
+    <string name="hook_testing_btn_disable_all">Disable</string>
     <string name="hook_testing_list_kernel">Kernel Hooks List</string>
     <string name="hook_testing_list_java">Java Hooks List</string>
 
@@ -287,8 +285,6 @@
 
     <!-- App Settings Screen (global + per-app hooks/ports) -->
     <string name="app_settings_title_global">Global settings</string>
-    <string name="app_settings_tab_hooks">Hooks</string>
-    <string name="app_settings_tab_ports">Ports</string>
     <string name="app_settings_port_hiding_off_hint">Port hiding is currently off for this app — turn on the \"P\" toggle in the app list for these rules to take effect.</string>
     <string name="app_settings_fab_global_desc">Default hiding rules for all apps</string>
     <string name="app_row_settings_desc">Hiding settings for this app</string>

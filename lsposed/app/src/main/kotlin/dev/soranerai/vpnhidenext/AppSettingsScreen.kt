@@ -3,10 +3,11 @@ package dev.soranerai.vpnhidenext
 import androidx.compose.animation.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -29,13 +30,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
 import dev.soranerai.vpnhidenext.db.DatabaseSync
 import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.db.DbPortRule
+import dev.soranerai.vpnhidenext.ui.theme.TelBlue
+import dev.soranerai.vpnhidenext.ui.theme.TelOrange
+import dev.soranerai.vpnhidenext.ui.theme.TelPink
+import dev.soranerai.vpnhidenext.ui.theme.TelPurple
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -55,208 +59,268 @@ internal fun AppSettingsScreen(
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    var selectedTab by remember { mutableStateOf(0) }
-    var showAddPortDialog by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val pagerState = rememberPagerState(initialPage = 0) { 3 }
 
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = {
-                    if (app != null) {
-                        Column {
-                            Text(
-                                app.label,
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                app.packageName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+    var rules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
+    var massRules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
+    var rulesLoaded by remember { mutableStateOf(false) }
+
+    // Identity and visibility are tracked separately: while the predictive-back
+    // gesture is held (or the exit animation is running), ruleScreenIdentity
+    // must keep pointing at the rule being edited (or null for "add new") so
+    // the screen doesn't blank out or flash to "add" mode mid-gesture — it's
+    // only ever overwritten by the next open, never reset on close.
+    var ruleScreenIdentity by remember { mutableStateOf<PortRule?>(null) }
+    var ruleScreenOpen by remember { mutableStateOf(false) }
+
+    suspend fun refreshRules() {
+        val db = AppDatabase.getInstance(context)
+        val mass = db.massPortRuleDao().getMassRulesSync().map { it.toPortRule() }
+        massRules = mass
+        rules =
+            if (app != null) {
+                db.portRuleDao().getRulesForAppSync(app.packageName, app.userId).map { it.toPortRule() }
+            } else {
+                mass
+            }
+        rulesLoaded = true
+    }
+
+    LaunchedEffect(app?.packageName, app?.userId) {
+        withContext(Dispatchers.IO) { refreshRules() }
+    }
+
+    fun mutateRules(action: suspend (AppDatabase) -> Unit) {
+        scope.launch(Dispatchers.IO) {
+            val db = AppDatabase.getInstance(context)
+            action(db)
+            DatabaseSync.sync(context)
+            refreshRules()
+        }
+    }
+
+    fun saveRule(newRule: PortRule) {
+        mutateRules { db ->
+            if (app != null) {
+                db.portRuleDao().insertRule(
+                    DbPortRule(
+                        id = newRule.id.toLongOrNull() ?: 0L,
+                        packageName = app.packageName,
+                        userId = app.userId,
+                        startPort = newRule.startPort,
+                        endPort = newRule.endPort,
+                        protocol = newRule.protocol,
+                        label = newRule.label,
+                        enabled = newRule.enabled,
+                    ),
+                )
+            } else {
+                db.massPortRuleDao().insertMassRule(
+                    DbMassPortRule(
+                        id = newRule.id.toLongOrNull() ?: 0L,
+                        startPort = newRule.startPort,
+                        endPort = newRule.endPort,
+                        protocol = newRule.protocol,
+                        label = newRule.label,
+                        enabled = newRule.enabled,
+                    ),
+                )
+            }
+        }
+    }
+
+    fun deleteRule(rule: PortRule) {
+        val id = rule.id.toLongOrNull() ?: return
+        mutateRules { db -> if (app != null) db.portRuleDao().deleteRule(id) else db.massPortRuleDao().deleteMassRule(id) }
+    }
+
+    fun toggleRule(rule: PortRule) {
+        saveRule(rule.copy(enabled = !rule.enabled))
+    }
+
+    fun openAddRule() {
+        ruleScreenIdentity = null
+        ruleScreenOpen = true
+    }
+
+    fun openEditRule(rule: PortRule) {
+        ruleScreenIdentity = rule
+        ruleScreenOpen = true
+    }
+
+    Box(modifier = modifier.fillMaxSize()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = {
+                        if (app != null) {
+                            Column {
+                                Text(
+                                    app.label,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
+                                Text(
+                                    app.packageName,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        } else {
+                            Text(stringResource(R.string.app_settings_title_global))
+                        }
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = stringResource(R.string.back),
                             )
                         }
-                    } else {
-                        Text(stringResource(R.string.app_settings_title_global))
-                    }
-                },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(
-                            Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = stringResource(R.string.back),
-                        )
-                    }
-                },
-                colors =
-                    TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                        titleContentColor = MaterialTheme.colorScheme.onBackground,
-                    ),
-            )
-        },
-        modifier = modifier,
-    ) { innerPadding ->
-        Box(
-            modifier =
-                Modifier
-                    .padding(top = innerPadding.calculateTopPadding())
-                    .fillMaxSize(),
-        ) {
-            Box(modifier = Modifier.fillMaxSize()) {
-                if (selectedTab == 0) {
-                    HooksTab(app)
-                } else {
-                    PortsTab(
-                        app = app,
-                        showAddDialog = showAddPortDialog,
-                        onDismissAddDialog = { showAddPortDialog = false },
-                    )
-                }
-            }
-
+                    },
+                    colors =
+                        TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                            titleContentColor = MaterialTheme.colorScheme.onBackground,
+                        ),
+                )
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) { innerPadding ->
             Box(
                 modifier =
                     Modifier
-                        .align(Alignment.BottomCenter)
-                        .navigationBarsPadding()
-                        .padding(bottom = 20.dp)
-                        .fillMaxWidth(),
-                contentAlignment = Alignment.Center,
+                        .padding(top = innerPadding.calculateTopPadding())
+                        .fillMaxSize(),
             ) {
-                Surface(
-                    shape = RoundedCornerShape(20.dp),
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
-                    tonalElevation = 12.dp,
-                    shadowElevation = 8.dp,
-                    modifier = Modifier.height(60.dp),
-                ) {
-                    Row(
-                        modifier =
-                            Modifier
-                                .padding(horizontal = 4.dp, vertical = 4.dp)
-                                .width(240.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        val tabs =
-                            listOf<Triple<Int, ImageVector, Int>>(
-                                Triple(0, Icons.Filled.Tune, R.string.app_settings_tab_hooks),
-                                Triple(1, Icons.Filled.Dns, R.string.app_settings_tab_ports),
+                // beyondViewportPageCount keeps all 3 pages composed at once (there
+                // are only 3 total) so switching pages — by swipe or by tapping
+                // the pill below — never disposes/reloads a page's state, which
+                // was the source of a visible blank-then-reload flicker.
+                HorizontalPager(
+                    state = pagerState,
+                    modifier = Modifier.fillMaxSize(),
+                    beyondViewportPageCount = 2,
+                ) { page ->
+                    when (page) {
+                        0 -> {
+                            HookPage(app = app, hooks = ALL_HOOKS, isKernel = true, accent = TelBlue)
+                        }
+
+                        1 -> {
+                            HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelPurple)
+                        }
+
+                        else -> {
+                            PortsTab(
+                                app = app,
+                                rules = rules,
+                                massRules = massRules,
+                                loaded = rulesLoaded,
+                                onEditRule = ::openEditRule,
+                                onDeleteRule = ::deleteRule,
+                                onToggleRule = ::toggleRule,
                             )
-                        tabs.forEach { (index: Int, icon: ImageVector, labelRes: Int) ->
-                            val selected = selectedTab == index
-                            Box(
-                                modifier =
-                                    Modifier
-                                        .weight(1f)
-                                        .fillMaxHeight()
-                                        .clip(RoundedCornerShape(16.dp))
-                                        .background(
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                                            } else {
-                                                Color.Transparent
-                                            },
-                                        ).clickable(
-                                            interactionSource = remember { MutableInteractionSource() },
-                                            indication = null,
-                                        ) { selectedTab = index },
-                                contentAlignment = Alignment.Center,
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center,
-                                    modifier = Modifier.padding(horizontal = 8.dp),
-                                ) {
-                                    Icon(
-                                        imageVector = icon,
-                                        contentDescription = null,
-                                        tint =
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                        modifier = Modifier.size(20.dp),
-                                    )
-                                    Spacer(Modifier.width(6.dp))
-                                    Text(
-                                        text = stringResource(labelRes),
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.sp,
-                                        color =
-                                            if (selected) {
-                                                MaterialTheme.colorScheme.primary
-                                            } else {
-                                                MaterialTheme.colorScheme.onSurfaceVariant
-                                            },
-                                    )
-                                }
-                            }
                         }
                     }
                 }
 
-                androidx.compose.animation.AnimatedVisibility(
-                    visible = selectedTab == 1,
-                    enter = fadeIn() + scaleIn(),
-                    exit = fadeOut() + scaleOut(),
-                    modifier = Modifier.align(Alignment.Center).offset(x = 162.dp),
+                Box(
+                    modifier =
+                        Modifier
+                            .align(Alignment.BottomCenter)
+                            .navigationBarsPadding()
+                            .padding(bottom = 20.dp)
+                            .fillMaxWidth(),
+                    contentAlignment = Alignment.Center,
                 ) {
-                    FloatingActionButton(
-                        onClick = { showAddPortDialog = true },
-                        containerColor = Color(0xFF388E3C), // Premium Green
-                        contentColor = Color.White,
-                        shape = RoundedCornerShape(20.dp),
-                        modifier = Modifier.size(60.dp),
-                        elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp),
+                    PillTabSelector(
+                        // Single-letter labels reuse the N/F/P convention already
+                        // used for the per-app protection chips in AppRows.kt
+                        // (kernel/framework/port) — full words ("Framework")
+                        // don't fit three-across without wrapping.
+                        tabs =
+                            listOf(
+                                PillTab(Icons.Filled.Memory, "N", accent = TelBlue),
+                                PillTab(Icons.Filled.Code, "F", accent = TelPurple),
+                                PillTab(Icons.Filled.Dns, "P", accent = TelPink),
+                            ),
+                        selectedIndex = pagerState.currentPage,
+                        onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
+                        modifier = Modifier.width(220.dp),
+                        height = 60.dp,
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                        tonalElevation = 12.dp,
+                        shadowElevation = 8.dp,
+                    )
+
+                    androidx.compose.animation.AnimatedVisibility(
+                        visible = pagerState.currentPage == 2,
+                        enter = fadeIn() + scaleIn(),
+                        exit = fadeOut() + scaleOut(),
+                        modifier = Modifier.align(Alignment.Center).offset(x = 152.dp),
                     ) {
-                        Icon(Icons.Filled.Add, contentDescription = null)
+                        FloatingActionButton(
+                            onClick = { openAddRule() },
+                            containerColor = TelPink,
+                            contentColor = Color.White,
+                            shape = RoundedCornerShape(20.dp),
+                            modifier = Modifier.size(60.dp),
+                            elevation = FloatingActionButtonDefaults.elevation(defaultElevation = 8.dp),
+                        ) {
+                            Icon(Icons.Filled.Add, contentDescription = null)
+                        }
                     }
                 }
             }
+        }
+
+        // Rendered as a sibling of the Scaffold above, not nested inside its
+        // content Box — that content is pushed down by innerPadding for this
+        // screen's own top bar, so a rule screen nested in there would render
+        // its own TopAppBar starting below this screen's bar (looking like a
+        // second stacked header) instead of covering the whole screen.
+        PredictiveBackOverlay(
+            visible = ruleScreenOpen,
+            onBack = { ruleScreenOpen = false },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            PortRuleScreen(
+                initialRule = ruleScreenIdentity,
+                existingRules = rules,
+                massRules = if (app != null) massRules else emptyList(),
+                onBack = { ruleScreenOpen = false },
+                onConfirm = { newRule ->
+                    saveRule(newRule)
+                    ruleScreenOpen = false
+                },
+            )
         }
     }
 }
 
 @Composable
-private fun HooksTab(app: AppEntry?) {
-    var subTab by remember { mutableStateOf(0) }
-    Column(modifier = Modifier.fillMaxSize()) {
-        TabRow(
-            selectedTabIndex = subTab,
-            containerColor = MaterialTheme.colorScheme.background,
-            contentColor = MaterialTheme.colorScheme.primary,
-        ) {
-            Tab(
-                selected = subTab == 0,
-                onClick = { subTab = 0 },
-                text = { Text(stringResource(R.string.hook_testing_tab_kernel), fontWeight = FontWeight.Bold) },
-            )
-            Tab(
-                selected = subTab == 1,
-                onClick = { subTab = 1 },
-                text = { Text(stringResource(R.string.hook_testing_tab_framework), fontWeight = FontWeight.Bold) },
-            )
-        }
-
-        Column(
-            modifier =
-                Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
-        ) {
-            Spacer(Modifier.height(16.dp))
-            if (subTab == 0) {
-                HookMaskSection(app = app, hooks = ALL_HOOKS, isKernel = true)
-            } else {
-                HookMaskSection(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false)
-            }
-            val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-            Spacer(Modifier.height(bottomNavPadding + 100.dp))
-        }
+private fun HookPage(
+    app: AppEntry?,
+    hooks: List<HookInfo>,
+    isKernel: Boolean,
+    accent: Color,
+) {
+    Column(
+        modifier =
+            Modifier
+                .fillMaxSize()
+                .padding(horizontal = 16.dp)
+                .verticalScroll(rememberScrollState()),
+    ) {
+        Spacer(Modifier.height(16.dp))
+        HookMaskSection(app = app, hooks = hooks, isKernel = isKernel, accent = accent)
+        val bottomNavPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+        Spacer(Modifier.height(bottomNavPadding + 100.dp))
     }
 }
 
@@ -271,6 +335,7 @@ private fun HookMaskSection(
     app: AppEntry?,
     hooks: List<HookInfo>,
     isKernel: Boolean,
+    accent: Color,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -359,46 +424,42 @@ private fun HookMaskSection(
     val effectiveMask = if (editable) m else globalMask
 
     if (app != null) {
-        ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
-            Row(
-                modifier = Modifier.padding(16.dp).fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        stringResource(R.string.app_hook_isolation_use_global),
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold,
-                    )
-                    Spacer(Modifier.height(2.dp))
-                    Text(
-                        stringResource(R.string.app_hook_isolation_use_global_desc),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-                Spacer(Modifier.width(12.dp))
-                Switch(
-                    checked = !hasOverride,
-                    enabled = !applying,
-                    onCheckedChange = { useGlobal -> apply(!useGlobal, if (useGlobal) m else globalMask) },
-                )
-            }
+        SettingsGroup {
+            SettingsSwitchRow(
+                title = stringResource(R.string.app_hook_isolation_use_global),
+                subtitle = stringResource(R.string.app_hook_isolation_use_global_desc),
+                checked = !hasOverride,
+                onCheckedChange = { useGlobal -> apply(!useGlobal, if (useGlobal) m else globalMask) },
+                icon = Icons.Filled.Public,
+                iconTint = accent,
+            )
         }
         Spacer(Modifier.height(16.dp))
     }
 
     if (error != null) {
         Card(
+            shape = RoundedCornerShape(12.dp),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Text(
-                text = error!!,
-                color = MaterialTheme.colorScheme.onErrorContainer,
-                style = MaterialTheme.typography.bodyMedium,
-                modifier = Modifier.padding(16.dp),
-            )
+            Row(
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(
+                    Icons.Filled.ErrorOutline,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onErrorContainer,
+                    modifier = Modifier.size(20.dp),
+                )
+                Spacer(Modifier.width(10.dp))
+                Text(
+                    text = error!!,
+                    color = MaterialTheme.colorScheme.onErrorContainer,
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            }
         }
         Spacer(Modifier.height(16.dp))
     }
@@ -408,6 +469,7 @@ private fun HookMaskSection(
         effectiveMask = effectiveMask,
         editable = editable,
         applying = applying,
+        accent = accent,
         onMaskChange = { newMask -> apply(true, newMask) },
     )
 }
@@ -418,9 +480,14 @@ private fun HookMaskEditor(
     effectiveMask: UInt,
     editable: Boolean,
     applying: Boolean,
+    accent: Color,
     onMaskChange: (UInt) -> Unit,
 ) {
-    ElevatedCard(shape = RoundedCornerShape(12.dp), modifier = Modifier.fillMaxWidth()) {
+    ElevatedCard(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = accent.copy(alpha = 0.08f)),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
         Column(modifier = Modifier.padding(16.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -432,10 +499,14 @@ private fun HookMaskEditor(
                     style = MaterialTheme.typography.headlineSmall,
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.onSurface,
+                    color = accent,
                 )
-                if (applying) {
-                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = applying,
+                    enter = fadeIn(),
+                    exit = fadeOut(),
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(24.dp), color = accent)
                 }
             }
 
@@ -447,8 +518,9 @@ private fun HookMaskEditor(
             ) {
                 Button(
                     onClick = { onMaskChange(0xFFFFFFFFu) },
-                    enabled = editable && !applying && effectiveMask != 0xFFFFFFFFu,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    enabled = editable && effectiveMask != 0xFFFFFFFFu,
+                    colors = ButtonDefaults.buttonColors(containerColor = accent, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.ToggleOn, contentDescription = null)
@@ -458,8 +530,9 @@ private fun HookMaskEditor(
 
                 OutlinedButton(
                     onClick = { onMaskChange(0x0000u) },
-                    enabled = editable && !applying && effectiveMask != 0x0000u,
+                    enabled = editable && effectiveMask != 0x0000u,
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
+                    shape = RoundedCornerShape(12.dp),
                     modifier = Modifier.weight(1f),
                 ) {
                     Icon(Icons.Default.ToggleOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
@@ -476,12 +549,12 @@ private fun HookMaskEditor(
         for (hook in hooks) {
             val isEnabled = hook.allIndices.all { idx -> (effectiveMask and (1u shl idx)) != 0u }
             ElevatedCard(
-                shape = RoundedCornerShape(8.dp),
+                shape = RoundedCornerShape(12.dp),
                 colors =
                     CardDefaults.elevatedCardColors(
                         containerColor =
                             if (isEnabled) {
-                                MaterialTheme.colorScheme.surface
+                                accent.copy(alpha = 0.08f)
                             } else {
                                 MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
                             },
@@ -497,6 +570,12 @@ private fun HookMaskEditor(
                             SuggestionChip(
                                 onClick = {},
                                 label = { Text(stringResource(R.string.hook_testing_idx_format, hook.index)) },
+                                colors =
+                                    SuggestionChipDefaults.suggestionChipColors(
+                                        containerColor = accent.copy(alpha = if (isEnabled) 0.15f else 0.06f),
+                                        labelColor = if (isEnabled) accent else accent.copy(alpha = 0.5f),
+                                    ),
+                                border = null,
                                 modifier = Modifier.padding(end = 8.dp),
                             )
                             Text(
@@ -523,7 +602,7 @@ private fun HookMaskEditor(
 
                     Switch(
                         checked = isEnabled,
-                        enabled = editable && !applying,
+                        enabled = editable,
                         onCheckedChange = { checked ->
                             var newMask = effectiveMask
                             for (idx in hook.allIndices) {
@@ -536,6 +615,12 @@ private fun HookMaskEditor(
                             }
                             onMaskChange(newMask)
                         },
+                        colors =
+                            SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = accent,
+                                checkedBorderColor = accent,
+                            ),
                     )
                 }
             }
@@ -549,84 +634,45 @@ private fun DbPortRule.toPortRule() =
 private fun DbMassPortRule.toPortRule() =
     PortRule(id = id.toString(), startPort = startPort, endPort = endPort, protocol = protocol, label = label, enabled = enabled)
 
+/** Small tinted icon+text banner — shared by the port-hiding-off hint and the rule dialog's warnings. */
+@Composable
+private fun InlineHintBanner(
+    text: String,
+    icon: ImageVector,
+    tint: Color,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        colors = CardDefaults.cardColors(containerColor = tint.copy(alpha = 0.12f)),
+        shape = RoundedCornerShape(12.dp),
+        modifier = modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(icon, contentDescription = null, tint = tint, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(10.dp))
+            Text(
+                text = text,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+        }
+    }
+}
+
+/** Purely presentational — rule data/mutations live in [AppSettingsScreen] so the rule editor can overlay the whole tab bar. */
 @Composable
 private fun PortsTab(
     app: AppEntry?,
-    showAddDialog: Boolean,
-    onDismissAddDialog: () -> Unit,
+    rules: List<PortRule>,
+    massRules: List<PortRule>,
+    loaded: Boolean,
+    onEditRule: (PortRule) -> Unit,
+    onDeleteRule: (PortRule) -> Unit,
+    onToggleRule: (PortRule) -> Unit,
 ) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var rules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
-    var massRules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
-    var loaded by remember { mutableStateOf(false) }
-    var editingRule by remember { mutableStateOf<PortRule?>(null) }
-
-    suspend fun refresh() {
-        val db = AppDatabase.getInstance(context)
-        val mass = db.massPortRuleDao().getMassRulesSync().map { it.toPortRule() }
-        massRules = mass
-        rules =
-            if (app != null) {
-                db.portRuleDao().getRulesForAppSync(app.packageName, app.userId).map { it.toPortRule() }
-            } else {
-                mass
-            }
-        loaded = true
-    }
-
-    LaunchedEffect(app?.packageName, app?.userId) {
-        withContext(Dispatchers.IO) { refresh() }
-    }
-
-    fun mutate(action: suspend (AppDatabase) -> Unit) {
-        scope.launch(Dispatchers.IO) {
-            val db = AppDatabase.getInstance(context)
-            action(db)
-            DatabaseSync.sync(context)
-            refresh()
-        }
-    }
-
-    fun saveRule(newRule: PortRule) {
-        mutate { db ->
-            if (app != null) {
-                db.portRuleDao().insertRule(
-                    DbPortRule(
-                        id = newRule.id.toLongOrNull() ?: 0L,
-                        packageName = app.packageName,
-                        userId = app.userId,
-                        startPort = newRule.startPort,
-                        endPort = newRule.endPort,
-                        protocol = newRule.protocol,
-                        label = newRule.label,
-                        enabled = newRule.enabled,
-                    ),
-                )
-            } else {
-                db.massPortRuleDao().insertMassRule(
-                    DbMassPortRule(
-                        id = newRule.id.toLongOrNull() ?: 0L,
-                        startPort = newRule.startPort,
-                        endPort = newRule.endPort,
-                        protocol = newRule.protocol,
-                        label = newRule.label,
-                        enabled = newRule.enabled,
-                    ),
-                )
-            }
-        }
-    }
-
-    fun deleteRule(rule: PortRule) {
-        val id = rule.id.toLongOrNull() ?: return
-        mutate { db -> if (app != null) db.portRuleDao().deleteRule(id) else db.massPortRuleDao().deleteMassRule(id) }
-    }
-
-    fun toggleRule(rule: PortRule) {
-        saveRule(rule.copy(enabled = !rule.enabled))
-    }
-
     val showEmpty = rules.isEmpty() && (app == null || massRules.isEmpty())
 
     Box(modifier = Modifier.fillMaxSize()) {
@@ -637,18 +683,12 @@ private fun PortsTab(
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
                 if (app != null && !app.portHiding) {
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp, vertical = 12.dp),
-                    ) {
-                        Text(
-                            text = stringResource(R.string.app_settings_port_hiding_off_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(12.dp),
-                        )
-                    }
+                    InlineHintBanner(
+                        text = stringResource(R.string.app_settings_port_hiding_off_hint),
+                        icon = Icons.Default.WarningAmber,
+                        tint = TelOrange,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                    )
                 }
 
                 if (showEmpty) {
@@ -658,7 +698,7 @@ private fun PortsTab(
                                 Icons.Default.Dns,
                                 contentDescription = null,
                                 modifier = Modifier.size(64.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f),
+                                tint = TelPink.copy(alpha = 0.4f),
                             )
                             Spacer(Modifier.height(16.dp))
                             Text(
@@ -673,29 +713,12 @@ private fun PortsTab(
                         app = app,
                         rules = rules,
                         massRules = massRules,
-                        onEdit = { editingRule = it },
-                        onDelete = ::deleteRule,
-                        onToggle = ::toggleRule,
+                        onEdit = onEditRule,
+                        onDelete = onDeleteRule,
+                        onToggle = onToggleRule,
                     )
                 }
             }
-        }
-
-        if (showAddDialog || editingRule != null) {
-            PortRuleDialog(
-                initialRule = editingRule,
-                existingRules = rules,
-                massRules = if (app != null) massRules else emptyList(),
-                onDismiss = {
-                    onDismissAddDialog()
-                    editingRule = null
-                },
-                onConfirm = { newRule ->
-                    saveRule(newRule)
-                    onDismissAddDialog()
-                    editingRule = null
-                },
-            )
         }
     }
 }
@@ -720,7 +743,7 @@ private fun LazyColumnPortRules(
                     stringResource(R.string.ports_mass_rules_title),
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
+                    color = MaterialTheme.colorScheme.secondary,
                     modifier = Modifier.padding(bottom = 8.dp),
                 )
             }
@@ -763,6 +786,7 @@ private fun PortRuleCard(
     onDelete: () -> Unit,
     onToggle: () -> Unit,
 ) {
+    val accent = if (isReadOnly) MaterialTheme.colorScheme.secondary else TelPink
     ElevatedCard(
         onClick = if (isReadOnly) ({}) else onEdit,
         shape = RoundedCornerShape(12.dp),
@@ -772,7 +796,7 @@ private fun PortRuleCard(
                     if (isReadOnly) {
                         MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f)
                     } else {
-                        MaterialTheme.colorScheme.surfaceVariant
+                        TelPink.copy(alpha = 0.08f)
                     },
             ),
     ) {
@@ -780,13 +804,15 @@ private fun PortRuleCard(
             modifier = Modifier.padding(16.dp).fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            SettingsRowIcon(icon = Icons.Default.Dns, tint = accent)
+            Spacer(Modifier.width(12.dp))
             Column(modifier = Modifier.weight(1f)) {
                 if (rule.label.isNotEmpty()) {
                     Text(
                         text = rule.label,
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold,
-                        color = if (isReadOnly) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                        color = accent,
                     )
                 }
                 Text(
@@ -808,11 +834,20 @@ private fun PortRuleCard(
                 Text(
                     text = stringResource(R.string.port_rule_protocol_format, protoLabel),
                     style = MaterialTheme.typography.labelSmall,
-                    color = if (isReadOnly) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.primary,
+                    color = accent,
                 )
             }
             if (!isReadOnly) {
-                Switch(checked = rule.enabled, onCheckedChange = { onToggle() })
+                Switch(
+                    checked = rule.enabled,
+                    onCheckedChange = { onToggle() },
+                    colors =
+                        SwitchDefaults.colors(
+                            checkedThumbColor = Color.White,
+                            checkedTrackColor = accent,
+                            checkedBorderColor = accent,
+                        ),
+                )
                 Spacer(Modifier.width(8.dp))
                 IconButton(onClick = onDelete) {
                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
@@ -831,11 +866,11 @@ private fun PortRuleCard(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun PortRuleDialog(
-    initialRule: PortRule? = null,
+private fun PortRuleScreen(
+    initialRule: PortRule?,
     existingRules: List<PortRule>,
     massRules: List<PortRule>,
-    onDismiss: () -> Unit,
+    onBack: () -> Unit,
     onConfirm: (PortRule) -> Unit,
 ) {
     var label by remember { mutableStateOf(initialRule?.label ?: "") }
@@ -843,172 +878,206 @@ private fun PortRuleDialog(
     var endPort by remember { mutableStateOf(initialRule?.endPort?.toString() ?: "") }
     var protocol by remember { mutableStateOf(initialRule?.protocol ?: PortProtocol.BOTH) }
 
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            shape = RoundedCornerShape(28.dp),
-            tonalElevation = 6.dp,
-            color = MaterialTheme.colorScheme.surface,
-            modifier = Modifier.fillMaxWidth().padding(16.dp),
-        ) {
-            Column(
-                modifier = Modifier.padding(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp),
-            ) {
-                Text(
-                    text =
-                        if (initialRule ==
-                            null
-                        ) {
+    val fieldColors =
+        OutlinedTextFieldDefaults.colors(
+            focusedBorderColor = TelPink,
+            focusedLabelColor = TelPink,
+            cursorColor = TelPink,
+        )
+
+    val currentRule =
+        PortRule(
+            id = initialRule?.id ?: "",
+            startPort = startPort.toIntOrNull() ?: (endPort.toIntOrNull() ?: 1),
+            endPort = endPort.toIntOrNull() ?: (startPort.toIntOrNull() ?: 65535),
+            protocol = protocol,
+            label = label,
+            enabled = true,
+        )
+
+    val violationLocal = validateRule(currentRule, existingRules)
+    val violationMass = validateRule(currentRule, massRules)
+    val violation = if (violationMass.type != RuleViolationType.NONE) violationMass else violationLocal
+
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        if (initialRule == null) {
                             stringResource(R.string.ports_new_rule_title)
                         } else {
                             stringResource(R.string.ports_edit_rule_title)
                         },
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-
-                OutlinedTextField(
-                    value = label,
-                    onValueChange = { label = it },
-                    label = { Text(stringResource(R.string.label_optional)) },
-                    placeholder = { Text(stringResource(R.string.ports_label_placeholder)) },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    OutlinedTextField(
-                        value = startPort,
-                        onValueChange = { if (it.length <= 5) startPort = it.filter { c -> c.isDigit() } },
-                        label = { Text(stringResource(R.string.port_start)) },
-                        placeholder = { Text("1") },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f),
                     )
-                    OutlinedTextField(
-                        value = endPort,
-                        onValueChange = { if (it.length <= 5) endPort = it.filter { c -> c.isDigit() } },
-                        label = { Text(stringResource(R.string.port_end)) },
-                        placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-
-                Text(
-                    stringResource(R.string.ports_default_range_hint),
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
-                )
-
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(stringResource(R.string.protocol), style = MaterialTheme.typography.labelMedium)
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        PortProtocol.values().forEachIndexed { index, p ->
-                            val pLabel =
-                                when (p) {
-                                    PortProtocol.TCP -> "TCP"
-                                    PortProtocol.UDP -> "UDP"
-                                    PortProtocol.BOTH -> stringResource(R.string.protocol_both)
-                                }
-                            SegmentedButton(
-                                selected = protocol == p,
-                                onClick = { protocol = p },
-                                shape = SegmentedButtonDefaults.itemShape(index = index, count = PortProtocol.values().size),
-                            ) {
-                                Text(pLabel, fontSize = 10.sp)
-                            }
-                        }
-                    }
-                }
-
-                val currentRule =
-                    PortRule(
-                        id = initialRule?.id ?: "",
-                        startPort = startPort.toIntOrNull() ?: (endPort.toIntOrNull() ?: 1),
-                        endPort = endPort.toIntOrNull() ?: (startPort.toIntOrNull() ?: 65535),
-                        protocol = protocol,
-                        label = label,
-                        enabled = true,
-                    )
-
-                val violationLocal = validateRule(currentRule, existingRules)
-                val violationMass = validateRule(currentRule, massRules)
-                val violation = if (violationMass.type != RuleViolationType.NONE) violationMass else violationLocal
-
-                if (violation.type != RuleViolationType.NONE) {
-                    val msg =
-                        when (violation.type) {
-                            RuleViolationType.DUPLICATE -> {
-                                stringResource(R.string.err_rule_exists)
-                            }
-
-                            RuleViolationType.REDUNDANT -> {
-                                val target = violation.coveringRule
-                                if (target?.label?.isNotEmpty() == true) {
-                                    stringResource(R.string.err_rule_redundant, target.label)
-                                } else {
-                                    stringResource(R.string.err_rule_redundant, "${target?.startPort}-${target?.endPort}")
-                                }
-                            }
-
-                            else -> {
-                                ""
-                            }
-                        }
-                    Text(
-                        text = msg,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.error,
-                        modifier = Modifier.padding(top = 4.dp),
-                    )
-                } else {
-                    val rulesToRemove =
-                        existingRules.filter { e ->
-                            e.id != initialRule?.id &&
-                                currentRule.startPort <= e.startPort && currentRule.endPort >= e.endPort &&
-                                (protocol == PortProtocol.BOTH || protocol == e.protocol)
-                        }
-                    if (rulesToRemove.isNotEmpty()) {
-                        Text(
-                            text = stringResource(R.string.ports_redundant_rules_removed_warning, rulesToRemove.size),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 4.dp),
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.End,
-                    verticalAlignment = Alignment.CenterVertically,
+                },
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                        titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    ),
+            )
+        },
+        bottomBar = {
+            Row(
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .navigationBarsPadding()
+                        .padding(horizontal = 20.dp, vertical = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                OutlinedButton(
+                    onClick = onBack,
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
                 ) {
-                    TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) }
-                    Spacer(Modifier.width(8.dp))
-                    Button(
-                        enabled = violation.type == RuleViolationType.NONE,
-                        onClick = {
-                            onConfirm(
-                                currentRule.copy(
-                                    id =
-                                        initialRule?.id ?: java.util.UUID
-                                            .randomUUID()
-                                            .toString(),
-                                    enabled = initialRule?.enabled ?: true,
-                                ),
-                            )
-                        },
-                        shape = RoundedCornerShape(12.dp),
-                    ) {
-                        Text(if (initialRule == null) stringResource(R.string.add_rule) else stringResource(R.string.btn_save))
-                    }
+                    Text(stringResource(R.string.cancel))
+                }
+                Button(
+                    enabled = violation.type == RuleViolationType.NONE,
+                    onClick = {
+                        onConfirm(
+                            currentRule.copy(
+                                id =
+                                    initialRule?.id ?: java.util.UUID
+                                        .randomUUID()
+                                        .toString(),
+                                enabled = initialRule?.enabled ?: true,
+                            ),
+                        )
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TelPink, contentColor = Color.White),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier.weight(1f),
+                ) {
+                    Text(if (initialRule == null) stringResource(R.string.add_rule) else stringResource(R.string.btn_save))
                 }
             }
+        },
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+    ) { innerPadding ->
+        Column(
+            modifier =
+                Modifier
+                    .padding(top = innerPadding.calculateTopPadding())
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
+                    .verticalScroll(rememberScrollState()),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Spacer(Modifier.height(4.dp))
+
+            OutlinedTextField(
+                value = label,
+                onValueChange = { label = it },
+                label = { Text(stringResource(R.string.label_optional)) },
+                placeholder = { Text(stringResource(R.string.ports_label_placeholder)) },
+                singleLine = true,
+                shape = RoundedCornerShape(12.dp),
+                colors = fieldColors,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = startPort,
+                    onValueChange = { if (it.length <= 5) startPort = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.port_start)) },
+                    placeholder = { Text("1") },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.weight(1f),
+                )
+                OutlinedTextField(
+                    value = endPort,
+                    onValueChange = { if (it.length <= 5) endPort = it.filter { c -> c.isDigit() } },
+                    label = { Text(stringResource(R.string.port_end)) },
+                    placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = fieldColors,
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            Text(
+                stringResource(R.string.ports_default_range_hint),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
+            )
+
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    stringResource(R.string.protocol),
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.Bold,
+                )
+                val protocolLabels =
+                    mapOf(
+                        PortProtocol.TCP to "TCP",
+                        PortProtocol.UDP to "UDP",
+                        PortProtocol.BOTH to stringResource(R.string.protocol_both),
+                    )
+                PillTabSelector(
+                    tabs =
+                        PortProtocol.values().map { p ->
+                            PillTab(icon = null, label = protocolLabels.getValue(p), accent = TelPink)
+                        },
+                    selectedIndex = PortProtocol.values().indexOf(protocol),
+                    onSelect = { index -> protocol = PortProtocol.values()[index] },
+                    modifier = Modifier.fillMaxWidth(),
+                    height = 44.dp,
+                )
+            }
+
+            if (violation.type != RuleViolationType.NONE) {
+                val msg =
+                    when (violation.type) {
+                        RuleViolationType.DUPLICATE -> {
+                            stringResource(R.string.err_rule_exists)
+                        }
+
+                        RuleViolationType.REDUNDANT -> {
+                            val target = violation.coveringRule
+                            if (target?.label?.isNotEmpty() == true) {
+                                stringResource(R.string.err_rule_redundant, target.label)
+                            } else {
+                                stringResource(R.string.err_rule_redundant, "${target?.startPort}-${target?.endPort}")
+                            }
+                        }
+
+                        else -> {
+                            ""
+                        }
+                    }
+                InlineHintBanner(text = msg, icon = Icons.Filled.ErrorOutline, tint = MaterialTheme.colorScheme.error)
+            } else {
+                val rulesToRemove =
+                    existingRules.filter { e ->
+                        e.id != initialRule?.id &&
+                            currentRule.startPort <= e.startPort && currentRule.endPort >= e.endPort &&
+                            (protocol == PortProtocol.BOTH || protocol == e.protocol)
+                    }
+                if (rulesToRemove.isNotEmpty()) {
+                    InlineHintBanner(
+                        text = stringResource(R.string.ports_redundant_rules_removed_warning, rulesToRemove.size),
+                        icon = Icons.Filled.Info,
+                        tint = TelPink,
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
         }
     }
 }
