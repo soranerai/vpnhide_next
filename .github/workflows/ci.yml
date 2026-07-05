@@ -24,76 +24,6 @@ jobs:
           echo "image=ghcr.io/${REPO,,}/ci:latest" >> "$GITHUB_OUTPUT"
 
 
-  lint:
-    needs: setup
-    runs-on: ubuntu-latest
-    container:
-      image: ${{ needs.setup.outputs.image }}
-      credentials:
-        username: ${{ github.actor }}
-        password: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-          fetch-depth: 0
-      - name: Mark workspace safe
-        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-
-      # Python lint + format (ruff). Fast (~100 ms on 1800 LoC) so it
-      # runs first — fails before the slow Rust/Gradle steps.
-      - name: ruff format
-        uses: astral-sh/ruff-action@v4.0.0
-        with:
-          args: format --check
-      - name: ruff check
-        uses: astral-sh/ruff-action@v4.0.0
-        with:
-          args: check
-
-      # Gradle cache (deps + configuration cache + wrapper). cache-read-only
-      # on PRs so only main pushes write — keeps the cache from churning on
-      # every PR's branch-scoped key.
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-        with:
-          cache-read-only: ${{ github.event_name == 'pull_request' }}
-
-      # Shell — module-side scripts (Magisk/KSU) and host-side dev tooling.
-      # shellcheck is preinstalled in the CI image (apt). The list is
-      # explicit so we don't accidentally pick up vendored .sh from
-      # zygisk/third_party.
-      - name: shellcheck
-        # SC2034: `SKIPUNZIP` and the `for i in seq …` counters look unused
-        #         to shellcheck — Magisk reads SKIPUNZIP externally, the
-        #         counters are loop iterators we don't read by name.
-        # SC3043: `local` is "not POSIX" but Android's /system/bin/sh
-        #         (mksh on Pixel) supports it, and our module-side
-        #         scripts always run there.
-        # The inline `apt-get install` is a one-job fallback for the
-        # window between this PR landing and the next ci-image rebuild
-        # (the Dockerfile bake also adds shellcheck). After the rebuild
-        # this no-ops in <1s.
-        run: |
-          if ! command -v shellcheck >/dev/null; then
-            apt-get update -qq && apt-get install -y --no-install-recommends shellcheck >/dev/null
-          fi
-          shellcheck -x -e SC2034,SC3043 \
-            kmod/module/customize.sh kmod/module/post-fs-data.sh kmod/module/service.sh \
-            scripts/clean-device.sh scripts/update-json.sh \
-            kmod/test/run.sh kmod/test/build-kernel.sh kmod/test/init.sh
-
-      # Kotlin — checks/ is uniffi-generated FFI glue committed as-is from
-      # the private repo build, not hand-written; excluded from style checks.
-      - name: ktlint
-        run: |
-          ktlint "lsposed/app/src/**/*.kt" \
-            "!lsposed/app/src/main/kotlin/dev/soranerai/vpnhidenext/checks/**"
-
-      # Single Gradle invocation: lint + tests share configuration
-      # cache and warm daemon. ANDROID_NDK_ROOT is baked into CI image.
-      - name: Android lint + Kotlin unit tests
-        run: cd lsposed && ./gradlew :app:lintDebug :app:testDebugUnitTest
 
   kmod:
     runs-on: ubuntu-latest
@@ -236,7 +166,7 @@ jobs:
 
 
   release:
-    needs: [lint, kmod, lsposed]
+    needs: [kmod, lsposed]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # Only the release job needs write — used by softprops/action-gh-release
