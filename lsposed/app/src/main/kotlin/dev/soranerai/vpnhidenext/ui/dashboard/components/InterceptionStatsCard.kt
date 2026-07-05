@@ -169,7 +169,7 @@ private fun InterceptionStatsCardContent(
                 }
             }
 
-            if (summary.topHooks.isNotEmpty()) {
+            if (summary.topFrameworkHooks.isNotEmpty() || summary.topNativeHooks.isNotEmpty()) {
                 Spacer(Modifier.height(16.dp))
                 HorizontalDivider(color = contentColor.copy(alpha = 0.15f))
                 Spacer(Modifier.height(10.dp))
@@ -179,23 +179,99 @@ private fun InterceptionStatsCardContent(
                     fontWeight = FontWeight.Bold,
                     color = contentColor,
                 )
-                Spacer(Modifier.height(6.dp))
-                for (hook in summary.topHooks) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                    ) {
+                Spacer(Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    // Framework Breakdown Column (Left)
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = hook.name,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = contentColor.copy(alpha = 0.85f),
-                        )
-                        Text(
-                            text = "${hook.count}",
+                            text = stringResource(R.string.dashboard_summary_lsposed),
                             style = MaterialTheme.typography.bodySmall,
                             fontWeight = FontWeight.Bold,
-                            color = contentColor,
+                            color = contentColor.copy(alpha = 0.8f),
                         )
+                        Spacer(Modifier.height(4.dp))
+                        if (summary.topFrameworkHooks.isEmpty()) {
+                            Text(
+                                text = "—",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = contentColor.copy(alpha = 0.5f),
+                            )
+                        } else {
+                            for (hook in summary.topFrameworkHooks) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = hook.name,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = contentColor.copy(alpha = 0.85f),
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "${hook.count}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = contentColor,
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Native Breakdown Column (Right)
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = stringResource(R.string.dashboard_summary_native),
+                            style = MaterialTheme.typography.bodySmall,
+                            fontWeight = FontWeight.Bold,
+                            color = contentColor.copy(alpha = 0.8f),
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        if (summary.topNativeHooks.isEmpty()) {
+                            Text(
+                                text = "—",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = contentColor.copy(alpha = 0.5f),
+                            )
+                        } else {
+                            for (hook in summary.topNativeHooks) {
+                                val vectorLabel =
+                                    when (hook.name) {
+                                        "ioctl" -> stringResource(R.string.vector_label_ioctl)
+                                        "netlink" -> stringResource(R.string.vector_label_netlink)
+                                        "proc" -> stringResource(R.string.vector_label_proc)
+                                        "sockopt" -> stringResource(R.string.vector_label_sockopt)
+                                        "connect" -> stringResource(R.string.vector_label_connect)
+                                        "getname" -> stringResource(R.string.vector_label_getname)
+                                        else -> hook.name
+                                    }
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(
+                                        text = vectorLabel,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = contentColor.copy(alpha = 0.85f),
+                                        modifier = Modifier.weight(1f),
+                                        maxLines = 1,
+                                    )
+                                    Spacer(Modifier.width(4.dp))
+                                    Text(
+                                        text = "${hook.count}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        fontWeight = FontWeight.Bold,
+                                        color = contentColor,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }

@@ -120,7 +120,8 @@ data class InterceptStatsSummary(
     val nativeTotal: Int,
     val lsposedTotal: Int,
     val portsTotal: Int,
-    val topHooks: List<HookCount>,
+    val topFrameworkHooks: List<HookCount>,
+    val topNativeHooks: List<HookCount>,
 )
 
 fun List<AppInterceptStats>.summarize(topHooksLimit: Int = 5): InterceptStatsSummary {
@@ -128,13 +129,20 @@ fun List<AppInterceptStats>.summarize(topHooksLimit: Int = 5): InterceptStatsSum
     val nativeTotal = sumOf { it.nativeTotal }
     val lsposedTotal = sumOf { it.frameworkTotal }
 
-    val hookCounts = mutableMapOf<String, Int>()
+    val frameworkCounts = mutableMapOf<String, Int>()
+    val nativeCounts = mutableMapOf<String, Int>()
     forEach { app ->
-        app.frameworkBreakdown.forEach { (hook, count) -> hookCounts[hook] = (hookCounts[hook] ?: 0) + count }
-        app.nativeBreakdown.forEach { (hook, count) -> hookCounts[hook] = (hookCounts[hook] ?: 0) + count }
+        app.frameworkBreakdown.forEach { (hook, count) -> frameworkCounts[hook] = (frameworkCounts[hook] ?: 0) + count }
+        app.nativeBreakdown.forEach { (hook, count) -> nativeCounts[hook] = (nativeCounts[hook] ?: 0) + count }
     }
-    val topHooks =
-        hookCounts.entries
+    val topFrameworkHooks =
+        frameworkCounts.entries
+            .sortedByDescending { it.value }
+            .take(topHooksLimit)
+            .map { HookCount(it.key, it.value) }
+
+    val topNativeHooks =
+        nativeCounts.entries
             .sortedByDescending { it.value }
             .take(topHooksLimit)
             .map { HookCount(it.key, it.value) }
@@ -144,7 +152,8 @@ fun List<AppInterceptStats>.summarize(topHooksLimit: Int = 5): InterceptStatsSum
         nativeTotal = nativeTotal,
         lsposedTotal = lsposedTotal,
         portsTotal = portsTotal,
-        topHooks = topHooks,
+        topFrameworkHooks = topFrameworkHooks,
+        topNativeHooks = topNativeHooks,
     )
 }
 
