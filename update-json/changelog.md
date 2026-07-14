@@ -1,3 +1,8 @@
+## v2.1.3
+
+### Fixed
+- fixed path hiding
+
 ## v2.1.2
 
 ## v2.1.1
@@ -81,8 +86,3 @@
 ### Removed
 - remove check_arp_timeout_illusion and check_broadcast_blackhole — ARP timeout oracle is conceptually identical to the existing NDP Timeout Oracle in check_ipv6_link_local_bruteforce (both test IFF_NOARP via L2 neighbor resolution absence); broadcast blackhole test (SO_BROADCAST to 255.255.255.255) is covered by the same ARPHRD-based L2 detection
 - Removed the 'VPN not active' prompt and its associated logic from the diagnostics and dashboard screens
-
-## v1.12.1
-
-### Changed
-- Optimize JSON configuration storage to only persist apps with active protections
