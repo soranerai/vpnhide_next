@@ -70,7 +70,7 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
     private const val SENTINEL = "===VPNHIDE-TARGETS-BOUNDARY==="
     private const val END = "===VPNHIDE-TARGETS-END==="
 
-    private val BATCH_SCRIPT =
+    private val BATCH_SCRIPT get() =
         """
         echo "$SENTINEL KMOD_MODULE_DIR"
         [ -d $KMOD_MODULE_DIR ] && echo 1 || echo 0

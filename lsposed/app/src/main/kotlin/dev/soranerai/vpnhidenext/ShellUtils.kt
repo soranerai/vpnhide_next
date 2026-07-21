@@ -14,12 +14,12 @@ private const val TAG = "VpnHide"
 
 internal const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
 
-internal const val KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
+internal var KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
 internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt"
 internal const val PORTS_RULES_FILE = "/data/adb/vpnhide_ports/rules.txt"
 internal const val IFACE_PREFIXES_FILE = "/data/adb/vpnhide_kmod_interfaces.txt"
 internal const val DEV_NODE = "/dev/vpnhide_ctrl"
-internal const val KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
+internal var KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
 internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
 internal const val KMOD_LOAD_DMESG_FILE = "/data/adb/vpnhide_kmod/load_dmesg"
 
@@ -39,11 +39,47 @@ internal const val SU_DEFAULT_TIMEOUT_SEC: Long = 10
  * `waitFor(timeout)` is never even reached. The threads exit naturally
  * once the child (or destroyForcibly) closes its pipes.
  */
+private var pathsResolved = false
+
+@Synchronized
+internal fun resolvePathsIfNeeded() {
+    if (pathsResolved) return
+    val script = """
+        for d in /data/adb/modules/vpnhide_*; do
+          if [ -d "${'$'}d" ]; then
+            echo "dir=${'$'}d"
+            if [ -f "${'$'}d/vpnhide-ctl" ]; then
+              echo "ctl=${'$'}d/vpnhide-ctl"
+            fi
+            break
+          fi
+        done
+    """.trimIndent()
+    try {
+        val (_, out) = suExec(script, skipPathResolve = true)
+        out.lines().forEach { line ->
+            if (line.startsWith("dir=")) {
+                KMOD_MODULE_DIR = line.removePrefix("dir=").trim()
+            }
+            if (line.startsWith("ctl=")) {
+                KMOD_CTL = line.removePrefix("ctl=").trim()
+            }
+        }
+        pathsResolved = true
+    } catch (e: Exception) {
+        VpnHideLog.e("VpnHide", "failed to resolve module paths: ${e.message}")
+    }
+}
+
 internal fun suExec(
     cmd: String,
     timeoutSec: Long = SU_DEFAULT_TIMEOUT_SEC,
+    skipPathResolve: Boolean = false,
 ): Pair<Int, String> =
     try {
+        if (!skipPathResolve) {
+            resolvePathsIfNeeded()
+        }
         val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
         try {
             val stdoutHolder = AtomicReference("")
