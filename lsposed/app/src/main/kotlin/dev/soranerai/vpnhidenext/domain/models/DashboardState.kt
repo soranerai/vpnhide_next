@@ -9,6 +9,7 @@ sealed interface ModuleState {
         val targetCount: Int,
         val gkiVariant: String? = null,
         val brokenReason: KmodBrokenReason? = null,
+        val isKmodType: Boolean = true,
     ) : ModuleState
 }
 

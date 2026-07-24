@@ -89,6 +89,7 @@ class DashboardRepository(
             echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
             echo "load_dmesg=${'$'}(cat $KMOD_LOAD_DMESG_FILE 2>/dev/null | tail -n 50 | base64 | tr -d '\n')"
             [ -c $DEV_NODE ] && echo "lsmod=1" || echo "lsmod=0"
+            grep -q "vpnhide" /proc/modules 2>/dev/null && echo "is_kmod=1" || echo "is_kmod=0"
             
             # LSPosed framework
             LSP_INSTALLED=0
@@ -251,25 +252,29 @@ class DashboardRepository(
 
             // kmod
             val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))
-            val kmodActive = kmodProp.installed && snapshot.get("lsmod") == "1"
+            val hasKmodDevice = snapshot.get("lsmod") == "1"
+            val isKmodType = snapshot.get("is_kmod") == "1"
+            val isKmodInstalled = kmodProp.installed || hasKmodDevice
+            val kmodActive = hasKmodDevice
             val kmodTargetCount =
-                if (kmodProp.installed) {
+                if (isKmodInstalled) {
                     appsSync.count { it.kmod && it.packageName != selfPkg }
                 } else {
                     0
                 }
             val kmodRaw: ModuleState =
-                if (kmodProp.installed) {
+                if (isKmodInstalled) {
                     ModuleState.Installed(
                         version = kmodProp.version,
                         active = kmodActive,
                         targetCount = kmodTargetCount,
                         gkiVariant = kmodProp.gkiVariant,
+                        isKmodType = isKmodType,
                     )
                 } else {
                     ModuleState.NotInstalled
                 }
-            VpnHideLog.i(TAG, "kmodRaw: $kmodRaw")
+            VpnHideLog.i(TAG, "kmodRaw: $kmodRaw (isKmodType=$isKmodType)")
 
             val kernelRaw = snapshot.get("uname")
             val kernelRecommendation =

@@ -202,6 +202,7 @@ fun ModuleCard(
                 containerColor = containerColor,
                 contentColor = contentColor,
                 showLoading = active && nativeResult is NativeResult.Checking,
+                isKmod = state.isKmodType,
                 onClick = onOpenDiagnosticsDetail,
             )
         }
@@ -347,6 +348,7 @@ fun ModuleCardShell(
     containerColor: Color,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     showLoading: Boolean = false,
+    isKmod: Boolean? = null,
     onClick: (() -> Unit)? = null,
 ) {
     ElevatedCard(
@@ -400,20 +402,42 @@ fun ModuleCardShell(
                 lineHeight = MaterialTheme.typography.bodySmall.fontSize * 1.2f,
             )
 
-            if (version != null) {
+            if (version != null || isKmod != null) {
                 Spacer(Modifier.height(6.dp))
-                Text(
-                    text = "v$version",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontWeight = FontWeight.Medium,
-                    color = contentColor,
-                    modifier =
-                        Modifier
-                            .background(
-                                color = contentColor.copy(alpha = 0.1f),
-                                shape = RoundedCornerShape(4.dp),
-                            ).padding(horizontal = 6.dp, vertical = 2.dp),
-                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    if (version != null) {
+                        Text(
+                            text = "v$version",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = contentColor,
+                            modifier =
+                                Modifier
+                                    .background(
+                                        color = contentColor.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(4.dp),
+                                    ).padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                    if (isKmod != null) {
+                        val modeText = if (isKmod) "kmod" else "built-in"
+                        Text(
+                            text = modeText,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = contentColor,
+                            modifier =
+                                Modifier
+                                    .background(
+                                        color = contentColor.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(4.dp),
+                                    ).padding(horizontal = 6.dp, vertical = 2.dp),
+                        )
+                    }
+                }
             }
         }
     }

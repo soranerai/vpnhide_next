@@ -175,7 +175,18 @@ private fun MainScreen(
     var showSettings by remember { mutableStateOf(false) }
     var showDiagnosticsDetail by remember { mutableStateOf(false) }
     var diagnosticsScrollToBottom by remember { mutableStateOf(false) }
+    var showKpatchAnnouncement by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
+
+    val prefs = remember { context.getSharedPreferences("vpnhide_prefs", android.content.Context.MODE_PRIVATE) }
+    LaunchedEffect(startup.isKmodType) {
+        if (startup.isKmodType) {
+            val shown = prefs.getBoolean("kpatch_announcement_shown_v2_2_0", false)
+            if (!shown) {
+                showKpatchAnnouncement = true
+            }
+        }
+    }
     val refreshRestart = selfNeedsRestart ?: false
     val searchFocusRequester = remember { FocusRequester() }
 
@@ -762,6 +773,23 @@ private fun MainScreen(
                 selfNeedsRestart = refreshRestart,
                 scrollToBottom = diagnosticsScrollToBottom,
                 onBack = { showDiagnosticsDetail = false },
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
+        PredictiveBackOverlay(
+            visible = showKpatchAnnouncement,
+            onBack = {
+                showKpatchAnnouncement = false
+                prefs.edit().putBoolean("kpatch_announcement_shown_v2_2_0", true).apply()
+            },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            KpatchAnnouncementScreen(
+                onDismiss = {
+                    showKpatchAnnouncement = false
+                    prefs.edit().putBoolean("kpatch_announcement_shown_v2_2_0", true).apply()
+                },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }

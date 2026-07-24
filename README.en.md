@@ -19,6 +19,15 @@
 > Stable operation on absolutely all devices, firmware, and kernel versions **is not guaranteed and cannot be guaranteed**.
 > In accordance with the MIT License, the software is provided "AS IS", without warranty of any kind. The author is not responsible for any malfunctions, bootloops, or kernel panics.
 
+> [!TIP]
+> **New Solution: Built-in Kernel Integration (monolithic / in-built)**
+> For absolute stealth, maximum stability, and zero overhead, a separate branch of the project has been developed with built-in integration. The hiding logic is compiled directly into the monolithic kernel at build time.
+> * **Zero Modular Overhead**: the hiding logic runs natively as part of the kernel code, completely eliminating modular latency and routing delays.
+> * **Absolute Stealth**: invulnerable to timing attacks on system calls (syscalls), making the presence of the hiding mechanisms completely undetectable.
+> * **Monolithic Stability**: compiled as a single monolithic unit with the kernel, it is permanent and does not depend on runtime hook failures or sync errors.
+> 
+> Pre-built kernels and source code are available in the [GKI_KernelSU_SUSFS](https://github.com/soranerai/GKI_KernelSU_SUSFS) repository.
+
 ---
 ### Project Information
 This is a fork of the [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide/) project. Like the original, it hides an active VPN from selected apps on three layers — LSPosed hooks in `system_server`, a native backend — LKM, and optional port blocking — but it was separated from upstream due to significant changes and a different philosophy.

@@ -51,7 +51,6 @@ import dev.soranerai.vpnhidenext.checks.checkTcpInfoMss
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
 import dev.soranerai.vpnhidenext.checks.checkTimestampingHw
 import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
-import dev.soranerai.vpnhidenext.checks.checkUdpQueuePressure
 import dev.soranerai.vpnhidenext.checks.checkUidRouteRulesLeak
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.generated.IfaceLists
@@ -116,7 +115,6 @@ private val NATIVE_CHECK_HOOK_BITS: Map<Int, IntArray> =
         R.string.check_udp_pmtu to intArrayOf(11), // HOOK_SETSOCKOPT (changes IP_MTU_DISCOVER→PMTUDISC_DONT)
         R.string.check_netlink_getneigh to intArrayOf(), // RTM_GETNEIGH not hooked; always runs
         R.string.check_proc_sys_net_conf to intArrayOf(18, 19, 20, 21, 22, 23, 24),
-        R.string.check_udp_queue_pressure to intArrayOf(25), // HOOK_UDP_SENDMSG
         R.string.check_gso_asymmetry to intArrayOf(11), // HOOK_SETSOCKOPT (zeroes UDP_SEGMENT to block GSO probe)
         R.string.check_ipv6_link_local_bruteforce to intArrayOf(28, 29), // HOOK_INET6_BIND_LL, HOOK_UDPV6_SENDMSG
         R.string.check_uid_route_rules_leak to intArrayOf(8), // HOOK_FIB_RULE_FILL (RTM_GETRULE)
@@ -124,7 +122,6 @@ private val NATIVE_CHECK_HOOK_BITS: Map<Int, IntArray> =
         R.string.check_qdisc_by_ifindex to intArrayOf(31), // HOOK_TC_FILL_QDISC
         R.string.check_timestamping_hw to intArrayOf(11), // HOOK_SETSOCKOPT (strips HW timestamp bits)
         R.string.check_rtm_getlink_trim_oracle to intArrayOf(2), // HOOK_RTNL_FILL
-        R.string.check_traffic_stats to intArrayOf(17), // HOOK_BPF (TrafficStats via BPF maps)
     )
 
 private fun isCheckSkipped(
@@ -178,7 +175,6 @@ private val NATIVE_CHECK_TIER: Map<Int, NativeCheckTier> =
         R.string.check_udp_pmtu to NativeCheckTier.ADVANCED,
         R.string.check_netlink_getneigh to NativeCheckTier.ADVANCED,
         R.string.check_proc_sys_net_conf to NativeCheckTier.CLASSIC,
-        R.string.check_udp_queue_pressure to NativeCheckTier.EXTREME,
         R.string.check_gso_asymmetry to NativeCheckTier.EXTREME,
         R.string.check_ipv6_link_local_bruteforce to NativeCheckTier.EXTREME,
         R.string.check_uid_route_rules_leak to NativeCheckTier.ADVANCED,
@@ -186,7 +182,6 @@ private val NATIVE_CHECK_TIER: Map<Int, NativeCheckTier> =
         R.string.check_qdisc_by_ifindex to NativeCheckTier.EXTREME,
         R.string.check_timestamping_hw to NativeCheckTier.EXTREME,
         R.string.check_rtm_getlink_trim_oracle to NativeCheckTier.EXTREME,
-        R.string.check_traffic_stats to NativeCheckTier.EXTREME,
     )
 
 /**
@@ -278,7 +273,6 @@ internal fun getPlaceholderResults(
             R.string.check_udp_pmtu,
             R.string.check_netlink_getneigh,
             R.string.check_proc_sys_net_conf,
-            R.string.check_udp_queue_pressure,
             R.string.check_gso_asymmetry,
             R.string.check_ipv6_link_local_bruteforce,
             R.string.check_uid_route_rules_leak,
@@ -286,7 +280,6 @@ internal fun getPlaceholderResults(
             R.string.check_qdisc_by_ifindex,
             R.string.check_timestamping_hw,
             R.string.check_rtm_getlink_trim_oracle,
-            R.string.check_traffic_stats,
         )
     val javaNames =
         listOf(
@@ -380,7 +373,6 @@ internal suspend fun runAllChecks(
                 skipOrRun(R.string.check_udp_pmtu) { checkUdpPmtu() },
                 skipOrRun(R.string.check_netlink_getneigh) { checkNetlinkGetneigh() },
                 skipOrRun(R.string.check_proc_sys_net_conf) { checkProcSysNetConf() },
-                skipOrRun(R.string.check_udp_queue_pressure) { checkUdpQueuePressure() },
                 skipOrRun(R.string.check_gso_asymmetry) { checkGsoAsymmetry() },
                 skipOrRun(R.string.check_ipv6_link_local_bruteforce) { checkIpv6LinkLocalBruteforce() },
                 skipOrRun(R.string.check_uid_route_rules_leak) { checkUidRouteRulesLeak() },
@@ -388,7 +380,6 @@ internal suspend fun runAllChecks(
                 skipOrRun(R.string.check_qdisc_by_ifindex) { checkQdiscByIfindex() },
                 skipOrRun(R.string.check_timestamping_hw) { checkTimestampingHw() },
                 skipOrRun(R.string.check_rtm_getlink_trim_oracle) { checkRtmGetlinkTrimOracle() },
-                skipOrRunFn(R.string.check_traffic_stats) { checkTrafficStatsDiscrepancy(cm, context, it) },
             )
 
         val javaDefs =
@@ -841,258 +832,7 @@ private fun checkGetNetworkForType(
     }
 }
 
-/**
- * Read per-interface byte counters for UP interfaces only.
- *
- * Priority order:
- *   1. `su` (root): full picture including hidden VPN interfaces like tun0;
- *      UP/DOWN state from `ip link show up`.
- *   2. Rust native: bypasses Java SELinux restriction; UP state via NetworkInterface.
- *   3. Java file read: last resort, likely blocked on API 29+.
- *
- * Returns (stats, hasSuAccess) where stats contains ONLY UP interfaces.
- */
-private fun readUpIfaceStats(): Pair<Map<String, Pair<Long, Long>>, Boolean> {
-    // ── 1. SU path — root shell sees all ifaces, real UP state ──
-    try {
-        val cmd = "cat /proc/net/dev; echo ---SU_SEP---; ip link show up"
-        val proc = Runtime.getRuntime().exec(arrayOf("su", "-c", cmd))
-        val exited = proc.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-        if (exited) {
-            val output = proc.inputStream.bufferedReader().readText()
-            val sepIdx = output.indexOf("---SU_SEP---")
-            if (sepIdx >= 0) {
-                val devText = output.substring(0, sepIdx)
-                val linkText = output.substring(sepIdx + "---SU_SEP---\n".length)
 
-                val allBytes = mutableMapOf<String, Pair<Long, Long>>()
-                for (line in devText.lines().drop(2)) {
-                    val t = line.trim()
-                    val c = t.indexOf(':')
-                    if (c < 0) continue
-                    val n = t.substring(0, c).trim()
-                    if (n.isEmpty()) continue
-                    val f = t.substring(c + 1).trim().split("\\s+".toRegex())
-                    allBytes[n] =
-                        Pair(
-                            f.getOrNull(8)?.toLongOrNull() ?: 0L,
-                            f.getOrNull(0)?.toLongOrNull() ?: 0L,
-                        )
-                }
-
-                val upNames = mutableSetOf<String>()
-                Regex("^\\d+:\\s+(\\S+?)(?:@\\S+)?:", RegexOption.MULTILINE)
-                    .findAll(linkText)
-                    .forEach { upNames.add(it.groupValues[1]) }
-
-                if (allBytes.isNotEmpty()) {
-                    return Pair(allBytes.filter { (name, _) -> name in upNames }, true)
-                }
-            }
-        }
-        proc.destroyForcibly()
-    } catch (_: Exception) {
-    }
-
-    // ── 2. Rust native path — may still be blocked by kernel SELinux ──
-    try {
-        val csv =
-            dev.soranerai.vpnhidenext.checks
-                .parseProcNetDevCsv()
-        if (csv.isNotBlank()) {
-            val result = mutableMapOf<String, Pair<Long, Long>>()
-            for (line in csv.trim().split('\n')) {
-                if (line.isBlank()) continue
-                val p = line.split(',')
-                if (p.size < 3) continue
-                val nm = p[0]
-                val isUp =
-                    try {
-                        java.net.NetworkInterface
-                            .getByName(nm)
-                            ?.isUp == true
-                    } catch (_: Exception) {
-                        false
-                    }
-                if (isUp) result[nm] = Pair(p[1].toLongOrNull() ?: 0L, p[2].toLongOrNull() ?: 0L)
-            }
-            if (result.isNotEmpty()) return Pair(result, false)
-        }
-    } catch (_: Exception) {
-    }
-
-    // ── 3. Java file fallback ──
-    val result = mutableMapOf<String, Pair<Long, Long>>()
-    try {
-        java.io.File("/proc/net/dev").forEachLine { line ->
-            val t = line.trim()
-            val c = t.indexOf(':')
-            if (c < 0) return@forEachLine
-            val nm = t.substring(0, c).trim()
-            val isUp =
-                try {
-                    java.net.NetworkInterface
-                        .getByName(nm)
-                        ?.isUp == true
-                } catch (_: Exception) {
-                    false
-                }
-            if (!isUp) return@forEachLine
-            val f = t.substring(c + 1).trim().split("\\s+".toRegex())
-            result[nm] = Pair(f.getOrNull(8)?.toLongOrNull() ?: 0L, f.getOrNull(0)?.toLongOrNull() ?: 0L)
-        }
-    } catch (_: Exception) {
-    }
-    return Pair(result, false)
-}
-
-private fun checkTrafficStatsDiscrepancy(
-    cm: ConnectivityManager,
-    context: android.content.Context,
-    name: String,
-): CheckResult {
-    try {
-        if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.VANILLA_ICE_CREAM) {
-            return CheckResult(
-                name,
-                true,
-                "TrafficStats per-interface queries require Android 15+ (API 35+)",
-            )
-        }
-
-        // ── Ground truth: UP interfaces from /proc/net/dev (raw, not hooked) ──
-        // readUpIfaceStats() already filters to UP-only, so no further isUp checks needed.
-        // hasSuAccess=true means tun0 is visible (hidden from Java but not from root).
-        val (rawStats, hasSuAccess) = readUpIfaceStats()
-        if (rawStats.isEmpty()) {
-            return CheckResult(name, true, "raw iface stats unavailable (no su, SELinux blocked)")
-        }
-
-        // ── Get the active cover interface from the kernel module ──
-        var coverIfaceName = ""
-        val (ctrlExit, ctrlOut) = suExec("cat /dev/vpnhide_ctrl 2>/dev/null")
-        if (ctrlExit == 0) {
-            val match = Regex("cover_iface:\\s*(\\S+)").find(ctrlOut)
-            if (match != null) {
-                coverIfaceName = match.groupValues[1]
-            }
-        }
-
-        // ── Enumerate visible interfaces (hook filters out tun0 etc.) ──
-        // Only count UP interfaces — a wlan0 that just disconnected should not
-        // participate in the visible-sum.
-        var visibleTx = 0L
-        var visibleRx = 0L
-        val names = mutableListOf<String>()
-        val ifaces = java.net.NetworkInterface.getNetworkInterfaces()
-        if (ifaces != null) {
-            for (iface in ifaces) {
-                val upStatus = if (iface.isUp) "up" else "down"
-                val t = android.net.TrafficStats.getTxBytes(iface.name)
-                val r = android.net.TrafficStats.getRxBytes(iface.name)
-                names.add("${iface.name}[$upStatus](tx=${t / 1024}K)")
-                if (!iface.isUp) continue
-                if (t > 0) visibleTx += t
-                if (r > 0) visibleRx += r
-            }
-        }
-
-        // ── Detect VPN traffic — rawStats already contains only UP interfaces ──
-        val vpnPrefixes = listOf("tun", "wg", "ppp", "tap", "ipsec")
-        var rawVpnTx = 0L
-        var rawVpnRx = 0L
-        val vpnIfaceNames = mutableListOf<String>()
-        for ((ifaceName, stats) in rawStats) {
-            if (vpnPrefixes.any { ifaceName.startsWith(it) }) {
-                rawVpnTx += stats.first
-                rawVpnRx += stats.second
-                vpnIfaceNames.add("$ifaceName(tx=${stats.first / 1024}K)")
-            }
-        }
-
-        // ── Raw system total: sum of all UP ifaces from rawStats (includes VPN) ──
-        // rawStats already contains only UP interfaces, so no further filtering needed.
-        val rawSystemTx = rawStats.values.sumOf { it.first }
-        val rawSystemRx = rawStats.values.sumOf { it.second }
-
-        // ── Primary check: raw system (UP, with VPN) vs BPF visible (UP, laundered) ──
-        val txDiff = rawSystemTx - visibleTx
-        val rxDiff = rawSystemRx - visibleRx
-        val threshold = 5 * 1024 * 1024L // 5 MB
-
-        // If there's no VPN traffic, discrepancies are natural (not from laundering failure) -> ignore
-        val hasVpnTraffic = rawVpnTx > 0L
-
-        val txSuspicious =
-            hasVpnTraffic &&
-                txDiff > threshold &&
-                (rawSystemTx.toDouble() / visibleTx.coerceAtLeast(1L).toDouble() > 1.5)
-        val rxSuspicious =
-            hasVpnTraffic &&
-                rxDiff > threshold &&
-                (rawSystemRx.toDouble() / visibleRx.coerceAtLeast(1L).toDouble() > 1.5)
-
-        // ── Secondary check: verify VPN traffic was laundered into cover iface ──
-        val vpnTrafficSignificant = rawVpnTx > threshold
-        var launderingOk = true
-        var launderDetail: String
-        val hasCoverIface = coverIfaceName.isNotEmpty() && coverIfaceName != "none"
-        if (vpnTrafficSignificant) {
-            if (hasCoverIface) {
-                val rawCoverTx = rawStats[coverIfaceName]?.first ?: 0L
-                val bpfCoverTx = android.net.TrafficStats.getTxBytes(coverIfaceName)
-                val expectedCoverTx = rawCoverTx + rawVpnTx
-                launderingOk = bpfCoverTx >= (expectedCoverTx * 0.7).toLong()
-                launderDetail =
-                    if (launderingOk) {
-                        "Laundering OK: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
-                            "≈ raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K"
-                    } else {
-                        "Laundering BROKEN: $coverIfaceName BPF=${bpfCoverTx / 1024}K " +
-                            "but expected ~${expectedCoverTx / 1024}K " +
-                            "(raw ${rawCoverTx / 1024}K + vpn ${rawVpnTx / 1024}K)"
-                    }
-            } else {
-                launderingOk = false
-                launderDetail = "Laundering UNKNOWN: VPN traffic active, but no cover interface set by kmod yet"
-            }
-        } else if (rawVpnTx in 1..<threshold) {
-            launderDetail = "Low VPN traffic (${rawVpnTx / 1024}K raw), skipping launder check"
-        } else {
-            launderDetail =
-                if (hasSuAccess) {
-                    "No UP VPN iface seen by root — VPN may be off"
-                } else {
-                    "No VPN traffic visible (no SU access, hidden ifaces not enumerable)"
-                }
-        }
-
-        val passed = !txSuspicious && !rxSuspicious && launderingOk
-
-        val detail =
-            buildString {
-                val src = if (hasSuAccess) "su/root" else "no-su fallback"
-                val bpfTotal = android.net.TrafficStats.getTotalTxBytes()
-                append("[$src] BPF Total: TX=${bpfTotal / 1024}K. ")
-                append("Raw UP sum: TX=${rawSystemTx / 1024}K. ")
-                append("Visible (BPF, UP): TX=${visibleTx / 1024}K. ")
-                append("Diff: TX=${txDiff / 1024}K, RX=${rxDiff / 1024}K. ")
-                append("Ifaces: [${names.joinToString()}]. ")
-                if (vpnIfaceNames.isNotEmpty()) {
-                    append("Raw VPN: [${vpnIfaceNames.joinToString()}]. ")
-                }
-                append(launderDetail)
-            }
-
-        return CheckResult(
-            name,
-            passed,
-            if (passed) "$detail (clean)" else "$detail (anomaly detected!)",
-        )
-    } catch (e: Exception) {
-        return CheckResult(name, false, "error checking traffic stats: ${e.message}")
-    }
-}
 
 // ==========================================================================
 //  Debug log export

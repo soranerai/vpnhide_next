@@ -121,6 +121,7 @@ internal data class StartupResult(
     val kmodActive: Boolean,
     val addedToTargets: Boolean,
     val currentBootId: String,
+    val isKmodType: Boolean,
 )
 
 /**
@@ -139,6 +140,7 @@ internal fun performStartupOptimized(): StartupResult {
         
         echo "added=0"
         echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
+        grep -q "vpnhide" /proc/modules 2>/dev/null && echo "is_kmod=1" || echo "is_kmod=0"
         """.trimIndent()
 
     val (_, out) = suExec(script)
@@ -155,6 +157,7 @@ internal fun performStartupOptimized(): StartupResult {
         kmodActive = props["kmod"] == "1",
         addedToTargets = props["added"] == "1",
         currentBootId = props["boot_id"] ?: "",
+        isKmodType = props["is_kmod"] == "1",
     )
 }
 

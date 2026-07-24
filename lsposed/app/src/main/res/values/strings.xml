@@ -510,4 +510,17 @@
     <string name="diag_no_vpn_desc">No active VPN detected. Connect to a VPN to run diagnostic checks.</string>
     <string name="self_test_vpn_session_name">VPNHide self-test (no real traffic)</string>
     <string name="dashboard_protection_vpn_off">-/-</string>
+
+    <!-- Kpatch Announcement -->
+    <string name="kpatch_announcement_title">Built-in mode</string>
+    <string name="kpatch_announcement_subtitle">Monolithic kernel integration for maximum stealth and stability</string>
+    <string name="kpatch_feature_overhead_title">Zero Modular Overhead</string>
+    <string name="kpatch_feature_overhead_desc">The hiding logic is compiled directly into the kernel source as a monolithic feature. Completely eliminates modular routing latency and execution delays.</string>
+    <string name="kpatch_feature_stealth_title">Absolute Stealth</string>
+    <string name="kpatch_feature_stealth_desc">Invulnerable to timing attacks on system calls (syscalls). Because it operates natively inside the kernel code rather than as a loaded module (LKM/KPM), it leaves no footprint.</string>
+    <string name="kpatch_feature_stability_title">Monolithic Stability</string>
+    <string name="kpatch_feature_stability_desc">Being compiled as one monolithic unit with the kernel, it is permanent and untouchable. Eliminates runtime synchronization errors or hook decoupling.</string>
+    <string name="kpatch_announcement_optional_note">Note: Switching is completely optional. The standard external kernel module (LKM) will continue to receive updates and function normally. You can switch to the built-in kernel version at your convenience.</string>
+    <string name="kpatch_action_repo">Open Repository</string>
+    <string name="kpatch_action_dismiss">Got it</string>
 </resources>
