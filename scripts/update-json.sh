@@ -33,4 +33,15 @@ EOJSON
     echo "  update-json/update-kmod-${kmi}.json"
 done
 
+cat > "update-json/update-bridge.json" <<EOJSON
+{
+  "version": "v${VERSION}",
+  "versionCode": ${VERSION_CODE},
+  "zipUrl": "${REPO}/releases/download/v${VERSION}/vpnhide-bridge.zip",
+  "changelog": "${RAW}/update-json/changelog.md"
+}
+EOJSON
+echo "  update-json/update-bridge.json"
+
+
 

@@ -165,8 +165,33 @@ jobs:
           if-no-files-found: error
 
 
+  bridge:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download prebuilt bridge from private repo
+        run: |
+          mkdir -p bridge-artifacts
+          if [ -n "${{ secrets.PRIVATE_REPO_PAT }}" ]; then
+            gh release download --repo soranerai/vpnhide_next_private \
+              -p "vpnhide-bridge.zip" \
+              -D bridge-artifacts
+          else
+            echo "⚠ PRIVATE_REPO_PAT not configured"
+            exit 1
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: vpnhide-bridge
+          path: bridge-artifacts/vpnhide-bridge.zip
+          if-no-files-found: error
+
+
   release:
-    needs: [kmod, lsposed]
+    needs: [kmod, lsposed, bridge]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # Only the release job needs write — used by softprops/action-gh-release

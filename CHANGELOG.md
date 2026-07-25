@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.2.0
+
+### Added
+- Added built-in mode kernel integration branch support and in-app announcement screen for kmod users
+
+### Fixed
+- Resolve native module and control tool paths dynamically to support custom module folders (e.g. vpnhide_kpatch).
+- Fixed detection via system call (syscall) timing attacks in the built-in mode
+
 ## v2.1.3
 
 ### Fixed
