@@ -8,17 +8,18 @@ internal data class CompatibleRelease(
     val kmod: String,
 )
 
-internal val compatibilityMatrix: List<CompatibleRelease> = listOf(
-    CompatibleRelease(
-        lsposed = "2.2.0",
-        bridge = "2.2.0",
-        builtIn = "2.2.0",
-        kmod = "2.2.0",
-    ),
-    CompatibleRelease(
-        lsposed = "2.2.1",
-        bridge = "2.2.1",
-        builtIn = "2.2.1",
-        kmod = "2.2.1",
-    ),
-)
+internal val compatibilityMatrix: List<CompatibleRelease> =
+    listOf(
+        CompatibleRelease(
+            lsposed = "2.2.0",
+            bridge = "2.2.0",
+            builtIn = "2.2.0",
+            kmod = "2.2.0",
+        ),
+        CompatibleRelease(
+            lsposed = "2.2.1",
+            bridge = "2.2.1",
+            builtIn = "2.2.1",
+            kmod = "2.2.1",
+        ),
+    )

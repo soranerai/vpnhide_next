@@ -12,8 +12,13 @@ internal data class InstalledComponentVersions(
 
 internal sealed interface CompatibilityResult {
     data object Compatible : CompatibilityResult
+
     data object Unknown : CompatibilityResult
-    data class Requires(val component: String, val version: String) : CompatibilityResult
+
+    data class Requires(
+        val component: String,
+        val version: String,
+    ) : CompatibilityResult
 }
 
 /** Resolves compatibility using explicit known-good component combinations. */
@@ -29,10 +34,11 @@ internal object CompatibilityResolver {
         }
 
         val native = installed.kmod ?: installed.builtIn ?: return CompatibilityResult.Unknown
-        val nativeMatches = matchingApp.filter {
-            baseVersion(it.kmod) == baseVersion(native) ||
-                baseVersion(it.builtIn) == baseVersion(native)
-        }
+        val nativeMatches =
+            matchingApp.filter {
+                baseVersion(it.kmod) == baseVersion(native) ||
+                    baseVersion(it.builtIn) == baseVersion(native)
+            }
         if (nativeMatches.isNotEmpty()) return CompatibilityResult.Compatible
 
         val expected = matchingApp.first()

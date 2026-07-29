@@ -6,20 +6,20 @@ import android.util.Base64
 import dev.soranerai.vpnhidenext.AppListCache
 import dev.soranerai.vpnhidenext.BuildConfig
 import dev.soranerai.vpnhidenext.CompatibilityResolver
+import dev.soranerai.vpnhidenext.CompatibilityResult
 import dev.soranerai.vpnhidenext.DEV_NODE
 import dev.soranerai.vpnhidenext.DiagnosticsCache
-import dev.soranerai.vpnhidenext.CompatibilityResult
 import dev.soranerai.vpnhidenext.InstalledComponentVersions
-import dev.soranerai.vpnhidenext.KMOD_CTL
 import dev.soranerai.vpnhidenext.KMOD_LOAD_DMESG_FILE
 import dev.soranerai.vpnhidenext.KMOD_LOAD_STATUS_FILE
-import dev.soranerai.vpnhidenext.KMOD_MODULE_DIR
 import dev.soranerai.vpnhidenext.R
 import dev.soranerai.vpnhidenext.VpnHideLog
 import dev.soranerai.vpnhidenext.compareSemver
 import dev.soranerai.vpnhidenext.domain.models.*
 import dev.soranerai.vpnhidenext.domain.usecase.buildNativeInstallRecommendation
 import dev.soranerai.vpnhidenext.isEnabledInPrefs
+import dev.soranerai.vpnhidenext.kmodCtl
+import dev.soranerai.vpnhidenext.kmodModuleDir
 import dev.soranerai.vpnhidenext.normalizeVersion
 import dev.soranerai.vpnhidenext.suExec
 import dev.soranerai.vpnhidenext.versionsMismatch
@@ -86,14 +86,14 @@ class DashboardRepository(
     private fun collectDashboardSnapshot(): RawDashboardSnapshot {
         val script =
             """
-            echo "kmod_prop=${'$'}(cat $KMOD_MODULE_DIR/module.prop 2>/dev/null | base64 | tr -d '\n')"
+            echo "kmod_prop=${'$'}(cat $kmodModuleDir/module.prop 2>/dev/null | base64 | tr -d '\n')"
             echo "uname=${'$'}(uname -r)"
             echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id)"
             echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
             echo "load_dmesg=${'$'}(cat $KMOD_LOAD_DMESG_FILE 2>/dev/null | tail -n 50 | base64 | tr -d '\n')"
             # Newer private kmod/kpatch control tools query the running
             # driver through /dev. Older tools simply produce no output.
-            [ -c $DEV_NODE ] && echo "device_version=${'$'}($KMOD_CTL version kmod 2>/dev/null || true)"
+            [ -c $DEV_NODE ] && echo "device_version=${'$'}($kmodCtl version kmod 2>/dev/null || true)"
             [ -c $DEV_NODE ] && echo "lsmod=1" || echo "lsmod=0"
             grep -q "vpnhide" /proc/modules 2>/dev/null && echo "is_kmod=1" || echo "is_kmod=0"
             
@@ -205,7 +205,12 @@ class DashboardRepository(
         val props = parseKeyValue(raw)
         val dmesgRaw = snapshot.decodeBase64("load_dmesg")
         val bootId = props["boot_id"]?.trim()
-        val deviceVersion = snapshot.get("device_version").trim().toIntOrNull()?.let(::versionCodeToVersion)
+        val deviceVersion =
+            snapshot
+                .get("device_version")
+                .trim()
+                .toIntOrNull()
+                ?.let(::versionCodeToVersion)
         return KmodLoadStatus(
             timestamp = props["timestamp"]?.trim()?.toLongOrNull(),
             bootId = bootId,
@@ -357,7 +362,7 @@ class DashboardRepository(
             )
 
             // lsposed hook status
-            val (_, hookStatusRaw) = suExec("$KMOD_CTL hook_status 2>/dev/null || true")
+            val (_, hookStatusRaw) = suExec("$kmodCtl hook_status 2>/dev/null || true")
             val hookProps = parseKeyValue(hookStatusRaw)
             val hookVersion = hookProps["version"]
             val hookBootId = hookProps["boot_id"]
@@ -633,9 +638,9 @@ class DashboardRepository(
 
         val script =
             """
-            if [ -x $KMOD_CTL ] && [ -c $DEV_NODE ]; then
-              echo "framework_stats=${'$'}($KMOD_CTL java_stats 2>/dev/null | base64 | tr -d '\n')"
-              echo "native_stats=${'$'}($KMOD_CTL stats 2>/dev/null | base64 | tr -d '\n')"
+            if [ -x $kmodCtl ] && [ -c $DEV_NODE ]; then
+              echo "framework_stats=${'$'}($kmodCtl java_stats 2>/dev/null | base64 | tr -d '\n')"
+              echo "native_stats=${'$'}($kmodCtl stats 2>/dev/null | base64 | tr -d '\n')"
             fi
             """.trimIndent()
 
@@ -768,8 +773,8 @@ class DashboardRepository(
     }
 
     fun resetInterceptStats() {
-        suExec("$KMOD_CTL java_stats clear 2>/dev/null")
-        suExec("$KMOD_CTL stats clear 2>/dev/null")
+        suExec("$kmodCtl java_stats clear 2>/dev/null")
+        suExec("$kmodCtl stats clear 2>/dev/null")
     }
 
     private fun resolveAppLabelWithFallback(
