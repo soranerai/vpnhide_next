@@ -299,9 +299,8 @@ internal fun ProtectionScreen(
                         val keysToKeep = protections.map { it.packageName to it.userId }.toSet()
                         for (existing in existingProtections) {
                             val key = existing.packageName to existing.userId
-                            if (key !in keysToKeep) {
-                                appDao.deleteAppProtection(existing)
-                            }
+                            if (existing.packageName == selfPkg || key in keysToKeep) continue
+                            appDao.deleteAppProtection(existing)
                         }
                     }
 

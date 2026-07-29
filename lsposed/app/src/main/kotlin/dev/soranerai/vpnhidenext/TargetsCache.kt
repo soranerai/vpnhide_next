@@ -79,13 +79,23 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
 
         var dbPopulatedOrUpdated = false
 
-        // The manager UID is protected by vpnhide-ctl itself. It must not be
-        // persisted as a user-selected target/exception in the declarative
-        // policy, otherwise ALLOWLIST appears to contain the manager app.
+        // Keep the manager package in the declarative policy with all layers
+        // disabled. In ALLOWLIST this makes it an ordinary unselected
+        // eligible package; in BLACKLIST the backend still force-targets it
+        // for self-tests.
         val selfPkg = appContext.packageName
         val selfProto = appDao.getAppProtection(selfPkg, 0)
-        if (selfProto != null) {
-            appDao.deleteAppProtection(selfProto)
+        if (selfProto == null) {
+            appDao.insertAppProtection(
+                dev.soranerai.vpnhidenext.db.AppProtection(
+                    packageName = selfPkg,
+                    userId = 0,
+                    uid = appContext.applicationInfo.uid,
+                ),
+            )
+            dbPopulatedOrUpdated = true
+        } else if (selfProto.kmod || selfProto.lsposed || selfProto.portHiding) {
+            appDao.insertAppProtection(selfProto.copy(kmod = false, lsposed = false, portHiding = false))
             dbPopulatedOrUpdated = true
         }
 
