@@ -25,6 +25,21 @@
    git push
    git push origin v0.6.2
    ```
+
+Component compatibility is stored in `data/compatibility.json`. When a
+release changes only one native component, update that component's column and
+keep the other versions unchanged. `release.py` validates the source and
+regenerates `CompatibilityMatrix.kt`; it does not assume that every component
+has the release version.
+
+The private native repository accepts the corresponding independent versions:
+
+```sh
+python3 scripts/release.py 2.2.1 --kmod-version 2.1.0 --built-in-version 2.1.0
+```
+
+Omitting both options retains the legacy behavior and updates both native
+components to the positional version.
 4. Wait for CI to finish the build. CI creates a **draft** GitHub release with all artifacts attached and release notes extracted from `CHANGELOG.md` — review it on the Releases page and click **Publish release** when you're happy.
 5. Generate update-json files pointing at the new release assets:
    ```sh

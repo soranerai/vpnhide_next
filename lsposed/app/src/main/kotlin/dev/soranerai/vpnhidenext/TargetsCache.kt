@@ -73,7 +73,7 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
     private val BATCH_SCRIPT get() =
         """
         echo "$SENTINEL KMOD_MODULE_DIR"
-        [ -d $KMOD_MODULE_DIR ] && echo 1 || echo 0
+        [ -d $kmodModuleDir ] && echo 1 || echo 0
         echo "$SENTINEL LSMOD"
         lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
         echo "$SENTINEL KMOD_TARGETS"
@@ -174,7 +174,7 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
         val statusScript =
             """
             echo "$SENTINEL KMOD_MODULE_DIR"
-            [ -d $KMOD_MODULE_DIR ] && echo 1 || echo 0
+            [ -d $kmodModuleDir ] && echo 1 || echo 0
             echo "$SENTINEL LSMOD"
             lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
             echo "$SENTINEL PM_LIST"

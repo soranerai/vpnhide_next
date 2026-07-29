@@ -185,6 +185,8 @@ data class KmodLoadStatus(
     val unameR: String?,
     val gkiVariant: String?,
     val kmodVersion: String?,
+    val runtimeVersion: String?,
+    val provider: String?,
     val rootManager: String?,
     val kprobes: String?,
     val kretprobes: String?,

@@ -12,7 +12,7 @@ import dev.soranerai.vpnhidenext.db.DbGlobalConfig
  *  - App Kotlin code → [VpnHideLog.enabled] (volatile)
  *  - system_server LSPosed hooks → [SS_DEBUG_LOGGING_FILE] (inotify-
  *    watched; flip takes effect immediately for already-running apps)
- *  - Kernel module → [KMOD_CTL] (stealthy IOCTL; per-boot
+ *  - Kernel module → [kmodCtl] (stealthy IOCTL; per-boot
  *    only, re-seeded from [SS_DEBUG_LOGGING_FILE] by `kmod/module/
  *    service.sh` at boot so the persistent toggle survives reboots
  *    even when the app isn't opened)
@@ -58,7 +58,7 @@ internal fun applyDebugLoggingRuntime(enabled: Boolean) {
 private fun writeDebugFlagFiles(enabled: Boolean) {
     val value = if (enabled) "1" else "0"
     suExec(
-        "[ -c $DEV_NODE ] && $KMOD_CTL debug $value; " +
+        "[ -c $DEV_NODE ] && $kmodCtl debug $value; " +
             "true",
     )
 }

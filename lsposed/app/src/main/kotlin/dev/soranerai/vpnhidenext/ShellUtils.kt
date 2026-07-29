@@ -14,12 +14,12 @@ private const val TAG = "VpnHide"
 
 internal const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
 
-internal var KMOD_CTL = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
+internal var kmodCtl = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
 internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt"
 internal const val PORTS_RULES_FILE = "/data/adb/vpnhide_ports/rules.txt"
 internal const val IFACE_PREFIXES_FILE = "/data/adb/vpnhide_kmod_interfaces.txt"
 internal const val DEV_NODE = "/dev/vpnhide_ctrl"
-internal var KMOD_MODULE_DIR = "/data/adb/modules/vpnhide_kmod"
+internal var kmodModuleDir = "/data/adb/modules/vpnhide_kmod"
 internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
 internal const val KMOD_LOAD_DMESG_FILE = "/data/adb/vpnhide_kmod/load_dmesg"
 
@@ -44,7 +44,8 @@ private var pathsResolved = false
 @Synchronized
 internal fun resolvePathsIfNeeded() {
     if (pathsResolved) return
-    val script = """
+    val script =
+        """
         for d in /data/adb/modules/vpnhide_*; do
           if [ -d "${'$'}d" ]; then
             echo "dir=${'$'}d"
@@ -54,15 +55,15 @@ internal fun resolvePathsIfNeeded() {
             break
           fi
         done
-    """.trimIndent()
+        """.trimIndent()
     try {
         val (_, out) = suExec(script, skipPathResolve = true)
         out.lines().forEach { line ->
             if (line.startsWith("dir=")) {
-                KMOD_MODULE_DIR = line.removePrefix("dir=").trim()
+                kmodModuleDir = line.removePrefix("dir=").trim()
             }
             if (line.startsWith("ctl=")) {
-                KMOD_CTL = line.removePrefix("ctl=").trim()
+                kmodCtl = line.removePrefix("ctl=").trim()
             }
         }
         pathsResolved = true
@@ -188,13 +189,13 @@ internal fun buildKmodApplyCommand(
     uids: List<Int>,
     targetType: String = "targets",
 ): String {
-    if (uids.isEmpty()) return "$KMOD_CTL $targetType ; true"
-    return "$KMOD_CTL $targetType ${uids.sorted().joinToString(" ")}"
+    if (uids.isEmpty()) return "$kmodCtl $targetType ; true"
+    return "$kmodCtl $targetType ${uids.sorted().joinToString(" ")}"
 }
 
 internal fun buildKmodPortRulesApplyCommand(rules: Map<Int, List<PortRule>>): String {
     if (rules.isEmpty()) {
-        return "[ -c $DEV_NODE ] && $KMOD_CTL port_rules; true"
+        return "[ -c $DEV_NODE ] && $kmodCtl port_rules; true"
     }
 
     return buildString {
@@ -217,14 +218,14 @@ internal fun buildKmodPortRulesApplyCommand(rules: Map<Int, List<PortRule>>): St
                 append("\"; ")
             }
         }
-        append("[ -n \"\$ARGS\" ] && $KMOD_CTL port_rules \$ARGS; fi")
+        append("[ -n \"\$ARGS\" ] && $kmodCtl port_rules \$ARGS; fi")
     }
 }
 
 internal fun buildAppHookMasksApplyCommand(apps: List<AppProtection>): String {
     val overridden = apps.filter { it.kernelHookMask != null || it.javaHookMask != null }
     if (overridden.isEmpty()) {
-        return "[ -c $DEV_NODE ] && $KMOD_CTL app_hooks; true"
+        return "[ -c $DEV_NODE ] && $kmodCtl app_hooks; true"
     }
 
     return buildString {
@@ -238,6 +239,6 @@ internal fun buildAppHookMasksApplyCommand(apps: List<AppProtection>): String {
                     "$hasJava ${app.javaHookMask ?: 0L}\"; ",
             )
         }
-        append("[ -n \"\$ARGS\" ] && $KMOD_CTL app_hooks \$ARGS; fi")
+        append("[ -n \"\$ARGS\" ] && $kmodCtl app_hooks \$ARGS; fi")
     }
 }

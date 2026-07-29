@@ -32,6 +32,53 @@ class NormalizeVersionTest {
     }
 }
 
+class CompatibilityResolverTest {
+    @Test
+    fun `accepts a known compatible component set`() {
+        assertEquals(
+            CompatibilityResult.Compatible,
+            CompatibilityResolver.resolve(
+                InstalledComponentVersions(
+                    lsposed = "2.2.0",
+                    bridge = null,
+                    builtIn = null,
+                    kmod = "2.2.0",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `requests only the native component when its version is not in the matrix`() {
+        assertEquals(
+            CompatibilityResult.Requires("kmod", "2.2.0"),
+            CompatibilityResolver.resolve(
+                InstalledComponentVersions(
+                    lsposed = "2.2.0",
+                    bridge = null,
+                    builtIn = null,
+                    kmod = "2.1.0",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `unknown app versions remain unknown instead of being treated as broken`() {
+        assertEquals(
+            CompatibilityResult.Unknown,
+            CompatibilityResolver.resolve(
+                InstalledComponentVersions(
+                    lsposed = "9.9.9",
+                    bridge = null,
+                    builtIn = null,
+                    kmod = "2.2.0",
+                ),
+            ),
+        )
+    }
+}
+
 class CompareSemverTest {
     @Test
     fun `equal versions return zero`() {

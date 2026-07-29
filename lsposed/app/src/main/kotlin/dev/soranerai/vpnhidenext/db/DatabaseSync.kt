@@ -26,12 +26,12 @@ internal object DatabaseSync {
             val parts = mutableListOf<String>()
 
             // Sync active hooks masks from database
-            parts += "$KMOD_CTL active_hooks ${config.kernelHookMask}"
-            parts += "$KMOD_CTL java_hooks ${config.javaHookMask}"
+            parts += "$kmodCtl active_hooks ${config.kernelHookMask}"
+            parts += "$kmodCtl java_hooks ${config.javaHookMask}"
 
             val statsBucketSeconds =
                 StatsRetentionPeriod.fromConfigValue(config.statsRetentionPeriod).bucketSeconds
-            parts += "$KMOD_CTL stats_window $statsBucketSeconds"
+            parts += "$kmodCtl stats_window $statsBucketSeconds"
 
             // 2. Build and apply VPN targets directly to the kernel module
             val kmodUids = (apps.filter { it.kmod }.map { it.uid } + selfUid).distinct().sorted()
@@ -43,9 +43,9 @@ internal object DatabaseSync {
             // 3. Build and apply Interface prefixes directly to the kernel module
             val ifaceApplyCmd =
                 if (ifacePrefixes.isEmpty()) {
-                    "$KMOD_CTL iface_prefixes"
+                    "$kmodCtl iface_prefixes"
                 } else {
-                    "$KMOD_CTL iface_prefixes ${ifacePrefixes.joinToString(" ")}"
+                    "$kmodCtl iface_prefixes ${ifacePrefixes.joinToString(" ")}"
                 }
             parts += ifaceApplyCmd
 

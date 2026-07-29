@@ -30,15 +30,17 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun KpatchAnnouncementScreen(
     onDismiss: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val gradient = Brush.verticalGradient(
-        colors = listOf(
-            MaterialTheme.colorScheme.background,
-            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    val gradient =
+        Brush.verticalGradient(
+            colors =
+                listOf(
+                    MaterialTheme.colorScheme.background,
+                    MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                ),
         )
-    )
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -46,49 +48,52 @@ fun KpatchAnnouncementScreen(
         topBar = {
             TopAppBar(
                 title = { Text(text = "") },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = Color.Transparent
-                ),
+                colors =
+                    TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
                 actions = {
                     IconButton(onClick = onDismiss) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.back)
+                            contentDescription = stringResource(R.string.back),
                         )
                     }
-                }
+                },
             )
-        }
+        },
     ) { innerPadding ->
         Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(gradient)
-                .padding(innerPadding)
+            modifier =
+                Modifier
+                    .fillMaxSize()
+                    .background(gradient)
+                    .padding(innerPadding),
         ) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 24.dp)
-                    .verticalScroll(rememberScrollState()),
-                horizontalAlignment = Alignment.CenterHorizontally
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .padding(horizontal = 24.dp)
+                        .verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 // Header section
                 Text(
                     text = stringResource(R.string.kpatch_announcement_title),
                     style = MaterialTheme.typography.headlineMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.primary,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
                     text = stringResource(R.string.kpatch_announcement_subtitle),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    textAlign = TextAlign.Center,
                 )
                 Spacer(modifier = Modifier.height(32.dp))
 
@@ -97,21 +102,21 @@ fun KpatchAnnouncementScreen(
                     icon = Icons.Default.Bolt,
                     title = stringResource(R.string.kpatch_feature_overhead_title),
                     description = stringResource(R.string.kpatch_feature_overhead_desc),
-                    iconColor = MaterialTheme.colorScheme.primary
+                    iconColor = MaterialTheme.colorScheme.primary,
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 FeatureItem(
                     icon = Icons.Default.VisibilityOff,
                     title = stringResource(R.string.kpatch_feature_stealth_title),
                     description = stringResource(R.string.kpatch_feature_stealth_desc),
-                    iconColor = MaterialTheme.colorScheme.secondary
+                    iconColor = MaterialTheme.colorScheme.secondary,
                 )
                 Spacer(modifier = Modifier.height(20.dp))
                 FeatureItem(
                     icon = Icons.Default.Security,
                     title = stringResource(R.string.kpatch_feature_stability_title),
                     description = stringResource(R.string.kpatch_feature_stability_desc),
-                    iconColor = MaterialTheme.colorScheme.tertiary
+                    iconColor = MaterialTheme.colorScheme.tertiary,
                 )
                 Spacer(modifier = Modifier.height(32.dp))
 
@@ -119,14 +124,14 @@ fun KpatchAnnouncementScreen(
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(
                         text = stringResource(R.string.kpatch_announcement_optional_note),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(16.dp),
-                        textAlign = TextAlign.Start
+                        textAlign = TextAlign.Start,
                     )
                 }
                 Spacer(modifier = Modifier.height(36.dp))
@@ -134,17 +139,17 @@ fun KpatchAnnouncementScreen(
                 // Action Buttons
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     OutlinedButton(
                         onClick = onDismiss,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     ) {
                         Text(
                             text = stringResource(R.string.kpatch_action_dismiss),
                             maxLines = 1,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                     Button(
@@ -152,13 +157,13 @@ fun KpatchAnnouncementScreen(
                             val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://github.com/soranerai/GKI_KernelSU_SUSFS"))
                             context.startActivity(intent)
                         },
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.weight(1f),
                     ) {
                         Text(
                             text = stringResource(R.string.kpatch_action_repo),
                             maxLines = 1,
                             textAlign = TextAlign.Center,
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
                         )
                     }
                 }
@@ -173,26 +178,26 @@ private fun FeatureItem(
     icon: ImageVector,
     title: String,
     description: String,
-    iconColor: Color
+    iconColor: Color,
 ) {
     Row(
         modifier = Modifier.fillMaxWidth(),
-        verticalAlignment = Alignment.Top
+        verticalAlignment = Alignment.Top,
     ) {
         Surface(
             shape = RoundedCornerShape(12.dp),
             color = iconColor.copy(alpha = 0.12f),
-            modifier = Modifier.size(40.dp)
+            modifier = Modifier.size(40.dp),
         ) {
             Box(
                 contentAlignment = Alignment.Center,
-                modifier = Modifier.fillMaxSize()
+                modifier = Modifier.fillMaxSize(),
             ) {
                 Icon(
                     imageVector = icon,
                     contentDescription = null,
                     tint = iconColor,
-                    modifier = Modifier.size(22.dp)
+                    modifier = Modifier.size(22.dp),
                 )
             }
         }
@@ -201,13 +206,13 @@ private fun FeatureItem(
             Text(
                 text = title,
                 style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.Bold
+                fontWeight = FontWeight.Bold,
             )
             Spacer(modifier = Modifier.height(4.dp))
             Text(
                 text = description,
                 style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
