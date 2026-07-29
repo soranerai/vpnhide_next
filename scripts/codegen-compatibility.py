@@ -58,20 +58,21 @@ def render(releases: list[dict[str, str]]) -> str:
         "    val kmod: String,",
         ")",
         "",
-        "internal val compatibilityMatrix: List<CompatibleRelease> = listOf(",
+        "internal val compatibilityMatrix: List<CompatibleRelease> =",
+        "    listOf(",
     ]
     for release in releases:
         lines.extend(
             [
-                "    CompatibleRelease(",
-                f"        lsposed = {kotlin_string(release['lsposed'])},",
-                f"        bridge = {kotlin_string(release['bridge'])},",
-                f"        builtIn = {kotlin_string(release['built-in'])},",
-                f"        kmod = {kotlin_string(release['kmod'])},",
-                "    ),",
+                "        CompatibleRelease(",
+                f"            lsposed = {kotlin_string(release['lsposed'])},",
+                f"            bridge = {kotlin_string(release['bridge'])},",
+                f"            builtIn = {kotlin_string(release['built-in'])},",
+                f"            kmod = {kotlin_string(release['kmod'])},",
+                "        ),",
             ]
         )
-    lines.extend([")", ""])
+    lines.extend(["    )", ""])
     return "\n".join(lines)
 
 
