@@ -1016,13 +1016,22 @@ internal suspend fun exportDebugZip(
             val db = AppDatabase.getInstance(context)
             val protections = db.appDao().getAllAppProtectionSync()
             val globalConfig = db.globalConfigDao().getConfig()
+            val policyFile = AppDatabase.policyConfigFile(context)
+            val (_, policyPreview) =
+                suExec(
+                    "[ -x $kmodCtl ] && $kmodCtl preview '${policyFile.absolutePath.replace("'", "'\\''")}' " +
+                        "${context.applicationInfo.uid} 2>&1 || true",
+                )
             val kmodTargets = protections.filter { it.kmod }
             val lsposedTargets = protections.filter { it.lsposed }
             val targetsText =
                 buildString {
                     appendLine("=== declarative policy ===")
                     appendLine("mode=${globalConfig?.listMode?.name ?: "BLACKLIST"}")
-                    appendLine("config=${AppDatabase.policyConfigFile(context).absolutePath}")
+                    appendLine("config=${policyFile.absolutePath}")
+                    appendLine()
+                    appendLine("=== backend preview ===")
+                    appendLine(policyPreview.ifBlank { "(unavailable)" }.trim())
                     appendLine()
                     appendLine("=== selected kmod entries ===")
                     if (kmodTargets.isEmpty()) {
