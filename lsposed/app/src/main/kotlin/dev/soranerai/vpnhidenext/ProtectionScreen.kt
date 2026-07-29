@@ -16,6 +16,8 @@ import dev.soranerai.vpnhidenext.db.PolicyListMode
 
 @Composable
 internal fun ProtectionScreen(
+    listMode: PolicyListMode,
+    onListModeChange: (PolicyListMode) -> Unit,
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
@@ -45,14 +47,8 @@ internal fun ProtectionScreen(
 
     var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var refreshTrigger by remember { mutableStateOf(0) }
-    var listMode by remember { mutableStateOf(PolicyListMode.BLACKLIST) }
-    var originalListMode by remember { mutableStateOf(PolicyListMode.BLACKLIST) }
+    var originalListMode by remember { mutableStateOf(listMode) }
     var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
-
-    LaunchedEffect(Unit) {
-        listMode = AppDatabase.getInstance(context).globalConfigDao().getConfig()?.listMode ?: PolicyListMode.BLACKLIST
-        originalListMode = listMode
-    }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -235,7 +231,7 @@ internal fun ProtectionScreen(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { listMode = selected; pendingMode = null }) {
+                    TextButton(onClick = { onListModeChange(selected); pendingMode = null }) {
                         Text(stringResource(R.string.policy_mode_change_confirm))
                     }
                 },

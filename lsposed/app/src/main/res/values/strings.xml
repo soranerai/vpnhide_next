@@ -64,6 +64,7 @@
     <string name="bulk_protect_added">Added %1$d app(s) to protection — tap Save to apply</string>
     <string name="bulk_protect_none_added">All shown apps are already protected</string>
     <string name="filter_only_selected">Only selected</string>
+    <string name="filter_only_exceptions">Only exceptions</string>
     <string name="filter_only_work_profile">Only work profile</string>
     <string name="sort_name_asc">Name (A-Z)</string>
     <string name="sort_name_desc">Name (Z-A)</string>

@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
+import dev.soranerai.vpnhidenext.db.PolicyListMode
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -165,6 +166,7 @@ private fun MainScreen(
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }
     var bulkProtectTrigger by remember { mutableStateOf(0) }
+    var policyListMode by remember { mutableStateOf<PolicyListMode?>(null) }
     var showGlobalAppSettings by remember { mutableStateOf(false) }
     // Identity and visibility are tracked separately: while the predictive-back
     // gesture is held (or the exit animation is running), editingAppSettingsTarget
@@ -177,6 +179,11 @@ private fun MainScreen(
     var diagnosticsScrollToBottom by remember { mutableStateOf(false) }
     var showKpatchAnnouncement by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
+
+    LaunchedEffect(Unit) {
+        policyListMode = AppDatabase.getInstance(context).globalConfigDao().getConfig()?.listMode
+            ?: PolicyListMode.BLACKLIST
+    }
 
     val prefs = remember { context.getSharedPreferences("vpnhide_prefs", android.content.Context.MODE_PRIVATE) }
     LaunchedEffect(startup.isKmodType) {
@@ -376,7 +383,17 @@ private fun MainScreen(
                                         )
                                         if (showRussianOnly) {
                                             DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.protect_all_shown)) },
+                                                text = {
+                                                    Text(
+                                                        stringResource(
+                                                            if (policyListMode == PolicyListMode.ALLOWLIST) {
+                                                                R.string.allowlist_add_all_shown
+                                                            } else {
+                                                                R.string.protect_all_shown
+                                                            },
+                                                        ),
+                                                    )
+                                                },
                                                 onClick = {
                                                     bulkProtectTrigger++
                                                     showFilterMenu = false
@@ -387,7 +404,17 @@ private fun MainScreen(
                                             )
                                         }
                                         DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.filter_only_selected)) },
+                                            text = {
+                                                Text(
+                                                    stringResource(
+                                                        if (policyListMode == PolicyListMode.ALLOWLIST) {
+                                                            R.string.filter_only_exceptions
+                                                        } else {
+                                                            R.string.filter_only_selected
+                                                        },
+                                                    ),
+                                                )
+                                            },
                                             onClick = { showOnlySelected = !showOnlySelected },
                                             leadingIcon = {
                                                 Checkbox(
@@ -496,23 +523,31 @@ private fun MainScreen(
                                 }
 
                                 Tab.Protection -> {
-                                    ProtectionScreen(
-                                        searchQuery = searchQuery,
-                                        showSystem = showSystem,
-                                        showRussianOnly = showRussianOnly,
-                                        showOnlySelected = showOnlySelected,
-                                        showOnlyWorkProfile = showOnlyWorkProfile,
-                                        sortOrder = sortOrder,
-                                        onDirtyChange = { isProtectionDirty = it },
-                                        onOpenAppSettings = { app ->
-                                            editingAppSettingsTarget = app
-                                            showEditingAppSettings = true
-                                        },
-                                        selfNeedsRestart = refreshRestart,
-                                        saveTrigger = saveTrigger,
-                                        bulkProtectTrigger = bulkProtectTrigger,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
+                                    if (policyListMode == null) {
+                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            CircularProgressIndicator()
+                                        }
+                                    } else {
+                                        ProtectionScreen(
+                                            listMode = policyListMode!!,
+                                            onListModeChange = { policyListMode = it },
+                                            searchQuery = searchQuery,
+                                            showSystem = showSystem,
+                                            showRussianOnly = showRussianOnly,
+                                            showOnlySelected = showOnlySelected,
+                                            showOnlyWorkProfile = showOnlyWorkProfile,
+                                            sortOrder = sortOrder,
+                                            onDirtyChange = { isProtectionDirty = it },
+                                            onOpenAppSettings = { app ->
+                                                editingAppSettingsTarget = app
+                                                showEditingAppSettings = true
+                                            },
+                                            selfNeedsRestart = refreshRestart,
+                                            saveTrigger = saveTrigger,
+                                            bulkProtectTrigger = bulkProtectTrigger,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    }
                                 }
 
                                 Tab.Statistics -> {

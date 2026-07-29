@@ -62,6 +62,7 @@
     <string name="bulk_protect_added">Добавлено в защиту: %1$d — нажмите «Сохранить», чтобы применить</string>
     <string name="bulk_protect_none_added">Все показанные приложения уже защищены</string>
     <string name="filter_only_selected">Только выбранные</string>
+    <string name="filter_only_exceptions">Только исключения</string>
     <string name="filter_only_work_profile">Только рабочий профиль</string>
     <string name="sort_name_asc">По названию (А-Я)</string>
     <string name="sort_name_desc">По названию (Я-А)</string>
