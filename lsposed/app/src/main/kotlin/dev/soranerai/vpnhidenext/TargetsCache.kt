@@ -79,21 +79,13 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
 
         var dbPopulatedOrUpdated = false
 
-        // Ensure the app itself (dev.soranerai.vpnhidenext) is in the database with kmod = true
+        // The manager UID is protected by vpnhide-ctl itself. It must not be
+        // persisted as a user-selected target/exception in the declarative
+        // policy, otherwise ALLOWLIST appears to contain the manager app.
         val selfPkg = appContext.packageName
         val selfProto = appDao.getAppProtection(selfPkg, 0)
-        if (selfProto == null || !selfProto.kmod) {
-            val selfUid = appContext.applicationInfo.uid
-            appDao.insertAppProtection(
-                dev.soranerai.vpnhidenext.db.AppProtection(
-                    packageName = selfPkg,
-                    userId = 0,
-                    uid = selfUid,
-                    kmod = true,
-                    lsposed = selfProto?.lsposed ?: false,
-                    portHiding = selfProto?.portHiding ?: false,
-                ),
-            )
+        if (selfProto != null) {
+            appDao.deleteAppProtection(selfProto)
             dbPopulatedOrUpdated = true
         }
 
