@@ -45,25 +45,18 @@ See [BUILDING.md](BUILDING.md) for the full guide (DDK Docker build, kernel sour
 
 On boot:
 - `post-fs-data.sh` runs `insmod` to load the kernel module
-- `service.sh` resolves package names from `targets.txt` to UIDs via `pm list packages -U` and writes them to `/proc/vpnhide_targets`
+- `service.sh` loads the app-owned JSON policy and starts `vpnhide-daemon`,
+  which resolves packages and applies one atomic policy snapshot
 
 ### Target management
 
-**VPNHide Next app (recommended):** open the VPNHide Next app (the [lsposed](../lsposed/) APK). It lists all installed apps with icons, search, and checkboxes. Saves targets for both kmod and zygisk, resolves UIDs, and writes to `/proc/vpnhide_targets` immediately. Works on both KernelSU and Magisk.
+**VPNHide Next app:** open the VPNHide Next app (the [lsposed](../lsposed/)
+APK). It writes one atomic policy file in app Device Protected Storage and
+invokes `vpnhide-ctl load`. The backend resolves UIDs, applies blacklist or
+allowlist semantics, and protects system applications automatically.
 
-**Shell:**
-```bash
-# Write package names to the persistent config
-adb shell su -c 'echo "com.example.targetapp" > /data/adb/vpnhide_kmod/targets.txt'
-
-# Or write UIDs directly to the kernel module
-adb shell su -c 'echo 10423 > /proc/vpnhide_targets'
-```
-
-The app writes to **three places** simultaneously:
-1. `targets.txt` -- persistent package names (survives module updates)
-2. `/proc/vpnhide_targets` -- resolved UIDs for the kernel module (live, no reboot)
-3. `/data/system/vpnhide_uids.txt` -- resolved UIDs for the [lsposed](../lsposed/) module's system_server hooks (live reload via inotify)
+Do not create target files or write `/proc/vpnhide_targets` manually; those
+are no longer frontend contracts.
 
 ## Combined use with system_server hooks
 

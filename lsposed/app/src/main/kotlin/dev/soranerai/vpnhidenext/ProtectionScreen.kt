@@ -7,8 +7,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.dp
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
+import dev.soranerai.vpnhidenext.db.DbGlobalConfig
+import dev.soranerai.vpnhidenext.db.PolicyListMode
 
 @Composable
 internal fun ProtectionScreen(
@@ -41,6 +45,14 @@ internal fun ProtectionScreen(
 
     var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var refreshTrigger by remember { mutableStateOf(0) }
+    var listMode by remember { mutableStateOf(PolicyListMode.BLACKLIST) }
+    var originalListMode by remember { mutableStateOf(PolicyListMode.BLACKLIST) }
+    var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
+
+    LaunchedEffect(Unit) {
+        listMode = AppDatabase.getInstance(context).globalConfigDao().getConfig()?.listMode ?: PolicyListMode.BLACKLIST
+        originalListMode = listMode
+    }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -181,26 +193,57 @@ internal fun ProtectionScreen(
             }
     }
 
-    val dirty = remember(apps, originalApps) { isDirty(apps, originalApps) }
+    val dirty = remember(apps, originalApps, listMode, originalListMode) {
+        isDirty(apps, originalApps) || listMode != originalListMode
+    }
 
     LaunchedEffect(dirty) { onDirtyChange(dirty) }
 
     Box(modifier = modifier.fillMaxSize()) {
-        AppPickerScreen(
-            apps = apps,
-            searchQuery = searchQuery,
-            showSystem = showSystem,
-            showRussianOnly = showRussianOnly,
-            showOnlySelected = showOnlySelected,
-            showOnlyWorkProfile = showOnlyWorkProfile,
-            sortOrder = sortOrder,
-            onUpdate = { newList -> apps = newList },
-            sortedIds = sortedIds,
-            onRefresh = onRefresh,
-            onOpenAppSettings = onOpenAppSettings,
-            listState = listState,
-            modifier = Modifier.fillMaxSize(),
-        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            PolicyModeCard(
+                mode = listMode,
+                onModeSelected = { selected -> if (selected != listMode) pendingMode = selected },
+            )
+            AppPickerScreen(
+                apps = apps,
+                searchQuery = searchQuery,
+                showSystem = showSystem,
+                showRussianOnly = showRussianOnly,
+                showOnlySelected = showOnlySelected,
+                showOnlyWorkProfile = showOnlyWorkProfile,
+                sortOrder = sortOrder,
+                onUpdate = { newList -> apps = newList },
+                sortedIds = sortedIds,
+                onRefresh = onRefresh,
+                onOpenAppSettings = onOpenAppSettings,
+                listState = listState,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        pendingMode?.let { selected ->
+            AlertDialog(
+                onDismissRequest = { pendingMode = null },
+                title = { Text(stringResource(R.string.policy_mode_change_title)) },
+                text = {
+                    Text(
+                        stringResource(
+                            if (selected == PolicyListMode.ALLOWLIST) R.string.policy_mode_allowlist_warning
+                            else R.string.policy_mode_blacklist_warning,
+                        ),
+                    )
+                },
+                confirmButton = {
+                    TextButton(onClick = { listMode = selected; pendingMode = null }) {
+                        Text(stringResource(R.string.policy_mode_change_confirm))
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { pendingMode = null }) { Text(stringResource(R.string.cancel)) }
+                },
+            )
+        }
 
         SnackbarHost(
             hostState = snackbarHostState,
@@ -220,6 +263,9 @@ internal fun ProtectionScreen(
                     val db = AppDatabase.getInstance(context)
                     db.withTransaction {
                         val appDao = db.appDao()
+                        val globalDao = db.globalConfigDao()
+                        val currentGlobal = globalDao.getConfig() ?: DbGlobalConfig()
+                        globalDao.insertConfig(currentGlobal.copy(listMode = listMode))
                         // Hook-mask overrides are now edited live from AppSettingsScreen, not
                         // staged in this list — read the current DB state so this save can't
                         // clobber them with the stale snapshot captured when the tab loaded.
@@ -272,6 +318,7 @@ internal fun ProtectionScreen(
                         DiagnosticsCache.run(scope, context)
                         TargetsCache.refresh(scope, context)
                         originalApps = apps
+                        originalListMode = listMode
                         // Re-sort after save to reflect new selection state (jump once, but after save is done)
                         resetOrder()
                     } else {
@@ -282,6 +329,42 @@ internal fun ProtectionScreen(
                 }
                 saving = false
             }
+        }
+    }
+}
+
+@Composable
+private fun PolicyModeCard(
+    mode: PolicyListMode,
+    onModeSelected: (PolicyListMode) -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(stringResource(R.string.policy_mode_title), style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                FilterChip(
+                    selected = mode == PolicyListMode.BLACKLIST,
+                    onClick = { onModeSelected(PolicyListMode.BLACKLIST) },
+                    label = { Text(stringResource(R.string.policy_mode_blacklist)) },
+                )
+                FilterChip(
+                    selected = mode == PolicyListMode.ALLOWLIST,
+                    onClick = { onModeSelected(PolicyListMode.ALLOWLIST) },
+                    label = { Text(stringResource(R.string.policy_mode_allowlist)) },
+                )
+            }
+            Text(
+                stringResource(
+                    if (mode == PolicyListMode.ALLOWLIST) R.string.policy_mode_allowlist_desc
+                    else R.string.policy_mode_blacklist_desc,
+                ),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

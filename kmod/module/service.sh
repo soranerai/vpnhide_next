@@ -1,5 +1,5 @@
 #!/system/bin/sh
-# Resolves and applies rules from SQLite database at boot.
+# Loads the app-owned declarative JSON policy and starts reconciliation.
 
 MODDIR="$(cd "$(dirname "$0")" && pwd)"
 CTL="$MODDIR/vpnhide-ctl"
@@ -54,34 +54,6 @@ else
     log_msg "kernel module control node not found, skipping kmod rules application"
 fi
 
-# Check for fallback migrated database and move it if the app is installed
-TEMP_DB="/data/adb/vpnhide_kmod/vpnhide_database"
-if [ -f "$TEMP_DB" ]; then
-    self_uid="$(pm list packages -U --user all 2>/dev/null | grep "^package:dev.soranerai.vpnhidenext " | awk '{print $2}' | sed 's/uid://' | tr ',' '\n' | head -n 1)"
-    if [ -n "$self_uid" ]; then
-        log_msg "manager app detected (UID $self_uid), promoting fallback database..."
-        find /data/user /data/user_de /data/data -maxdepth 4 -name "dev.soranerai.vpnhidenext" 2>/dev/null | while read -r p; do
-            db_dir="$p/databases"
-            mkdir -p "$db_dir"
-            app_db="$db_dir/vpnhide_database"
-
-            log_msg "copying $TEMP_DB to $app_db"
-            cp "$TEMP_DB" "$app_db"
-            if [ -f "$TEMP_DB-wal" ]; then
-                cp "$TEMP_DB-wal" "$app_db-wal" || true
-            fi
-            if [ -f "$TEMP_DB-shm" ]; then
-                cp "$TEMP_DB-shm" "$app_db-shm" || true
-            fi
-
-            chmod 660 "$app_db"*
-            chown "$self_uid:$self_uid" "$app_db"*
-            restorecon -R "$db_dir" 2>/dev/null || true
-        done
-        rm -f "$TEMP_DB"*
-    fi
-fi
-
 # Detect JSON config file in Device Protected Storage files directory
 JSON_CONF="/data/user_de/0/dev.soranerai.vpnhidenext/files/vpnhide_config.json"
 
@@ -115,4 +87,6 @@ DAEMON="$MODDIR/vpnhide-daemon"
 chmod +x "$DAEMON"
 
 # Start the event-driven C daemon in the background
-"$DAEMON" >/data/adb/vpnhide_kmod/daemon.log 2>&1 &
+self_uid="$(pm list packages -U --user all 2>/dev/null | grep "^package:dev.soranerai.vpnhidenext " | awk '{print $2}' | sed 's/uid://' | tr ',' '\n' | head -n 1)"
+"$DAEMON" "$CTL" "$JSON_CONF" "${self_uid:-0}" \
+    >/data/adb/vpnhide_kmod/daemon.log 2>&1 &

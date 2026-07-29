@@ -14,9 +14,8 @@ import java.util.concurrent.TimeUnit
 
 private const val BOOT_HEALTH_CHECK_WORK_NAME = "health_check_boot"
 
-// kmod/module/service.sh — which resolves targets.txt -> UIDs and applies
-// kernel/LSPosed hook state — runs "after boot_completed-ish" (see
-// docs/state.md § 8), so reacting to BOOT_COMPLETED immediately can race it.
+// The root daemon reloads the app-owned JSON policy after boot. The health
+// check is delayed so module loading and daemon startup can settle first.
 private const val BOOT_HEALTH_CHECK_DELAY_SEC = 60L
 
 /**

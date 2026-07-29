@@ -1,8 +1,9 @@
-# vpnhide_next -- LSPosed module + target picker app
+# vpnhide_next -- LSPosed module + policy manager app
 
 Hooks `writeToParcel()` in `system_server` to strip VPN data before Binder serialization reaches target apps. Part of [vpnhide_next](../README.md).
 
-The APK also serves as the **target management UI** for the entire vpnhide_next project — it writes targets for both [kmod](../kmod/) and [zygisk](../zygisk/) modules.
+The APK also serves as the policy management UI for the entire vpnhide_next
+project. It writes one atomic policy file for the kernel and Java layers.
 
 Zero presence in the target app's process -- only "System Framework" is needed in the LSPosed scope.
 
@@ -24,11 +25,9 @@ Filtering is controlled by `Binder.getCallingUid()` -- only apps whose UID appea
 
 ### Target management
 
-Target UIDs are loaded from `/data/system/vpnhide_uids.txt`. A `FileObserver` (inotify) watches for changes and reloads the list immediately -- no reboot needed.
-
-This file is written by:
-- The **VPNHide Next app** (this APK's target picker UI)
-- The module's `service.sh` on boot
+Effective target UIDs are resolved by `vpnhide-ctl` from the declarative JSON
+policy and applied atomically through the kernel policy API. The app does not
+write a shared UID file.
 
 ## Target picker app
 
@@ -37,12 +36,10 @@ The APK includes a Compose UI for managing target apps across all vpnhide module
 - Lists all installed apps with icons, names, and package names
 - Text search filter
 - System apps toggle (selected system apps always visible)
-- Save writes to all target locations via `su`:
-  - `/data/adb/vpnhide_kmod/targets.txt` (if kmod is installed)
-  - `/data/adb/vpnhide_zygisk/targets.txt` (if zygisk is installed)
-  - `/data/adb/modules/vpnhide_zygisk/targets.txt` (Magisk module dir copy)
-  - `/proc/vpnhide_targets` (kmod live update, no reboot needed)
-  - `/data/system/vpnhide_uids.txt` (system_server hooks, live reload via inotify)
+- Save atomically updates
+  `/data/user_de/0/dev.soranerai.vpnhidenext/files/vpnhide_config.json`.
+- The root daemon watches this file and applies the complete policy without
+  per-component target setters.
 
 Works on KernelSU, Magisk, and any other root solution.
 

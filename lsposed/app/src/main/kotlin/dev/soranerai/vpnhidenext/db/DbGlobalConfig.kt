@@ -8,8 +8,14 @@ internal const val JAVA_HOOK_BIT_HIDE_VPN_APPS = 5
 internal const val JAVA_HOOK_BIT_SELF_HIDE = 7
 internal const val DEFAULT_JAVA_HOOK_MASK = 0xFFFFFFFFL and (1L shl JAVA_HOOK_BIT_SELF_HIDE).inv()
 
+internal enum class PolicyListMode {
+    BLACKLIST,
+    ALLOWLIST,
+}
+
 internal data class DbGlobalConfig(
     val id: String = "default",
+    val listMode: PolicyListMode = PolicyListMode.BLACKLIST,
     val kernelHookMask: Long = 0xFFFFFFFFL,
     val javaHookMask: Long = DEFAULT_JAVA_HOOK_MASK,
     val debugLogging: Int = 0,

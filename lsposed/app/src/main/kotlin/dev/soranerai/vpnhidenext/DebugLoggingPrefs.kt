@@ -3,6 +3,7 @@ package dev.soranerai.vpnhidenext
 import android.content.Context
 import android.util.Log
 import dev.soranerai.vpnhidenext.db.AppDatabase
+import dev.soranerai.vpnhidenext.db.DatabaseSync
 import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 
 /**
@@ -10,15 +11,10 @@ import dev.soranerai.vpnhidenext.db.DbGlobalConfig
  * out-of-process logging sinks:
  *
  *  - App Kotlin code → [VpnHideLog.enabled] (volatile)
- *  - system_server LSPosed hooks → [SS_DEBUG_LOGGING_FILE] (inotify-
- *    watched; flip takes effect immediately for already-running apps)
- *  - Kernel module → [kmodCtl] (stealthy IOCTL; per-boot
- *    only, re-seeded from [SS_DEBUG_LOGGING_FILE] by `kmod/module/
- *    service.sh` at boot so the persistent toggle survives reboots
- *    even when the app isn't opened)
+ *  - Kernel module → the persisted JSON policy, applied through `load`
+ *  - LSPosed hooks → process-local logging only; system_server does not
+ *    probe app-private or shared filesystem state
  */
-internal const val SS_DEBUG_LOGGING_FILE = "/data/system/vpnhide_debug_logging"
-
 /** Default is OFF — stealth-first matches the project's anti-detection stance. */
 internal suspend fun isEnabledInPrefs(context: Context): Boolean {
     val db = AppDatabase.getInstance(context)
@@ -40,6 +36,7 @@ internal suspend fun setDebugLoggingEnabled(
     val current = dao.getConfig() ?: DbGlobalConfig()
     dao.insertConfig(current.copy(debugLogging = if (enabled) 1 else 0))
     applyDebugLoggingRuntime(enabled)
+    DatabaseSync.sync(context)
 }
 
 /**
@@ -52,13 +49,4 @@ internal suspend fun setDebugLoggingEnabled(
  */
 internal fun applyDebugLoggingRuntime(enabled: Boolean) {
     VpnHideLog.enabled = enabled
-    writeDebugFlagFiles(enabled)
-}
-
-private fun writeDebugFlagFiles(enabled: Boolean) {
-    val value = if (enabled) "1" else "0"
-    suExec(
-        "[ -c $DEV_NODE ] && $kmodCtl debug $value; " +
-            "true",
-    )
 }

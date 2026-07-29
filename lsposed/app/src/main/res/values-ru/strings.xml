@@ -7,7 +7,17 @@
     <string name="tab_protection">Защита</string>
     <string name="tab_statistics">Статистика</string>
 
-    <!-- Protection modes (segmented button) -->
+    <!-- Protection modes -->
+    <string name="policy_mode_title">Режим защиты</string>
+    <string name="policy_mode_blacklist">Скрывать выбранные</string>
+    <string name="policy_mode_allowlist">Показывать выбранные</string>
+    <string name="policy_mode_blacklist_desc">Выбранные приложения не видят VPN-интерфейсы, порты и включённые хуки.</string>
+    <string name="policy_mode_allowlist_desc">Выбранные приложения остаются видимыми. Подходящие сторонние приложения скрываются, системные защищены.</string>
+    <string name="policy_mode_change_title">Изменить режим защиты?</string>
+    <string name="policy_mode_change_confirm">Изменить режим</string>
+    <string name="policy_mode_allowlist_warning">Выбранные приложения станут исключениями. Остальные подходящие сторонние приложения будут скрыты. Системные и privileged-приложения не затрагиваются.</string>
+    <string name="policy_mode_blacklist_warning">Выбранные приложения снова станут целями сокрытия. Список сохраняется, меняется только его смысл.</string>
+    <string name="allowlist_add_all_shown">Добавить показанные в исключения</string>
 
     <!-- Port hiding -->
     <string name="ports_hint_safe">Безопасно для банков, госуслуг, маркетплейсов, не-браузерных приложений. Chromium-браузеры используют localhost для dev/PWA — их не стоит делать observer\'ами.</string>

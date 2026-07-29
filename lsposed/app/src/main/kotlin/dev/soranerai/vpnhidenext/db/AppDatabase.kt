@@ -519,6 +519,14 @@ internal class AppDatabase private constructor(
                 instance!!
             }
 
+        /** The only persistent policy path shared with the root daemon. */
+        fun policyConfigFile(context: Context): File {
+            val deContext =
+                if (context.isDeviceProtectedStorage) context
+                else context.createDeviceProtectedStorageContext()
+            return File(deContext.filesDir, "vpnhide_config.json")
+        }
+
         fun performMigrationIfRequired(context: Context) {
             val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
             val dbFile = deContext.getDatabasePath("vpnhide_database")
@@ -782,6 +790,7 @@ private fun JSONObject.toDbMassPortRule(): DbMassPortRule =
 private fun DbGlobalConfig.toJson(): JSONObject =
     JSONObject().apply {
         put("id", id)
+        put("listMode", listMode.name)
         put("kernelHookMask", kernelHookMask)
         put("javaHookMask", javaHookMask)
         put("debugLogging", debugLogging)
@@ -794,6 +803,9 @@ private fun DbGlobalConfig.toJson(): JSONObject =
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
     DbGlobalConfig(
         id = optString("id", "default"),
+        listMode = runCatching {
+            PolicyListMode.valueOf(optString("listMode", PolicyListMode.BLACKLIST.name))
+        }.getOrDefault(PolicyListMode.BLACKLIST),
         kernelHookMask = optLong("kernelHookMask", 0xFFFFFFFFL),
         javaHookMask = optLong("javaHookMask", DEFAULT_JAVA_HOOK_MASK),
         debugLogging = optInt("debugLogging", 0),

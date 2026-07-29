@@ -7,7 +7,17 @@
     <string name="tab_protection">Protection</string>
     <string name="tab_statistics">Statistics</string>
 
-    <!-- Protection modes (segmented button) -->
+    <!-- Protection modes -->
+    <string name="policy_mode_title">Protection mode</string>
+    <string name="policy_mode_blacklist">Hide selected</string>
+    <string name="policy_mode_allowlist">Show selected</string>
+    <string name="policy_mode_blacklist_desc">Selected apps are hidden from VPN interfaces, ports and enabled hooks.</string>
+    <string name="policy_mode_allowlist_desc">Selected apps remain visible. Eligible third-party apps are hidden; system apps are protected.</string>
+    <string name="policy_mode_change_title">Change protection mode?</string>
+    <string name="policy_mode_change_confirm">Change mode</string>
+    <string name="policy_mode_allowlist_warning">Selected apps become exceptions. Other eligible third-party apps will be hidden. System and privileged apps are never targeted.</string>
+    <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. The current selection is preserved; only its meaning changes.</string>
+    <string name="allowlist_add_all_shown">Add shown to exceptions</string>
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>
