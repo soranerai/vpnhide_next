@@ -13,10 +13,15 @@ internal object DatabaseSync {
             if (!configFile.isFile) return@withContext false
 
             val statsBucketSeconds =
-                StatsRetentionPeriod.fromConfigValue(
-                    AppDatabase.getInstance(context).globalConfigDao().getConfig()?.statsRetentionPeriod
-                        ?: "30m",
-                ).bucketSeconds
+                StatsRetentionPeriod
+                    .fromConfigValue(
+                        AppDatabase
+                            .getInstance(context)
+                            .globalConfigDao()
+                            .getConfig()
+                            ?.statsRetentionPeriod
+                            ?: "30m",
+                    ).bucketSeconds
             val selfUid = context.applicationInfo.uid
             val quotedConfig = shellQuote(configFile.absolutePath)
             val command =
@@ -27,6 +32,5 @@ internal object DatabaseSync {
             exitCode == 0
         }
 
-    private fun shellQuote(value: String): String =
-        "'${value.replace("'", "'\\''")}'"
+    private fun shellQuote(value: String): String = "'${value.replace("'", "'\\''")}'"
 }

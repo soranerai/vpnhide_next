@@ -119,9 +119,10 @@ internal object SettingsBackupHelper {
                     if (globalObj != null) {
                         val kernelMask = globalObj.optLong("kernelHookMask", 0xFFFFFFFFL)
                         val javaMask = globalObj.optLong("javaHookMask", 0xFFFFFFFFL)
-                        val listMode = runCatching {
-                            PolicyListMode.valueOf(globalObj.optString("listMode", PolicyListMode.BLACKLIST.name))
-                        }.getOrDefault(PolicyListMode.BLACKLIST)
+                        val listMode =
+                            runCatching {
+                                PolicyListMode.valueOf(globalObj.optString("listMode", PolicyListMode.BLACKLIST.name))
+                            }.getOrDefault(PolicyListMode.BLACKLIST)
                         db.globalConfigDao().insertConfig(
                             DbGlobalConfig(
                                 listMode = listMode,

@@ -1,11 +1,8 @@
 package dev.soranerai.vpnhidenext
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -195,18 +192,15 @@ internal fun ProtectionScreen(
             }
     }
 
-    val dirty = remember(apps, originalApps, listMode, originalListMode) {
-        isDirty(apps, originalApps) || listMode != originalListMode
-    }
+    val dirty =
+        remember(apps, originalApps, listMode, originalListMode) {
+            isDirty(apps, originalApps) || listMode != originalListMode
+        }
 
     LaunchedEffect(dirty) { onDirtyChange(dirty) }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
-            PolicyModeCard(
-                mode = listMode,
-                onModeSelected = { selected -> if (selected != listMode) pendingMode = selected },
-            )
             AppPickerScreen(
                 apps = apps,
                 searchQuery = searchQuery,
@@ -220,9 +214,28 @@ internal fun ProtectionScreen(
                 onRefresh = onRefresh,
                 onOpenAppSettings = onOpenAppSettings,
                 listState = listState,
+                topContentPadding = 84.dp,
                 modifier = Modifier.weight(1f),
             )
         }
+
+        PillTabSelector(
+            tabs =
+                listOf(
+                    PillTab(Icons.Default.VisibilityOff, stringResource(R.string.policy_mode_blacklist)),
+                    PillTab(Icons.Default.Visibility, stringResource(R.string.policy_mode_allowlist)),
+                ),
+            selectedIndex = if (listMode == PolicyListMode.BLACKLIST) 0 else 1,
+            onSelect = { selected ->
+                val selectedMode = if (selected == 0) PolicyListMode.BLACKLIST else PolicyListMode.ALLOWLIST
+                if (selectedMode != listMode) pendingMode = selectedMode
+            },
+            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp).width(260.dp),
+            height = 60.dp,
+            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+            tonalElevation = 12.dp,
+            shadowElevation = 8.dp,
+        )
 
         pendingMode?.let { selected ->
             AlertDialog(
@@ -231,13 +244,19 @@ internal fun ProtectionScreen(
                 text = {
                     Text(
                         stringResource(
-                            if (selected == PolicyListMode.ALLOWLIST) R.string.policy_mode_allowlist_warning
-                            else R.string.policy_mode_blacklist_warning,
+                            if (selected == PolicyListMode.ALLOWLIST) {
+                                R.string.policy_mode_allowlist_warning
+                            } else {
+                                R.string.policy_mode_blacklist_warning
+                            },
                         ),
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = { onListModeChange(selected); pendingMode = null }) {
+                    TextButton(onClick = {
+                        onListModeChange(selected)
+                        pendingMode = null
+                    }) {
                         Text(stringResource(R.string.policy_mode_change_confirm))
                     }
                 },
@@ -330,109 +349,6 @@ internal fun ProtectionScreen(
                 }
                 saving = false
             }
-        }
-    }
-}
-
-@Composable
-private fun PolicyModeCard(
-    mode: PolicyListMode,
-    onModeSelected: (PolicyListMode) -> Unit,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f)),
-    ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Surface(
-                    modifier = Modifier.size(36.dp),
-                    shape = RoundedCornerShape(12.dp),
-                    color = MaterialTheme.colorScheme.primary,
-                    contentColor = MaterialTheme.colorScheme.onPrimary,
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Shield,
-                        contentDescription = null,
-                        modifier = Modifier.padding(8.dp),
-                    )
-                }
-                Spacer(Modifier.width(10.dp))
-                Text(stringResource(R.string.policy_mode_title), style = MaterialTheme.typography.titleMedium)
-            }
-            Spacer(Modifier.height(8.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                PolicyModeButton(
-                    label = stringResource(R.string.policy_mode_blacklist),
-                    icon = Icons.Default.VisibilityOff,
-                    selected = mode == PolicyListMode.BLACKLIST,
-                    selectedContainer = MaterialTheme.colorScheme.primary,
-                    selectedContent = MaterialTheme.colorScheme.onPrimary,
-                    onClick = { onModeSelected(PolicyListMode.BLACKLIST) },
-                    modifier = Modifier.weight(1f),
-                )
-                PolicyModeButton(
-                    label = stringResource(R.string.policy_mode_allowlist),
-                    icon = Icons.Default.Visibility,
-                    selected = mode == PolicyListMode.ALLOWLIST,
-                    selectedContainer = MaterialTheme.colorScheme.primaryContainer,
-                    selectedContent = MaterialTheme.colorScheme.onPrimaryContainer,
-                    onClick = { onModeSelected(PolicyListMode.ALLOWLIST) },
-                    modifier = Modifier.weight(1f),
-                )
-            }
-            Text(
-                stringResource(
-                    if (mode == PolicyListMode.ALLOWLIST) R.string.policy_mode_allowlist_desc
-                    else R.string.policy_mode_blacklist_desc,
-                ),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-}
-
-@Composable
-private fun PolicyModeButton(
-    label: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    selected: Boolean,
-    selectedContainer: androidx.compose.ui.graphics.Color,
-    selectedContent: androidx.compose.ui.graphics.Color,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    Surface(
-        onClick = onClick,
-        modifier = modifier.height(42.dp),
-        shape = RoundedCornerShape(12.dp),
-        color = if (selected) selectedContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.16f),
-        contentColor = if (selected) selectedContent else MaterialTheme.colorScheme.onPrimaryContainer,
-        border = BorderStroke(
-            1.dp,
-            if (selected) selectedContainer else MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
-        ),
-    ) {
-        Row(
-            modifier = Modifier.padding(horizontal = 10.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = null,
-                modifier = Modifier.size(20.dp),
-            )
-            Spacer(Modifier.width(7.dp))
-            Text(
-                text = label,
-                style = MaterialTheme.typography.labelLarge,
-                maxLines = 1,
-            )
         }
     }
 }

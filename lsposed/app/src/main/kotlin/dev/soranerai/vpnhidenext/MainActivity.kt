@@ -181,7 +181,11 @@ private fun MainScreen(
     val userNames by AppListCache.userNames.collectAsState()
 
     LaunchedEffect(Unit) {
-        policyListMode = AppDatabase.getInstance(context).globalConfigDao().getConfig()?.listMode
+        policyListMode = AppDatabase
+            .getInstance(context)
+            .globalConfigDao()
+            .getConfig()
+            ?.listMode
             ?: PolicyListMode.BLACKLIST
     }
 

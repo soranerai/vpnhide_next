@@ -6,7 +6,7 @@ import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DatabaseSync
 import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 
-/**
+/*
  * Persisted "debug logging" preference and its propagation to the
  * out-of-process logging sinks:
  *
@@ -15,6 +15,7 @@ import dev.soranerai.vpnhidenext.db.DbGlobalConfig
  *  - LSPosed hooks → process-local logging only; system_server does not
  *    probe app-private or shared filesystem state
  */
+
 /** Default is OFF — stealth-first matches the project's anti-detection stance. */
 internal suspend fun isEnabledInPrefs(context: Context): Boolean {
     val db = AppDatabase.getInstance(context)

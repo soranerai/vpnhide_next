@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -58,6 +59,7 @@ internal fun AppPickerScreen(
     onRefresh: () -> Unit,
     onOpenAppSettings: (AppEntry) -> Unit,
     listState: LazyListState,
+    topContentPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val appList by AppListCache.apps.collectAsState()
@@ -95,7 +97,10 @@ internal fun AppPickerScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (loading) {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = topContentPadding),
+            ) {
                 items(10) { SkeletonAppRow() }
             }
         } else {
@@ -116,7 +121,11 @@ internal fun AppPickerScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = bottomNavPadding + 100.dp),
+                        contentPadding =
+                            PaddingValues(
+                                top = topContentPadding,
+                                bottom = bottomNavPadding + 100.dp,
+                            ),
                     ) {
                         items(displayApps, key = { "${it.packageName}:${it.userId}" }) { app ->
                             AppRow(

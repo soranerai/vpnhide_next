@@ -271,8 +271,9 @@ class DashboardRepository(
                 dev.soranerai.vpnhidenext.db.AppDatabase
                     .getInstance(context)
             val appsSync = db.appDao().getAllAppProtectionSync()
-            val policyMode = db.globalConfigDao().getConfig()?.listMode
-                ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
+            val policyMode =
+                db.globalConfigDao().getConfig()?.listMode
+                    ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
 
             // kmod
             val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))

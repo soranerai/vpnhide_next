@@ -173,8 +173,9 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
 
         val snapshot =
             TargetsSnapshot(
-                listMode = db.globalConfigDao().getConfig()?.listMode
-                    ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
+                listMode =
+                    db.globalConfigDao().getConfig()?.listMode
+                        ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
                 kmodModuleInstalled = statusSnapshot.kmodModuleInstalled,
                 kmodActive = statusSnapshot.kmodActive,
                 kmodTargets = apps.filter { it.kmod }.map { it.packageName to it.userId }.toSet(),
