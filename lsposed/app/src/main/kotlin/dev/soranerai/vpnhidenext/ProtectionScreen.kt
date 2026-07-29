@@ -4,6 +4,10 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Shield
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -337,10 +341,25 @@ private fun PolicyModeCard(
 ) {
     Card(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.18f)),
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(stringResource(R.string.policy_mode_title), style = MaterialTheme.typography.titleMedium)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Surface(
+                    modifier = Modifier.size(36.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Shield,
+                        contentDescription = null,
+                        modifier = Modifier.padding(8.dp),
+                    )
+                }
+                Spacer(Modifier.width(10.dp))
+                Text(stringResource(R.string.policy_mode_title), style = MaterialTheme.typography.titleMedium)
+            }
             Spacer(Modifier.height(8.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -348,17 +367,19 @@ private fun PolicyModeCard(
             ) {
                 PolicyModeButton(
                     label = stringResource(R.string.policy_mode_blacklist),
+                    icon = Icons.Default.VisibilityOff,
                     selected = mode == PolicyListMode.BLACKLIST,
-                    selectedContainer = MaterialTheme.colorScheme.primaryContainer,
-                    selectedContent = MaterialTheme.colorScheme.onPrimaryContainer,
+                    selectedContainer = MaterialTheme.colorScheme.primary,
+                    selectedContent = MaterialTheme.colorScheme.onPrimary,
                     onClick = { onModeSelected(PolicyListMode.BLACKLIST) },
                     modifier = Modifier.weight(1f),
                 )
                 PolicyModeButton(
                     label = stringResource(R.string.policy_mode_allowlist),
+                    icon = Icons.Default.Visibility,
                     selected = mode == PolicyListMode.ALLOWLIST,
-                    selectedContainer = MaterialTheme.colorScheme.secondaryContainer,
-                    selectedContent = MaterialTheme.colorScheme.onSecondaryContainer,
+                    selectedContainer = MaterialTheme.colorScheme.primaryContainer,
+                    selectedContent = MaterialTheme.colorScheme.onPrimaryContainer,
                     onClick = { onModeSelected(PolicyListMode.ALLOWLIST) },
                     modifier = Modifier.weight(1f),
                 )
@@ -378,6 +399,7 @@ private fun PolicyModeCard(
 @Composable
 private fun PolicyModeButton(
     label: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
     selected: Boolean,
     selectedContainer: androidx.compose.ui.graphics.Color,
     selectedContent: androidx.compose.ui.graphics.Color,
@@ -388,14 +410,24 @@ private fun PolicyModeButton(
         onClick = onClick,
         modifier = modifier.height(42.dp),
         shape = RoundedCornerShape(12.dp),
-        color = if (selected) selectedContainer else MaterialTheme.colorScheme.surfaceVariant,
-        contentColor = if (selected) selectedContent else MaterialTheme.colorScheme.onSurfaceVariant,
+        color = if (selected) selectedContainer else MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.16f),
+        contentColor = if (selected) selectedContent else MaterialTheme.colorScheme.onPrimaryContainer,
         border = BorderStroke(
             1.dp,
-            if (selected) selectedContainer else MaterialTheme.colorScheme.outline,
+            if (selected) selectedContainer else MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
         ),
     ) {
-        Box(contentAlignment = Alignment.Center) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp),
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                modifier = Modifier.size(20.dp),
+            )
+            Spacer(Modifier.width(7.dp))
             Text(
                 text = label,
                 style = MaterialTheme.typography.labelLarge,
