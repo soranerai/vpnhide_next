@@ -9,8 +9,8 @@
 
     <!-- Protection modes -->
     <string name="policy_mode_title">Protection mode</string>
-    <string name="policy_mode_blacklist">Hide selected</string>
-    <string name="policy_mode_allowlist">Show selected</string>
+    <string name="policy_mode_blacklist">Hide</string>
+    <string name="policy_mode_allowlist">Show</string>
     <string name="policy_mode_blacklist_desc">Selected apps are hidden from VPN interfaces, ports and enabled hooks.</string>
     <string name="policy_mode_allowlist_desc">Selected apps remain visible. Eligible third-party apps are hidden; system apps are protected.</string>
     <string name="policy_mode_change_title">Change protection mode?</string>

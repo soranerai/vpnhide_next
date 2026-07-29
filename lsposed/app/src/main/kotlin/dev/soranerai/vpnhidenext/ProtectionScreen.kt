@@ -1,7 +1,9 @@
 package dev.soranerai.vpnhidenext
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -340,16 +342,25 @@ private fun PolicyModeCard(
         Column(modifier = Modifier.padding(16.dp)) {
             Text(stringResource(R.string.policy_mode_title), style = MaterialTheme.typography.titleMedium)
             Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PolicyModeButton(
+                    label = stringResource(R.string.policy_mode_blacklist),
                     selected = mode == PolicyListMode.BLACKLIST,
+                    selectedContainer = MaterialTheme.colorScheme.primaryContainer,
+                    selectedContent = MaterialTheme.colorScheme.onPrimaryContainer,
                     onClick = { onModeSelected(PolicyListMode.BLACKLIST) },
-                    label = { Text(stringResource(R.string.policy_mode_blacklist)) },
+                    modifier = Modifier.weight(1f),
                 )
-                FilterChip(
+                PolicyModeButton(
+                    label = stringResource(R.string.policy_mode_allowlist),
                     selected = mode == PolicyListMode.ALLOWLIST,
+                    selectedContainer = MaterialTheme.colorScheme.secondaryContainer,
+                    selectedContent = MaterialTheme.colorScheme.onSecondaryContainer,
                     onClick = { onModeSelected(PolicyListMode.ALLOWLIST) },
-                    label = { Text(stringResource(R.string.policy_mode_allowlist)) },
+                    modifier = Modifier.weight(1f),
                 )
             }
             Text(
@@ -359,6 +370,36 @@ private fun PolicyModeCard(
                 ),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+@Composable
+private fun PolicyModeButton(
+    label: String,
+    selected: Boolean,
+    selectedContainer: androidx.compose.ui.graphics.Color,
+    selectedContent: androidx.compose.ui.graphics.Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Surface(
+        onClick = onClick,
+        modifier = modifier.height(42.dp),
+        shape = RoundedCornerShape(12.dp),
+        color = if (selected) selectedContainer else MaterialTheme.colorScheme.surfaceVariant,
+        contentColor = if (selected) selectedContent else MaterialTheme.colorScheme.onSurfaceVariant,
+        border = BorderStroke(
+            1.dp,
+            if (selected) selectedContainer else MaterialTheme.colorScheme.outline,
+        ),
+    ) {
+        Box(contentAlignment = Alignment.Center) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.labelLarge,
+                maxLines = 1,
             )
         }
     }

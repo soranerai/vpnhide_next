@@ -9,8 +9,8 @@
 
     <!-- Protection modes -->
     <string name="policy_mode_title">Режим защиты</string>
-    <string name="policy_mode_blacklist">Скрывать выбранные</string>
-    <string name="policy_mode_allowlist">Показывать выбранные</string>
+    <string name="policy_mode_blacklist">Скрывать</string>
+    <string name="policy_mode_allowlist">Показывать</string>
     <string name="policy_mode_blacklist_desc">Выбранные приложения не видят VPN-интерфейсы, порты и включённые хуки.</string>
     <string name="policy_mode_allowlist_desc">Выбранные приложения остаются видимыми. Подходящие сторонние приложения скрываются, системные защищены.</string>
     <string name="policy_mode_change_title">Изменить режим защиты?</string>
