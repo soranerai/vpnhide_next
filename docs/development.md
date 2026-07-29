@@ -99,6 +99,10 @@ After flashing kmod or zygisk, reboot the device.
 CI runs the same checks. See [.github/workflows/ci.yml](../.github/workflows/ci.yml) for the authoritative list.
 
 ```sh
+# Compatibility matrix codegen — run after editing data/compatibility.json
+python3 scripts/codegen-compatibility.py
+git diff --quiet -- lsposed/app/src/main/kotlin/dev/soranerai/vpnhidenext/generated/CompatibilityMatrix.kt
+
 # Codegen drift — run after editing data/interfaces.toml; CI fails on diff
 python3 scripts/codegen-interfaces.py
 git diff --quiet  # must be clean

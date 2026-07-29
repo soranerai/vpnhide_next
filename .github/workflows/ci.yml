@@ -80,6 +80,11 @@ jobs:
       - name: Mark workspace safe
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Verify generated compatibility matrix
+        run: |
+          python3 scripts/codegen-compatibility.py
+          git diff --exit-code -- lsposed/app/src/main/kotlin/dev/soranerai/vpnhidenext/generated/CompatibilityMatrix.kt
+
       # Gradle cache (deps + configuration cache + wrapper). cache-read-only
       # on PRs so only main pushes write the cache.
       - name: Set up Gradle

@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "releases": [
+    {
+      "lsposed": "2.2.0",
+      "bridge": "2.2.0",
+      "built-in": "2.2.0",
+      "kmod": "2.2.0"
+    },
+    {
+      "lsposed": "2.2.1",
+      "bridge": "2.2.0",
+      "built-in": "2.2.0",
+      "kmod": "2.2.1"
+    }
+  ]
+}

@@ -110,6 +110,34 @@ def write_version_file(version: str) -> None:
     (REPO_ROOT / "VERSION").write_text(f"{version}\n", encoding="utf-8")
 
 
+def regenerate_compatibility_matrix() -> None:
+    """Validate the compatibility source and refresh generated Kotlin."""
+    import subprocess
+
+    subprocess.run(
+        [sys.executable, str(REPO_ROOT / "scripts/codegen-compatibility.py")],
+        cwd=REPO_ROOT,
+        check=True,
+    )
+
+
+def require_compatibility_release(version: str) -> None:
+    """Require the release's APK version to be represented in the matrix."""
+    source = REPO_ROOT / "data/compatibility.json"
+    try:
+        import json
+
+        data = json.loads(source.read_text(encoding="utf-8"))
+        releases = data.get("releases", [])
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"error: cannot read {source}: {exc}") from exc
+    if not any(str(row.get("lsposed")) == version for row in releases):
+        raise SystemExit(
+            f"error: data/compatibility.json has no lsposed entry for {version}; "
+            "add the compatibility row before releasing"
+        )
+
+
 def main() -> int:
     console = Console()
     if len(sys.argv) != 2:
@@ -118,6 +146,7 @@ def main() -> int:
 
     version, version_code = parse_version(sys.argv[1])
     console.print(f"[bold]Releasing v{version}[/bold]  [dim](versionCode {version_code})[/dim]")
+    require_compatibility_release(version)
 
     # Check that the version hasn't already been released.
     data = load_json()
@@ -165,10 +194,12 @@ def main() -> int:
     update_module_prop(REPO_ROOT / "kmod/module/module.prop", version, version_code)
     update_cargo_toml(REPO_ROOT / "lsposed/native/Cargo.toml", version)
     update_gradle_kts(REPO_ROOT / "lsposed/app/build.gradle.kts", version, version_code)
+    regenerate_compatibility_matrix()
 
     console.print("  [green]✓[/green] kmod/module/module.prop")
     console.print("  [green]✓[/green] lsposed/native/Cargo.toml")
     console.print("  [green]✓[/green] lsposed/app/build.gradle.kts")
+    console.print("  [green]✓[/green] generated compatibility matrix")
 
     console.print()
     console.print("[bold]Next steps:[/bold]")
