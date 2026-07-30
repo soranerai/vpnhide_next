@@ -281,6 +281,7 @@ class DashboardRepository(
             val isKmodType = snapshot.get("is_kmod") == "1"
             val isKmodInstalled = kmodProp.installed || hasKmodDevice
             val kmodActive = hasKmodDevice
+            val kmodLoadStatus = readKmodLoadStatus(snapshot, currentBootId.trim())
             val kmodTargetCount =
                 if (isKmodInstalled) {
                     appsSync.count { it.kmod && it.packageName != selfPkg }
@@ -290,7 +291,10 @@ class DashboardRepository(
             val kmodRaw: ModuleState =
                 if (isKmodInstalled) {
                     ModuleState.Installed(
-                        version = kmodProp.version,
+                        // The module.prop version belongs to the installed
+                        // bridge package. Prefer the version reported by the
+                        // running kernel module through /dev.
+                        version = kmodLoadStatus?.runtimeVersion ?: kmodProp.version,
                         active = kmodActive,
                         targetCount = kmodTargetCount,
                         gkiVariant = kmodProp.gkiVariant,
@@ -304,7 +308,6 @@ class DashboardRepository(
             val kernelRaw = snapshot.get("uname")
             val kernelRecommendation =
                 buildNativeInstallRecommendation(kernelRaw, androidMajorVersionLabel())
-            val kmodLoadStatus = readKmodLoadStatus(snapshot, currentBootId.trim())
             VpnHideLog.i(TAG, "kmodLoadStatus=$kmodLoadStatus")
 
             val recommendedKmi = kernelRecommendation?.recommendedGkiVariant
