@@ -1,16 +1,20 @@
 package dev.soranerai.vpnhidenext
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
@@ -52,6 +56,7 @@ internal fun ProtectionScreen(
     var refreshTrigger by remember { mutableStateOf(0) }
     var originalListMode by remember { mutableStateOf(listMode) }
     var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
+    var showModeHelp by remember { mutableStateOf(false) }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -203,6 +208,7 @@ internal fun ProtectionScreen(
         Column(modifier = Modifier.fillMaxSize()) {
             AppPickerScreen(
                 apps = apps,
+                listMode = listMode,
                 searchQuery = searchQuery,
                 showSystem = showSystem,
                 showRussianOnly = showRussianOnly,
@@ -214,28 +220,94 @@ internal fun ProtectionScreen(
                 onRefresh = onRefresh,
                 onOpenAppSettings = onOpenAppSettings,
                 listState = listState,
-                topContentPadding = 84.dp,
+                topContentPadding = 114.dp,
                 modifier = Modifier.weight(1f),
             )
         }
 
-        PillTabSelector(
-            tabs =
-                listOf(
-                    PillTab(Icons.Default.VisibilityOff, stringResource(R.string.policy_mode_blacklist)),
-                    PillTab(Icons.Default.Visibility, stringResource(R.string.policy_mode_allowlist)),
-                ),
-            selectedIndex = if (listMode == PolicyListMode.BLACKLIST) 0 else 1,
-            onSelect = { selected ->
-                val selectedMode = if (selected == 0) PolicyListMode.BLACKLIST else PolicyListMode.ALLOWLIST
-                if (selectedMode != listMode) pendingMode = selectedMode
-            },
-            modifier = Modifier.align(Alignment.TopCenter).padding(top = 12.dp).width(260.dp),
-            height = 60.dp,
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
-            tonalElevation = 12.dp,
-            shadowElevation = 8.dp,
-        )
+        Column(
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PillTabSelector(
+                    tabs =
+                        listOf(
+                            PillTab(Icons.Default.VisibilityOff, stringResource(R.string.policy_mode_blacklist)),
+                            PillTab(Icons.Default.Visibility, stringResource(R.string.policy_mode_allowlist)),
+                        ),
+                    selectedIndex = if (listMode == PolicyListMode.BLACKLIST) 0 else 1,
+                    onSelect = { selected ->
+                        val selectedMode = if (selected == 0) PolicyListMode.BLACKLIST else PolicyListMode.ALLOWLIST
+                        if (selectedMode != listMode) pendingMode = selectedMode
+                    },
+                    modifier = Modifier.weight(1f),
+                    height = 56.dp,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                    tonalElevation = 12.dp,
+                    shadowElevation = 8.dp,
+                )
+                FilledIconButton(
+                    onClick = { showModeHelp = true },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Default.HelpOutline,
+                        contentDescription = stringResource(R.string.policy_help_title),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
+            val selectedCount = apps.count { it.anyProtection || it.portHiding }
+            val summaryBackgroundColor =
+                if (isSystemInDarkTheme()) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
+            val summaryContentColor =
+                if (isSystemInDarkTheme()) Color.White else Color(0xFF1B5E20)
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = summaryBackgroundColor,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector =
+                            if (listMode == PolicyListMode.ALLOWLIST) {
+                                Icons.Default.Visibility
+                            } else {
+                                Icons.Default.VisibilityOff
+                            },
+                        contentDescription = null,
+                        tint = summaryContentColor,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text =
+                            stringResource(
+                                if (listMode == PolicyListMode.ALLOWLIST) {
+                                    R.string.policy_mode_allowlist_summary
+                                } else {
+                                    R.string.policy_mode_blacklist_summary
+                                },
+                                selectedCount,
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = summaryContentColor,
+                    )
+                }
+            }
+        }
 
         pendingMode?.let { selected ->
             AlertDialog(
@@ -262,6 +334,39 @@ internal fun ProtectionScreen(
                 },
                 dismissButton = {
                     TextButton(onClick = { pendingMode = null }) { Text(stringResource(R.string.cancel)) }
+                },
+            )
+        }
+
+        if (showModeHelp) {
+            AlertDialog(
+                onDismissRequest = { showModeHelp = false },
+                title = { Text(stringResource(R.string.policy_help_title)) },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(
+                            stringResource(
+                                if (listMode == PolicyListMode.ALLOWLIST) {
+                                    R.string.policy_help_allowlist
+                                } else {
+                                    R.string.policy_help_blacklist
+                                },
+                            ),
+                        )
+                        Text(
+                            stringResource(R.string.policy_help_layers),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            stringResource(R.string.policy_help_ports),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showModeHelp = false }) {
+                        Text(stringResource(R.string.ok))
+                    }
                 },
             )
         }

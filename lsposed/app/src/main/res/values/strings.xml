@@ -18,6 +18,14 @@
     <string name="policy_mode_allowlist_warning">Selected apps become exceptions. Other eligible third-party apps will be hidden. System and privileged apps are never targeted.</string>
     <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. The current selection is preserved; only its meaning changes.</string>
     <string name="allowlist_add_all_shown">Add shown to exceptions</string>
+    <string name="policy_mode_blacklist_summary">Hide VPN from selected apps · %d target(s)</string>
+    <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d exception(s)</string>
+    <string name="policy_help_title">How protection selection works</string>
+    <string name="policy_help_blacklist">Hide selected apps: enabled layers are applied to the selected apps. Other eligible apps are not affected.</string>
+    <string name="policy_help_allowlist">Show selected apps: enabled layers become exceptions for the selected apps. Other eligible third-party apps are hidden.</string>
+    <string name="policy_help_layers">N = Native/kernel, F = Framework/LSPosed, P = Ports. In Hide mode an enabled chip applies protection. In Show mode an enabled chip grants an exception. A check mark means exception.</string>
+    <string name="policy_help_ports">Port rules follow the same inversion: Hide mode blocks or hides configured ports for selected apps; Show mode lets selected apps bypass port hiding. System and privileged apps are not targeted.</string>
+    <string name="ok">OK</string>
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>

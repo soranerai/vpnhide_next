@@ -23,10 +23,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
+import dev.soranerai.vpnhidenext.db.PolicyListMode
 
 @Composable
 internal fun AppRow(
     app: AppEntry,
+    listMode: PolicyListMode,
     installed: InstalledModules,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
@@ -95,11 +97,11 @@ internal fun AppRow(
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (installed.kmod) {
-                    ProtectionChip("N", app.kmod, true, app.userId) { onToggle(Layer.KMOD) }
+                    ProtectionChip("N", app.kmod, true, app.userId, listMode) { onToggle(Layer.KMOD) }
                 }
 
-                ProtectionChip("F", app.lsposed, true, app.userId) { onToggle(Layer.LSPOSED) }
-                ProtectionChip("P", app.portHiding, true, app.userId) { onTogglePort() }
+                ProtectionChip("F", app.lsposed, true, app.userId, listMode) { onToggle(Layer.LSPOSED) }
+                ProtectionChip("P", app.portHiding, true, app.userId, listMode) { onTogglePort() }
             }
         }
     }
@@ -111,6 +113,7 @@ private fun ProtectionChip(
     active: Boolean,
     installed: Boolean,
     userId: Int = 0,
+    listMode: PolicyListMode = PolicyListMode.BLACKLIST,
     onClick: () -> Unit,
 ) {
     val activeColor = if (userId != 0) Color(0xFF2196F3) else MaterialTheme.colorScheme.primary
@@ -129,7 +132,11 @@ private fun ProtectionChip(
         Box(
             contentAlignment = Alignment.Center,
         ) {
-            Text(label, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+            Text(
+                text = if (listMode == PolicyListMode.ALLOWLIST && active) "✓$label" else label,
+                fontWeight = FontWeight.Bold,
+                fontSize = 13.sp,
+            )
         }
     }
 }

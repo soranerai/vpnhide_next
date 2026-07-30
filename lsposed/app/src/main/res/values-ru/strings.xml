@@ -18,6 +18,14 @@
     <string name="policy_mode_allowlist_warning">Выбранные приложения станут исключениями. Остальные подходящие сторонние приложения будут скрыты. Системные и privileged-приложения не затрагиваются.</string>
     <string name="policy_mode_blacklist_warning">Выбранные приложения снова станут целями сокрытия. Список сохраняется, меняется только его смысл.</string>
     <string name="allowlist_add_all_shown">Добавить показанные в исключения</string>
+    <string name="policy_mode_blacklist_summary">Скрывать VPN у выбранных · целей: %d</string>
+    <string name="policy_mode_allowlist_summary">Показывать VPN только выбранным · исключений: %d</string>
+    <string name="policy_help_title">Как работает выбор защиты</string>
+    <string name="policy_help_blacklist">Скрывать выбранным: включённые слои применяются к выбранным приложениям. Остальные подходящие приложения не затрагиваются.</string>
+    <string name="policy_help_allowlist">Показывать выбранным: включённые слои становятся исключениями для выбранных приложений. Остальные подходящие сторонние приложения скрываются.</string>
+    <string name="policy_help_layers">N — Native/ядро, F — Framework/LSPosed, P — порты. В режиме «Скрывать» включённый чип включает защиту. В режиме «Показывать» включённый чип даёт исключение. Галочка означает исключение.</string>
+    <string name="policy_help_ports">Порты инвертируются так же: в режиме «Скрывать» настроенные порты блокируются или скрываются у выбранных приложений; в режиме «Показывать» выбранные приложения обходят скрытие портов. Системные и privileged-приложения не затрагиваются.</string>
+    <string name="ok">OK</string>
 
     <!-- Port hiding -->
     <string name="ports_hint_safe">Безопасно для банков, госуслуг, маркетплейсов, не-браузерных приложений. Chromium-браузеры используют localhost для dev/PWA — их не стоит делать observer\'ами.</string>

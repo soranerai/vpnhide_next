@@ -48,6 +48,7 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun AppPickerScreen(
     apps: List<AppEntry>,
+    listMode: dev.soranerai.vpnhidenext.db.PolicyListMode,
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
@@ -130,6 +131,7 @@ internal fun AppPickerScreen(
                         items(displayApps, key = { "${it.packageName}:${it.userId}" }) { app ->
                             AppRow(
                                 app = app,
+                                listMode = listMode,
                                 installed = installed,
                                 onToggle = { layer ->
                                     val newList =
