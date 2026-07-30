@@ -11,8 +11,16 @@ import dev.soranerai.vpnhidenext.hooks.core.HookContext
 
 object PackageManagerHook {
     private class CallerContext(
+        val uid: Int,
         val callerPackages: Array<String>?,
-    )
+    ) {
+        // A missing package list is not proof that the caller owns nothing.
+        // It means that applying a hiding policy would be unsafe.
+        val identityKnown: Boolean
+            get() = uid > 0 && callerPackages != null
+
+        fun owns(packageName: String): Boolean = callerPackages?.contains(packageName) == true
+    }
 
     // Bit 5 = hide VPN apps ("Hiding VPN apps" in the Hook Isolation screen);
     // bit 7 = hide our own package ("Hiding VPNHide Next itself"). Both bits
@@ -23,15 +31,14 @@ object PackageManagerHook {
             return null
         }
 
-        val callingUid = Binder.getCallingUid()
-        val targetUid = if (callingUid == 1000) HookContext.currentCallbackUid.get() else callingUid
+        val targetUid = HookContext.resolveEffectiveUid()
         val callerPackages =
-            if (targetUid != null && targetUid > 0) {
+            if (targetUid > 0) {
                 HookContext.getPackagesForUid(param.thisObject, targetUid)
             } else {
                 null
             }
-        return CallerContext(callerPackages)
+        return CallerContext(targetUid, callerPackages)
     }
 
     private fun isVpnApp(
@@ -39,7 +46,8 @@ object PackageManagerHook {
         pmInstance: Any,
         userId: Int,
     ): Boolean {
-        HookContext.vpnPackageCache[packageName]?.let {
+        val cacheKey = "$userId:$packageName"
+        HookContext.vpnPackageCache[cacheKey]?.let {
             return it
         }
 
@@ -89,16 +97,32 @@ object PackageManagerHook {
             }
 
         if (succeeded) {
-            HookContext.vpnPackageCache[packageName] = isVpn
+            HookContext.vpnPackageCache[cacheKey] = isVpn
         }
         return isVpn
+    }
+
+    /**
+     * A single visibility decision shared by every PackageManager hook.
+     * Unknown caller identity and unknown VPN classification both fail open:
+     * a false negative is preferable to breaking a VPN application's own
+     * service lookup.
+     */
+    private fun shouldHideVpnPackage(
+        caller: CallerContext,
+        packageName: String,
+        pmInstance: Any,
+        userId: Int,
+    ): Boolean {
+        if (!caller.identityKnown || caller.owns(packageName)) return false
+        return isVpnApp(packageName, pmInstance, userId)
     }
 
     private fun filterParceledList(
         param: XC_MethodHook.MethodHookParam,
         sliceClass: Class<*>,
         userId: Int,
-        callerPackages: Array<String>?,
+        caller: CallerContext,
         hideVpnApps: Boolean,
         hideSelf: Boolean,
         logTag: String,
@@ -123,9 +147,10 @@ object PackageManagerHook {
             list.filter { item ->
                 if (item == null) return@filter true
                 val packageName = itemToPackageName(item) ?: return@filter true
-                if (callerPackages?.contains(packageName) == true) return@filter true
-                val hiddenAsVpn = hideVpnApps && isVpnApp(packageName, param.thisObject, userId)
-                val hiddenAsSelf = hideSelf && packageName == HookContext.OWN_PACKAGE_NAME
+                val hiddenAsVpn =
+                    hideVpnApps && shouldHideVpnPackage(caller, packageName, param.thisObject, userId)
+                val hiddenAsSelf = hideSelf && caller.identityKnown &&
+                    packageName == HookContext.OWN_PACKAGE_NAME && !caller.owns(packageName)
                 !hiddenAsVpn && !hiddenAsSelf
             }
 
@@ -196,7 +221,7 @@ object PackageManagerHook {
                                 param = param,
                                 sliceClass = sliceClass,
                                 userId = userId,
-                                callerPackages = callerCtx.callerPackages,
+                                caller = callerCtx,
                                 hideVpnApps = hideVpnApps,
                                 hideSelf = false,
                                 logTag = "queryIntentServices",
@@ -233,10 +258,11 @@ object PackageManagerHook {
                         val requestedPackage = param.args.getOrNull(0) as? String ?: return
                         val userId = param.args.getOrNull(2) as? Int ?: return
 
-                        if (HookContext.isOwnApp(param.thisObject, requestedPackage)) return
-
-                        val hiddenAsVpn = hideVpnApps && isVpnApp(requestedPackage, param.thisObject, userId)
-                        val hiddenAsSelf = hideSelf && requestedPackage == HookContext.OWN_PACKAGE_NAME
+                        val callerCtx = guardCheck(param) ?: return
+                        val hiddenAsVpn =
+                            hideVpnApps && shouldHideVpnPackage(callerCtx, requestedPackage, param.thisObject, userId)
+                        val hiddenAsSelf = hideSelf && callerCtx.identityKnown &&
+                            requestedPackage == HookContext.OWN_PACKAGE_NAME && !callerCtx.owns(requestedPackage)
                         if (hiddenAsVpn || hiddenAsSelf) {
                             HookContext.recordIntercept("PackageManager")
                             param.result = null
@@ -266,7 +292,7 @@ object PackageManagerHook {
                                 param = param,
                                 sliceClass = sliceClass,
                                 userId = userId,
-                                callerPackages = callerCtx.callerPackages,
+                                caller = callerCtx,
                                 hideVpnApps = hideVpnApps,
                                 hideSelf = hideSelf,
                                 logTag = methodName,
@@ -296,6 +322,7 @@ object PackageManagerHook {
                         if (intent.action == "android.net.VpnService" ||
                             intent.component?.className?.contains("VpnService") == true
                         ) {
+                            val userId = param.args.lastOrNull() as? Int ?: 0
                             val result = param.result
                             if (result != null) {
                                 val packageName =
@@ -305,11 +332,9 @@ object PackageManagerHook {
                                     } catch (_: Throwable) {
                                         null
                                     }
-                                if (packageName != null) {
-                                    if (callerCtx.callerPackages?.contains(packageName) == true) {
-                                        return
-                                    }
-                                }
+                                if (packageName == null ||
+                                    !shouldHideVpnPackage(callerCtx, packageName, param.thisObject, userId)
+                                ) return
                                 HookContext.recordIntercept("PackageManager")
                                 param.result = null
                                 HookLog.i("VpnHide: Blocked resolveService for VpnService")
@@ -338,7 +363,7 @@ object PackageManagerHook {
                                 param = param,
                                 sliceClass = sliceClass,
                                 userId = userId,
-                                callerPackages = callerCtx.callerPackages,
+                                caller = callerCtx,
                                 hideVpnApps = hideVpnApps,
                                 hideSelf = false,
                                 logTag = "queryIntentActivities",
