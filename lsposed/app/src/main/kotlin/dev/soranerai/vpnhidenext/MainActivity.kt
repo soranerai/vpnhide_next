@@ -756,6 +756,7 @@ private fun MainScreen(
             editingAppSettingsTarget?.let { app ->
                 AppSettingsScreen(
                     app = app,
+                    listMode = policyListMode ?: PolicyListMode.BLACKLIST,
                     onBack = {
                         showEditingAppSettings = false
                         TargetsCache.refresh(scope, context)
@@ -775,6 +776,7 @@ private fun MainScreen(
         ) {
             AppSettingsScreen(
                 app = null,
+                listMode = policyListMode ?: PolicyListMode.BLACKLIST,
                 onBack = {
                     showGlobalAppSettings = false
                     TargetsCache.refresh(scope, context)

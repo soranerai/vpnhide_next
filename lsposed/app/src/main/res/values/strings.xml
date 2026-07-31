@@ -13,10 +13,10 @@
     <string name="policy_mode_allowlist">Show</string>
     <string name="policy_mode_blacklist_desc">Selected apps are hidden from VPN interfaces, ports and enabled hooks.</string>
     <string name="policy_mode_allowlist_desc">Selected apps remain visible. Eligible third-party apps are hidden; system apps are protected.</string>
-    <string name="policy_mode_change_title">Change protection mode?</string>
-    <string name="policy_mode_change_confirm">Change mode</string>
-    <string name="policy_mode_allowlist_warning">Selected apps become exceptions. Other eligible third-party apps will be hidden. System and privileged apps are never targeted.</string>
-    <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. The current selection is preserved; only its meaning changes.</string>
+    <string name="policy_mode_change_title">Change mode and reset all protection?</string>
+    <string name="policy_mode_change_confirm">Reset everything and change mode</string>
+    <string name="policy_mode_allowlist_warning">Selected apps become exceptions. Other eligible third-party apps will be hidden. This destructive action removes all app targets, local and global hook overrides, and local and global port rules. The reset cannot be undone.</string>
+    <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. This destructive action removes all app targets, local and global hook overrides, and local and global port rules. The reset cannot be undone.</string>
     <string name="allowlist_add_all_shown">Add shown to exceptions</string>
     <string name="policy_mode_blacklist_summary">Hide VPN from selected apps · %d target(s)</string>
     <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d exception(s)</string>
@@ -31,6 +31,8 @@
     <string name="ports_chip" translatable="false">P</string>
     <string name="ports_hint_safe">Safe for banks, госуслуги, marketplaces, non-browser apps. Chromium-based browsers use localhost for dev/PWA features — avoid adding them as observers.</string>
     <string name="ports_hint_reboot">Rules are re-applied on every Save. After reboot, the module restores them automatically via service.sh.</string>
+    <string name="ports_mode_blacklist_hint">Ports to hide: these rules block or conceal the listed ports for selected apps.</string>
+    <string name="ports_mode_allowlist_hint">Ports to show: these rules specify which listed ports remain available to selected apps.</string>
     <string name="ports_save_success">Saved · %1$d observer(s)</string>
     <string name="ports_count" translatable="false">P: %d</string>
     <string name="bulk_rules_title">Bulk Rules</string>

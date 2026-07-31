@@ -36,6 +36,7 @@ import dev.soranerai.vpnhidenext.db.DatabaseSync
 import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.db.DbPortRule
+import dev.soranerai.vpnhidenext.db.PolicyListMode
 import dev.soranerai.vpnhidenext.ui.theme.TelBlue
 import dev.soranerai.vpnhidenext.ui.theme.TelGreen
 import dev.soranerai.vpnhidenext.ui.theme.TelOrange
@@ -57,12 +58,14 @@ import kotlinx.coroutines.withContext
 @Composable
 internal fun AppSettingsScreen(
     app: AppEntry?,
+    listMode: PolicyListMode,
     onBack: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val pagerState = rememberPagerState(initialPage = 0) { 3 }
+    val allowlist = listMode == PolicyListMode.ALLOWLIST
+    val pagerState = rememberPagerState(initialPage = 0) { if (allowlist) 1 else 3 }
 
     var rules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
     var massRules by remember { mutableStateOf<List<PortRule>>(emptyList()) }
@@ -207,25 +210,39 @@ internal fun AppSettingsScreen(
                     modifier = Modifier.fillMaxSize(),
                     beyondViewportPageCount = 2,
                 ) { page ->
-                    when (page) {
-                        0 -> {
-                            HookPage(app = app, hooks = ALL_HOOKS, isKernel = true, accent = TelBlue)
-                        }
+                    if (allowlist) {
+                        PortsTab(
+                            app = app,
+                            listMode = listMode,
+                            rules = rules,
+                            massRules = massRules,
+                            loaded = rulesLoaded,
+                            onEditRule = ::openEditRule,
+                            onDeleteRule = ::deleteRule,
+                            onToggleRule = ::toggleRule,
+                        )
+                    } else {
+                        when (page) {
+                            0 -> {
+                                HookPage(app = app, hooks = ALL_HOOKS, isKernel = true, accent = TelBlue)
+                            }
 
-                        1 -> {
-                            HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelPurple)
-                        }
+                            1 -> {
+                                HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelPurple)
+                            }
 
-                        else -> {
-                            PortsTab(
-                                app = app,
-                                rules = rules,
-                                massRules = massRules,
-                                loaded = rulesLoaded,
-                                onEditRule = ::openEditRule,
-                                onDeleteRule = ::deleteRule,
-                                onToggleRule = ::toggleRule,
-                            )
+                            else -> {
+                                PortsTab(
+                                    app = app,
+                                    listMode = listMode,
+                                    rules = rules,
+                                    massRules = massRules,
+                                    loaded = rulesLoaded,
+                                    onEditRule = ::openEditRule,
+                                    onDeleteRule = ::deleteRule,
+                                    onToggleRule = ::toggleRule,
+                                )
+                            }
                         }
                     }
                 }
@@ -245,14 +262,18 @@ internal fun AppSettingsScreen(
                         // (kernel/framework/port) — full words ("Framework")
                         // don't fit three-across without wrapping.
                         tabs =
-                            listOf(
-                                PillTab(Icons.Filled.Memory, "N", accent = TelBlue),
-                                PillTab(Icons.Filled.Code, "F", accent = TelPurple),
-                                PillTab(Icons.Filled.Dns, "P", accent = TelPink),
-                            ),
+                            if (allowlist) {
+                                listOf(PillTab(Icons.Filled.Dns, "P", accent = TelPink))
+                            } else {
+                                listOf(
+                                    PillTab(Icons.Filled.Memory, "N", accent = TelBlue),
+                                    PillTab(Icons.Filled.Code, "F", accent = TelPurple),
+                                    PillTab(Icons.Filled.Dns, "P", accent = TelPink),
+                                )
+                            },
                         selectedIndex = pagerState.currentPage,
                         onSelect = { index -> scope.launch { pagerState.animateScrollToPage(index) } },
-                        modifier = Modifier.width(220.dp),
+                        modifier = Modifier.width(if (allowlist) 76.dp else 220.dp),
                         height = 60.dp,
                         containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
                         tonalElevation = 12.dp,
@@ -708,6 +729,7 @@ private fun InlineHintBanner(
 @Composable
 private fun PortsTab(
     app: AppEntry?,
+    listMode: PolicyListMode,
     rules: List<PortRule>,
     massRules: List<PortRule>,
     loaded: Boolean,
@@ -724,6 +746,19 @@ private fun PortsTab(
             }
         } else {
             Column(modifier = Modifier.fillMaxSize()) {
+                InlineHintBanner(
+                    text =
+                        stringResource(
+                            if (listMode == PolicyListMode.ALLOWLIST) {
+                                R.string.ports_mode_allowlist_hint
+                            } else {
+                                R.string.ports_mode_blacklist_hint
+                            },
+                        ),
+                    icon = if (listMode == PolicyListMode.ALLOWLIST) Icons.Default.Visibility else Icons.Default.VisibilityOff,
+                    tint = TelPink,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                )
                 if (app != null && !app.portHiding) {
                     InlineHintBanner(
                         text = stringResource(R.string.app_settings_port_hiding_off_hint),

@@ -223,6 +223,30 @@ internal class AppDatabase private constructor(
         DbNotifier.notifyChanged("global_config")
     }
 
+    /** Reset targets, hook overrides, and local/global port rules on a mode change. */
+    suspend fun resetProtectionConfig(listMode: PolicyListMode) {
+        synchronized(lock) {
+            val current = config.globalConfig
+            config =
+                config.copy(
+                    globalConfig =
+                        current.copy(
+                            listMode = listMode,
+                            kernelHookMask = DbGlobalConfig().kernelHookMask,
+                            javaHookMask = DbGlobalConfig().javaHookMask,
+                        ),
+                    apps = emptyMap(),
+                    portRules = emptyList(),
+                    massPortRules = emptyList(),
+                )
+            saveConfigInternal()
+        }
+        DbNotifier.notifyChanged("app_protection")
+        DbNotifier.notifyChanged("port_rules")
+        DbNotifier.notifyChanged("mass_port_rules")
+        DbNotifier.notifyChanged("global_config")
+    }
+
     fun appDao(): AppDao = appDaoImpl
 
     fun portRuleDao(): PortRuleDao = portRuleDaoImpl

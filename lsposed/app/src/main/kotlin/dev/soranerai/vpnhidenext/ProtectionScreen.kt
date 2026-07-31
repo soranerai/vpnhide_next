@@ -3,6 +3,7 @@ package dev.soranerai.vpnhidenext
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Visibility
@@ -14,12 +15,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.unit.dp
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
+import dev.soranerai.vpnhidenext.db.DatabaseSync
 import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 import dev.soranerai.vpnhidenext.db.PolicyListMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun ProtectionScreen(
@@ -57,6 +61,7 @@ internal fun ProtectionScreen(
     var originalListMode by remember { mutableStateOf(listMode) }
     var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
     var showModeHelp by remember { mutableStateOf(false) }
+    var resettingMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -325,10 +330,37 @@ internal fun ProtectionScreen(
                     )
                 },
                 confirmButton = {
-                    TextButton(onClick = {
-                        onListModeChange(selected)
-                        pendingMode = null
-                    }) {
+                    TextButton(
+                        onClick = {
+                            resettingMode = true
+                            apps = apps.map { it.copy(kmod = false, lsposed = false, portHiding = false) }
+                            onListModeChange(selected)
+                            pendingMode = null
+                            scope.launch(Dispatchers.IO) {
+                                try {
+                                    val db = AppDatabase.getInstance(context)
+                                    db.resetProtectionConfig(selected)
+                                    DatabaseSync
+                                        .sync(context)
+                                    withContext(Dispatchers.Main) {
+                                        TargetsCache.refresh(scope, context)
+                                        originalApps = apps
+                                        originalListMode = selected
+                                        resettingMode = false
+                                    }
+                                } catch (e: Exception) {
+                                    withContext(Dispatchers.Main) {
+                                        resettingMode = false
+                                        snackMessage = e.message ?: context.getString(R.string.save_failed_exit, -1)
+                                    }
+                                }
+                            }
+                        },
+                        colors =
+                            ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                    ) {
                         Text(stringResource(R.string.policy_mode_change_confirm))
                     }
                 },
@@ -377,7 +409,7 @@ internal fun ProtectionScreen(
         )
 
         LaunchedEffect(saveTrigger) {
-            if (saveTrigger > 0 && !saving && dirty) {
+            if (saveTrigger > 0 && !saving && !resettingMode && dirty) {
                 saving = true
             }
         }
