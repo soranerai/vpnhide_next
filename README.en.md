@@ -4,7 +4,7 @@
 
 <h1 align="center">VPNHide Next</h1>
 
-<p align="center">Hides an active VPN connection on Android from selected applications.</p>
+<p align="center">A system-level solution designed to hide active VPN connections on Android devices from selected applications.</p>
 
 <p align="center">
   <a href="https://github.com/soranerai/vpnhide_next/releases/latest"><img src="https://img.shields.io/github/v/release/soranerai/vpnhide_next" alt="Release"></a>
@@ -15,45 +15,61 @@
 <p align="center"><strong><a href="README.md">Russian version</a></strong></p>
 
 > [!WARNING]
-> **This fork uses extremely aggressive kernel-level and framework-level hiding methods.**
-> Stable operation on absolutely all devices, firmware, and kernel versions **is not guaranteed and cannot be guaranteed**.
-> In accordance with the MIT License, the software is provided "AS IS", without warranty of any kind. The author is not responsible for any malfunctions, bootloops, or kernel panics.
-
-> [!TIP]
-> **New Solution: Built-in Kernel Integration (monolithic / in-built)**
-> For absolute stealth, maximum stability, and zero overhead, a separate branch of the project has been developed with built-in integration. The hiding logic is compiled directly into the monolithic kernel at build time.
-> * **Zero Modular Overhead**: the hiding logic runs natively as part of the kernel code, completely eliminating modular latency and routing delays.
-> * **Absolute Stealth**: invulnerable to timing attacks on system calls (syscalls), making the presence of the hiding mechanisms completely undetectable.
-> * **Monolithic Stability**: compiled as a single monolithic unit with the kernel, it is permanent and does not depend on runtime hook failures or sync errors.
-> 
-> Pre-built kernels and source code are available in the [GKI_KernelSU_SUSFS](https://github.com/soranerai/GKI_KernelSU_SUSFS) repository.
+> **Requires kernel-level and system framework-level integration**
+> Stable operation across all devices, ROMs, and kernel versions is not guaranteed. The software is provided "AS IS" under the MIT License. The author assumes no liability for any device issues.
 
 ---
-### Project Information
-This is a fork of the [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide/) project. Like the original, it hides an active VPN from selected apps on three layers — LSPosed hooks in `system_server`, a native backend — LKM, and optional port blocking — but it was separated from upstream due to significant changes and a different philosophy.
-The philosophy of this project is to block ALL direct and indirect vectors at the root, not just the obvious ones.
 
-**Key differences from the original (in brief):**
-* **Kernel-level port blocking**: instead of a separate iptables module, loopback connections to VPN daemon control ports are blocked by the `security_socket_connect` kernel hook — no iptables rules, no ProcFS.
-* **New protection tiers that don't exist upstream at all**: see "Protection Levels" below — MTU/MSS/TCP_INFO spoofing, GSO/PMTU probe resistance, zeroed eBPF traffic stats, qdisc hiding, timing-attack and IPv6 link-local bruteforce resistance.
-* **Different data exchange architecture**: complete abandonment of ProcFS (files in `/proc/`) in favor of the `/dev/vpnhide_ctrl` misc device.
-* **Work profile support**: full separation of applications and work profiles.
-* **Single source of truth**: a single JSON file on disk for the entire configuration; at runtime, all data passes through the kernel.
-* **Automatic app hiding**: automatic hiding of VPN applications from LSPosed targets at runtime. No need to resave targets.
+### Architecture and Integration Methods
+
+The project implements a two-component hiding model that combines low-level system call interception in the kernel with system framework response modification:
+
+1. **Kernel Module (LKM or Built-in)**:
+   * **LKM (Loadable Kernel Module)**: Distributed as a loadable module for Android GKI kernels (Android 12–16, versions 5.10–6.12). Uses `kretprobes` to intercept network-related system calls and filesystem operations.
+   * **Built-in Mode**: Direct integration of the hiding logic into the monolithic kernel source at build time. Provides zero call overhead, absolute resistance to syscall timing attacks, and maximum stability without depending on runtime module loading. Pre-built builds are available in the following repositories:
+     * **Standard GKI2**: [GKI_KernelSU_SUSFS](https://github.com/soranerai/GKI_KernelSU_SUSFS)
+     * **OnePlus GKI2**: [OnePlus_KernelSU_SUSFS](https://github.com/soranerai/OnePlus_KernelSU_SUSFS)
+2. **LSPosed Module**:
+   * Intercepts Binder IPC calls inside the `system_server` process (specifically, Parcel serialization for `NetworkCapabilities`, `NetworkInfo`, and `LinkProperties`). This prevents VPN info leaks via Java APIs without injecting code into the target app processes.
+
+---
+
+### Key Features
+
+* **100% Stealth (built-in)**: The hiding logic is compiled directly into the kernel, eliminating the use of external modules and kretprobe hooks. This makes the protection mechanisms completely invulnerable to syscall timing attacks and undetectable by any user-space analysis or anti-tamper SDKs.
+* **Unlimited Target Applications**: The filtering mechanism supports an unlimited number of target applications. The effective UID list is computed dynamically on the daemon side, preventing system buffer overflows.
+* **List Modes (Blacklist / Whitelist)**:
+  * *Blacklist Mode*: Hides VPN interfaces and socket options only from explicitly selected applications.
+  * *Whitelist Mode*: Hides VPN from all installed applications except those explicitly selected in the exclusion list.
+* **Dynamic Port Rules**: Kernel-level blocking and redirection of connections to local VPN daemon ports using the `security_socket_connect` / `security_socket_bind` hooks. Port rules are managed dynamically without relying on iptables rules or ProcFS.
+* **Dynamic Hook Configuration**: Hiding parameters and protection levels can be toggled on the fly via the `/dev/vpnhide_ctrl` control device. Changes are applied immediately without rebooting.
+* **Automatic Controller Hiding**: The VPN client applications and the VPNHide Next manager are automatically hidden from target applications at runtime.
+* **Work Profile Support**: Full separation of hiding logic and target lists between the primary user and isolated Android work profiles (Multi-user/Work Profile).
+
+---
 
 ### Protection Levels
-The level is picked on the dashboard and toggles the active set of kernel hooks on the fly — a trade-off between hiding completeness and performance.
 
-| Level | Coverage |
-|---|---|
-| **Min** | Interface/address enumeration (`getifaddrs`, `ioctl`, netlink, kernel routing tables) + VPN port blocking on `bind()`/`connect()`. Not covered: socket options (MTU/MSS/TCP_INFO), GSO/PMTU probes, eBPF traffic stats, `/sys/class/net`. |
-| **Avg** | Everything in "Min" + `setsockopt`/`getsockopt` interception: MTU, MSS, `TCP_INFO`, `SO_BINDTODEVICE`, and `SO_TIMESTAMPING` are spoofed to match the physical interface, `SO_MARK` no longer leaks, GSO/PMTU probes are neutralized. |
-| **Max** | Everything in "Avg" + `/proc/net/{dev,if_inet6,fib_trie}` and `/sys/class/net` hidden from the filesystem, eBPF traffic stats zeroed, UDP protected against timing attacks, IPv6 link-local bruteforce blocked, VPN qdisc hidden. Covers all known direct and indirect detection vectors. |
+Protection levels can be toggled dynamically via the dashboard, configuring the active set of kernel hooks:
 
-### How far this fork has gone beyond the original
-Upstream closes roughly 25 detection vectors (native syscalls, netlink, `/proc`, Java connectivity APIs). This fork checks the same base vectors (the "Classic" diagnostic tier) and adds two further tiers — **Advanced** and **Extreme** — for a total of **44 automated diagnostic checks** (37 native + 7 Java-level) in the built-in diagnostics screen. About 20 of those (MSS/PMTU/TCP_INFO spoofing, zeroed eBPF traffic stats, qdisc hiding, UDP timing-attack resistance, IPv6 link-local bruteforce resistance, the `RTM_GETLINK` trim oracle, and others) don't exist upstream at all — vectors the original doesn't even attempt to close.
+| Level | Description | Covered Detection Vectors |
+|---|---|---|
+| **Minimum (Min)** | Basic network isolation | Interface enumeration filtering (`ioctl`, netlink), port blocking, and hiding routes in `/proc/net/route`. |
+| **Average (Avg)** | Socket and network parameter isolation | All features of **Min** + `getsockopt`/`setsockopt` interception (MTU, MSS, `TCP_INFO`, `SO_BINDTODEVICE`, `SO_TIMESTAMPING` spoofing), preventing socket mark leakage (`SO_MARK`). |
+| **Maximum (Max)** | Comprehensive system isolation | All features of **Avg** + hiding files in `/proc/net/{dev,if_inet6,fib_trie}` and `/sys/class/net`, zeroing eBPF traffic statistics, UDP timing attack protection, IPv6 link-local bruteforce protection, and hiding VPN qdisc. |
+
+---
+
+### Diagnostics and Monitoring
+
+The application features a built-in diagnostic module performing **44 automated checks** (37 native-level and 7 Java-level checks) to verify hiding completeness against all known detection vectors.
+
+Intercept statistics are accumulated by the daemon in an in-memory ring buffer and can be queried in real time via the `vpnhide.stats.v1` abstract socket.
+
+---
 
 ### Screenshots
+
 <div align="center">
 
 | Dashboard | App List | Statistics |
