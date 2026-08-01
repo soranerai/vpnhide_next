@@ -381,6 +381,9 @@
     <!-- Intercepts Statistics Dashboard -->
     <string name="dashboard_stats_empty_title">Перехваты отсутствуют</string>
     <string name="dashboard_stats_empty_desc">Активный VPN-трафик от целевых приложений будет отслеживаться, перехватываться и записываться здесь в реальном времени.</string>
+    <string name="dashboard_stats_unavailable_title">Статистика временно недоступна</string>
+    <string name="dashboard_stats_unavailable_desc">Демон статистики недоступен. Повторите попытку после завершения запуска kernel-модуля.</string>
+    <string name="dashboard_stats_history_dropped">Старые интервалы удалены: история достигла лимита хранения в памяти.</string>
     <string name="dashboard_stats_framework_title">Перехваты Framework</string>
     <string name="dashboard_stats_native_title">Перехваты Native</string>
     <string name="dashboard_stats_ports_title">Перехваты портов</string>

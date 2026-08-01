@@ -86,7 +86,6 @@ fun SettingsScreen(
     var updateCheckEnabled by remember { mutableStateOf(true) }
     var healthCheckEnabled by remember { mutableStateOf(true) }
     var selfTestVpnEnabled by remember { mutableStateOf(true) }
-    var statsRetentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
     // Defaults to true (hidden) until the real check completes, so the row
     // doesn't flash in for a frame on every screen open.
     var batteryOptimizationIgnored by remember { mutableStateOf(true) }
@@ -98,7 +97,6 @@ fun SettingsScreen(
             updateCheckEnabled = getUpdateCheckEnabled(context)
             healthCheckEnabled = getHealthCheckEnabled(context)
             selfTestVpnEnabled = getSelfTestVpnEnabled(context)
-            statsRetentionPeriod = getStatsRetentionPeriod(context)
         }
         batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
     }
@@ -152,39 +150,6 @@ fun SettingsScreen(
             item(key = "backup_restore_card") { BackupRestoreCard() }
             item(key = "debug_logging_card") { DebugLoggingCard() }
             item(key = "debug_log_export_card") { DebugLogExportCard(selfNeedsRestart) }
-
-            item(key = "section_statistics") {
-                SectionHeader(
-                    stringResource(R.string.settings_section_statistics),
-                    icon = Icons.Default.BarChart,
-                    tint = TelGreen,
-                    modifier = Modifier.padding(start = 16.dp),
-                )
-            }
-            item(key = "group_statistics") {
-                val labelsByPeriod = StatsRetentionPeriod.entries.associateWith { it.displayLabel() }
-                SettingsGroup {
-                    SettingsDropdownRow(
-                        title = stringResource(R.string.settings_stats_retention_title),
-                        subtitle = stringResource(R.string.settings_stats_retention_desc),
-                        options = labelsByPeriod.values.toList(),
-                        selected = labelsByPeriod.getValue(statsRetentionPeriod),
-                        icon = Icons.Default.Schedule,
-                        iconTint = TelGreen,
-                        onSelect = { label ->
-                            val newPeriod = labelsByPeriod.entries.first { it.value == label }.key
-                            val previous = statsRetentionPeriod
-                            statsRetentionPeriod = newPeriod
-                            scope.launch(Dispatchers.IO) {
-                                val success = setStatsRetentionPeriod(context, newPeriod)
-                                if (!success) {
-                                    withContext(Dispatchers.Main) { statsRetentionPeriod = previous }
-                                }
-                            }
-                        },
-                    )
-                }
-            }
 
             item(key = "section_testing") {
                 SectionHeader(

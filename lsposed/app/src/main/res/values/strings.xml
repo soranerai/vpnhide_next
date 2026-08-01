@@ -472,6 +472,9 @@
     <!-- Intercepts Statistics Dashboard -->
     <string name="dashboard_stats_empty_title">No Intercepts Recorded</string>
     <string name="dashboard_stats_empty_desc">Active VPN traffic from target apps will be monitored, intercepted, and logged here in real time.</string>
+    <string name="dashboard_stats_unavailable_title">Statistics temporarily unavailable</string>
+    <string name="dashboard_stats_unavailable_desc">The statistics daemon is not available. Try again after the kernel module finishes starting.</string>
+    <string name="dashboard_stats_history_dropped">Older intervals were discarded because the in-memory history reached its retention limit.</string>
     <string name="dashboard_stats_framework_title">Framework Intercepts</string>
     <string name="dashboard_stats_native_title">Native Intercepts</string>
     <string name="dashboard_stats_ports_title">Port Intercepts</string>

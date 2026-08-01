@@ -42,9 +42,11 @@ The daemon watches the same JSON directory and re-runs `load` after an
 atomic update or a Package Manager change. A failed load leaves the previous
 kernel snapshot active and is reported to the app.
 
-The only separate runtime setting currently applied by the frontend is
-`stats_window`; hook masks, debug state, interface prefixes, ports, and
-targets are all part of the JSON policy.
+Hook masks, debug state, interface prefixes, ports, and targets are all part
+of the JSON policy. Intercept statistics are session-scoped runtime
+diagnostics: the daemon samples cumulative kernel counters into an in-memory
+ring and exposes them through the abstract `vpnhide.stats.v1` socket. No
+statistics history or `stats_window` setting is persisted.
 
 ## Runtime and diagnostics
 
@@ -63,6 +65,12 @@ These are boot diagnostics, not policy storage.
 
 Hook status is exposed through the read-only control device where supported.
 No policy or debug coordination file is written to `/data/system`.
+
+The app reads kmod intercept history through `vpnhide.stats.v1` using
+`LocalSocket` in the abstract namespace. The daemon accepts only the manager
+application UID, returns interval deltas, and keeps the ring in memory. A
+socket failure means statistics are temporarily unavailable; it must not be
+shown as an empty history.
 
 ## Migration
 

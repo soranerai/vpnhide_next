@@ -3,6 +3,7 @@ package dev.soranerai.vpnhidenext
 import android.content.Context
 import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
 import dev.soranerai.vpnhidenext.domain.models.AppInterceptStats
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -21,6 +22,10 @@ import kotlinx.coroutines.withContext
  */
 internal object InterceptStatsCache : AsyncCache<List<AppInterceptStats>>() {
     val stats: StateFlow<List<AppInterceptStats>?> = state
+    private val _unavailable = MutableStateFlow(false)
+    val unavailable: StateFlow<Boolean> = _unavailable.asStateFlow()
+    private val _response = MutableStateFlow<KmodStatsResponse?>(null)
+    val response: StateFlow<KmodStatsResponse?> = _response.asStateFlow()
 
     fun ensureLoaded(
         scope: CoroutineScope,
@@ -29,7 +34,7 @@ internal object InterceptStatsCache : AsyncCache<List<AppInterceptStats>>() {
         launchEnsureLoaded(scope) {
             AppListCache.apps.first { it != null }
             val repository = DashboardRepository(context.applicationContext)
-            repository.loadInterceptStats()
+            load(repository)
         }
     }
 
@@ -40,12 +45,28 @@ internal object InterceptStatsCache : AsyncCache<List<AppInterceptStats>>() {
         launchReload(scope) {
             AppListCache.apps.first { it != null }
             val repository = DashboardRepository(context.applicationContext)
-            repository.loadInterceptStats()
+            load(repository)
         }
     }
 
+    private fun load(repository: DashboardRepository): List<AppInterceptStats> =
+        try {
+            repository.loadInterceptStats().also {
+                _response.value = repository.lastKmodStatsResponse
+                _unavailable.value = false
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (_: Exception) {
+            _response.value = null
+            _unavailable.value = true
+            emptyList()
+        }
+
     fun clearStats() {
         synchronized(lock) {
+            _unavailable.value = false
+            _response.value = null
             updateState(emptyList())
         }
     }

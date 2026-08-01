@@ -63,21 +63,26 @@ struct vpnhide_spoof_ip {
 
 struct vpnhide_uid_stats {
 	uid_t uid;
-	unsigned int ioctl_count;
-	unsigned int netlink_count;
-	unsigned int proc_count;
-	unsigned int sockopt_count;
-	unsigned int connect_count;
-	unsigned int getname_count;
+	__u64 ioctl_count;
+	__u64 netlink_count;
+	__u64 proc_count;
+	__u64 sockopt_count;
+	__u64 connect_count;
+	__u64 getname_count;
+	__u64 port_count;
 };
 
-struct vpnhide_kmod_stats_data {
-	int count;
-	struct vpnhide_uid_stats stats[MAX_TARGET_UIDS];
+struct vpnhide_stats_snapshot {
+	__u32 capacity;
+	__u32 count;
+	__u64 sequence;
+	__u64 monotonic_ns;
+	__u64 entries_ptr;
 };
 
-#define VH_GET_STATS _IOR(VH_IOCTL_MAGIC, 0x0B, struct vpnhide_kmod_stats_data)
+#define VH_GET_STATS _IOWR(VH_IOCTL_MAGIC, 0x0B, struct vpnhide_stats_snapshot)
 #define VH_CLEAR_STATS _IO(VH_IOCTL_MAGIC, 0x0C)
+#define VH_GET_STATS_SESSION _IOR(VH_IOCTL_MAGIC, 0x22, __u64)
 #define VH_GET_TARGETS _IOR(VH_IOCTL_MAGIC, 0x0D, struct vpnhide_ioctl_data)
 #define VH_SET_BPF_MAP_FOPS _IOW(VH_IOCTL_MAGIC, 0x0E, unsigned long)
 #define VH_SET_STATS_MAP_A _IOW(VH_IOCTL_MAGIC, 0x0F, int)

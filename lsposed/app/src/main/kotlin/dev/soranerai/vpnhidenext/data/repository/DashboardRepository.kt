@@ -10,6 +10,8 @@ import dev.soranerai.vpnhidenext.CompatibilityResult
 import dev.soranerai.vpnhidenext.DEV_NODE
 import dev.soranerai.vpnhidenext.DiagnosticsCache
 import dev.soranerai.vpnhidenext.InstalledComponentVersions
+import dev.soranerai.vpnhidenext.KmodStatsClient
+import dev.soranerai.vpnhidenext.KmodStatsResponse
 import dev.soranerai.vpnhidenext.KMOD_LOAD_DMESG_FILE
 import dev.soranerai.vpnhidenext.KMOD_LOAD_STATUS_FILE
 import dev.soranerai.vpnhidenext.R
@@ -69,6 +71,8 @@ private fun decodeBase64String(encoded: String): String =
         ""
     }
 
+private fun Long.saturatingInt(): Int = coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+
 private data class RawDashboardSnapshot(
     val props: Map<String, String>,
 ) {
@@ -80,6 +84,8 @@ private data class RawDashboardSnapshot(
 class DashboardRepository(
     private val context: Context,
 ) {
+    internal var lastKmodStatsResponse: KmodStatsResponse? = null
+
     private val res = context.resources
     private val selfPkg = context.packageName
 
@@ -646,7 +652,6 @@ class DashboardRepository(
             """
             if [ -x $kmodCtl ] && [ -c $DEV_NODE ]; then
               echo "framework_stats=${'$'}($kmodCtl java_stats 2>/dev/null | base64 | tr -d '\n')"
-              echo "native_stats=${'$'}($kmodCtl stats 2>/dev/null | base64 | tr -d '\n')"
             fi
             """.trimIndent()
 
@@ -670,36 +675,21 @@ class DashboardRepository(
             }
         }
 
-        val nativeStatsRaw = decodeBase64String(props["native_stats"] ?: "")
         val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
         val uidPortsMap = mutableMapOf<Int, Int>()
-        if (nativeStatsRaw.isNotBlank()) {
-            nativeStatsRaw.lines().forEach { line ->
-                val parts = line.split(';')
-                if (parts.size == 8) {
-                    val uid = parts[0].toIntOrNull()
-                    val ioctl = parts[1].toIntOrNull() ?: 0
-                    val netlink = parts[2].toIntOrNull() ?: 0
-                    val proc = parts[3].toIntOrNull() ?: 0
-                    val sockopt = parts[4].toIntOrNull() ?: 0
-                    val connect = parts[5].toIntOrNull() ?: 0
-                    val getname = parts[6].toIntOrNull() ?: 0
-                    val port = parts[7].toIntOrNull() ?: 0
-                    if (uid != null && (
-                            ioctl > 0 || netlink > 0 || proc > 0 ||
-                                sockopt > 0 || connect > 0 || getname > 0 || port > 0
-                        )
-                    ) {
-                        val hookMap = uidNativeMap.computeIfAbsent(uid) { mutableMapOf() }
-                        if (ioctl > 0) hookMap["ioctl"] = ioctl
-                        if (netlink > 0) hookMap["netlink"] = netlink
-                        if (proc > 0) hookMap["proc"] = proc
-                        if (sockopt > 0) hookMap["sockopt"] = sockopt
-                        if (connect > 0) hookMap["connect"] = connect
-                        if (getname > 0) hookMap["getname"] = getname
-                        if (port > 0) uidPortsMap[uid] = (uidPortsMap[uid] ?: 0) + port
-                    }
+        val daemonStats = KmodStatsClient.getStats()
+        lastKmodStatsResponse = daemonStats
+        daemonStats.points.filterNot { it.gap }.flatMap { it.uids }.forEach { stats ->
+            val hookMap = uidNativeMap.computeIfAbsent(stats.uid) { mutableMapOf() }
+            stats.values().forEach { (hook, count) ->
+                if (count > 0) {
+                    hookMap[hook] = (hookMap[hook]?.toLong() ?: 0L).plus(count).saturatingInt()
                 }
+            }
+            if (stats.port > 0) {
+                uidPortsMap[stats.uid] = (uidPortsMap[stats.uid]?.toLong() ?: 0L)
+                    .plus(stats.port)
+                    .saturatingInt()
             }
         }
 
@@ -780,7 +770,7 @@ class DashboardRepository(
 
     fun resetInterceptStats() {
         suExec("$kmodCtl java_stats clear 2>/dev/null")
-        suExec("$kmodCtl stats clear 2>/dev/null")
+        KmodStatsClient.clearHistory()
     }
 
     private fun resolveAppLabelWithFallback(
