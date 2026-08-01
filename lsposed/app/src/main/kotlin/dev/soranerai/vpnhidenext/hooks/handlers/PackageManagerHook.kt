@@ -149,8 +149,9 @@ object PackageManagerHook {
                 val packageName = itemToPackageName(item) ?: return@filter true
                 val hiddenAsVpn =
                     hideVpnApps && shouldHideVpnPackage(caller, packageName, param.thisObject, userId)
-                val hiddenAsSelf = hideSelf && caller.identityKnown &&
-                    packageName == HookContext.OWN_PACKAGE_NAME && !caller.owns(packageName)
+                val hiddenAsSelf =
+                    hideSelf && caller.identityKnown &&
+                        packageName == HookContext.OWN_PACKAGE_NAME && !caller.owns(packageName)
                 !hiddenAsVpn && !hiddenAsSelf
             }
 
@@ -261,8 +262,9 @@ object PackageManagerHook {
                         val callerCtx = guardCheck(param) ?: return
                         val hiddenAsVpn =
                             hideVpnApps && shouldHideVpnPackage(callerCtx, requestedPackage, param.thisObject, userId)
-                        val hiddenAsSelf = hideSelf && callerCtx.identityKnown &&
-                            requestedPackage == HookContext.OWN_PACKAGE_NAME && !callerCtx.owns(requestedPackage)
+                        val hiddenAsSelf =
+                            hideSelf && callerCtx.identityKnown &&
+                                requestedPackage == HookContext.OWN_PACKAGE_NAME && !callerCtx.owns(requestedPackage)
                         if (hiddenAsVpn || hiddenAsSelf) {
                             HookContext.recordIntercept("PackageManager")
                             param.result = null
@@ -334,7 +336,9 @@ object PackageManagerHook {
                                     }
                                 if (packageName == null ||
                                     !shouldHideVpnPackage(callerCtx, packageName, param.thisObject, userId)
-                                ) return
+                                ) {
+                                    return
+                                }
                                 HookContext.recordIntercept("PackageManager")
                                 param.result = null
                                 HookLog.i("VpnHide: Blocked resolveService for VpnService")

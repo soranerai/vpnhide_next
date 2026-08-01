@@ -213,6 +213,5 @@ internal fun AppPickerScreen(
                 }
             }
         }
-
     }
 }

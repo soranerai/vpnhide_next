@@ -33,40 +33,42 @@ internal data class KmodStatsResponse(
     companion object {
         fun fromJson(json: JSONObject): KmodStatsResponse {
             val pointsJson = json.optJSONArray("points")
-            val points = buildList {
-                if (pointsJson != null) {
-                    for (i in 0 until pointsJson.length()) {
-                        val point = pointsJson.optJSONObject(i) ?: continue
-                        val uidsJson = point.optJSONArray("uids")
-                        val uids = buildList {
-                            if (uidsJson != null) {
-                                for (j in 0 until uidsJson.length()) {
-                                    val uid = uidsJson.optJSONObject(j) ?: continue
-                                    add(
-                                        KmodUidStats(
-                                            uid = uid.optInt("uid", -1),
-                                            ioctl = uid.optLong("ioctl"),
-                                            netlink = uid.optLong("netlink"),
-                                            proc = uid.optLong("proc"),
-                                            sockopt = uid.optLong("sockopt"),
-                                            connect = uid.optLong("connect"),
-                                            getname = uid.optLong("getname"),
-                                            port = uid.optLong("port"),
-                                        ),
-                                    )
-                                }
-                            }
-                        }.filter { it.uid >= 0 }
-                        add(
-                            KmodStatsPoint(
-                                timestampMs = point.optLong("timestampMs"),
-                                gap = point.optBoolean("gap", false),
-                                uids = uids,
-                            ),
-                        )
+            val points =
+                buildList {
+                    if (pointsJson != null) {
+                        for (i in 0 until pointsJson.length()) {
+                            val point = pointsJson.optJSONObject(i) ?: continue
+                            val uidsJson = point.optJSONArray("uids")
+                            val uids =
+                                buildList {
+                                    if (uidsJson != null) {
+                                        for (j in 0 until uidsJson.length()) {
+                                            val uid = uidsJson.optJSONObject(j) ?: continue
+                                            add(
+                                                KmodUidStats(
+                                                    uid = uid.optInt("uid", -1),
+                                                    ioctl = uid.optLong("ioctl"),
+                                                    netlink = uid.optLong("netlink"),
+                                                    proc = uid.optLong("proc"),
+                                                    sockopt = uid.optLong("sockopt"),
+                                                    connect = uid.optLong("connect"),
+                                                    getname = uid.optLong("getname"),
+                                                    port = uid.optLong("port"),
+                                                ),
+                                            )
+                                        }
+                                    }
+                                }.filter { it.uid >= 0 }
+                            add(
+                                KmodStatsPoint(
+                                    timestampMs = point.optLong("timestampMs"),
+                                    gap = point.optBoolean("gap", false),
+                                    uids = uids,
+                                ),
+                            )
+                        }
                     }
                 }
-            }
             return KmodStatsResponse(
                 sessionId = json.optString("sessionId", "unknown"),
                 sequence = json.optLong("sequence", 0),

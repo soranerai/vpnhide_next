@@ -10,10 +10,10 @@ import dev.soranerai.vpnhidenext.CompatibilityResult
 import dev.soranerai.vpnhidenext.DEV_NODE
 import dev.soranerai.vpnhidenext.DiagnosticsCache
 import dev.soranerai.vpnhidenext.InstalledComponentVersions
-import dev.soranerai.vpnhidenext.KmodStatsClient
-import dev.soranerai.vpnhidenext.KmodStatsResponse
 import dev.soranerai.vpnhidenext.KMOD_LOAD_DMESG_FILE
 import dev.soranerai.vpnhidenext.KMOD_LOAD_STATUS_FILE
+import dev.soranerai.vpnhidenext.KmodStatsClient
+import dev.soranerai.vpnhidenext.KmodStatsResponse
 import dev.soranerai.vpnhidenext.R
 import dev.soranerai.vpnhidenext.VpnHideLog
 import dev.soranerai.vpnhidenext.compareSemver
@@ -687,9 +687,10 @@ class DashboardRepository(
                 }
             }
             if (stats.port > 0) {
-                uidPortsMap[stats.uid] = (uidPortsMap[stats.uid]?.toLong() ?: 0L)
-                    .plus(stats.port)
-                    .saturatingInt()
+                uidPortsMap[stats.uid] =
+                    (uidPortsMap[stats.uid]?.toLong() ?: 0L)
+                        .plus(stats.port)
+                        .saturatingInt()
             }
         }
 

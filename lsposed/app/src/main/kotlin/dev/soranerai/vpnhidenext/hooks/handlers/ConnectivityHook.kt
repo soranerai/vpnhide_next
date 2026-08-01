@@ -505,9 +505,7 @@ object ConnectivityHook {
         return null
     }
 
-    fun getActivePhysicalInterfaceName(): String? {
-        return HookContext.cachedPhysicalIfaceName
-    }
+    fun getActivePhysicalInterfaceName(): String? = HookContext.cachedPhysicalIfaceName
 
     fun getPhysicalIpv4Address(): java.net.Inet4Address? {
         return try {
