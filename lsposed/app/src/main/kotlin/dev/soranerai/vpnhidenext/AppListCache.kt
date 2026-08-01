@@ -55,7 +55,7 @@ internal fun labelWithUser(
  * instantly on tab switch.
  *
  * [refreshCounter] increments on every refresh — screens that maintain
- * their own per-screen state (targets.txt / observer files etc.) key
+ * their own per-screen selection state key
  * their reload `LaunchedEffect` on it, so the TopBar refresh button
  * rehydrates *everything*, not just the package+icon cache.
  */
@@ -111,7 +111,7 @@ internal object AppListCache {
     }
 
     /** Force a reload and bump the refresh counter so screens re-read
-     * their per-screen state (targets.txt / observer files etc.) too.
+     * their per-screen selection state too.
      */
     fun refresh(
         scope: CoroutineScope,

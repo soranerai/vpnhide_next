@@ -1,23 +1,14 @@
 package dev.soranerai.vpnhidenext
 
 import android.content.Context
-import android.util.Base64
-import dev.soranerai.vpnhidenext.db.AppProtection
-import dev.soranerai.vpnhidenext.generated.IfaceLists
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
 
 private const val TAG = "VpnHide"
 
-internal const val KMOD_TARGETS = "/data/adb/vpnhide_kmod/targets.txt"
-
 internal var kmodCtl = "/data/adb/modules/vpnhide_kmod/vpnhide-ctl"
-internal const val PORTS_OBSERVERS_FILE = "/data/adb/vpnhide_ports/observers.txt"
-internal const val PORTS_RULES_FILE = "/data/adb/vpnhide_ports/rules.txt"
-internal const val IFACE_PREFIXES_FILE = "/data/adb/vpnhide_kmod_interfaces.txt"
 internal const val DEV_NODE = "/dev/vpnhide_ctrl"
 internal var kmodModuleDir = "/data/adb/modules/vpnhide_kmod"
 internal const val KMOD_LOAD_STATUS_FILE = "/data/adb/vpnhide_kmod/load_status"
@@ -160,85 +151,4 @@ internal fun performStartupOptimized(): StartupResult {
         currentBootId = props["boot_id"] ?: "",
         isKmodType = props["is_kmod"] == "1",
     )
-}
-
-internal fun buildUidResolver(
-    uids: List<Int>,
-    outputFile: String,
-): String {
-    if (uids.isEmpty()) {
-        return "echo > $outputFile 2>/dev/null"
-    }
-    val body = uids.sorted().joinToString("\n") + "\n"
-    val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
-    return "echo '$b64' | base64 -d > $outputFile && chmod 644 $outputFile"
-}
-
-internal fun buildWriteTargetsCommand(
-    path: String,
-    header: String,
-    uids: List<Int>,
-): String {
-    val body = "$header\n" + uids.sorted().joinToString("\n") + if (uids.isNotEmpty()) "\n" else ""
-    val b64 = Base64.encodeToString(body.toByteArray(), Base64.NO_WRAP)
-    val dir = path.substringBeforeLast('/')
-    return "mkdir -p $dir ; echo '$b64' | base64 -d > $path && chmod 644 $path"
-}
-
-internal fun buildKmodApplyCommand(
-    uids: List<Int>,
-    targetType: String = "targets",
-): String {
-    if (uids.isEmpty()) return "$kmodCtl $targetType ; true"
-    return "$kmodCtl $targetType ${uids.sorted().joinToString(" ")}"
-}
-
-internal fun buildKmodPortRulesApplyCommand(rules: Map<Int, List<PortRule>>): String {
-    if (rules.isEmpty()) {
-        return "[ -c $DEV_NODE ] && $kmodCtl port_rules; true"
-    }
-
-    return buildString {
-        append("if [ -c $DEV_NODE ]; then ")
-        append("ARGS=\"\"; ")
-        rules.forEach { (uid, portRules) ->
-            if (portRules.isEmpty()) {
-                append("ARGS=\"\$ARGS $uid 1 0 65535 2\"; ")
-            } else {
-                append("ARGS=\"\$ARGS $uid ${portRules.size}")
-                portRules.forEach { rule ->
-                    val proto =
-                        when (rule.protocol) {
-                            PortProtocol.TCP -> 0
-                            PortProtocol.UDP -> 1
-                            PortProtocol.BOTH -> 2
-                        }
-                    append(" ${rule.startPort} ${rule.endPort} $proto")
-                }
-                append("\"; ")
-            }
-        }
-        append("[ -n \"\$ARGS\" ] && $kmodCtl port_rules \$ARGS; fi")
-    }
-}
-
-internal fun buildAppHookMasksApplyCommand(apps: List<AppProtection>): String {
-    val overridden = apps.filter { it.kernelHookMask != null || it.javaHookMask != null }
-    if (overridden.isEmpty()) {
-        return "[ -c $DEV_NODE ] && $kmodCtl app_hooks; true"
-    }
-
-    return buildString {
-        append("if [ -c $DEV_NODE ]; then ")
-        append("ARGS=\"\"; ")
-        overridden.forEach { app ->
-            val hasKernel = if (app.kernelHookMask != null) 1 else 0
-            val hasJava = if (app.javaHookMask != null) 1 else 0
-            append(
-                "ARGS=\"\$ARGS ${app.uid} $hasKernel ${app.kernelHookMask ?: 0L} " +
-                    "$hasJava ${app.javaHookMask ?: 0L}\"; ",
-            )
-        }
-        append("[ -n \"\$ARGS\" ] && $kmodCtl app_hooks \$ARGS; fi")
-    }
 }

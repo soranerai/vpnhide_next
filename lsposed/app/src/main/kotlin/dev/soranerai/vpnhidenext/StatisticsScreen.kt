@@ -44,13 +44,13 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val stats by InterceptStatsCache.stats.collectAsState()
+    val statsUnavailable by InterceptStatsCache.unavailable.collectAsState()
+    val statsResponse by InterceptStatsCache.response.collectAsState()
     val appsList by AppListCache.apps.collectAsState()
     var refreshing by remember { mutableStateOf(false) }
-    var retentionPeriod by remember { mutableStateOf(StatsRetentionPeriod.THIRTY_MIN) }
 
     LaunchedEffect(Unit) {
         InterceptStatsCache.ensureLoaded(scope, context)
-        retentionPeriod = withContext(Dispatchers.IO) { getStatsRetentionPeriod(context) }
     }
 
     PullToRefreshBox(
@@ -63,6 +63,12 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
                 refreshing = false
             }
         },
+        indicator = {
+            UnifiedRefreshIndicator(
+                visible = refreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        },
         modifier = modifier.fillMaxSize(),
     ) {
         Column(
@@ -72,7 +78,12 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
         ) {
-            InterceptStatisticsSection(stats = stats, appsList = appsList, retentionPeriod = retentionPeriod)
+            InterceptStatisticsSection(
+                stats = stats,
+                appsList = appsList,
+                unavailable = statsUnavailable,
+                historyDropped = statsResponse?.dropped == true,
+            )
 
             val bottomNavPadding =
                 WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -85,7 +96,8 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
 private fun InterceptStatisticsSection(
     stats: List<AppInterceptStats>?,
     appsList: List<AppSummary>?,
-    retentionPeriod: StatsRetentionPeriod,
+    unavailable: Boolean,
+    historyDropped: Boolean,
 ) {
     var expandedApps by remember { mutableStateOf(setOf<Int>()) }
 
@@ -124,10 +136,7 @@ private fun InterceptStatisticsSection(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text =
-                            stringResource(
-                                R.string.dashboard_stats_lifetime_hint_fmt,
-                                retentionPeriod.displayLabel(),
-                            ),
+                            stringResource(R.string.dashboard_stats_lifetime_hint_fmt, stringResource(R.string.stats_period_24h)),
                         style = MaterialTheme.typography.bodySmall,
                         color = contentColor.copy(alpha = 0.7f),
                     )
@@ -141,7 +150,8 @@ private fun InterceptStatisticsSection(
                             scope.launch {
                                 // 1. Instantly clear the UI stats cache
                                 InterceptStatsCache.clearStats()
-                                // 2. Perform the actual backend reset
+                                // Clear only the daemon's userspace history. Kernel counters
+                                // remain cumulative unless an explicit kernel reset is requested.
                                 withContext(Dispatchers.IO) {
                                     repository.resetInterceptStats()
                                 }
@@ -157,7 +167,37 @@ private fun InterceptStatisticsSection(
 
             Spacer(Modifier.height(14.dp))
 
-            if (stats == null) {
+            if (historyDropped) {
+                Text(
+                    text = stringResource(R.string.dashboard_stats_history_dropped),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = contentColor.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+
+            if (unavailable) {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Column(modifier = Modifier.padding(20.dp).fillMaxWidth()) {
+                        Text(
+                            text = stringResource(R.string.dashboard_stats_unavailable_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                        Spacer(Modifier.height(4.dp))
+                        Text(
+                            text = stringResource(R.string.dashboard_stats_unavailable_desc),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                        )
+                    }
+                }
+            } else if (stats == null) {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     SkeletonStatsCard(containerColor = innerCardColor)
                     SkeletonStatsCard(containerColor = innerCardColor)

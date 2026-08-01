@@ -46,6 +46,7 @@ import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
+import dev.soranerai.vpnhidenext.db.PolicyListMode
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -164,7 +165,9 @@ private fun MainScreen(
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }
+    var cancelTrigger by remember { mutableStateOf(0) }
     var bulkProtectTrigger by remember { mutableStateOf(0) }
+    var policyListMode by remember { mutableStateOf<PolicyListMode?>(null) }
     var showGlobalAppSettings by remember { mutableStateOf(false) }
     // Identity and visibility are tracked separately: while the predictive-back
     // gesture is held (or the exit animation is running), editingAppSettingsTarget
@@ -177,6 +180,15 @@ private fun MainScreen(
     var diagnosticsScrollToBottom by remember { mutableStateOf(false) }
     var showKpatchAnnouncement by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
+
+    LaunchedEffect(Unit) {
+        policyListMode = AppDatabase
+            .getInstance(context)
+            .globalConfigDao()
+            .getConfig()
+            ?.listMode
+            ?: PolicyListMode.BLACKLIST
+    }
 
     val prefs = remember { context.getSharedPreferences("vpnhide_prefs", android.content.Context.MODE_PRIVATE) }
     LaunchedEffect(startup.isKmodType) {
@@ -333,7 +345,8 @@ private fun MainScreen(
                                 }
                                 Box {
                                     val anyFilterActive =
-                                        showSystem || showRussianOnly || showOnlySelected || showOnlyWorkProfile ||
+                                        (policyListMode != PolicyListMode.ALLOWLIST && (showSystem || showRussianOnly)) ||
+                                            showOnlySelected || showOnlyWorkProfile ||
                                             sortOrder != AppSortOrder.NAME_ASC
                                     if (anyFilterActive) {
                                         FilledIconButton(onClick = { showFilterMenu = true }) {
@@ -354,29 +367,31 @@ private fun MainScreen(
                                         expanded = showFilterMenu,
                                         onDismissRequest = { showFilterMenu = false },
                                     ) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.filter_show_system)) },
-                                            onClick = { showSystem = !showSystem },
-                                            leadingIcon = {
-                                                Checkbox(
-                                                    checked = showSystem,
-                                                    onCheckedChange = null,
-                                                )
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.filter_russian_only)) },
-                                            onClick = { showRussianOnly = !showRussianOnly },
-                                            leadingIcon = {
-                                                Checkbox(
-                                                    checked = showRussianOnly,
-                                                    onCheckedChange = null,
-                                                )
-                                            },
-                                        )
-                                        if (showRussianOnly) {
+                                        if (policyListMode != PolicyListMode.ALLOWLIST) {
                                             DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.protect_all_shown)) },
+                                                text = { Text(stringResource(R.string.filter_show_system)) },
+                                                onClick = { showSystem = !showSystem },
+                                                leadingIcon = { Checkbox(checked = showSystem, onCheckedChange = null) },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.filter_russian_only)) },
+                                                onClick = { showRussianOnly = !showRussianOnly },
+                                                leadingIcon = { Checkbox(checked = showRussianOnly, onCheckedChange = null) },
+                                            )
+                                        }
+                                        if (policyListMode != PolicyListMode.ALLOWLIST && showRussianOnly) {
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        stringResource(
+                                                            if (policyListMode == PolicyListMode.ALLOWLIST) {
+                                                                R.string.allowlist_add_all_shown
+                                                            } else {
+                                                                R.string.protect_all_shown
+                                                            },
+                                                        ),
+                                                    )
+                                                },
                                                 onClick = {
                                                     bulkProtectTrigger++
                                                     showFilterMenu = false
@@ -387,7 +402,17 @@ private fun MainScreen(
                                             )
                                         }
                                         DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.filter_only_selected)) },
+                                            text = {
+                                                Text(
+                                                    stringResource(
+                                                        if (policyListMode == PolicyListMode.ALLOWLIST) {
+                                                            R.string.filter_only_exceptions
+                                                        } else {
+                                                            R.string.filter_only_selected
+                                                        },
+                                                    ),
+                                                )
+                                            },
                                             onClick = { showOnlySelected = !showOnlySelected },
                                             leadingIcon = {
                                                 Checkbox(
@@ -467,7 +492,7 @@ private fun MainScreen(
                     TopProgressBar(visible = restart == null)
 
                     // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
-                    TabLoadingBar()
+                    TabLoadingBar(currentTab)
 
                     if (restart != null) {
                         // beyondViewportPageCount keeps neighboring tabs composed
@@ -496,23 +521,38 @@ private fun MainScreen(
                                 }
 
                                 Tab.Protection -> {
-                                    ProtectionScreen(
-                                        searchQuery = searchQuery,
-                                        showSystem = showSystem,
-                                        showRussianOnly = showRussianOnly,
-                                        showOnlySelected = showOnlySelected,
-                                        showOnlyWorkProfile = showOnlyWorkProfile,
-                                        sortOrder = sortOrder,
-                                        onDirtyChange = { isProtectionDirty = it },
-                                        onOpenAppSettings = { app ->
-                                            editingAppSettingsTarget = app
-                                            showEditingAppSettings = true
-                                        },
-                                        selfNeedsRestart = refreshRestart,
-                                        saveTrigger = saveTrigger,
-                                        bulkProtectTrigger = bulkProtectTrigger,
-                                        modifier = Modifier.fillMaxSize(),
-                                    )
+                                    if (policyListMode == null) {
+                                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                                            CircularProgressIndicator()
+                                        }
+                                    } else {
+                                        ProtectionScreen(
+                                            listMode = policyListMode!!,
+                                            onListModeChange = {
+                                                policyListMode = it
+                                                if (it == PolicyListMode.ALLOWLIST) {
+                                                    showSystem = false
+                                                    showRussianOnly = false
+                                                }
+                                            },
+                                            searchQuery = searchQuery,
+                                            showSystem = showSystem,
+                                            showRussianOnly = showRussianOnly,
+                                            showOnlySelected = showOnlySelected,
+                                            showOnlyWorkProfile = showOnlyWorkProfile,
+                                            sortOrder = sortOrder,
+                                            onDirtyChange = { isProtectionDirty = it },
+                                            onOpenAppSettings = { app ->
+                                                editingAppSettingsTarget = app
+                                                showEditingAppSettings = true
+                                            },
+                                            selfNeedsRestart = refreshRestart,
+                                            saveTrigger = saveTrigger,
+                                            cancelTrigger = cancelTrigger,
+                                            bulkProtectTrigger = bulkProtectTrigger,
+                                            modifier = Modifier.fillMaxSize(),
+                                        )
+                                    }
                                 }
 
                                 Tab.Statistics -> {
@@ -612,14 +652,22 @@ private fun MainScreen(
                             }
                         }
 
-                        // Extra Settings Button — opens the global hooks+ports settings screen
+                        // While the protection picker is dirty this button becomes
+                        // an explicit rollback action. Once saved it returns to
+                        // the global hooks+ports settings screen.
                         if (extraBtnProgress > 0.01f) {
                             val extraBtnOffset by animateDpAsState(
                                 targetValue = if (showSave) (-72).dp else 0.dp,
                                 label = "extraBtnOffset",
                             )
                             Surface(
-                                onClick = { showGlobalAppSettings = true },
+                                onClick = {
+                                    if (showSave) {
+                                        cancelTrigger++
+                                    } else {
+                                        showGlobalAppSettings = true
+                                    }
+                                },
                                 color = bulkColor,
                                 contentColor = bulkContentColor,
                                 modifier =
@@ -638,8 +686,11 @@ private fun MainScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Default.AdminPanelSettings,
-                                        contentDescription = stringResource(R.string.app_settings_fab_global_desc),
+                                        if (showSave) Icons.Default.Close else Icons.Default.AdminPanelSettings,
+                                        contentDescription =
+                                            stringResource(
+                                                if (showSave) R.string.cancel_changes else R.string.app_settings_fab_global_desc,
+                                            ),
                                         modifier = Modifier.size(28.dp),
                                     )
                                 }
@@ -717,6 +768,7 @@ private fun MainScreen(
             editingAppSettingsTarget?.let { app ->
                 AppSettingsScreen(
                     app = app,
+                    listMode = policyListMode ?: PolicyListMode.BLACKLIST,
                     onBack = {
                         showEditingAppSettings = false
                         TargetsCache.refresh(scope, context)
@@ -736,6 +788,7 @@ private fun MainScreen(
         ) {
             AppSettingsScreen(
                 app = null,
+                listMode = policyListMode ?: PolicyListMode.BLACKLIST,
                 onBack = {
                     showGlobalAppSettings = false
                     TargetsCache.refresh(scope, context)
@@ -797,10 +850,18 @@ private fun MainScreen(
 }
 
 @Composable
-private fun TabLoadingBar() {
+private fun TabLoadingBar(currentTab: Tab) {
+    val dashboardLoading by DashboardCache.loading.collectAsState()
     val appListLoading by AppListCache.loading.collectAsState()
     val targetsLoading by TargetsCache.loading.collectAsState()
-    TopProgressBar(visible = appListLoading || targetsLoading)
+    val statsLoading by InterceptStatsCache.loading.collectAsState()
+    val loading =
+        when (currentTab) {
+            Tab.Dashboard -> dashboardLoading
+            Tab.Protection -> appListLoading || targetsLoading
+            Tab.Statistics -> statsLoading
+        }
+    TopProgressBar(visible = loading)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -957,19 +1018,11 @@ private fun RefreshActionIcon(
             onClick = rc.onRefresh,
             enabled = !rc.loading,
         ) {
-            if (rc.loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            } else {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.action_refresh_apps),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
+            Icon(
+                Icons.Default.Refresh,
+                contentDescription = stringResource(R.string.action_refresh_apps),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
         }
     }
 }

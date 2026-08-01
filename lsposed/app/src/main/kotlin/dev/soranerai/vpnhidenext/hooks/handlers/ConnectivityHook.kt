@@ -290,7 +290,7 @@ object ConnectivityHook {
         physicalLp: LinkProperties?,
     ): Boolean {
         var modified = false
-        val targetIface = getActivePhysicalInterfaceName(cs, physicalLp)
+        val targetIface = getActivePhysicalInterfaceName()
 
         val ifaceName = XposedHelpers.getObjectField(copy, "mIfaceName") as? String
         if (ifaceName != null && HookContext.isVpnInterfaceName(ifaceName)) {
@@ -457,68 +457,32 @@ object ConnectivityHook {
         }
     }
 
-    fun getNetworkScore(
-        nc: NetworkCapabilities,
-        lp: LinkProperties?,
-    ): Int {
-        var score = 0
-        if (nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) {
-            score += 10000
-        } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-            score += 8000
-        } else if (nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR)) {
-            score += 5000
-        }
-
-        if (nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)) {
-            score += 10000
-        }
-        if (nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
-            score += 2000
-        }
-        if (lp != null && lp.dnsServers.isNotEmpty()) {
-            score += 3000
-        }
-        return score
-    }
-
-    fun getBestPhysicalNetwork(cs: Any): android.net.Network? {
+    /**
+     * Resolve the physical network selected by vpnhide-daemon.
+     *
+     * The daemon publishes the authoritative cover interface through the
+     * control device. Do not independently rank ConnectivityService
+     * networks here: doing so can pair one network's properties with another
+     * network's interface name.
+     */
+    private fun getDaemonPhysicalNetwork(cs: Any): android.net.Network? {
+        val ifaceName = HookContext.cachedPhysicalIfaceName ?: return null
         val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
-        var bestNet: android.net.Network? = null
-        var bestScore = Int.MIN_VALUE
 
         for (netObj in networks) {
             val net = netObj as? android.net.Network ?: continue
-            val nc = getNetworkCapabilitiesSafe(cs, net) ?: continue
-
-            if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                continue
-            }
-
-            val hasPhysicalTransport =
-                nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) ||
-                    nc.hasTransport(NetworkCapabilities.TRANSPORT_CELLULAR) ||
-                    nc.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)
-            if (!hasPhysicalTransport) {
-                continue
-            }
-
             val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
-            val score = getNetworkScore(nc, lp)
-            if (score > bestScore) {
-                bestScore = score
-                bestNet = net
-            }
+            if (lp?.interfaceName == ifaceName) return net
         }
-        return bestNet
+        return null
     }
 
     fun getPhysicalLinkProperties(cs: Any): LinkProperties? {
         val token = Binder.clearCallingIdentity()
         try {
-            val bestNet = getBestPhysicalNetwork(cs)
-            if (bestNet != null) {
-                val lp = XposedHelpers.callMethod(cs, "getLinkProperties", bestNet) as? LinkProperties
+            val daemonNet = getDaemonPhysicalNetwork(cs)
+            if (daemonNet != null) {
+                val lp = XposedHelpers.callMethod(cs, "getLinkProperties", daemonNet) as? LinkProperties
                 if (lp != null) return lp
             }
         } catch (t: Throwable) {
@@ -532,7 +496,7 @@ object ConnectivityHook {
     fun getPhysicalNetwork(cs: Any): android.net.Network? {
         val token = Binder.clearCallingIdentity()
         try {
-            return getBestPhysicalNetwork(cs)
+            return getDaemonPhysicalNetwork(cs)
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to get physical network: ${t.message}")
         } finally {
@@ -541,21 +505,7 @@ object ConnectivityHook {
         return null
     }
 
-    fun getActivePhysicalInterfaceName(
-        cs: Any? = null,
-        lp: LinkProperties? = null,
-    ): String {
-        HookContext.cachedPhysicalIfaceName?.let { return it }
-        val actualCs = cs ?: HookContext.getConnectivityService()
-        if (actualCs != null) {
-            val actualLp = lp ?: getPhysicalLinkProperties(actualCs)
-            val iface = actualLp?.interfaceName
-            if (iface != null) {
-                return iface
-            }
-        }
-        return "wlan0"
-    }
+    fun getActivePhysicalInterfaceName(): String? = HookContext.cachedPhysicalIfaceName
 
     fun getPhysicalIpv4Address(): java.net.Inet4Address? {
         return try {

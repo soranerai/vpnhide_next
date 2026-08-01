@@ -29,6 +29,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
@@ -39,14 +40,13 @@ import io.github.oikvpqya.compose.fastscroller.indicator.IndicatorConstants
 import io.github.oikvpqya.compose.fastscroller.material3.defaultMaterialScrollbarStyle
 import io.github.oikvpqya.compose.fastscroller.rememberScrollbarAdapter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun AppPickerScreen(
     apps: List<AppEntry>,
+    listMode: dev.soranerai.vpnhidenext.db.PolicyListMode,
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
@@ -55,20 +55,18 @@ internal fun AppPickerScreen(
     sortOrder: AppSortOrder,
     onUpdate: (List<AppEntry>) -> Unit,
     sortedIds: List<String>,
-    onRefresh: () -> Unit,
     onOpenAppSettings: (AppEntry) -> Unit,
     listState: LazyListState,
+    topContentPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
 ) {
     val appList by AppListCache.apps.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
-    val loading = targets == null || appList == null || (apps.isEmpty() && appList?.isNotEmpty() == true)
+    val appListLoading by AppListCache.loading.collectAsState()
+    val targetsLoading by TargetsCache.loading.collectAsState()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // Pull to Refresh state
-    var refreshing by remember { mutableStateOf(false) }
-    var refreshTrigger by remember { mutableStateOf(0) }
-
+    val loading = targets == null || appList == null || (apps.isEmpty() && appList?.isNotEmpty() == true)
     // Map current data to the stable order.
     // Key on BOTH apps and sortedIds:
     //   - sortedIds changes  → order changes (filter/search/save)
@@ -95,20 +93,22 @@ internal fun AppPickerScreen(
 
     Box(modifier = modifier.fillMaxSize()) {
         if (loading) {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(top = topContentPadding),
+            ) {
                 items(10) { SkeletonAppRow() }
             }
         } else {
             PullToRefreshBox(
-                isRefreshing = refreshing,
+                isRefreshing = appListLoading || targetsLoading,
                 onRefresh = {
-                    scope.launch {
-                        refreshing = true
-                        onRefresh()
-                        delay(500)
-                        refreshing = false
-                    }
+                    AppListCache.refresh(scope, context)
+                    TargetsCache.refresh(scope, context)
                 },
+                // The indicator is rendered by ProtectionScreen in a root
+                // overlay so it stays above the picker header and list.
+                indicator = {},
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -116,11 +116,16 @@ internal fun AppPickerScreen(
                     LazyColumn(
                         state = listState,
                         modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(bottom = bottomNavPadding + 100.dp),
+                        contentPadding =
+                            PaddingValues(
+                                top = topContentPadding,
+                                bottom = bottomNavPadding + 100.dp,
+                            ),
                     ) {
                         items(displayApps, key = { "${it.packageName}:${it.userId}" }) { app ->
                             AppRow(
                                 app = app,
+                                listMode = listMode,
                                 installed = installed,
                                 onToggle = { layer ->
                                     val newList =

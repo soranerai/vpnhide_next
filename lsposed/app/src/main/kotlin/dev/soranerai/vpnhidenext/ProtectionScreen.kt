@@ -1,17 +1,38 @@
 package dev.soranerai.vpnhidenext
 
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
+import dev.soranerai.vpnhidenext.db.DatabaseSync
+import dev.soranerai.vpnhidenext.db.DbGlobalConfig
+import dev.soranerai.vpnhidenext.db.PolicyListMode
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 @Composable
 internal fun ProtectionScreen(
+    listMode: PolicyListMode,
+    onListModeChange: (PolicyListMode) -> Unit,
     searchQuery: String,
     showSystem: Boolean,
     showRussianOnly: Boolean,
@@ -22,6 +43,7 @@ internal fun ProtectionScreen(
     onOpenAppSettings: (AppEntry) -> Unit,
     selfNeedsRestart: Boolean,
     saveTrigger: Int,
+    cancelTrigger: Int = 0,
     modifier: Modifier = Modifier,
     bulkProtectTrigger: Int = 0,
 ) {
@@ -39,8 +61,9 @@ internal fun ProtectionScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
 
-    var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
-    var refreshTrigger by remember { mutableStateOf(0) }
+    var originalListMode by remember { mutableStateOf(listMode) }
+    var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
+    var showModeHelp by remember { mutableStateOf(false) }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -49,55 +72,20 @@ internal fun ProtectionScreen(
         }
     }
 
-    // Explicit order reset: computes a stable display ID list from the latest targets snapshot.
-    // MUST be declared before any LaunchedEffect that calls it.
-    //
-    // When to call:
-    //   • First data load (sortedIds still empty)        → called from LaunchedEffect(cachedApps, targets)
-    //   • Filter / search / sortOrder changes             → called from LaunchedEffect(filters…)
-    //   • Pull-to-refresh (refreshTrigger++)              → called from LaunchedEffect(filters…) via trigger
-    //   • After successful save                           → called explicitly in save block
-    //
-    // When NOT to call:
-    //   • Toggle (apps changes) → sortedIds stays the same, remember(apps, sortedIds)
-    //     re-maps content with the same order, no jump occurs.
-    fun resetOrder() {
-        val allApps = cachedApps ?: return
-        val t = targets ?: return
-        val q = searchQuery.trim().lowercase()
-        val selfPkg = context.packageName
+    var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
 
-        fun isProtected(app: AppSummary): Boolean {
-            val key = app.packageName to app.userId
-            return key in t.kmodTargets || key in t.lsposedTargets || key in t.portsObservers
-        }
-
+    fun resetOrder(source: List<AppEntry> = apps) {
         sortedIds =
-            allApps
-                .filter { it.packageName != selfPkg }
-                .filter { app ->
-                    (showSystem || !app.isSystem || isProtected(app)) &&
-                        (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
-                        (!showOnlySelected || isProtected(app)) &&
-                        (!showOnlyWorkProfile || app.userId != 0) &&
-                        (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
-                }.let { list ->
-                    when (sortOrder) {
-                        AppSortOrder.NAME_ASC -> {
-                            list.sortedBy { it.label.lowercase() }
-                        }
-
-                        AppSortOrder.NAME_DESC -> {
-                            list.sortedByDescending { it.label.lowercase() }
-                        }
-
-                        AppSortOrder.SELECTED_FIRST -> {
-                            list.sortedWith(
-                                compareByDescending<AppSummary> { isProtected(it) }.thenBy { it.label.lowercase() },
-                            )
-                        }
-                    }
-                }.map { "${it.packageName}:${it.userId}" }
+            filterAndSortApps(
+                source,
+                listMode,
+                searchQuery,
+                showSystem,
+                showRussianOnly,
+                showOnlySelected,
+                showOnlyWorkProfile,
+                sortOrder,
+            ).map { "${it.packageName}:${it.userId}" }
     }
 
     // Load/Sync apps when cache changes (only if not dirty)
@@ -130,24 +118,15 @@ internal fun ProtectionScreen(
                         compareByDescending<AppEntry> { it.anyProtection || it.portHiding }.thenBy { it.label },
                     )
             originalApps = apps
-
-            if (sortedIds.isEmpty()) {
-                resetOrder()
-            }
+            resetOrder(apps)
         }
     }
 
-    // Stable Re-sorting logic: only run when filters, search, sortOrder, or manual refresh change
-    LaunchedEffect(searchQuery, showSystem, showRussianOnly, showOnlySelected, showOnlyWorkProfile, sortOrder, refreshTrigger) {
-        if (targets != null) {
-            resetOrder()
-        }
-    }
-
-    val onRefresh = {
-        TargetsCache.refresh(scope, context)
-        refreshTrigger++
-        Unit
+    // Rebuild the order when the presentation state changes. Do not include
+    // `apps` here: row toggles are staged and must not reorder the list until
+    // Save, while the displayed row values still update immediately.
+    LaunchedEffect(searchQuery, showSystem, showRussianOnly, showOnlySelected, showOnlyWorkProfile, sortOrder, listMode) {
+        if (apps.isNotEmpty()) resetOrder()
     }
 
     // Bulk "protect all shown" action from the filter menu — only ever adds
@@ -181,26 +160,209 @@ internal fun ProtectionScreen(
             }
     }
 
-    val dirty = remember(apps, originalApps) { isDirty(apps, originalApps) }
+    val dirty =
+        remember(apps, originalApps, listMode, originalListMode) {
+            isDirty(apps, originalApps) || listMode != originalListMode
+        }
 
     LaunchedEffect(dirty) { onDirtyChange(dirty) }
 
+    LaunchedEffect(cancelTrigger) {
+        if (cancelTrigger == 0 || !dirty) return@LaunchedEffect
+        apps = originalApps
+        onListModeChange(originalListMode)
+        pendingMode = null
+        snackMessage = null
+    }
+
     Box(modifier = modifier.fillMaxSize()) {
-        AppPickerScreen(
-            apps = apps,
-            searchQuery = searchQuery,
-            showSystem = showSystem,
-            showRussianOnly = showRussianOnly,
-            showOnlySelected = showOnlySelected,
-            showOnlyWorkProfile = showOnlyWorkProfile,
-            sortOrder = sortOrder,
-            onUpdate = { newList -> apps = newList },
-            sortedIds = sortedIds,
-            onRefresh = onRefresh,
-            onOpenAppSettings = onOpenAppSettings,
-            listState = listState,
-            modifier = Modifier.fillMaxSize(),
-        )
+        Column(modifier = Modifier.fillMaxSize()) {
+            AppPickerScreen(
+                apps = apps,
+                listMode = listMode,
+                searchQuery = searchQuery,
+                showSystem = showSystem,
+                showRussianOnly = showRussianOnly,
+                showOnlySelected = showOnlySelected,
+                showOnlyWorkProfile = showOnlyWorkProfile,
+                sortOrder = sortOrder,
+                onUpdate = { newList -> apps = newList },
+                sortedIds = sortedIds,
+                onOpenAppSettings = onOpenAppSettings,
+                listState = listState,
+                topContentPadding = 114.dp,
+                modifier = Modifier.weight(1f),
+            )
+        }
+
+        Column(
+            modifier =
+                Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(horizontal = 12.dp, vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                PillTabSelector(
+                    tabs =
+                        listOf(
+                            PillTab(Icons.Default.VisibilityOff, stringResource(R.string.policy_mode_blacklist)),
+                            PillTab(Icons.Default.Visibility, stringResource(R.string.policy_mode_allowlist)),
+                        ),
+                    selectedIndex = if (listMode == PolicyListMode.BLACKLIST) 0 else 1,
+                    onSelect = { selected ->
+                        val selectedMode = if (selected == 0) PolicyListMode.BLACKLIST else PolicyListMode.ALLOWLIST
+                        if (selectedMode != listMode) pendingMode = selectedMode
+                    },
+                    modifier = Modifier.weight(1f),
+                    height = 56.dp,
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                    tonalElevation = 12.dp,
+                    shadowElevation = 8.dp,
+                )
+                FilledIconButton(
+                    onClick = { showModeHelp = true },
+                    modifier = Modifier.size(40.dp),
+                ) {
+                    Icon(
+                        Icons.Default.HelpOutline,
+                        contentDescription = stringResource(R.string.policy_help_title),
+                        modifier = Modifier.size(20.dp),
+                    )
+                }
+            }
+
+            val selectedCount = apps.count { it.anyProtection || it.portHiding }
+            val summaryBackgroundColor =
+                if (isSystemInDarkTheme()) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
+            val summaryContentColor =
+                if (isSystemInDarkTheme()) Color.White else Color(0xFF1B5E20)
+            Surface(
+                shape = RoundedCornerShape(14.dp),
+                color = summaryBackgroundColor,
+                tonalElevation = 2.dp,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Icon(
+                        imageVector =
+                            if (listMode == PolicyListMode.ALLOWLIST) {
+                                Icons.Default.Visibility
+                            } else {
+                                Icons.Default.VisibilityOff
+                            },
+                        contentDescription = null,
+                        tint = summaryContentColor,
+                    )
+                    Spacer(Modifier.width(10.dp))
+                    Text(
+                        text =
+                            stringResource(
+                                if (listMode == PolicyListMode.ALLOWLIST) {
+                                    R.string.policy_mode_allowlist_summary
+                                } else {
+                                    R.string.policy_mode_blacklist_summary
+                                },
+                                selectedCount,
+                            ),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = summaryContentColor,
+                    )
+                }
+            }
+        }
+
+        pendingMode?.let { selected ->
+            AlertDialog(
+                onDismissRequest = { pendingMode = null },
+                title = { Text(stringResource(R.string.policy_mode_change_title)) },
+                text = {
+                    Text(
+                        stringResource(
+                            if (selected == PolicyListMode.ALLOWLIST) {
+                                R.string.policy_mode_allowlist_warning
+                            } else {
+                                R.string.policy_mode_blacklist_warning
+                            },
+                        ),
+                    )
+                },
+                confirmButton = {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
+                    ) {
+                        TextButton(onClick = { pendingMode = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        TextButton(
+                            onClick = {
+                                apps = apps.map { it.copy(kmod = false, lsposed = false, portHiding = false) }
+                                onListModeChange(selected)
+                                pendingMode = null
+                            },
+                            colors =
+                                ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                        ) {
+                            Text(stringResource(R.string.policy_mode_change_confirm))
+                        }
+                    }
+                },
+            )
+        }
+
+        if (showModeHelp) {
+            AlertDialog(
+                onDismissRequest = { showModeHelp = false },
+                title = { Text(stringResource(R.string.policy_help_title)) },
+                text = {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.policy_help_scope_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = stringResource(R.string.policy_help_scope_intro),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_blacklist_title),
+                            text = stringResource(R.string.policy_help_blacklist),
+                        )
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_allowlist_title),
+                            text = stringResource(R.string.policy_help_allowlist),
+                        )
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_layers_title),
+                            text = stringResource(R.string.policy_help_layers),
+                        )
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_ports_title),
+                            text = stringResource(R.string.policy_help_ports),
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(onClick = { showModeHelp = false }) {
+                        Text(stringResource(R.string.ok))
+                    }
+                },
+            )
+        }
 
         SnackbarHost(
             hostState = snackbarHostState,
@@ -220,6 +382,9 @@ internal fun ProtectionScreen(
                     val db = AppDatabase.getInstance(context)
                     db.withTransaction {
                         val appDao = db.appDao()
+                        val globalDao = db.globalConfigDao()
+                        val currentGlobal = globalDao.getConfig() ?: DbGlobalConfig()
+                        globalDao.insertConfig(currentGlobal.copy(listMode = listMode))
                         // Hook-mask overrides are now edited live from AppSettingsScreen, not
                         // staged in this list — read the current DB state so this save can't
                         // clobber them with the stale snapshot captured when the tab loaded.
@@ -257,9 +422,8 @@ internal fun ProtectionScreen(
                         val keysToKeep = protections.map { it.packageName to it.userId }.toSet()
                         for (existing in existingProtections) {
                             val key = existing.packageName to existing.userId
-                            if (existing.packageName != selfPkg && key !in keysToKeep) {
-                                appDao.deleteAppProtection(existing)
-                            }
+                            if (existing.packageName == selfPkg || key in keysToKeep) continue
+                            appDao.deleteAppProtection(existing)
                         }
                     }
 
@@ -272,7 +436,7 @@ internal fun ProtectionScreen(
                         DiagnosticsCache.run(scope, context)
                         TargetsCache.refresh(scope, context)
                         originalApps = apps
-                        // Re-sort after save to reflect new selection state (jump once, but after save is done)
+                        originalListMode = listMode
                         resetOrder()
                     } else {
                         snackMessage = context.getString(R.string.save_failed_exit, -1)
@@ -282,6 +446,33 @@ internal fun ProtectionScreen(
                 }
                 saving = false
             }
+        }
+
+        val appListRefreshing by AppListCache.loading.collectAsState()
+        val targetsRefreshing by TargetsCache.loading.collectAsState()
+        UnifiedRefreshIndicator(
+            visible = appListRefreshing || targetsRefreshing,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
+    }
+}
+
+@Composable
+private fun ModeHelpSection(
+    title: String,
+    text: String,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(text, style = MaterialTheme.typography.bodySmall)
         }
     }
 }

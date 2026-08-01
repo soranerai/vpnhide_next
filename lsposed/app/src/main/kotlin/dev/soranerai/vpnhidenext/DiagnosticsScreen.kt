@@ -1010,18 +1010,30 @@ internal suspend fun exportDebugZip(
                 }
             files["modules.txt"] = moduleInfo
 
-            // Target UIDs
-            val (_, procTargets) = suExec("cat /proc/vpnhide_targets 2>/dev/null")
+            // Declarative policy. Effective UID expansion is owned by vpnhide-ctl
+            // and the daemon; the app must not treat legacy proc snapshots as
+            // its source of truth.
             val db = AppDatabase.getInstance(context)
             val protections = db.appDao().getAllAppProtectionSync()
+            val globalConfig = db.globalConfigDao().getConfig()
+            val policyFile = AppDatabase.policyConfigFile(context)
+            val (_, policyPreview) =
+                suExec(
+                    "[ -x $kmodCtl ] && $kmodCtl preview '${policyFile.absolutePath.replace("'", "'\\''")}' " +
+                        "${context.applicationInfo.uid} 2>&1 || true",
+                )
             val kmodTargets = protections.filter { it.kmod }
             val lsposedTargets = protections.filter { it.lsposed }
             val targetsText =
                 buildString {
-                    appendLine("=== /proc/vpnhide_targets (live UIDs) ===")
-                    appendLine(procTargets.ifEmpty { "(empty)" })
+                    appendLine("=== declarative policy ===")
+                    appendLine("mode=${globalConfig?.listMode?.name ?: "BLACKLIST"}")
+                    appendLine("config=${policyFile.absolutePath}")
                     appendLine()
-                    appendLine("=== kmod targets (DB) ===")
+                    appendLine("=== backend preview ===")
+                    appendLine(policyPreview.ifBlank { "(unavailable)" }.trim())
+                    appendLine()
+                    appendLine("=== selected kmod entries ===")
                     if (kmodTargets.isEmpty()) {
                         appendLine("(empty)")
                     } else {
@@ -1036,7 +1048,7 @@ internal suspend fun exportDebugZip(
                         }
                     }
                     appendLine()
-                    appendLine("=== lsposed targets (DB) ===")
+                    appendLine("=== selected lsposed entries ===")
                     if (lsposedTargets.isEmpty()) {
                         appendLine("(empty)")
                     } else {
@@ -1051,7 +1063,7 @@ internal suspend fun exportDebugZip(
                         }
                     }
                 }
-            files["targets.txt"] = targetsText
+            files["policy.txt"] = targetsText
 
             // Network interfaces (via su, unfiltered)
             val ifacesText =

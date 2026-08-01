@@ -91,12 +91,12 @@ val ALL_HOOKS =
             R.string.hook_symbol_sys_getsockopt,
             R.string.hook_desc_sys_getsockopt,
         ),
-        HookInfo(
-            13,
-            R.string.hook_name_sys_connect,
-            R.string.hook_symbol_sys_connect,
-            R.string.hook_desc_sys_connect,
-        ),
+        // HookInfo(
+        //     13,
+        //     R.string.hook_name_sys_connect,
+        //     R.string.hook_symbol_sys_connect,
+        //     R.string.hook_desc_sys_connect,
+        // ),
         HookInfo(
             14,
             R.string.hook_name_sys_getsockname_ipv4,
@@ -109,12 +109,12 @@ val ALL_HOOKS =
             R.string.hook_symbol_sys_getsockname_ipv6,
             R.string.hook_desc_sys_getsockname_ipv6,
         ),
-        HookInfo(
-            16,
-            R.string.hook_name_sys_bind,
-            R.string.hook_symbol_sys_bind,
-            R.string.hook_desc_sys_bind,
-        ),
+        // HookInfo(
+        //     16,
+        //     R.string.hook_name_sys_bind,
+        //     R.string.hook_symbol_sys_bind,
+        //     R.string.hook_desc_sys_bind,
+        // ),
         HookInfo(
             17,
             R.string.hook_name_bpf_stats_spoof,

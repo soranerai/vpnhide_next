@@ -223,6 +223,30 @@ internal class AppDatabase private constructor(
         DbNotifier.notifyChanged("global_config")
     }
 
+    /** Reset targets, hook overrides, and local/global port rules on a mode change. */
+    suspend fun resetProtectionConfig(listMode: PolicyListMode) {
+        synchronized(lock) {
+            val current = config.globalConfig
+            config =
+                config.copy(
+                    globalConfig =
+                        current.copy(
+                            listMode = listMode,
+                            kernelHookMask = DbGlobalConfig().kernelHookMask,
+                            javaHookMask = DbGlobalConfig().javaHookMask,
+                        ),
+                    apps = emptyMap(),
+                    portRules = emptyList(),
+                    massPortRules = emptyList(),
+                )
+            saveConfigInternal()
+        }
+        DbNotifier.notifyChanged("app_protection")
+        DbNotifier.notifyChanged("port_rules")
+        DbNotifier.notifyChanged("mass_port_rules")
+        DbNotifier.notifyChanged("global_config")
+    }
+
     fun appDao(): AppDao = appDaoImpl
 
     fun portRuleDao(): PortRuleDao = portRuleDaoImpl
@@ -519,6 +543,17 @@ internal class AppDatabase private constructor(
                 instance!!
             }
 
+        /** The only persistent policy path shared with the root daemon. */
+        fun policyConfigFile(context: Context): File {
+            val deContext =
+                if (context.isDeviceProtectedStorage) {
+                    context
+                } else {
+                    context.createDeviceProtectedStorageContext()
+                }
+            return File(deContext.filesDir, "vpnhide_config.json")
+        }
+
         fun performMigrationIfRequired(context: Context) {
             val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
             val dbFile = deContext.getDatabasePath("vpnhide_database")
@@ -782,10 +817,10 @@ private fun JSONObject.toDbMassPortRule(): DbMassPortRule =
 private fun DbGlobalConfig.toJson(): JSONObject =
     JSONObject().apply {
         put("id", id)
+        put("listMode", listMode.name)
         put("kernelHookMask", kernelHookMask)
         put("javaHookMask", javaHookMask)
         put("debugLogging", debugLogging)
-        put("statsRetentionPeriod", statsRetentionPeriod)
         put("updateCheckEnabled", updateCheckEnabled)
         put("healthCheckEnabled", healthCheckEnabled)
         put("selfTestVpnEnabled", selfTestVpnEnabled)
@@ -794,10 +829,13 @@ private fun DbGlobalConfig.toJson(): JSONObject =
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
     DbGlobalConfig(
         id = optString("id", "default"),
+        listMode =
+            runCatching {
+                PolicyListMode.valueOf(optString("listMode", PolicyListMode.BLACKLIST.name))
+            }.getOrDefault(PolicyListMode.BLACKLIST),
         kernelHookMask = optLong("kernelHookMask", 0xFFFFFFFFL),
         javaHookMask = optLong("javaHookMask", DEFAULT_JAVA_HOOK_MASK),
         debugLogging = optInt("debugLogging", 0),
-        statsRetentionPeriod = optString("statsRetentionPeriod", "30m"),
         updateCheckEnabled = optBoolean("updateCheckEnabled", true),
         healthCheckEnabled = optBoolean("healthCheckEnabled", true),
         selfTestVpnEnabled = optBoolean("selfTestVpnEnabled", true),

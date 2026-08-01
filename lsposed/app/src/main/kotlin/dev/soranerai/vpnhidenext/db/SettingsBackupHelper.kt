@@ -89,6 +89,7 @@ internal object SettingsBackupHelper {
             // 4. Export global settings
             val config = db.globalConfigDao().getConfig() ?: DbGlobalConfig()
             val globalObj = JSONObject()
+            globalObj.put("listMode", config.listMode.name)
             globalObj.put("kernelHookMask", config.kernelHookMask)
             globalObj.put("javaHookMask", config.javaHookMask)
             json.put("global_config", globalObj)
@@ -118,8 +119,13 @@ internal object SettingsBackupHelper {
                     if (globalObj != null) {
                         val kernelMask = globalObj.optLong("kernelHookMask", 0xFFFFFFFFL)
                         val javaMask = globalObj.optLong("javaHookMask", 0xFFFFFFFFL)
+                        val listMode =
+                            runCatching {
+                                PolicyListMode.valueOf(globalObj.optString("listMode", PolicyListMode.BLACKLIST.name))
+                            }.getOrDefault(PolicyListMode.BLACKLIST)
                         db.globalConfigDao().insertConfig(
                             DbGlobalConfig(
+                                listMode = listMode,
                                 kernelHookMask = kernelMask,
                                 javaHookMask = javaMask,
                             ),
@@ -218,7 +224,7 @@ internal object SettingsBackupHelper {
                     }
                 }
 
-                // Database healing: Dynamic UID resolution & SQLite config database sync to /data/system/vpnhide
+                // Database healing and atomic JSON policy apply.
                 TargetsCache.reload(context)
 
                 // Dynamic system settings synchronization to system files observers, kmod & system_server

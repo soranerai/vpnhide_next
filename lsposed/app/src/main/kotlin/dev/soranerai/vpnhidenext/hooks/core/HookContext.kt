@@ -41,7 +41,7 @@ object HookContext {
     @Volatile
     var statsBucketDurationMs: Long = 60_000L
 
-    // Cache: packageName -> is package VPN?
+    // Cache: "$userId:$packageName" -> is package VPN?
     val vpnPackageCache = ConcurrentHashMap<String, Boolean>()
 
     val hookStats = ConcurrentHashMap<Int, ConcurrentHashMap<String, RollingCounter>>()

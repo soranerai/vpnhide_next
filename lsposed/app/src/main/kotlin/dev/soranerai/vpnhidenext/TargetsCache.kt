@@ -30,6 +30,7 @@ import kotlinx.coroutines.withContext
  * - The user taps the top-bar Refresh button on Protection.
  */
 internal data class TargetsSnapshot(
+    val listMode: dev.soranerai.vpnhidenext.db.PolicyListMode,
     val kmodModuleInstalled: Boolean,
     val kmodActive: Boolean,
     val kmodTargets: Set<Pair<String, Int>>,
@@ -64,30 +65,10 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
         }
     }
 
-    // Bundle every read into a single `suExec` call separated by
-    // distinctive banner lines. One root roundtrip beats 8 serial
-    // ones — PM + 7 cats typically take <100ms this way.
+    // Read only module status and Package Manager state. Policy selections
+    // come from the app-owned JSON database; no target files are consulted.
     private const val SENTINEL = "===VPNHIDE-TARGETS-BOUNDARY==="
     private const val END = "===VPNHIDE-TARGETS-END==="
-
-    private val BATCH_SCRIPT get() =
-        """
-        echo "$SENTINEL KMOD_MODULE_DIR"
-        [ -d $kmodModuleDir ] && echo 1 || echo 0
-        echo "$SENTINEL LSMOD"
-        lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
-        echo "$SENTINEL KMOD_TARGETS"
-        cat $KMOD_TARGETS 2>/dev/null || true
-        echo "$SENTINEL PORTS_OBSERVERS"
-        cat $PORTS_OBSERVERS_FILE 2>/dev/null || true
-        echo "$SENTINEL PORTS_RULES"
-        cat $PORTS_RULES_FILE 2>/dev/null || true
-        echo "$SENTINEL IFACE_PREFIXES"
-        cat $IFACE_PREFIXES_FILE 2>/dev/null || true
-        echo "$SENTINEL PM_LIST"
-        pm list packages -U --user all 2>/dev/null || true
-        echo "$END"
-        """.trimIndent()
 
     internal suspend fun reload(appContext: Context): TargetsSnapshot {
         val db = AppDatabase.getInstance(appContext)
@@ -96,72 +77,25 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
         val massPortRuleDao = db.massPortRuleDao()
         val ifacePrefixDao = db.ifacePrefixDao()
 
-        // Check if DB is empty
-        val allAppsSync = appDao.getAllAppProtectionSync()
         var dbPopulatedOrUpdated = false
-        if (allAppsSync.isEmpty()) {
-            // Initial migration: read from files
-            val (_, out) = withContext(Dispatchers.IO) { suExec(BATCH_SCRIPT) }
-            val snapshot = parse(out)
 
-            // Populate DB
-            val pkgUserToUid = snapshot.uidToPkg.entries.associate { (uid, pkg) -> (pkg to (uid / 100000)) to uid }
-            for (entry in snapshot.kmodTargets + snapshot.lsposedTargets + snapshot.portsObservers) {
-                val (pkg, userId) = entry
-                val uid = pkgUserToUid[pkg to userId] ?: 0
-                appDao.insertAppProtection(
-                    dev.soranerai.vpnhidenext.db.AppProtection(
-                        packageName = pkg,
-                        userId = userId,
-                        uid = uid,
-                        kmod = entry in snapshot.kmodTargets,
-                        lsposed = entry in snapshot.lsposedTargets,
-                        portHiding = entry in snapshot.portsObservers,
-                    ),
-                )
-                snapshot.portRules[entry]?.forEach { rule ->
-                    portRuleDao.insertRule(
-                        dev.soranerai.vpnhidenext.db.DbPortRule(
-                            packageName = pkg,
-                            userId = userId,
-                            startPort = rule.startPort,
-                            endPort = rule.endPort,
-                            protocol = rule.protocol,
-                            label = rule.label,
-                            enabled = rule.enabled,
-                        ),
-                    )
-                }
-            }
-
-            // Migrate iface prefixes from file if DB is empty
-            val allPrefixesSync = ifacePrefixDao.getAllPrefixesSync()
-            if (allPrefixesSync.isEmpty()) {
-                ifacePrefixDao.insertPrefixes(
-                    snapshot.ifacePrefixes.map {
-                        dev.soranerai.vpnhidenext.db
-                            .DbIfacePrefix(it)
-                    },
-                )
-            }
-            dbPopulatedOrUpdated = true
-        }
-
-        // Ensure the app itself (dev.soranerai.vpnhidenext) is in the database with kmod = true
+        // Keep the manager package in the declarative policy with all layers
+        // disabled. In ALLOWLIST this makes it an ordinary unselected
+        // eligible package; in BLACKLIST the backend still force-targets it
+        // for self-tests.
         val selfPkg = appContext.packageName
         val selfProto = appDao.getAppProtection(selfPkg, 0)
-        if (selfProto == null || !selfProto.kmod) {
-            val selfUid = appContext.applicationInfo.uid
+        if (selfProto == null) {
             appDao.insertAppProtection(
                 dev.soranerai.vpnhidenext.db.AppProtection(
                     packageName = selfPkg,
                     userId = 0,
-                    uid = selfUid,
-                    kmod = true,
-                    lsposed = selfProto?.lsposed ?: false,
-                    portHiding = selfProto?.portHiding ?: false,
+                    uid = appContext.applicationInfo.uid,
                 ),
             )
+            dbPopulatedOrUpdated = true
+        } else if (selfProto.kmod || selfProto.lsposed || selfProto.portHiding) {
+            appDao.insertAppProtection(selfProto.copy(kmod = false, lsposed = false, portHiding = false))
             dbPopulatedOrUpdated = true
         }
 
@@ -239,6 +173,9 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
 
         val snapshot =
             TargetsSnapshot(
+                listMode =
+                    db.globalConfigDao().getConfig()?.listMode
+                        ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
                 kmodModuleInstalled = statusSnapshot.kmodModuleInstalled,
                 kmodActive = statusSnapshot.kmodActive,
                 kmodTargets = apps.filter { it.kmod }.map { it.packageName to it.userId }.toSet(),
@@ -307,79 +244,18 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             }
         }
 
-        fun parseEntries(raw: String?): Set<Pair<String, Int>> =
-            raw
-                ?.lines()
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() && !it.startsWith("#") }
-                ?.map { entry ->
-                    val cleanEntry =
-                        if (entry.contains(":")) {
-                            val parts = entry.split(":")
-                            parts[0] to (parts[1].toIntOrNull() ?: 0)
-                        } else {
-                            entry to 0
-                        }
-                    val uid = cleanEntry.first.toIntOrNull()
-                    if (uid != null) {
-                        val resolvedPkg = uidToPkg[uid]
-                        if (resolvedPkg != null) {
-                            resolvedPkg to (uid / 100000)
-                        } else {
-                            cleanEntry
-                        }
-                    } else {
-                        cleanEntry
-                    }
-                }?.toSet() ?: emptySet()
-
-        val portRules = mutableMapOf<Pair<String, Int>, List<PortRule>>()
-        sections["PORTS_RULES"]?.lines()?.forEach { line ->
-            if (line.isBlank() || line.startsWith("#")) return@forEach
-            val parts = line.split(" ")
-            if (parts.size < 2) return@forEach
-            val entry = parts[0]
-            val key =
-                if (entry.contains(":")) {
-                    val p = entry.split(":")
-                    p[0] to (p[1].toIntOrNull() ?: 0)
-                } else {
-                    entry to 0
-                }
-            val rulesList = mutableListOf<PortRule>()
-            for (i in 1 until parts.size) {
-                val ruleParts = parts[i].split("-", ":")
-                if (ruleParts.size == 3) {
-                    val start = ruleParts[0].toIntOrNull() ?: 0
-                    val end = ruleParts[1].toIntOrNull() ?: 0
-                    val protoIdx = ruleParts[2].toIntOrNull() ?: 2
-                    val proto =
-                        when (protoIdx) {
-                            0 -> PortProtocol.TCP
-                            1 -> PortProtocol.UDP
-                            else -> PortProtocol.BOTH
-                        }
-                    rulesList.add(PortRule(startPort = start, endPort = end, protocol = proto))
-                }
-            }
-            portRules[key] = rulesList
-        }
-
         return TargetsSnapshot(
+            listMode = dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",
             kmodActive = sections["LSMOD"]?.trim() == "1",
-            kmodTargets = parseEntries(sections["KMOD_TARGETS"]),
+            kmodTargets = emptySet(),
             lsposedTargets = emptySet(),
-            portsObservers = parseEntries(sections["PORTS_OBSERVERS"]),
-            portRules = portRules,
+            portsObservers = emptySet(),
+            portRules = emptyMap(),
             kernelHookMasks = emptyMap(),
             javaHookMasks = emptyMap(),
             massPortRules = emptyList(),
-            ifacePrefixes =
-                sections["IFACE_PREFIXES"]
-                    ?.lines()
-                    ?.map { it.trim() }
-                    ?.filter { it.isNotEmpty() && !it.startsWith("#") } ?: emptyList(),
+            ifacePrefixes = emptyList(),
             uidToPkg = uidToPkg,
         )
     }
