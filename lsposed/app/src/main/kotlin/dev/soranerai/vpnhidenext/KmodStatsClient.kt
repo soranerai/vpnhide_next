@@ -1,32 +1,21 @@
 package dev.soranerai.vpnhidenext
 
-import android.net.LocalSocket
-import android.net.LocalSocketAddress
 import org.json.JSONObject
 import java.io.IOException
 
 /** Client for the daemon-owned, session-scoped statistics history. */
 internal object KmodStatsClient {
-    private const val SOCKET_NAME = "vpnhide.stats.v1"
-
     fun getStats(): KmodStatsResponse = request("GET_STATS")
 
     fun clearHistory(): KmodStatsResponse = request("CLEAR_HISTORY")
 
     private fun request(command: String): KmodStatsResponse {
-        val socket = LocalSocket()
-        try {
-            socket.connect(LocalSocketAddress(SOCKET_NAME, LocalSocketAddress.Namespace.ABSTRACT))
-            socket.outputStream.bufferedWriter(Charsets.UTF_8).use { writer ->
-                writer.append(command).append('\n')
-                writer.flush()
-            }
-            val payload = socket.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
-            if (payload.isBlank()) throw IOException("statistics daemon returned an empty response")
-            return KmodStatsResponse.fromJson(JSONObject(payload))
-        } finally {
-            socket.close()
+        val suffix = if (command == "CLEAR_HISTORY") " clear" else ""
+        val (exit, payload) = suExec("$kmodCtl stats_history$suffix 2>/dev/null")
+        if (exit != 0 || payload.isBlank()) {
+            throw IOException("statistics daemon root helper failed (exit=$exit)")
         }
+        return KmodStatsResponse.fromJson(JSONObject(payload))
     }
 }
 

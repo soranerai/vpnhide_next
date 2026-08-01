@@ -66,11 +66,12 @@ These are boot diagnostics, not policy storage.
 Hook status is exposed through the read-only control device where supported.
 No policy or debug coordination file is written to `/data/system`.
 
-The app reads kmod intercept history through `vpnhide.stats.v1` using
-`LocalSocket` in the abstract namespace. The daemon accepts only the manager
-application UID, returns interval deltas, and keeps the ring in memory. A
-socket failure means statistics are temporarily unavailable; it must not be
-shown as an empty history.
+The app reads kmod intercept history through the root-side
+`vpnhide-ctl stats_history` helper. The helper connects to the daemon's
+abstract `vpnhide.stats.v1` socket, returns interval deltas, and keeps the ring
+in memory. The app does not connect to that socket directly; a root-helper
+failure means statistics are temporarily unavailable and must not be shown as
+an empty history.
 
 ## Migration
 
