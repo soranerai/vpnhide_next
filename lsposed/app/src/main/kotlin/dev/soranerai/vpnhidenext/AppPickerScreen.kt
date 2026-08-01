@@ -21,7 +21,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
@@ -33,7 +32,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.zIndex
 import androidx.core.graphics.drawable.toBitmap
 import dev.soranerai.vpnhidenext.ShimmerPlaceholder
 import dev.soranerai.vpnhidenext.ui.theme.*
@@ -42,12 +40,7 @@ import io.github.oikvpqya.compose.fastscroller.indicator.IndicatorConstants
 import io.github.oikvpqya.compose.fastscroller.material3.defaultMaterialScrollbarStyle
 import io.github.oikvpqya.compose.fastscroller.rememberScrollbarAdapter
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.combine
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import kotlinx.coroutines.withTimeoutOrNull
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -62,7 +55,6 @@ internal fun AppPickerScreen(
     sortOrder: AppSortOrder,
     onUpdate: (List<AppEntry>) -> Unit,
     sortedIds: List<String>,
-    onRefresh: () -> Unit,
     onOpenAppSettings: (AppEntry) -> Unit,
     listState: LazyListState,
     topContentPadding: Dp = 0.dp,
@@ -70,12 +62,11 @@ internal fun AppPickerScreen(
 ) {
     val appList by AppListCache.apps.collectAsState()
     val targets by TargetsCache.snapshot.collectAsState()
-    val loading = targets == null || appList == null || (apps.isEmpty() && appList?.isNotEmpty() == true)
+    val appListLoading by AppListCache.loading.collectAsState()
+    val targetsLoading by TargetsCache.loading.collectAsState()
+    val context = LocalContext.current
     val scope = rememberCoroutineScope()
-
-    // Pull to Refresh state
-    var refreshing by remember { mutableStateOf(false) }
-
+    val loading = targets == null || appList == null || (apps.isEmpty() && appList?.isNotEmpty() == true)
     // Map current data to the stable order.
     // Key on BOTH apps and sortedIds:
     //   - sortedIds changes  → order changes (filter/search/save)
@@ -110,22 +101,13 @@ internal fun AppPickerScreen(
             }
         } else {
             PullToRefreshBox(
-                isRefreshing = refreshing,
+                isRefreshing = appListLoading || targetsLoading,
                 onRefresh = {
-                    scope.launch {
-                        refreshing = true
-                        onRefresh()
-                        // Cache refreshes are asynchronous. Keep the indicator alive until
-                        // both reloads actually finish, but never let a broken root command
-                        // leave the pull gesture spinning forever.
-                        delay(50)
-                        withTimeoutOrNull(15_000) {
-                            combine(AppListCache.loading, TargetsCache.loading) { apps, targets -> apps || targets }
-                                .first { !it }
-                        }
-                        refreshing = false
-                    }
+                    AppListCache.refresh(scope, context)
+                    TargetsCache.refresh(scope, context)
                 },
+                // Keep the gesture and remove Material3's bottom/overlay indicator.
+                indicator = {},
                 modifier = Modifier.fillMaxSize(),
             ) {
                 Box(modifier = Modifier.fillMaxSize()) {
@@ -232,23 +214,5 @@ internal fun AppPickerScreen(
             }
         }
 
-        if (refreshing) {
-            Surface(
-                modifier =
-                    Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = topContentPadding + 8.dp)
-                        .zIndex(10f)
-                        .shadow(8.dp, CircleShape),
-                shape = CircleShape,
-                color = MaterialTheme.colorScheme.surface,
-                tonalElevation = 8.dp,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.padding(10.dp).size(24.dp),
-                    strokeWidth = 2.5.dp,
-                )
-            }
-        }
     }
 }

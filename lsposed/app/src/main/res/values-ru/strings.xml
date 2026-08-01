@@ -21,10 +21,30 @@
     <string name="policy_mode_blacklist_summary">Скрывать VPN у выбранных · целей: %d</string>
     <string name="policy_mode_allowlist_summary">Показывать VPN только выбранным · исключений: %d</string>
     <string name="policy_help_title">Как работает выбор защиты</string>
-    <string name="policy_help_blacklist">Скрывать выбранным: включённые слои применяются к выбранным приложениям. Остальные подходящие приложения не затрагиваются.</string>
-    <string name="policy_help_allowlist">Показывать выбранным: включённые слои становятся исключениями для выбранных приложений. Остальные подходящие сторонние приложения скрываются.</string>
-    <string name="policy_help_layers">N — Native/ядро, F — Framework/LSPosed, P — порты. В режиме «Скрывать» включённый чип включает защиту. В режиме «Показывать» включённый чип даёт исключение. Галочка означает исключение.</string>
-    <string name="policy_help_ports">Порты инвертируются так же: в режиме «Скрывать» настроенные порты блокируются или скрываются у выбранных приложений; в режиме «Показывать» выбранные приложения обходят скрытие портов. Системные и privileged-приложения не затрагиваются.</string>
+    <string name="policy_help_scope_title">1. Режимы защиты</string>
+    <string name="policy_help_scope_intro">Выберите, какие приложения должны видеть VPN, а какие — не видеть его.</string>
+    <string name="policy_help_layers_title">2. Слои защиты</string>
+    <string name="policy_help_ports_title">3. Правила портов</string>
+    <string name="policy_help_blacklist_title">Скрывать — чёрный список</string>
+    <string name="policy_help_allowlist_title">Показывать — белый список</string>
+    <string name="policy_help_blacklist">Выбранные приложения НЕ ВИДЯТ VPN.
+
+    Включённые уровни защиты применяются к выбранным приложениям и скрывают от них VPN. Все остальные подходящие приложения работают без этой защиты.</string>
+    <string name="policy_help_allowlist">Выбранные приложения ВИДЯТ VPN.
+
+    Включённые для них уровни становятся разрешениями. Все остальные подходящие сторонние приложения НЕ ВИДЯТ VPN.</string>
+    <string name="policy_help_layers">N — защита на уровне ядра, F — защита Android/LSPosed, P — скрытие портов.
+
+    В режиме «Скрывать» включённый чип скрывает соответствующую часть VPN у выбранного приложения.
+
+    В режиме «Показывать» включённый чип разрешает выбранному приложению видеть соответствующую часть VPN. Галочка на чипе означает, что разрешение включено.</string>
+    <string name="policy_help_ports">Правила портов работают по той же логике.
+
+    В режиме «Скрывать» указанные порты скрываются у выбранных приложений.
+
+    В режиме «Показывать» выбранные приложения видят указанные порты, а остальные подходящие приложения — нет.
+
+    Системные и привилегированные приложения не затрагиваются.</string>
     <string name="ok">OK</string>
 
     <!-- Port hiding -->
@@ -36,6 +56,9 @@
     <string name="bulk_rules_title">Массовые правила</string>
     <string name="bulk_rules_subtitle">Применяются ко всем защищённым приложениям</string>
     <string name="no_rules">Правила не настроены</string>
+    <string name="no_hide_rules_desc">Нажмите «+», чтобы добавить порты для скрытия.</string>
+    <string name="no_allow_rules">Разрешённые порты не заданы</string>
+    <string name="no_allow_rules_desc">Нажмите «+», чтобы указать порты, которые останутся видимыми в режиме «Показывать».</string>
     <string name="back">Назад</string>
     <string name="bulk_btn">Bulk</string>
     <string name="cancel">Отмена</string>

@@ -281,7 +281,7 @@ internal fun AppSettingsScreen(
                     )
 
                     androidx.compose.animation.AnimatedVisibility(
-                        visible = pagerState.currentPage == 2,
+                        visible = pagerState.currentPage == if (allowlist) 0 else 2,
                         enter = fadeIn() + scaleIn(),
                         exit = fadeOut() + scaleOut(),
                         modifier = Modifier.align(Alignment.Center).offset(x = 152.dp),
@@ -779,9 +779,29 @@ private fun PortsTab(
                             )
                             Spacer(Modifier.height(16.dp))
                             Text(
-                                stringResource(R.string.no_rules),
+                                stringResource(
+                                    if (listMode == PolicyListMode.ALLOWLIST) {
+                                        R.string.no_allow_rules
+                                    } else {
+                                        R.string.no_rules
+                                    },
+                                ),
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                stringResource(
+                                    if (listMode == PolicyListMode.ALLOWLIST) {
+                                        R.string.no_allow_rules_desc
+                                    } else {
+                                        R.string.no_hide_rules_desc
+                                    },
+                                ),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(horizontal = 32.dp),
                             )
                         }
                     }

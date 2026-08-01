@@ -498,7 +498,7 @@ private fun MainScreen(
                     TopProgressBar(visible = restart == null)
 
                     // Tab-switch loaders (localized collection to prevent Scaffold recomposition)
-                    TabLoadingBar()
+                    TabLoadingBar(currentTab)
 
                     if (restart != null) {
                         // beyondViewportPageCount keeps neighboring tabs composed
@@ -838,10 +838,18 @@ private fun MainScreen(
 }
 
 @Composable
-private fun TabLoadingBar() {
+private fun TabLoadingBar(currentTab: Tab) {
+    val dashboardLoading by DashboardCache.loading.collectAsState()
     val appListLoading by AppListCache.loading.collectAsState()
     val targetsLoading by TargetsCache.loading.collectAsState()
-    TopProgressBar(visible = appListLoading || targetsLoading)
+    val statsLoading by InterceptStatsCache.loading.collectAsState()
+    val loading =
+        when (currentTab) {
+            Tab.Dashboard -> dashboardLoading
+            Tab.Protection -> appListLoading || targetsLoading
+            Tab.Statistics -> statsLoading
+        }
+    TopProgressBar(visible = loading)
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -998,19 +1006,11 @@ private fun RefreshActionIcon(
             onClick = rc.onRefresh,
             enabled = !rc.loading,
         ) {
-            if (rc.loading) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(20.dp),
-                    strokeWidth = 2.dp,
-                    color = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            } else {
-                Icon(
-                    Icons.Default.Refresh,
-                    contentDescription = stringResource(R.string.action_refresh_apps),
-                    tint = MaterialTheme.colorScheme.onPrimaryContainer,
-                )
-            }
+            Icon(
+                Icons.Default.Refresh,
+                contentDescription = stringResource(R.string.action_refresh_apps),
+                tint = MaterialTheme.colorScheme.onPrimaryContainer,
+            )
         }
     }
 }

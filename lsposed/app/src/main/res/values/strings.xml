@@ -21,10 +21,30 @@
     <string name="policy_mode_blacklist_summary">Hide VPN from selected apps · %d target(s)</string>
     <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d exception(s)</string>
     <string name="policy_help_title">How protection selection works</string>
-    <string name="policy_help_blacklist">Hide selected apps: enabled layers are applied to the selected apps. Other eligible apps are not affected.</string>
-    <string name="policy_help_allowlist">Show selected apps: enabled layers become exceptions for the selected apps. Other eligible third-party apps are hidden.</string>
-    <string name="policy_help_layers">N = Native/kernel, F = Framework/LSPosed, P = Ports. In Hide mode an enabled chip applies protection. In Show mode an enabled chip grants an exception. A check mark means exception.</string>
-    <string name="policy_help_ports">Port rules follow the same inversion: Hide mode blocks or hides configured ports for selected apps; Show mode lets selected apps bypass port hiding. System and privileged apps are not targeted.</string>
+    <string name="policy_help_scope_title">1. Protection modes</string>
+    <string name="policy_help_scope_intro">Choose which apps should see the VPN and which apps should not.</string>
+    <string name="policy_help_layers_title">2. Protection layers</string>
+    <string name="policy_help_ports_title">3. Port rules</string>
+    <string name="policy_help_blacklist_title">Hide — blacklist</string>
+    <string name="policy_help_allowlist_title">Show — whitelist</string>
+    <string name="policy_help_blacklist">Selected apps CANNOT SEE THE VPN.
+
+    Enabled protection layers are applied to the selected apps and hide the VPN from them. Other eligible apps work without this protection.</string>
+    <string name="policy_help_allowlist">Selected apps CAN SEE THE VPN.
+
+    Enabled layers become permissions for those apps. Other eligible third-party apps CANNOT SEE THE VPN.</string>
+    <string name="policy_help_layers">N = kernel protection, F = Android/LSPosed protection, P = port hiding.
+
+    In Hide mode, an enabled chip hides that part of the VPN from the selected app.
+
+    In Show mode, an enabled chip lets the selected app see that part of the VPN. A check mark means the permission is enabled.</string>
+    <string name="policy_help_ports">Port rules follow the same logic.
+
+    In Hide mode, the listed ports are hidden from selected apps.
+
+    In Show mode, selected apps can see the listed ports, while other eligible apps cannot.
+
+    System and privileged apps are not affected.</string>
     <string name="ok">OK</string>
 
     <!-- Port hiding -->
@@ -38,6 +58,9 @@
     <string name="bulk_rules_title">Bulk Rules</string>
     <string name="bulk_rules_subtitle">Applies to all protected apps</string>
     <string name="no_rules">No rules defined</string>
+    <string name="no_hide_rules_desc">Add a rule with + to hide the selected ports.</string>
+    <string name="no_allow_rules">No allowed ports defined</string>
+    <string name="no_allow_rules_desc">Add a rule with + to specify which ports remain visible in Show mode.</string>
     <string name="back">Back</string>
     <string name="bulk_btn">Bulk</string>
     <string name="cancel">Cancel</string>

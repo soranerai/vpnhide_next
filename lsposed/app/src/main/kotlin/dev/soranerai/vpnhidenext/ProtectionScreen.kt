@@ -3,7 +3,9 @@ package dev.soranerai.vpnhidenext
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.HelpOutline
 import androidx.compose.material.icons.filled.Visibility
@@ -15,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
@@ -57,7 +60,6 @@ internal fun ProtectionScreen(
     val listState = rememberLazyListState()
 
     var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
-    var refreshTrigger by remember { mutableStateOf(0) }
     var originalListMode by remember { mutableStateOf(listMode) }
     var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
     var showModeHelp by remember { mutableStateOf(false) }
@@ -76,7 +78,6 @@ internal fun ProtectionScreen(
     // When to call:
     //   • First data load (sortedIds still empty)        → called from LaunchedEffect(cachedApps, targets)
     //   • Filter / search / sortOrder changes             → called from LaunchedEffect(filters…)
-    //   • Pull-to-refresh (refreshTrigger++)              → called from LaunchedEffect(filters…) via trigger
     //   • After successful save                           → called explicitly in save block
     //
     // When NOT to call:
@@ -159,16 +160,10 @@ internal fun ProtectionScreen(
     }
 
     // Stable Re-sorting logic: only run when filters, search, sortOrder, or manual refresh change
-    LaunchedEffect(searchQuery, showSystem, showRussianOnly, showOnlySelected, showOnlyWorkProfile, sortOrder, refreshTrigger) {
+    LaunchedEffect(searchQuery, showSystem, showRussianOnly, showOnlySelected, showOnlyWorkProfile, sortOrder) {
         if (targets != null) {
             resetOrder()
         }
-    }
-
-    val onRefresh = {
-        TargetsCache.refresh(scope, context)
-        refreshTrigger++
-        Unit
     }
 
     // Bulk "protect all shown" action from the filter menu — only ever adds
@@ -222,7 +217,6 @@ internal fun ProtectionScreen(
                 sortOrder = sortOrder,
                 onUpdate = { newList -> apps = newList },
                 sortedIds = sortedIds,
-                onRefresh = onRefresh,
                 onOpenAppSettings = onOpenAppSettings,
                 listState = listState,
                 topContentPadding = 114.dp,
@@ -375,23 +369,34 @@ internal fun ProtectionScreen(
                 onDismissRequest = { showModeHelp = false },
                 title = { Text(stringResource(R.string.policy_help_title)) },
                 text = {
-                    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Column(
+                        modifier = Modifier.verticalScroll(rememberScrollState()),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
                         Text(
-                            stringResource(
-                                if (listMode == PolicyListMode.ALLOWLIST) {
-                                    R.string.policy_help_allowlist
-                                } else {
-                                    R.string.policy_help_blacklist
-                                },
-                            ),
+                            text = stringResource(R.string.policy_help_scope_title),
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold,
                         )
                         Text(
-                            stringResource(R.string.policy_help_layers),
+                            text = stringResource(R.string.policy_help_scope_intro),
                             style = MaterialTheme.typography.bodySmall,
                         )
-                        Text(
-                            stringResource(R.string.policy_help_ports),
-                            style = MaterialTheme.typography.bodySmall,
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_blacklist_title),
+                            text = stringResource(R.string.policy_help_blacklist),
+                        )
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_allowlist_title),
+                            text = stringResource(R.string.policy_help_allowlist),
+                        )
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_layers_title),
+                            text = stringResource(R.string.policy_help_layers),
+                        )
+                        ModeHelpSection(
+                            title = stringResource(R.string.policy_help_ports_title),
+                            text = stringResource(R.string.policy_help_ports),
                         )
                     }
                 },
@@ -486,6 +491,26 @@ internal fun ProtectionScreen(
                 }
                 saving = false
             }
+        }
+    }
+}
+
+@Composable
+private fun ModeHelpSection(
+    title: String,
+    text: String,
+) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Text(text, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
