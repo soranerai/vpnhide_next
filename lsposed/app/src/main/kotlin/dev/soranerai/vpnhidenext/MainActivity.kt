@@ -165,6 +165,7 @@ private fun MainScreen(
     var showFilterMenu by remember { mutableStateOf(false) }
     var isProtectionDirty by remember { mutableStateOf(false) }
     var saveTrigger by remember { mutableStateOf(0) }
+    var cancelTrigger by remember { mutableStateOf(0) }
     var bulkProtectTrigger by remember { mutableStateOf(0) }
     var policyListMode by remember { mutableStateOf<PolicyListMode?>(null) }
     var showGlobalAppSettings by remember { mutableStateOf(false) }
@@ -344,7 +345,8 @@ private fun MainScreen(
                                 }
                                 Box {
                                     val anyFilterActive =
-                                        showSystem || showRussianOnly || showOnlySelected || showOnlyWorkProfile ||
+                                        (policyListMode != PolicyListMode.ALLOWLIST && (showSystem || showRussianOnly)) ||
+                                            showOnlySelected || showOnlyWorkProfile ||
                                             sortOrder != AppSortOrder.NAME_ASC
                                     if (anyFilterActive) {
                                         FilledIconButton(onClick = { showFilterMenu = true }) {
@@ -365,27 +367,19 @@ private fun MainScreen(
                                         expanded = showFilterMenu,
                                         onDismissRequest = { showFilterMenu = false },
                                     ) {
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.filter_show_system)) },
-                                            onClick = { showSystem = !showSystem },
-                                            leadingIcon = {
-                                                Checkbox(
-                                                    checked = showSystem,
-                                                    onCheckedChange = null,
-                                                )
-                                            },
-                                        )
-                                        DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.filter_russian_only)) },
-                                            onClick = { showRussianOnly = !showRussianOnly },
-                                            leadingIcon = {
-                                                Checkbox(
-                                                    checked = showRussianOnly,
-                                                    onCheckedChange = null,
-                                                )
-                                            },
-                                        )
-                                        if (showRussianOnly) {
+                                        if (policyListMode != PolicyListMode.ALLOWLIST) {
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.filter_show_system)) },
+                                                onClick = { showSystem = !showSystem },
+                                                leadingIcon = { Checkbox(checked = showSystem, onCheckedChange = null) },
+                                            )
+                                            DropdownMenuItem(
+                                                text = { Text(stringResource(R.string.filter_russian_only)) },
+                                                onClick = { showRussianOnly = !showRussianOnly },
+                                                leadingIcon = { Checkbox(checked = showRussianOnly, onCheckedChange = null) },
+                                            )
+                                        }
+                                        if (policyListMode != PolicyListMode.ALLOWLIST && showRussianOnly) {
                                             DropdownMenuItem(
                                                 text = {
                                                     Text(
@@ -534,7 +528,13 @@ private fun MainScreen(
                                     } else {
                                         ProtectionScreen(
                                             listMode = policyListMode!!,
-                                            onListModeChange = { policyListMode = it },
+                                            onListModeChange = {
+                                                policyListMode = it
+                                                if (it == PolicyListMode.ALLOWLIST) {
+                                                    showSystem = false
+                                                    showRussianOnly = false
+                                                }
+                                            },
                                             searchQuery = searchQuery,
                                             showSystem = showSystem,
                                             showRussianOnly = showRussianOnly,
@@ -548,6 +548,7 @@ private fun MainScreen(
                                             },
                                             selfNeedsRestart = refreshRestart,
                                             saveTrigger = saveTrigger,
+                                            cancelTrigger = cancelTrigger,
                                             bulkProtectTrigger = bulkProtectTrigger,
                                             modifier = Modifier.fillMaxSize(),
                                         )
@@ -651,14 +652,22 @@ private fun MainScreen(
                             }
                         }
 
-                        // Extra Settings Button — opens the global hooks+ports settings screen
+                        // While the protection picker is dirty this button becomes
+                        // an explicit rollback action. Once saved it returns to
+                        // the global hooks+ports settings screen.
                         if (extraBtnProgress > 0.01f) {
                             val extraBtnOffset by animateDpAsState(
                                 targetValue = if (showSave) (-72).dp else 0.dp,
                                 label = "extraBtnOffset",
                             )
                             Surface(
-                                onClick = { showGlobalAppSettings = true },
+                                onClick = {
+                                    if (showSave) {
+                                        cancelTrigger++
+                                    } else {
+                                        showGlobalAppSettings = true
+                                    }
+                                },
                                 color = bulkColor,
                                 contentColor = bulkContentColor,
                                 modifier =
@@ -677,8 +686,11 @@ private fun MainScreen(
                             ) {
                                 Box(contentAlignment = Alignment.Center) {
                                     Icon(
-                                        Icons.Default.AdminPanelSettings,
-                                        contentDescription = stringResource(R.string.app_settings_fab_global_desc),
+                                        if (showSave) Icons.Default.Close else Icons.Default.AdminPanelSettings,
+                                        contentDescription =
+                                            stringResource(
+                                                if (showSave) R.string.cancel_changes else R.string.app_settings_fab_global_desc,
+                                            ),
                                         modifier = Modifier.size(28.dp),
                                     )
                                 }

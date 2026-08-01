@@ -2,8 +2,8 @@ _2026-07-29_
 
 ## English
 
-Use an explicit component compatibility matrix and runtime native version fallback
+Compatibility is now checked using an explicit component matrix with a runtime fallback for the native version.
 
 ## Русский
 
-Добавить явную матрицу совместимости компонентов и fallback для определения версии native-компонента
+Совместимость компонентов теперь проверяется по отдельной матрице, а при необходимости версия native-компонента определяется во время работы.

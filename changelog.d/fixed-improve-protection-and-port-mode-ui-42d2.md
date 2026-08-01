@@ -2,8 +2,8 @@ _2026-08-01_
 
 ## English
 
-Improve protection and port-mode UI clarity, including readable blacklist/whitelist help, allowlist port-rule creation and top-only loading feedback
+Make protection modes and port rules easier to understand, with clearer Hide/Show controls, help text, allowlist port rules, and consistent refresh feedback
 
 ## Русский
 
-Улучшены понятность интерфейса режимов и портов, объяснение чёрного и белого списка, добавление правил в режиме «Показывать» и индикация загрузки только сверху
+Интерфейс режимов и портов стал понятнее: обновлены переключатель «Скрывать / Показывать», подсказки, правила портов в режиме «Показывать» и единый индикатор обновления

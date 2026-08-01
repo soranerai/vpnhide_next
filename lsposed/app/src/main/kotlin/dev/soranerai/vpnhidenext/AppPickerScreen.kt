@@ -106,7 +106,8 @@ internal fun AppPickerScreen(
                     AppListCache.refresh(scope, context)
                     TargetsCache.refresh(scope, context)
                 },
-                // Keep the gesture and remove Material3's bottom/overlay indicator.
+                // The indicator is rendered by ProtectionScreen in a root
+                // overlay so it stays above the picker header and list.
                 indicator = {},
                 modifier = Modifier.fillMaxSize(),
             ) {

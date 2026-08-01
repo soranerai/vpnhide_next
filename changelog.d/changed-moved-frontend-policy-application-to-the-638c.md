@@ -2,8 +2,8 @@ _2026-07-29_
 
 ## English
 
-Moved frontend policy application to the atomic JSON load API, removed legacy target-file synchronization, and added blacklist/allowlist mode controls.
+Policy changes are now applied through the atomic JSON API; legacy target-file synchronization was removed, and Hide/Show modes were added.
 
 ## Русский
 
-Перевёл применение политики фронта на атомарный JSON API load, удалил синхронизацию через legacy-файлы и добавил переключатель blacklist/allowlist.
+Изменения политики применяются через атомарный JSON API, старая синхронизация через файлы целей удалена, а в приложении появились режимы «Скрывать» и «Показывать».

@@ -15,6 +15,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
@@ -42,6 +43,7 @@ internal fun ProtectionScreen(
     onOpenAppSettings: (AppEntry) -> Unit,
     selfNeedsRestart: Boolean,
     saveTrigger: Int,
+    cancelTrigger: Int = 0,
     modifier: Modifier = Modifier,
     bulkProtectTrigger: Int = 0,
 ) {
@@ -59,11 +61,9 @@ internal fun ProtectionScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     val listState = rememberLazyListState()
 
-    var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
     var originalListMode by remember { mutableStateOf(listMode) }
     var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
     var showModeHelp by remember { mutableStateOf(false) }
-    var resettingMode by remember { mutableStateOf(false) }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -72,54 +72,20 @@ internal fun ProtectionScreen(
         }
     }
 
-    // Explicit order reset: computes a stable display ID list from the latest targets snapshot.
-    // MUST be declared before any LaunchedEffect that calls it.
-    //
-    // When to call:
-    //   • First data load (sortedIds still empty)        → called from LaunchedEffect(cachedApps, targets)
-    //   • Filter / search / sortOrder changes             → called from LaunchedEffect(filters…)
-    //   • After successful save                           → called explicitly in save block
-    //
-    // When NOT to call:
-    //   • Toggle (apps changes) → sortedIds stays the same, remember(apps, sortedIds)
-    //     re-maps content with the same order, no jump occurs.
-    fun resetOrder() {
-        val allApps = cachedApps ?: return
-        val t = targets ?: return
-        val q = searchQuery.trim().lowercase()
-        val selfPkg = context.packageName
+    var sortedIds by remember { mutableStateOf<List<String>>(emptyList()) }
 
-        fun isProtected(app: AppSummary): Boolean {
-            val key = app.packageName to app.userId
-            return key in t.kmodTargets || key in t.lsposedTargets || key in t.portsObservers
-        }
-
+    fun resetOrder(source: List<AppEntry> = apps) {
         sortedIds =
-            allApps
-                .filter { it.packageName != selfPkg }
-                .filter { app ->
-                    (showSystem || !app.isSystem || isProtected(app)) &&
-                        (!showRussianOnly || isRussianApp(app.packageName, app.label)) &&
-                        (!showOnlySelected || isProtected(app)) &&
-                        (!showOnlyWorkProfile || app.userId != 0) &&
-                        (q.isEmpty() || app.label.lowercase().contains(q) || app.packageName.lowercase().contains(q))
-                }.let { list ->
-                    when (sortOrder) {
-                        AppSortOrder.NAME_ASC -> {
-                            list.sortedBy { it.label.lowercase() }
-                        }
-
-                        AppSortOrder.NAME_DESC -> {
-                            list.sortedByDescending { it.label.lowercase() }
-                        }
-
-                        AppSortOrder.SELECTED_FIRST -> {
-                            list.sortedWith(
-                                compareByDescending<AppSummary> { isProtected(it) }.thenBy { it.label.lowercase() },
-                            )
-                        }
-                    }
-                }.map { "${it.packageName}:${it.userId}" }
+            filterAndSortApps(
+                source,
+                listMode,
+                searchQuery,
+                showSystem,
+                showRussianOnly,
+                showOnlySelected,
+                showOnlyWorkProfile,
+                sortOrder,
+            ).map { "${it.packageName}:${it.userId}" }
     }
 
     // Load/Sync apps when cache changes (only if not dirty)
@@ -152,18 +118,15 @@ internal fun ProtectionScreen(
                         compareByDescending<AppEntry> { it.anyProtection || it.portHiding }.thenBy { it.label },
                     )
             originalApps = apps
-
-            if (sortedIds.isEmpty()) {
-                resetOrder()
-            }
+            resetOrder(apps)
         }
     }
 
-    // Stable Re-sorting logic: only run when filters, search, sortOrder, or manual refresh change
-    LaunchedEffect(searchQuery, showSystem, showRussianOnly, showOnlySelected, showOnlyWorkProfile, sortOrder) {
-        if (targets != null) {
-            resetOrder()
-        }
+    // Rebuild the order when the presentation state changes. Do not include
+    // `apps` here: row toggles are staged and must not reorder the list until
+    // Save, while the displayed row values still update immediately.
+    LaunchedEffect(searchQuery, showSystem, showRussianOnly, showOnlySelected, showOnlyWorkProfile, sortOrder, listMode) {
+        if (apps.isNotEmpty()) resetOrder()
     }
 
     // Bulk "protect all shown" action from the filter menu — only ever adds
@@ -203,6 +166,14 @@ internal fun ProtectionScreen(
         }
 
     LaunchedEffect(dirty) { onDirtyChange(dirty) }
+
+    LaunchedEffect(cancelTrigger) {
+        if (cancelTrigger == 0 || !dirty) return@LaunchedEffect
+        apps = originalApps
+        onListModeChange(originalListMode)
+        pendingMode = null
+        snackMessage = null
+    }
 
     Box(modifier = modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -324,42 +295,27 @@ internal fun ProtectionScreen(
                     )
                 },
                 confirmButton = {
-                    TextButton(
-                        onClick = {
-                            resettingMode = true
-                            apps = apps.map { it.copy(kmod = false, lsposed = false, portHiding = false) }
-                            onListModeChange(selected)
-                            pendingMode = null
-                            scope.launch(Dispatchers.IO) {
-                                try {
-                                    val db = AppDatabase.getInstance(context)
-                                    db.resetProtectionConfig(selected)
-                                    DatabaseSync
-                                        .sync(context)
-                                    withContext(Dispatchers.Main) {
-                                        TargetsCache.refresh(scope, context)
-                                        originalApps = apps
-                                        originalListMode = selected
-                                        resettingMode = false
-                                    }
-                                } catch (e: Exception) {
-                                    withContext(Dispatchers.Main) {
-                                        resettingMode = false
-                                        snackMessage = e.message ?: context.getString(R.string.save_failed_exit, -1)
-                                    }
-                                }
-                            }
-                        },
-                        colors =
-                            ButtonDefaults.textButtonColors(
-                                contentColor = MaterialTheme.colorScheme.error,
-                            ),
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End,
                     ) {
-                        Text(stringResource(R.string.policy_mode_change_confirm))
+                        TextButton(onClick = { pendingMode = null }) {
+                            Text(stringResource(R.string.cancel))
+                        }
+                        TextButton(
+                            onClick = {
+                                apps = apps.map { it.copy(kmod = false, lsposed = false, portHiding = false) }
+                                onListModeChange(selected)
+                                pendingMode = null
+                            },
+                            colors =
+                                ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.error,
+                                ),
+                        ) {
+                            Text(stringResource(R.string.policy_mode_change_confirm))
+                        }
                     }
-                },
-                dismissButton = {
-                    TextButton(onClick = { pendingMode = null }) { Text(stringResource(R.string.cancel)) }
                 },
             )
         }
@@ -414,7 +370,7 @@ internal fun ProtectionScreen(
         )
 
         LaunchedEffect(saveTrigger) {
-            if (saveTrigger > 0 && !saving && !resettingMode && dirty) {
+            if (saveTrigger > 0 && !saving && dirty) {
                 saving = true
             }
         }
@@ -481,7 +437,6 @@ internal fun ProtectionScreen(
                         TargetsCache.refresh(scope, context)
                         originalApps = apps
                         originalListMode = listMode
-                        // Re-sort after save to reflect new selection state (jump once, but after save is done)
                         resetOrder()
                     } else {
                         snackMessage = context.getString(R.string.save_failed_exit, -1)
@@ -492,6 +447,13 @@ internal fun ProtectionScreen(
                 saving = false
             }
         }
+
+        val appListRefreshing by AppListCache.loading.collectAsState()
+        val targetsRefreshing by TargetsCache.loading.collectAsState()
+        UnifiedRefreshIndicator(
+            visible = appListRefreshing || targetsRefreshing,
+            modifier = Modifier.align(Alignment.TopCenter),
+        )
     }
 }
 

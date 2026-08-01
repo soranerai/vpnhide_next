@@ -14,9 +14,9 @@
     <string name="policy_mode_blacklist_desc">Selected apps are hidden from VPN interfaces, ports and enabled hooks.</string>
     <string name="policy_mode_allowlist_desc">Selected apps remain visible. Eligible third-party apps are hidden; system apps are protected.</string>
     <string name="policy_mode_change_title">Change mode and reset all protection?</string>
-    <string name="policy_mode_change_confirm">Reset everything and change mode</string>
-    <string name="policy_mode_allowlist_warning">Selected apps become exceptions. Other eligible third-party apps will be hidden. This destructive action removes all app targets, local and global hook overrides, and local and global port rules. The reset cannot be undone.</string>
-    <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. This destructive action removes all app targets, local and global hook overrides, and local and global port rules. The reset cannot be undone.</string>
+    <string name="policy_mode_change_confirm">Change mode</string>
+    <string name="policy_mode_allowlist_warning">Selected apps become exceptions. Other eligible third-party apps will be hidden. This will clear all app targets, local and global hook overrides, and local and global port rules when you save.</string>
+    <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. This will clear all app targets, local and global hook overrides, and local and global port rules when you save.</string>
     <string name="allowlist_add_all_shown">Add shown to exceptions</string>
     <string name="policy_mode_blacklist_summary">Hide VPN from selected apps · %d target(s)</string>
     <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d exception(s)</string>
@@ -64,6 +64,7 @@
     <string name="back">Back</string>
     <string name="bulk_btn">Bulk</string>
     <string name="cancel">Cancel</string>
+    <string name="cancel_changes">Discard unsaved changes</string>
     <string name="apply_bulk_btn">Apply</string>
     <string name="new_bulk_rule">New Bulk Rule</string>
     <string name="edit_bulk_rule">Edit Bulk Rule</string>

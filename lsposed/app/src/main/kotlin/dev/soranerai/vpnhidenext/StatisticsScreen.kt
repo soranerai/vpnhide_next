@@ -63,6 +63,12 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
                 refreshing = false
             }
         },
+        indicator = {
+            UnifiedRefreshIndicator(
+                visible = refreshing,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        },
         modifier = modifier.fillMaxSize(),
     ) {
         Column(

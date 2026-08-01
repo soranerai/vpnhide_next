@@ -14,9 +14,9 @@
     <string name="policy_mode_blacklist_desc">Выбранные приложения не видят VPN-интерфейсы, порты и включённые хуки.</string>
     <string name="policy_mode_allowlist_desc">Выбранные приложения остаются видимыми. Подходящие сторонние приложения скрываются, системные защищены.</string>
     <string name="policy_mode_change_title">Сменить режим и сбросить всю защиту?</string>
-    <string name="policy_mode_change_confirm">Сбросить всё и сменить режим</string>
-    <string name="policy_mode_allowlist_warning">Выбранные приложения станут исключениями. Остальные подходящие сторонние приложения будут скрыты. Это деструктивное действие удалит все цели приложений, локальные и глобальные hook overrides, а также локальные и глобальные правила портов. Отменить сброс нельзя.</string>
-    <string name="policy_mode_blacklist_warning">Выбранные приложения снова станут целями сокрытия. Это деструктивное действие удалит все цели приложений, локальные и глобальные hook overrides, а также локальные и глобальные правила портов. Отменить сброс нельзя.</string>
+    <string name="policy_mode_change_confirm">Сменить режим</string>
+    <string name="policy_mode_allowlist_warning">Выбранные приложения станут исключениями. Остальные подходящие сторонние приложения будут скрыты. При сохранении будут очищены все цели приложений, локальные и глобальные hook overrides, а также локальные и глобальные правила портов.</string>
+    <string name="policy_mode_blacklist_warning">Выбранные приложения снова станут целями сокрытия. При сохранении будут очищены все цели приложений, локальные и глобальные hook overrides, а также локальные и глобальные правила портов.</string>
     <string name="allowlist_add_all_shown">Добавить показанные в исключения</string>
     <string name="policy_mode_blacklist_summary">Скрывать VPN у выбранных · целей: %d</string>
     <string name="policy_mode_allowlist_summary">Показывать VPN только выбранным · исключений: %d</string>
@@ -62,6 +62,7 @@
     <string name="back">Назад</string>
     <string name="bulk_btn">Bulk</string>
     <string name="cancel">Отмена</string>
+    <string name="cancel_changes">Отменить изменения</string>
     <string name="apply_bulk_btn">Применить</string>
     <string name="new_bulk_rule">Новое массовое правило</string>
     <string name="edit_bulk_rule">Редактировать правило</string>

@@ -2,8 +2,8 @@ _2026-08-01_
 
 ## English
 
-Use the daemon-backed session-scoped intercept statistics history
+Intercept statistics history is now provided by the daemon and kept for the current session.
 
 ## Русский
 
-Использовать историю статистики перехватов из daemon сессии
+История статистики перехватов теперь хранится в daemon только в течение текущей сессии.

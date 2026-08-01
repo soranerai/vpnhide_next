@@ -2,8 +2,8 @@ _2026-07-30_
 
 ## English
 
-Make runtime VPN-app hiding caller-aware and preserve self VPN services
+VPN-app hiding now accounts for the calling app and preserves the manager's own VPN services.
 
 ## Русский
 
-Сделать runtime-скрытие VPN-приложений зависимым от caller и сохранять собственные VPN-сервисы
+Скрытие VPN-приложений теперь учитывает приложение-инициатор и сохраняет собственные VPN-сервисы менеджера.
