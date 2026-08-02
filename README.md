@@ -81,7 +81,7 @@
 
 ---
 
-### Благодарности / Many Thanks
+### Благодарности
 
 * [KernelSU](https://github.com/tiann/KernelSU) / [KernelSU-Next](https://github.com/rifsxd/KernelSU-Next) — за прекрасное рут-решение.
 * [wildkernels](https://github.com/wildkernels) — за основу для built-in режима.
