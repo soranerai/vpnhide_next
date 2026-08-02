@@ -78,3 +78,13 @@
 | <img src="assets/screenshots/hook_settings.jpg" width="200"> | <img src="assets/screenshots/app_settings.jpg" width="200"> | <img src="assets/screenshots/diagnostics_screen.jpg" width="200"> |
 
 </div>
+
+---
+
+### Благодарности / Many Thanks
+
+* [KernelSU](https://github.com/tiann/KernelSU) / [KernelSU-Next](https://github.com/rifsxd/KernelSU-Next) — за прекрасное рут-решение.
+* [wildkernels](https://github.com/wildkernels) — за основу для built-in режима.
+* [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide) — за основу и вдохновение.
+* [LSPosed](https://github.com/LSPosed/LSPosed) — за мощный фреймворк для перехвата API системного фреймворка.
+* [SUSFS](https://gitlab.com/ephxius/susfs4ksu) — за концепцию скрытия файлов и путей в пространстве ядра.

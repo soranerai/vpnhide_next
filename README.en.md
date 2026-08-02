@@ -78,3 +78,13 @@ Intercept statistics are accumulated by the daemon in an in-memory ring buffer a
 | <img src="assets/screenshots/hook_settings.jpg" width="200"> | <img src="assets/screenshots/app_settings.jpg" width="200"> | <img src="assets/screenshots/diagnostics_screen.jpg" width="200"> |
 
 </div>
+
+---
+
+### Many Thanks
+
+* [KernelSU](https://github.com/tiann/KernelSU) / [KernelSU-Next](https://github.com/rifsxd/KernelSU-Next) — for the excellent root solution.
+* [wildkernels](https://github.com/wildkernels) — for the base of the built-in mode.
+* [okhsunrog/vpnhide](https://github.com/okhsunrog/vpnhide) — for the base and inspiration of this project.
+* [LSPosed](https://github.com/LSPosed/LSPosed) — for the powerful system framework hooking mechanisms.
+* [SUSFS](https://gitlab.com/ephxius/susfs4ksu) — for the file/path hiding concept in kernel-space.
