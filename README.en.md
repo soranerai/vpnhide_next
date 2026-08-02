@@ -28,7 +28,6 @@ The project implements a two-component hiding model that combines low-level syst
    * **LKM (Loadable Kernel Module)**: Distributed as a loadable module for Android GKI kernels (Android 12–16, versions 5.10–6.12). Uses `kretprobes` to intercept network-related system calls and filesystem operations.
    * **Built-in Mode**: Direct integration of the hiding logic into the monolithic kernel source at build time. Provides zero call overhead, absolute resistance to syscall timing attacks, and maximum stability without depending on runtime module loading. Pre-built builds are available in the following repositories:
      * **Standard GKI2**: [GKI_KernelSU_SUSFS](https://github.com/soranerai/GKI_KernelSU_SUSFS)
-     * **OnePlus GKI2**: [OnePlus_KernelSU_SUSFS](https://github.com/soranerai/OnePlus_KernelSU_SUSFS)
 2. **LSPosed Module**:
    * Intercepts Binder IPC calls inside the `system_server` process (specifically, Parcel serialization for `NetworkCapabilities`, `NetworkInfo`, and `LinkProperties`). This prevents VPN info leaks via Java APIs without injecting code into the target app processes.
 
