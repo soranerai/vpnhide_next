@@ -1,6 +1,53 @@
 {
   "history": [
     {
+      "version": "2.2.2",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Policy changes are now applied through the atomic JSON API; legacy target-file synchronization was removed, and Hide/Show modes were added.",
+              "ru": "Изменения политики применяются через атомарный JSON API, старая синхронизация через файлы целей удалена, а в приложении появились режимы «Скрывать» и «Показывать»."
+            },
+            {
+              "en": "Compatibility is now checked using an explicit component matrix with a runtime fallback for the native version.",
+              "ru": "Совместимость компонентов теперь проверяется по отдельной матрице, а при необходимости версия native-компонента определяется во время работы."
+            },
+            {
+              "en": "The Native card shows the version of the running kernel module",
+              "ru": "В карточке Native показывается версия загруженного модуля ядра"
+            },
+            {
+              "en": "The number of targets is now unlimited",
+              "ru": "Количество таргетов теперь не имеет ограничений"
+            },
+            {
+              "en": "Intercept statistics history is now provided by the daemon and kept for the current session.",
+              "ru": "История статистики перехватов теперь хранится в daemon только в течение текущей сессии."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "VPN-app hiding now accounts for the calling app and preserves the manager's own VPN services.",
+              "ru": "Скрытие VPN-приложений теперь учитывает приложение-инициатор и сохраняет собственные VPN-сервисы менеджера."
+            },
+            {
+              "en": "LSPosed network hooks now consistently use the physical interface selected by the daemon.",
+              "ru": "Сетевые хуки LSPosed теперь используют физический интерфейс, выбранный daemon."
+            },
+            {
+              "en": "Make protection modes and port rules easier to understand, with clearer Hide/Show controls, help text, allowlist port rules, and consistent refresh feedback",
+              "ru": "Интерфейс режимов и портов стал понятнее: обновлены переключатель «Скрывать / Показывать», подсказки, правила портов в режиме «Показывать» и единый индикатор обновления"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.2.0",
       "sections": [
         {
