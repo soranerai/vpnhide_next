@@ -45,6 +45,9 @@ components to the positional version.
    ```sh
    ./scripts/update-json.sh
    ```
+   The script downloads each published kmod artifact and records its SHA-256
+   digest in the matching metadata file. The app requires this digest before
+   it will offer root-assisted installation.
 6. Commit and push:
    ```sh
    git commit -am "chore: update-json for v0.6.2"

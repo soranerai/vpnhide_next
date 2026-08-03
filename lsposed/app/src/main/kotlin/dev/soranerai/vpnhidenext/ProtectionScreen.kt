@@ -63,6 +63,7 @@ internal fun ProtectionScreen(
 
     var originalListMode by remember { mutableStateOf(listMode) }
     var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
+    var modeResetPending by remember { mutableStateOf(false) }
     var showModeHelp by remember { mutableStateOf(false) }
 
     LaunchedEffect(snackMessage) {
@@ -161,8 +162,8 @@ internal fun ProtectionScreen(
     }
 
     val dirty =
-        remember(apps, originalApps, listMode, originalListMode) {
-            isDirty(apps, originalApps) || listMode != originalListMode
+        remember(apps, originalApps, listMode, originalListMode, modeResetPending) {
+            isDirty(apps, originalApps) || listMode != originalListMode || modeResetPending
         }
 
     LaunchedEffect(dirty) { onDirtyChange(dirty) }
@@ -171,6 +172,7 @@ internal fun ProtectionScreen(
         if (cancelTrigger == 0 || !dirty) return@LaunchedEffect
         apps = originalApps
         onListModeChange(originalListMode)
+        modeResetPending = false
         pendingMode = null
         snackMessage = null
     }
@@ -304,8 +306,19 @@ internal fun ProtectionScreen(
                         }
                         TextButton(
                             onClick = {
-                                apps = apps.map { it.copy(kmod = false, lsposed = false, portHiding = false) }
+                                apps =
+                                    apps.map {
+                                        it.copy(
+                                            kmod = false,
+                                            lsposed = false,
+                                            portHiding = false,
+                                            portRules = emptyList(),
+                                            kernelHookMask = null,
+                                            javaHookMask = null,
+                                        )
+                                    }
                                 onListModeChange(selected)
+                                modeResetPending = true
                                 pendingMode = null
                             },
                             colors =
@@ -380,50 +393,54 @@ internal fun ProtectionScreen(
                 try {
                     val selfPkg = context.packageName
                     val db = AppDatabase.getInstance(context)
-                    db.withTransaction {
-                        val appDao = db.appDao()
-                        val globalDao = db.globalConfigDao()
-                        val currentGlobal = globalDao.getConfig() ?: DbGlobalConfig()
-                        globalDao.insertConfig(currentGlobal.copy(listMode = listMode))
-                        // Hook-mask overrides are now edited live from AppSettingsScreen, not
-                        // staged in this list — read the current DB state so this save can't
-                        // clobber them with the stale snapshot captured when the tab loaded.
-                        val existingProtections = appDao.getAllAppProtectionSync()
-                        val existingMap = existingProtections.associateBy { it.packageName to it.userId }
-                        val appsMap = apps.associateBy { it.packageName to it.userId }
+                    if (modeResetPending) {
+                        db.resetProtectionConfig(listMode)
+                    } else {
+                        db.withTransaction {
+                            val appDao = db.appDao()
+                            val globalDao = db.globalConfigDao()
+                            val currentGlobal = globalDao.getConfig() ?: DbGlobalConfig()
+                            globalDao.insertConfig(currentGlobal.copy(listMode = listMode))
+                            // Hook-mask overrides are now edited live from AppSettingsScreen, not
+                            // staged in this list — read the current DB state so this save can't
+                            // clobber them with the stale snapshot captured when the tab loaded.
+                            val existingProtections = appDao.getAllAppProtectionSync()
+                            val existingMap = existingProtections.associateBy { it.packageName to it.userId }
+                            val appsMap = apps.associateBy { it.packageName to it.userId }
 
-                        val protections =
-                            appsMap.keys.mapNotNull { key ->
-                                val (pkg, userId) = key
-                                val entry = appsMap.getValue(key)
-                                val existing = existingMap[key]
-                                val kernelHookMask = existing?.kernelHookMask
-                                val javaHookMask = existing?.javaHookMask
+                            val protections =
+                                appsMap.keys.mapNotNull { key ->
+                                    val (pkg, userId) = key
+                                    val entry = appsMap.getValue(key)
+                                    val existing = existingMap[key]
+                                    val kernelHookMask = existing?.kernelHookMask
+                                    val javaHookMask = existing?.javaHookMask
 
-                                if (!entry.kmod && !entry.lsposed && !entry.portHiding &&
-                                    kernelHookMask == null && javaHookMask == null
-                                ) {
-                                    return@mapNotNull null
+                                    if (!entry.kmod && !entry.lsposed && !entry.portHiding &&
+                                        kernelHookMask == null && javaHookMask == null
+                                    ) {
+                                        return@mapNotNull null
+                                    }
+
+                                    AppProtection(
+                                        packageName = pkg,
+                                        userId = userId,
+                                        uid = entry.uid,
+                                        kmod = entry.kmod,
+                                        lsposed = entry.lsposed,
+                                        portHiding = entry.portHiding,
+                                        kernelHookMask = kernelHookMask,
+                                        javaHookMask = javaHookMask,
+                                    )
                                 }
+                            appDao.insertAppProtections(protections)
 
-                                AppProtection(
-                                    packageName = pkg,
-                                    userId = userId,
-                                    uid = entry.uid,
-                                    kmod = entry.kmod,
-                                    lsposed = entry.lsposed,
-                                    portHiding = entry.portHiding,
-                                    kernelHookMask = kernelHookMask,
-                                    javaHookMask = javaHookMask,
-                                )
+                            val keysToKeep = protections.map { it.packageName to it.userId }.toSet()
+                            for (existing in existingProtections) {
+                                val key = existing.packageName to existing.userId
+                                if (existing.packageName == selfPkg || key in keysToKeep) continue
+                                appDao.deleteAppProtection(existing)
                             }
-                        appDao.insertAppProtections(protections)
-
-                        val keysToKeep = protections.map { it.packageName to it.userId }.toSet()
-                        for (existing in existingProtections) {
-                            val key = existing.packageName to existing.userId
-                            if (existing.packageName == selfPkg || key in keysToKeep) continue
-                            appDao.deleteAppProtection(existing)
                         }
                     }
 
@@ -437,6 +454,7 @@ internal fun ProtectionScreen(
                         TargetsCache.refresh(scope, context)
                         originalApps = apps
                         originalListMode = listMode
+                        modeResetPending = false
                         resetOrder()
                     } else {
                         snackMessage = context.getString(R.string.save_failed_exit, -1)

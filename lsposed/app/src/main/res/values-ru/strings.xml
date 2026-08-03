@@ -182,6 +182,25 @@
     <string name="update_available_title">Доступно обновление</string>
     <string name="update_available_subtitle">Доступна версия %1$s</string>
     <string name="update_download">Скачать</string>
+    <string name="retry">Повторить</string>
+
+    <!-- kmod updater -->
+    <string name="kmod_update_title">Обновление модуля ядра</string>
+    <string name="kmod_update_available">Доступна версия %1$s для %2$s</string>
+    <string name="kmod_update_confirm_title">Установить обновление kmod?</string>
+    <string name="kmod_update_confirm_message">VPNHide Next скачает версию %1$s для %2$s, проверит контрольную сумму SHA-256 и содержимое пакета, затем подготовит обновление через root-менеджер. Новый модуль станет активен после перезагрузки.</string>
+    <string name="kmod_update_install">Установить</string>
+    <string name="kmod_update_downloading">Скачивание и проверка&#8230;</string>
+    <string name="kmod_update_downloading_progress">Скачивание и проверка&#8230; %1$d%%</string>
+    <string name="kmod_update_installing">Установка через root-менеджер&#8230;</string>
+    <string name="kmod_update_awaiting_reboot">Версия %1$s установлена и станет активна после перезагрузки.</string>
+    <string name="kmod_update_reboot">Перезагрузить</string>
+    <string name="kmod_update_error_download">Не удалось скачать обновление. Проверьте подключение и повторите попытку.</string>
+    <string name="kmod_update_error_checksum">Контрольная сумма скачанного файла не совпала. Файл удалён.</string>
+    <string name="kmod_update_error_package">Скачанный ZIP не является подходящим пакетом kmod для этого ядра. Файл удалён.</string>
+    <string name="kmod_update_error_root">Root-доступ отклонён или истекло время ожидания.</string>
+    <string name="kmod_update_error_manager">Этот root-менеджер не поддерживает автоматическую установку.</string>
+    <string name="kmod_update_error_install">Root-менеджеру не удалось установить обновление. Текущий модуль остался активным.</string>
 
     <!-- Changelog -->
     <string name="changelog_title">Что нового в v%1$s</string>

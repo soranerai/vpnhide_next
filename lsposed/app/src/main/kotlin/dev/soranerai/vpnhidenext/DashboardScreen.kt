@@ -75,6 +75,17 @@ fun DashboardScreen(
 
     val state by DashboardCache.state.collectAsState()
     val updateInfo by UpdateCheckCache.info.collectAsState()
+    val kmodUpdateState by KmodUpdateCache.state.collectAsState()
+    val kmodUpdateTarget =
+        remember(state) {
+            val dashboard = state ?: return@remember null
+            val installed = dashboard.kmod as? ModuleState.Installed ?: return@remember null
+            resolveKmodUpdateTarget(
+                installedVersion = installed.version,
+                installedKmi = installed.gkiVariant,
+                unameR = dashboard.kmodLoadStatus?.unameR,
+            )
+        }
     var showChangelog by remember { mutableStateOf(false) }
     var changelogData by remember { mutableStateOf<ChangelogData?>(null) }
     var refreshing by remember { mutableStateOf(false) }
@@ -95,6 +106,10 @@ fun DashboardScreen(
         }
     }
 
+    LaunchedEffect(kmodUpdateTarget) {
+        kmodUpdateTarget?.let { KmodUpdateCache.ensureFresh(scope, it) }
+    }
+
     if (showChangelog && changelogData != null) {
         ChangelogDialog(
             data = changelogData!!,
@@ -110,6 +125,7 @@ fun DashboardScreen(
                 DashboardCache.refresh(scope, context, selfNeedsRestart)
                 DiagnosticsCache.retry(scope, context)
                 InterceptStatsCache.refresh(scope, context)
+                kmodUpdateTarget?.let { KmodUpdateCache.refresh(scope, it) }
 
                 val startTime = System.currentTimeMillis()
                 kotlinx.coroutines.delay(50) // Allow loading flags to transition to true
@@ -154,6 +170,7 @@ fun DashboardScreen(
                     s = s,
                     selfNeedsRestart = selfNeedsRestart,
                     updateInfo = updateInfo,
+                    kmodUpdateState = kmodUpdateState,
                     scope = scope,
                     context = context,
                     onOpenInterceptStats = onOpenInterceptStats,
@@ -222,6 +239,7 @@ private fun DashboardContent(
     s: DashboardState,
     selfNeedsRestart: Boolean,
     updateInfo: UpdateInfo?,
+    kmodUpdateState: KmodUpdateState,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
     onOpenInterceptStats: () -> Unit,
@@ -327,6 +345,10 @@ private fun DashboardContent(
         updateInfo?.let { info ->
             Spacer(Modifier.height(12.dp))
             UpdateAvailableCard(info)
+        }
+        if (kmodUpdateState != KmodUpdateState.None) {
+            Spacer(Modifier.height(12.dp))
+            KmodUpdateCard(kmodUpdateState, scope, context)
         }
 
         Spacer(Modifier.height(12.dp))
@@ -717,6 +739,142 @@ private fun UpdateAvailableCard(info: UpdateInfo) {
                     )
                 },
             ) { Text(stringResource(R.string.update_download)) }
+        }
+    }
+}
+
+@Composable
+private fun KmodUpdateCard(
+    state: KmodUpdateState,
+    scope: kotlinx.coroutines.CoroutineScope,
+    context: android.content.Context,
+) {
+    var confirmInfo by remember { mutableStateOf<KmodUpdateInfo?>(null) }
+    confirmInfo?.let { info ->
+        AlertDialog(
+            onDismissRequest = { confirmInfo = null },
+            icon = { Icon(Icons.Default.SystemUpdateAlt, contentDescription = null) },
+            title = { Text(stringResource(R.string.kmod_update_confirm_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.kmod_update_confirm_message,
+                        normalizeVersion(info.version),
+                        info.kmi,
+                    ),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        confirmInfo = null
+                        KmodUpdateCache.install(scope, context, info)
+                    },
+                ) { Text(stringResource(R.string.kmod_update_install)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { confirmInfo = null }) {
+                    Text(stringResource(R.string.cancel))
+                }
+            },
+        )
+    }
+
+    val info =
+        when (state) {
+            is KmodUpdateState.Available -> state.info
+            is KmodUpdateState.Downloading -> state.info
+            is KmodUpdateState.Installing -> state.info
+            is KmodUpdateState.Failed -> state.info
+            else -> null
+        }
+    val subtitle =
+        when (state) {
+            is KmodUpdateState.Available -> {
+                stringResource(R.string.kmod_update_available, normalizeVersion(state.info.version), state.info.kmi)
+            }
+
+            is KmodUpdateState.Downloading -> {
+                state.progress?.let { stringResource(R.string.kmod_update_downloading_progress, it) }
+                    ?: stringResource(R.string.kmod_update_downloading)
+            }
+
+            is KmodUpdateState.Installing -> {
+                stringResource(R.string.kmod_update_installing)
+            }
+
+            is KmodUpdateState.AwaitingReboot -> {
+                stringResource(R.string.kmod_update_awaiting_reboot, state.version)
+            }
+
+            is KmodUpdateState.Failed -> {
+                stringResource(
+                    when (state.error) {
+                        KmodUpdateError.DOWNLOAD -> R.string.kmod_update_error_download
+                        KmodUpdateError.CHECKSUM -> R.string.kmod_update_error_checksum
+                        KmodUpdateError.INVALID_PACKAGE -> R.string.kmod_update_error_package
+                        KmodUpdateError.ROOT_DENIED -> R.string.kmod_update_error_root
+                        KmodUpdateError.UNSUPPORTED_ROOT_MANAGER -> R.string.kmod_update_error_manager
+                        KmodUpdateError.INSTALL_FAILED -> R.string.kmod_update_error_install
+                    },
+                )
+            }
+
+            KmodUpdateState.None -> {
+                return
+            }
+        }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = stringResource(R.string.kmod_update_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.width(12.dp))
+            when (state) {
+                is KmodUpdateState.Available -> {
+                    Button(onClick = { confirmInfo = state.info }) {
+                        Text(stringResource(R.string.kmod_update_install))
+                    }
+                }
+
+                is KmodUpdateState.Downloading, is KmodUpdateState.Installing -> {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                }
+
+                is KmodUpdateState.AwaitingReboot -> {
+                    Button(onClick = { scope.launch(Dispatchers.IO) { suExec("svc power reboot", timeoutSec = 5) } }) {
+                        Text(stringResource(R.string.kmod_update_reboot))
+                    }
+                }
+
+                is KmodUpdateState.Failed -> {
+                    OutlinedButton(onClick = { info?.let { KmodUpdateCache.install(scope, context, it) } }) {
+                        Text(stringResource(R.string.retry))
+                    }
+                }
+
+                KmodUpdateState.None -> {
+                    Unit
+                }
+            }
         }
     }
 }

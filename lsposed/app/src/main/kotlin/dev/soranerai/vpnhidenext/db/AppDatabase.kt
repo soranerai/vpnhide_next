@@ -85,6 +85,21 @@ internal data class VpnHideConfig(
     val ifacePrefixes: List<String> = emptyList(),
 )
 
+internal fun VpnHideConfig.resetProtectionForListMode(listMode: PolicyListMode): VpnHideConfig {
+    val defaults = DbGlobalConfig()
+    return copy(
+        globalConfig =
+            globalConfig.copy(
+                listMode = listMode,
+                kernelHookMask = defaults.kernelHookMask,
+                javaHookMask = defaults.javaHookMask,
+            ),
+        apps = emptyMap(),
+        portRules = emptyList(),
+        massPortRules = emptyList(),
+    )
+}
+
 internal class AppDatabase private constructor(
     context: Context,
 ) {
@@ -224,28 +239,17 @@ internal class AppDatabase private constructor(
     }
 
     /** Reset targets, hook overrides, and local/global port rules on a mode change. */
-    suspend fun resetProtectionConfig(listMode: PolicyListMode) {
-        synchronized(lock) {
-            val current = config.globalConfig
-            config =
-                config.copy(
-                    globalConfig =
-                        current.copy(
-                            listMode = listMode,
-                            kernelHookMask = DbGlobalConfig().kernelHookMask,
-                            javaHookMask = DbGlobalConfig().javaHookMask,
-                        ),
-                    apps = emptyMap(),
-                    portRules = emptyList(),
-                    massPortRules = emptyList(),
-                )
-            saveConfigInternal()
+    suspend fun resetProtectionConfig(listMode: PolicyListMode) =
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                config = config.resetProtectionForListMode(listMode)
+                saveConfigInternal()
+            }
+            DbNotifier.notifyChanged("app_protection")
+            DbNotifier.notifyChanged("port_rules")
+            DbNotifier.notifyChanged("mass_port_rules")
+            DbNotifier.notifyChanged("global_config")
         }
-        DbNotifier.notifyChanged("app_protection")
-        DbNotifier.notifyChanged("port_rules")
-        DbNotifier.notifyChanged("mass_port_rules")
-        DbNotifier.notifyChanged("global_config")
-    }
 
     fun appDao(): AppDao = appDaoImpl
 

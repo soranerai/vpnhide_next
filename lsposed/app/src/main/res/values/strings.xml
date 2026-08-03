@@ -219,6 +219,25 @@
     <string name="update_available_title">Update available</string>
     <string name="update_available_subtitle">Version %1$s is available</string>
     <string name="update_download">Download</string>
+    <string name="retry">Retry</string>
+
+    <!-- kmod updater -->
+    <string name="kmod_update_title">Kernel module update</string>
+    <string name="kmod_update_available">Version %1$s is available for %2$s</string>
+    <string name="kmod_update_confirm_title">Install kmod update?</string>
+    <string name="kmod_update_confirm_message">VPNHide Next will download version %1$s for %2$s, verify its SHA-256 checksum and package contents, then stage it through your root manager. The new module becomes active after a reboot.</string>
+    <string name="kmod_update_install">Install</string>
+    <string name="kmod_update_downloading">Downloading and verifying&#8230;</string>
+    <string name="kmod_update_downloading_progress">Downloading and verifying&#8230; %1$d%%</string>
+    <string name="kmod_update_installing">Installing through the root manager&#8230;</string>
+    <string name="kmod_update_awaiting_reboot">Version %1$s is installed and will become active after a reboot.</string>
+    <string name="kmod_update_reboot">Reboot</string>
+    <string name="kmod_update_error_download">Couldn\'t download the update. Check your connection and try again.</string>
+    <string name="kmod_update_error_checksum">The downloaded file failed checksum verification and was deleted.</string>
+    <string name="kmod_update_error_package">The downloaded ZIP is not a valid kmod package for this kernel and was deleted.</string>
+    <string name="kmod_update_error_root">Root access was denied or timed out.</string>
+    <string name="kmod_update_error_manager">Automatic installation is not supported by this root manager.</string>
+    <string name="kmod_update_error_install">The root manager failed to install the update. The current module was left active.</string>
 
     <!-- Changelog -->
     <string name="changelog_title">What\'s new in v%1$s</string>
