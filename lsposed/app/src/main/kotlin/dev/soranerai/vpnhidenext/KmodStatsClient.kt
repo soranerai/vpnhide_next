@@ -54,6 +54,7 @@ internal data class KmodStatsResponse(
                                                     connect = uid.optLong("connect"),
                                                     getname = uid.optLong("getname"),
                                                     port = uid.optLong("port"),
+                                                    java = uid.optLong("java"),
                                                 ),
                                             )
                                         }
@@ -99,6 +100,7 @@ internal data class KmodUidStats(
     val connect: Long,
     val getname: Long,
     val port: Long,
+    val java: Long = 0,
 ) {
     fun values(): Map<String, Long> =
         mapOf(
@@ -108,7 +110,8 @@ internal data class KmodUidStats(
             "sockopt" to sockopt,
             "connect" to connect,
             "getname" to getname,
+            "java" to java,
         )
 
-    fun total(): Long = ioctl + netlink + proc + sockopt + connect + getname
+    fun total(): Long = ioctl + netlink + proc + sockopt + connect + getname + java
 }

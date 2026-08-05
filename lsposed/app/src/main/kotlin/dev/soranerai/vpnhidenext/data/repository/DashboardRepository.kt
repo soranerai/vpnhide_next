@@ -648,40 +648,19 @@ class DashboardRepository(
         val appList = AppListCache.apps.value
         val labelLookup = appList?.associate { (it.packageName to it.userId) to it.label } ?: emptyMap()
 
-        val script =
-            """
-            if [ -x $kmodCtl ] && [ -c $DEV_NODE ]; then
-              echo "framework_stats=${'$'}($kmodCtl java_stats 2>/dev/null | base64 | tr -d '\n')"
-            fi
-            """.trimIndent()
-
-        val (_, out) = suExec(script)
-        val props = parseKeyValue(out)
-
-        val frameworkStatsRaw = decodeBase64String(props["framework_stats"] ?: "")
         val uidFrameworkMap = mutableMapOf<Int, MutableMap<String, Int>>()
-        if (frameworkStatsRaw.isNotBlank()) {
-            frameworkStatsRaw.lines().forEach { line ->
-                val parts = line.split(';')
-                if (parts.size == 3) {
-                    val uid = parts[0].toIntOrNull()
-                    val hook = parts[1]
-                    val count = parts[2].toIntOrNull()
-                    if (uid != null && count != null && count > 0) {
-                        val hookMap = uidFrameworkMap.computeIfAbsent(uid) { mutableMapOf() }
-                        hookMap[hook] = (hookMap[hook] ?: 0) + count
-                    }
-                }
-            }
-        }
-
         val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
         val uidPortsMap = mutableMapOf<Int, Int>()
+
         val daemonStats = KmodStatsClient.getStats()
         lastKmodStatsResponse = daemonStats
         daemonStats.points.filterNot { it.gap }.flatMap { it.uids }.forEach { stats ->
+            if (stats.java > 0) {
+                val fMap = uidFrameworkMap.computeIfAbsent(stats.uid) { mutableMapOf() }
+                fMap["java"] = (fMap["java"]?.toLong() ?: 0L).plus(stats.java).saturatingInt()
+            }
             val hookMap = uidNativeMap.computeIfAbsent(stats.uid) { mutableMapOf() }
-            stats.values().forEach { (hook, count) ->
+            stats.values().filterKeys { it != "java" }.forEach { (hook, count) ->
                 if (count > 0) {
                     hookMap[hook] = (hookMap[hook]?.toLong() ?: 0L).plus(count).saturatingInt()
                 }
@@ -770,7 +749,7 @@ class DashboardRepository(
     }
 
     fun resetInterceptStats() {
-        suExec("$kmodCtl java_stats clear 2>/dev/null")
+        suExec("echo clear_stats > $DEV_NODE 2>/dev/null || true")
         KmodStatsClient.clearHistory()
     }
 
