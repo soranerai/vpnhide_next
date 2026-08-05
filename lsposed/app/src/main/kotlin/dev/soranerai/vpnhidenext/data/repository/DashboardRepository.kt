@@ -655,16 +655,29 @@ class DashboardRepository(
         val daemonStats = KmodStatsClient.getStats()
         lastKmodStatsResponse = daemonStats
         daemonStats.points.filterNot { it.gap }.flatMap { it.uids }.forEach { stats ->
-            if (stats.java > 0) {
-                val fMap = uidFrameworkMap.computeIfAbsent(stats.uid) { mutableMapOf() }
-                fMap["java"] = (fMap["java"]?.toLong() ?: 0L).plus(stats.java).saturatingInt()
-            }
+            val fMap = uidFrameworkMap.computeIfAbsent(stats.uid) { mutableMapOf() }
             val hookMap = uidNativeMap.computeIfAbsent(stats.uid) { mutableMapOf() }
-            stats.values().filterKeys { it != "java" }.forEach { (hook, count) ->
+
+            stats.values().forEach { (hook, count) ->
                 if (count > 0) {
-                    hookMap[hook] = (hookMap[hook]?.toLong() ?: 0L).plus(count).saturatingInt()
+                    if (hook.startsWith("java_")) {
+                        val friendlyName = when (hook) {
+                            "java_pm" -> "PackageManager"
+                            "java_um" -> "UserManager"
+                            "java_nc" -> "NetworkCapabilities"
+                            "java_ni" -> "NetworkInfo"
+                            "java_net" -> "Network"
+                            "java_lp" -> "LinkProperties"
+                            "java_cs" -> "ConnectivityService"
+                            else -> hook
+                        }
+                        fMap[friendlyName] = (fMap[friendlyName]?.toLong() ?: 0L).plus(count).saturatingInt()
+                    } else {
+                        hookMap[hook] = (hookMap[hook]?.toLong() ?: 0L).plus(count).saturatingInt()
+                    }
                 }
             }
+
             if (stats.port > 0) {
                 uidPortsMap[stats.uid] =
                     (uidPortsMap[stats.uid]?.toLong() ?: 0L)
