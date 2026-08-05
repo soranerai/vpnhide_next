@@ -136,7 +136,7 @@ private fun InterceptStatisticsSection(
                     Spacer(Modifier.height(2.dp))
                     Text(
                         text =
-                            stringResource(R.string.dashboard_stats_lifetime_hint_fmt, stringResource(R.string.stats_period_24h)),
+                            stringResource(R.string.dashboard_stats_lifetime_hint_fmt),
                         style = MaterialTheme.typography.bodySmall,
                         color = contentColor.copy(alpha = 0.7f),
                     )

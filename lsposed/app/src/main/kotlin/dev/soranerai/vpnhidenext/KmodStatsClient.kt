@@ -131,5 +131,6 @@ internal data class KmodUidStats(
             "java_cs" to java_cs,
         )
 
-    fun total(): Long = ioctl + netlink + proc + sockopt + connect + getname + java_pm + java_um + java_nc + java_ni + java_net + java_lp + java_cs
+    fun total(): Long =
+        ioctl + netlink + proc + sockopt + connect + getname + java_pm + java_um + java_nc + java_ni + java_net + java_lp + java_cs
 }

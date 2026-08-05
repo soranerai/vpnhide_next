@@ -347,7 +347,7 @@
     <string name="import_success">Настройки успешно импортированы и применены</string>
     <string name="import_failed">Ошибка импорта: %1$s</string>
     <string name="dashboard_intercept_statistics">Статистика перехватов</string>
-    <string name="dashboard_stats_lifetime_hint_fmt">Показывается скользящая статистика за последние: %1$s</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">Показывается статистика с момента последнего запуска</string>
 
     <!-- Statistics retention period -->
     <string name="stats_period_30m">30 минут</string>

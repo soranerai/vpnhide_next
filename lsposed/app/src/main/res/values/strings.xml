@@ -400,7 +400,8 @@
     <string name="import_success">Settings imported and applied successfully</string>
     <string name="import_failed">Import failed: %1$s</string>
     <string name="dashboard_intercept_statistics">Intercept Statistics</string>
-    <string name="dashboard_stats_lifetime_hint_fmt">Showing rolling telemetry for the last %1$s</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">Showing telemetry since the last boot</string>
+
     <string name="btn_clear">Clear</string>
 
     <!-- Statistics retention period -->

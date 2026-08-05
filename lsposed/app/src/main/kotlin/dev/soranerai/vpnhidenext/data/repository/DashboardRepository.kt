@@ -661,16 +661,17 @@ class DashboardRepository(
             stats.values().forEach { (hook, count) ->
                 if (count > 0) {
                     if (hook.startsWith("java_")) {
-                        val friendlyName = when (hook) {
-                            "java_pm" -> "PackageManager"
-                            "java_um" -> "UserManager"
-                            "java_nc" -> "NetworkCapabilities"
-                            "java_ni" -> "NetworkInfo"
-                            "java_net" -> "Network"
-                            "java_lp" -> "LinkProperties"
-                            "java_cs" -> "ConnectivityService"
-                            else -> hook
-                        }
+                        val friendlyName =
+                            when (hook) {
+                                "java_pm" -> "PackageManager"
+                                "java_um" -> "UserManager"
+                                "java_nc" -> "NetworkCapabilities"
+                                "java_ni" -> "NetworkInfo"
+                                "java_net" -> "Network"
+                                "java_lp" -> "LinkProperties"
+                                "java_cs" -> "ConnectivityService"
+                                else -> hook
+                            }
                         fMap[friendlyName] = (fMap[friendlyName]?.toLong() ?: 0L).plus(count).saturatingInt()
                     } else {
                         hookMap[hook] = (hookMap[hook]?.toLong() ?: 0L).plus(count).saturatingInt()
