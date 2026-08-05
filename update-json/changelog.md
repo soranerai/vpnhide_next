@@ -1,3 +1,16 @@
+## v2.3.0
+
+### Added
+- The app can now securely download, verify, and install kmod updates through KernelSU, APatch, or Magisk.
+
+### Changed
+- Synchronize Framework intercept statistics with the daemon's in-memory history ring
+
+### Fixed
+- all: Added exclusion of dummy0 from interfaces for spoofing
+- built-in: Fixed wifi/bluetooth disruption on some devices
+- app: Changing between Hide and Show modes now fully clears app targets, per-app and global hook overrides, and local and global port rules on save.
+
 ## v2.2.2
 
 ### Changed
@@ -27,5 +40,3 @@
 - fixed path hiding
 
 ## v2.1.2
-
-## v2.1.1
