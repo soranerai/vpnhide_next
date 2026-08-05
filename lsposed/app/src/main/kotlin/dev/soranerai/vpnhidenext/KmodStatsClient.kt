@@ -54,7 +54,13 @@ internal data class KmodStatsResponse(
                                                     connect = uid.optLong("connect"),
                                                     getname = uid.optLong("getname"),
                                                     port = uid.optLong("port"),
-                                                    java = uid.optLong("java"),
+                                                    java_pm = uid.optLong("java_pm"),
+                                                    java_um = uid.optLong("java_um"),
+                                                    java_nc = uid.optLong("java_nc"),
+                                                    java_ni = uid.optLong("java_ni"),
+                                                    java_net = uid.optLong("java_net"),
+                                                    java_lp = uid.optLong("java_lp"),
+                                                    java_cs = uid.optLong("java_cs"),
                                                 ),
                                             )
                                         }
@@ -100,7 +106,13 @@ internal data class KmodUidStats(
     val connect: Long,
     val getname: Long,
     val port: Long,
-    val java: Long = 0,
+    val java_pm: Long = 0,
+    val java_um: Long = 0,
+    val java_nc: Long = 0,
+    val java_ni: Long = 0,
+    val java_net: Long = 0,
+    val java_lp: Long = 0,
+    val java_cs: Long = 0,
 ) {
     fun values(): Map<String, Long> =
         mapOf(
@@ -110,8 +122,14 @@ internal data class KmodUidStats(
             "sockopt" to sockopt,
             "connect" to connect,
             "getname" to getname,
-            "java" to java,
+            "java_pm" to java_pm,
+            "java_um" to java_um,
+            "java_nc" to java_nc,
+            "java_ni" to java_ni,
+            "java_net" to java_net,
+            "java_lp" to java_lp,
+            "java_cs" to java_cs,
         )
 
-    fun total(): Long = ioctl + netlink + proc + sockopt + connect + getname + java
+    fun total(): Long = ioctl + netlink + proc + sockopt + connect + getname + java_pm + java_um + java_nc + java_ni + java_net + java_lp + java_cs
 }
