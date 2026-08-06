@@ -1,6 +1,6 @@
 {
-  "version": "v2.2.2",
-  "versionCode": 20202,
-  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.2.2/vpnhide-bridge.zip",
+  "version": "v2.3.0",
+  "versionCode": 20300,
+  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-bridge.zip",
   "changelog": "https://raw.githubusercontent.com/soranerai/vpnhide_next/main/update-json/changelog.md"
 }
