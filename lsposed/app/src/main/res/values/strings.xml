@@ -246,6 +246,45 @@
     <string name="kmod_update_error_manager">Automatic installation is not supported by this root manager.</string>
     <string name="kmod_update_error_install">The root manager failed to install the update. The current module was left active.</string>
 
+    <!-- Built-in bridge + kernel updater -->
+    <string name="builtin_update_title">Bridge and kernel update</string>
+    <string name="builtin_update_available">Kernel version %1$s is available: %2$s</string>
+    <string name="builtin_update_downloading">Downloading %1$s&#8230;</string>
+    <string name="builtin_update_downloading_progress">Downloading %1$s&#8230; %2$d%%</string>
+    <string name="builtin_update_validating">Checking checksums and archive contents&#8230;</string>
+    <string name="builtin_update_ready">Download verified. Review the warning to continue.</string>
+    <string name="builtin_update_continue">Continue</string>
+    <string name="builtin_update_confirm_title">Update the bridge and kernel?</string>
+    <string name="builtin_update_confirm_message">VPNHide Next will install bridge and kernel version %1$s (%2$s). The active boot image will be backed up first. Flashing a kernel can cause a bootloop; make sure you have an external recovery method.</string>
+    <string name="builtin_update_mode_normal">Normal (recommended)</string>
+    <string name="builtin_update_mode_normal_desc">Use the standard image. This is the correct choice for most devices.</string>
+    <string name="builtin_update_mode_bypass">Bypass (compatibility)</string>
+    <string name="builtin_update_mode_bypass_desc">Force-loads kernel modules on devices with compatibility problems. It does not bypass root detection.</string>
+    <string name="builtin_update_confirm_action">Back up and update</string>
+    <string name="builtin_update_backing_up">Backing up the active boot image&#8230;</string>
+    <string name="builtin_update_installing_bridge">Installing the bridge&#8230;</string>
+    <string name="builtin_update_flashing_kernel">Flashing the kernel with AnyKernel3&#8230;</string>
+    <string name="builtin_update_awaiting_reboot">Version %1$s is installed. Reboot to activate it.</string>
+    <string name="builtin_update_reboot_title">Update installed</string>
+    <string name="builtin_update_reboot_message">Bridge and kernel version %1$s were installed successfully. Boot backup: %2$s</string>
+    <string name="builtin_update_reboot_now">Reboot now</string>
+    <string name="builtin_update_reboot_later">Later</string>
+    <string name="builtin_update_error_metadata">Couldn\'t read secure update metadata. Pull down to try again.</string>
+    <string name="builtin_update_error_unsupported">The running kernel version cannot be identified safely.</string>
+    <string name="builtin_update_error_no_kernel">No compatible kernel archive was found for this device.</string>
+    <string name="builtin_update_error_downgrade">Compatible release kernels are older than the running kernel. Flashing was blocked.</string>
+    <string name="builtin_update_error_download">Couldn\'t download the bridge or kernel.</string>
+    <string name="builtin_update_error_checksum">A downloaded file failed SHA-256 verification and was deleted.</string>
+    <string name="builtin_update_error_bridge">The bridge archive has invalid or unexpected contents.</string>
+    <string name="builtin_update_error_kernel">The AnyKernel3 archive has invalid or unexpected contents.</string>
+    <string name="builtin_update_error_storage">There isn\'t enough usable storage for the update.</string>
+    <string name="builtin_update_error_root">Root access was denied or timed out.</string>
+    <string name="builtin_update_error_backup">The active boot image could not be backed up. Nothing was flashed.</string>
+    <string name="builtin_update_error_manager">This root manager does not support automatic bridge installation.</string>
+    <string name="builtin_update_error_bridge_install">The bridge could not be installed. The boot backup was kept.</string>
+    <string name="builtin_update_error_kernel_install">AnyKernel3 failed. Do not reboot until the problem is resolved; the boot backup was kept.</string>
+    <string name="builtin_update_error_reboot">The reboot command failed. Reboot manually when ready.</string>
+
     <!-- Changelog -->
     <string name="changelog_title">What\'s new in v%1$s</string>
     <string name="changelog_section_added">Added</string>

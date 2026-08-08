@@ -2,5 +2,9 @@
   "version": "v2.3.0",
   "versionCode": 20300,
   "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-bridge.zip",
+  "sha256": "be2fe72a484321ac2e2711c0426a42ca90fdfd33b6532c9af77729c2cf90e370",
+  "kernelVersion": "v2.3.0",
+  "kernelVersionCode": 20300,
+  "kernelReleasesApi": "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
   "changelog": "https://raw.githubusercontent.com/soranerai/vpnhide_next/main/update-json/changelog.md"
 }

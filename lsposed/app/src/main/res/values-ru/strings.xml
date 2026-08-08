@@ -209,6 +209,45 @@
     <string name="kmod_update_error_manager">Этот root-менеджер не поддерживает автоматическую установку.</string>
     <string name="kmod_update_error_install">Root-менеджеру не удалось установить обновление. Текущий модуль остался активным.</string>
 
+    <!-- Built-in bridge + kernel updater -->
+    <string name="builtin_update_title">Обновление моста и ядра</string>
+    <string name="builtin_update_available">Доступна версия ядра %1$s: %2$s</string>
+    <string name="builtin_update_downloading">Скачивание %1$s&#8230;</string>
+    <string name="builtin_update_downloading_progress">Скачивание %1$s&#8230; %2$d%%</string>
+    <string name="builtin_update_validating">Проверка контрольных сумм и содержимого архивов&#8230;</string>
+    <string name="builtin_update_ready">Загрузка проверена. Ознакомьтесь с предупреждением для продолжения.</string>
+    <string name="builtin_update_continue">Продолжить</string>
+    <string name="builtin_update_confirm_title">Обновить мост и ядро?</string>
+    <string name="builtin_update_confirm_message">VPNHide Next установит мост и ядро версии %1$s (%2$s). Перед прошивкой будет создана резервная копия активного boot. Прошивка ядра может привести к бутлупу — убедитесь, что у вас есть внешний способ восстановления.</string>
+    <string name="builtin_update_mode_normal">Обычный (рекомендуется)</string>
+    <string name="builtin_update_mode_normal_desc">Использовать стандартный образ. Подходит большинству устройств.</string>
+    <string name="builtin_update_mode_bypass">Bypass (совместимость)</string>
+    <string name="builtin_update_mode_bypass_desc">Принудительная загрузка модулей ядра при проблемах совместимости. Не предназначено для обхода детектов root.</string>
+    <string name="builtin_update_confirm_action">Создать бэкап и обновить</string>
+    <string name="builtin_update_backing_up">Создание резервной копии активного boot&#8230;</string>
+    <string name="builtin_update_installing_bridge">Установка моста&#8230;</string>
+    <string name="builtin_update_flashing_kernel">Прошивка ядра через AnyKernel3&#8230;</string>
+    <string name="builtin_update_awaiting_reboot">Версия %1$s установлена. Для активации нужна перезагрузка.</string>
+    <string name="builtin_update_reboot_title">Обновление установлено</string>
+    <string name="builtin_update_reboot_message">Мост и ядро версии %1$s успешно установлены. Резервная копия boot: %2$s</string>
+    <string name="builtin_update_reboot_now">Перезагрузить сейчас</string>
+    <string name="builtin_update_reboot_later">Позже</string>
+    <string name="builtin_update_error_metadata">Не удалось прочитать защищённые метаданные обновления. Потяните экран вниз, чтобы повторить.</string>
+    <string name="builtin_update_error_unsupported">Не удалось безопасно определить версию запущенного ядра.</string>
+    <string name="builtin_update_error_no_kernel">Для этого устройства не найден совместимый архив ядра.</string>
+    <string name="builtin_update_error_downgrade">Совместимые ядра из релиза старее запущенного. Прошивка заблокирована.</string>
+    <string name="builtin_update_error_download">Не удалось скачать мост или ядро.</string>
+    <string name="builtin_update_error_checksum">Контрольная сумма SHA-256 скачанного файла не совпала. Файл удалён.</string>
+    <string name="builtin_update_error_bridge">Архив моста повреждён или имеет неожиданное содержимое.</string>
+    <string name="builtin_update_error_kernel">Архив AnyKernel3 повреждён или имеет неожиданное содержимое.</string>
+    <string name="builtin_update_error_storage">Недостаточно доступного места для обновления.</string>
+    <string name="builtin_update_error_root">Root-доступ отклонён или истекло время ожидания.</string>
+    <string name="builtin_update_error_backup">Не удалось создать резервную копию активного boot. Прошивка не выполнялась.</string>
+    <string name="builtin_update_error_manager">Root-менеджер не поддерживает автоматическую установку моста.</string>
+    <string name="builtin_update_error_bridge_install">Не удалось установить мост. Резервная копия boot сохранена.</string>
+    <string name="builtin_update_error_kernel_install">AnyKernel3 завершился с ошибкой. Не перезагружайтесь до устранения проблемы; резервная копия boot сохранена.</string>
+    <string name="builtin_update_error_reboot">Команда перезагрузки завершилась с ошибкой. Перезагрузите устройство вручную.</string>
+
     <!-- Changelog -->
     <string name="changelog_title">Что нового в v%1$s</string>
     <string name="changelog_section_added">Добавлено</string>

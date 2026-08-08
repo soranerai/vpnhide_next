@@ -41,14 +41,23 @@ EOJSON
     echo "  update-json/update-kmod-${kmi}.json"
 done
 
+BRIDGE_ARTIFACT="vpnhide-bridge.zip"
+BRIDGE_URL="${REPO}/releases/download/v${VERSION}/${BRIDGE_ARTIFACT}"
+curl --fail --location --silent --show-error \
+    "$BRIDGE_URL" -o "$ARTIFACT_DIR/$BRIDGE_ARTIFACT"
+BRIDGE_SHA256="$(sha256sum "$ARTIFACT_DIR/$BRIDGE_ARTIFACT" | cut -d' ' -f1)"
+
 cat > "update-json/update-bridge.json" <<EOJSON
 {
   "version": "v${VERSION}",
   "versionCode": ${VERSION_CODE},
-  "zipUrl": "${REPO}/releases/download/v${VERSION}/vpnhide-bridge.zip",
+  "zipUrl": "${BRIDGE_URL}",
+  "sha256": "${BRIDGE_SHA256}",
+  "kernelVersion": "v${VERSION}",
+  "kernelVersionCode": ${VERSION_CODE},
+  "kernelReleasesApi": "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
   "changelog": "${RAW}/update-json/changelog.md"
 }
 EOJSON
 echo "  update-json/update-bridge.json"
-
 
