@@ -839,7 +839,7 @@ private fun PortStatisticsDetailScreen(
                     .padding(padding)
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState())
-                    .padding(16.dp),
+                    .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 40.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             listOf("tcp", "udp").forEach { protocol ->
