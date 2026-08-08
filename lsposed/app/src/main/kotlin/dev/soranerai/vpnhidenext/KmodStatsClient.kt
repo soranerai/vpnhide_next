@@ -26,6 +26,7 @@ internal data class KmodStatsResponse(
     val retentionSec: Int,
     val dropped: Boolean,
     val droppedIntervals: Long,
+    val droppedPortEntries: Long,
     val oldestTimestampMs: Long,
     val newestTimestampMs: Long,
     val points: List<KmodStatsPoint>,
@@ -61,6 +62,24 @@ internal data class KmodStatsResponse(
                                                     java_net = uid.optLong("java_net"),
                                                     java_lp = uid.optLong("java_lp"),
                                                     java_cs = uid.optLong("java_cs"),
+                                                    ports =
+                                                        buildList {
+                                                            val portsJson = uid.optJSONArray("ports")
+                                                            if (portsJson != null) {
+                                                                for (k in 0 until portsJson.length()) {
+                                                                    val port = portsJson.optJSONObject(k) ?: continue
+                                                                    val number = port.optInt("port", -1)
+                                                                    if (number !in 1..65535) continue
+                                                                    add(
+                                                                        KmodPortStats(
+                                                                            port = number,
+                                                                            protocol = port.optString("protocol", "tcp"),
+                                                                            count = port.optLong("count"),
+                                                                        ),
+                                                                    )
+                                                                }
+                                                            }
+                                                        },
                                                 ),
                                             )
                                         }
@@ -80,9 +99,10 @@ internal data class KmodStatsResponse(
                 sessionId = json.optString("sessionId", "unknown"),
                 sequence = json.optLong("sequence", 0),
                 resolutionSec = json.optInt("resolutionSec", 60),
-                retentionSec = json.optInt("retentionSec", 86400),
+                retentionSec = json.optInt("retentionSec", 21600),
                 dropped = json.optBoolean("dropped", false),
                 droppedIntervals = json.optLong("droppedIntervals", 0),
+                droppedPortEntries = json.optLong("droppedPortEntries", 0),
                 oldestTimestampMs = json.optLong("oldestTimestampMs", 0),
                 newestTimestampMs = json.optLong("newestTimestampMs", 0),
                 points = points,
@@ -113,6 +133,7 @@ internal data class KmodUidStats(
     val java_net: Long = 0,
     val java_lp: Long = 0,
     val java_cs: Long = 0,
+    val ports: List<KmodPortStats> = emptyList(),
 ) {
     fun values(): Map<String, Long> =
         mapOf(
@@ -134,3 +155,9 @@ internal data class KmodUidStats(
     fun total(): Long =
         ioctl + netlink + proc + sockopt + connect + getname + java_pm + java_um + java_nc + java_ni + java_net + java_lp + java_cs
 }
+
+internal data class KmodPortStats(
+    val port: Int,
+    val protocol: String,
+    val count: Long,
+)

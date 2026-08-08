@@ -9,10 +9,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +26,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.core.graphics.drawable.toBitmap
 import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
 import dev.soranerai.vpnhidenext.domain.models.*
@@ -48,6 +52,21 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
     val statsResponse by InterceptStatsCache.response.collectAsState()
     val appsList by AppListCache.apps.collectAsState()
     var refreshing by remember { mutableStateOf(false) }
+    var selectedTab by rememberSaveable { mutableIntStateOf(0) }
+    var selectedPortApp by remember { mutableStateOf<AppInterceptStats?>(null) }
+
+    selectedPortApp?.let { app ->
+        Dialog(
+            onDismissRequest = { selectedPortApp = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false),
+        ) {
+            PortStatisticsDetailScreen(
+                app = app,
+                onBack = { selectedPortApp = null },
+                modifier = Modifier.fillMaxSize(),
+            )
+        }
+    }
 
     LaunchedEffect(Unit) {
         InterceptStatsCache.ensureLoaded(scope, context)
@@ -78,12 +97,42 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
                     .verticalScroll(rememberScrollState())
                     .padding(horizontal = 16.dp),
         ) {
-            InterceptStatisticsSection(
-                stats = stats,
-                appsList = appsList,
-                unavailable = statsUnavailable,
-                historyDropped = statsResponse?.dropped == true,
+            Spacer(Modifier.height(12.dp))
+            PillTabSelector(
+                tabs =
+                    listOf(
+                        PillTab(Icons.Default.Code, stringResource(R.string.statistics_tab_hooks)),
+                        PillTab(Icons.Default.Dns, stringResource(R.string.statistics_tab_ports)),
+                    ),
+                selectedIndex = selectedTab,
+                onSelect = { selectedTab = it },
+                modifier = Modifier.fillMaxWidth(),
+                height = 56.dp,
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.98f),
+                tonalElevation = 12.dp,
+                shadowElevation = 8.dp,
             )
+            Spacer(Modifier.height(12.dp))
+
+            if (selectedTab == 0) {
+                InterceptStatisticsSection(
+                    stats =
+                        stats
+                            ?.filter { it.frameworkTotal > 0 || it.nativeTotal > 0 }
+                            ?.sortedByDescending { it.frameworkTotal + it.nativeTotal },
+                    appsList = appsList,
+                    unavailable = statsUnavailable,
+                    historyDropped = statsResponse?.dropped == true,
+                )
+            } else {
+                PortStatisticsSection(
+                    stats = stats?.filter { it.portsCount > 0 }?.sortedByDescending { it.portsCount },
+                    appsList = appsList,
+                    unavailable = statsUnavailable,
+                    historyDropped = statsResponse?.dropped == true,
+                    onOpenApp = { selectedPortApp = it },
+                )
+            }
 
             val bottomNavPadding =
                 WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -100,8 +149,6 @@ private fun InterceptStatisticsSection(
     historyDropped: Boolean,
 ) {
     var expandedApps by remember { mutableStateOf(setOf<Int>()) }
-
-    Spacer(Modifier.height(12.dp))
 
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -372,26 +419,6 @@ private fun InterceptStatisticsSection(
                                                 )
                                             }
                                         }
-                                        if (appStat.portsCount > 0) {
-                                            Surface(
-                                                shape = RoundedCornerShape(8.dp),
-                                                color = MaterialTheme.colorScheme.secondaryContainer,
-                                                contentColor =
-                                                    MaterialTheme.colorScheme.onSecondaryContainer,
-                                            ) {
-                                                Text(
-                                                    text = "P: ${appStat.portsCount}",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    fontWeight = FontWeight.Bold,
-                                                    modifier =
-                                                        Modifier.padding(
-                                                            horizontal = 6.dp,
-                                                            vertical = 3.dp,
-                                                        ),
-                                                )
-                                            }
-                                        }
-
                                         if (canExpand) {
                                             Icon(
                                                 imageVector =
@@ -523,6 +550,320 @@ private fun InterceptStatisticsSection(
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun PortStatisticsSection(
+    stats: List<AppInterceptStats>?,
+    appsList: List<AppSummary>?,
+    unavailable: Boolean,
+    historyDropped: Boolean,
+    onOpenApp: (AppInterceptStats) -> Unit,
+) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val repository = remember { DashboardRepository(context.applicationContext) }
+    val darkTheme = isSystemInDarkTheme()
+    val containerColor = if (darkTheme) Color(0xFF1E3E28) else Color(0xFFE8F5E9)
+    val contentColor = if (darkTheme) Color(0xFFA5D6A7) else Color(0xFF2E7D32)
+    val innerCardColor = if (darkTheme) Color(0xFF17331F) else Color.White
+
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(containerColor = containerColor),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.statistics_ports_title),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = contentColor,
+                    )
+                    Text(
+                        text = stringResource(R.string.dashboard_stats_lifetime_hint_fmt),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = contentColor.copy(alpha = 0.7f),
+                    )
+                }
+                if (!stats.isNullOrEmpty()) {
+                    SettingsSquareIconButton(
+                        icon = Icons.Default.Delete,
+                        contentDescription = stringResource(R.string.btn_clear),
+                        onClick = {
+                            scope.launch {
+                                InterceptStatsCache.clearStats()
+                                withContext(Dispatchers.IO) { repository.resetInterceptStats() }
+                                InterceptStatsCache.refresh(scope, context)
+                            }
+                        },
+                        tint = contentColor,
+                        size = 36.dp,
+                    )
+                }
+            }
+            Spacer(Modifier.height(14.dp))
+
+            if (historyDropped) {
+                Text(
+                    text = stringResource(R.string.dashboard_stats_history_dropped),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = contentColor.copy(alpha = 0.8f),
+                    modifier = Modifier.padding(bottom = 8.dp),
+                )
+            }
+            when {
+                unavailable -> {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.dashboard_stats_unavailable_desc),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            modifier = Modifier.padding(20.dp),
+                        )
+                    }
+                }
+
+                stats == null -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SkeletonStatsCard(containerColor = innerCardColor)
+                        SkeletonStatsCard(containerColor = innerCardColor)
+                    }
+                }
+
+                stats.isEmpty() -> {
+                    Surface(
+                        shape = RoundedCornerShape(14.dp),
+                        color = contentColor.copy(alpha = 0.1f),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(
+                            text = stringResource(R.string.statistics_ports_empty),
+                            textAlign = TextAlign.Center,
+                            color = contentColor,
+                            modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                        )
+                    }
+                }
+
+                else -> {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        stats.forEach { appStat ->
+                            val appSummary = appsList?.find { it.uid == appStat.uid }
+                            ElevatedCard(
+                                onClick = { onOpenApp(appStat) },
+                                shape = RoundedCornerShape(16.dp),
+                                colors = CardDefaults.elevatedCardColors(containerColor = innerCardColor),
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier.fillMaxWidth().padding(14.dp),
+                                ) {
+                                    AppStatsIcon(appStat, appSummary)
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = appStat.appLabel,
+                                            fontWeight = FontWeight.Bold,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                        )
+                                        Text(
+                                            text = appStat.packageName,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                        )
+                                    }
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            text = appStat.portsCount.toString(),
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.secondary,
+                                        )
+                                        Text(
+                                            text =
+                                                stringResource(
+                                                    R.string.statistics_unique_ports_fmt,
+                                                    appStat.portAccesses
+                                                        .map { it.port }
+                                                        .distinct()
+                                                        .size,
+                                                ),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                    Spacer(Modifier.width(6.dp))
+                                    Icon(Icons.Default.ChevronRight, contentDescription = null)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AppStatsIcon(
+    appStat: AppInterceptStats,
+    appSummary: AppSummary?,
+) {
+    Box(modifier = Modifier.size(40.dp)) {
+        val icon = appSummary?.icon
+        if (icon != null) {
+            Image(
+                bitmap = remember(icon) { icon.toBitmap(48, 48).asImageBitmap() },
+                contentDescription = null,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.primaryContainer,
+            ) {
+                Box(contentAlignment = Alignment.Center) {
+                    Text(
+                        text = appStat.appLabel.take(1).uppercase(),
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    )
+                }
+            }
+        }
+        if (appStat.userId != 0) {
+            Surface(
+                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp),
+                shape = CircleShape,
+                color = Color(0xFF2196F3),
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Work,
+                    contentDescription = null,
+                    modifier = Modifier.padding(3.dp).size(12.dp),
+                    tint = Color.White,
+                )
+            }
+        }
+    }
+}
+
+internal data class PortDisplayRange(
+    val start: Int,
+    val end: Int,
+    val count: Int,
+) {
+    val label: String get() = if (start == end) start.toString() else "$start–$end"
+}
+
+internal fun buildPortDisplayRanges(accesses: List<PortAccess>): List<PortDisplayRange> {
+    val counts = accesses.groupBy { it.port }.mapValues { (_, values) -> values.sumOf { it.count } }.toSortedMap()
+    val ports = counts.keys.toList()
+    val result = mutableListOf<PortDisplayRange>()
+    var index = 0
+    while (index < ports.size) {
+        var endIndex = index
+        while (endIndex + 1 < ports.size && ports[endIndex + 1] == ports[endIndex] + 1) endIndex++
+        if (endIndex - index + 1 >= 3) {
+            result +=
+                PortDisplayRange(
+                    start = ports[index],
+                    end = ports[endIndex],
+                    count = (index..endIndex).sumOf { counts.getValue(ports[it]) },
+                )
+        } else {
+            for (item in index..endIndex) {
+                val port = ports[item]
+                result += PortDisplayRange(port, port, counts.getValue(port))
+            }
+        }
+        index = endIndex + 1
+    }
+    return result
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PortStatisticsDetailScreen(
+    app: AppInterceptStats,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Scaffold(
+        modifier = modifier,
+        containerColor = MaterialTheme.colorScheme.background,
+        topBar = {
+            TopAppBar(
+                title = {
+                    Column {
+                        Text(app.appLabel, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(
+                            app.packageName,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.back))
+                    }
+                },
+            )
+        },
+    ) { padding ->
+        Column(
+            modifier =
+                Modifier
+                    .padding(padding)
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            listOf("tcp", "udp").forEach { protocol ->
+                val accesses = app.portAccesses.filter { it.protocol == protocol }
+                if (accesses.isNotEmpty()) {
+                    Text(
+                        text = protocol.uppercase(),
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    ElevatedCard(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            buildPortDisplayRanges(accesses).forEachIndexed { index, range ->
+                                if (index > 0) HorizontalDivider()
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 10.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                ) {
+                                    Text(range.label, fontWeight = FontWeight.SemiBold)
+                                    Text(
+                                        text = range.count.toString(),
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
                                 }
                             }
                         }

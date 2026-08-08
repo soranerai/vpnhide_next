@@ -47,9 +47,10 @@ kernel snapshot active and is reported to the app.
 
 Hook masks, debug state, interface prefixes, ports, and targets are all part
 of the JSON policy. Intercept statistics are session-scoped runtime
-diagnostics: the daemon samples cumulative kernel counters into an in-memory
-ring and exposes them through the abstract `vpnhide.stats.v1` socket. No
-statistics history or `stats_window` setting is persisted.
+diagnostics: the daemon samples cumulative kernel counters into a six-hour
+in-memory ring and exposes hook and per-port history through the abstract
+`vpnhide.stats.v1` socket. No statistics history or `stats_window` setting is
+persisted.
 
 ## Runtime and diagnostics
 

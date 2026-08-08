@@ -651,6 +651,7 @@ class DashboardRepository(
         val uidFrameworkMap = mutableMapOf<Int, MutableMap<String, Int>>()
         val uidNativeMap = mutableMapOf<Int, MutableMap<String, Int>>()
         val uidPortsMap = mutableMapOf<Int, Int>()
+        val uidPortDetailsMap = mutableMapOf<Int, MutableMap<Pair<String, Int>, Long>>()
 
         val daemonStats = KmodStatsClient.getStats()
         lastKmodStatsResponse = daemonStats
@@ -685,11 +686,19 @@ class DashboardRepository(
                         .plus(stats.port)
                         .saturatingInt()
             }
+            if (stats.ports.isNotEmpty()) {
+                val details = uidPortDetailsMap.computeIfAbsent(stats.uid) { mutableMapOf() }
+                stats.ports.forEach { port ->
+                    val protocol = if (port.protocol.equals("udp", ignoreCase = true)) "udp" else "tcp"
+                    val key = protocol to port.port
+                    details[key] = (details[key] ?: 0L) + port.count
+                }
+            }
         }
 
         val selfUid = context.applicationInfo.uid
         val allUids =
-            (uidFrameworkMap.keys + uidNativeMap.keys + uidPortsMap.keys).filter { it != selfUid }
+            (uidFrameworkMap.keys + uidNativeMap.keys + uidPortsMap.keys + uidPortDetailsMap.keys).filter { it != selfUid }
 
         val uidsToResolveRoot = mutableListOf<Int>()
         for (uid in allUids) {
@@ -747,6 +756,16 @@ class DashboardRepository(
                 val fBreakdown = uidFrameworkMap[uid] ?: emptyMap()
                 val nBreakdown = uidNativeMap[uid] ?: emptyMap()
                 val portsCount = uidPortsMap[uid] ?: 0
+                val portAccesses =
+                    uidPortDetailsMap[uid]
+                        .orEmpty()
+                        .map { (key, count) ->
+                            PortAccess(
+                                port = key.second,
+                                protocol = key.first,
+                                count = count.saturatingInt(),
+                            )
+                        }.sortedWith(compareBy<PortAccess> { it.protocol }.thenBy { it.port })
                 AppInterceptStats(
                     packageName = pkg,
                     appLabel = label,
@@ -755,6 +774,7 @@ class DashboardRepository(
                     frameworkBreakdown = fBreakdown,
                     nativeBreakdown = nBreakdown,
                     portsCount = portsCount,
+                    portAccesses = portAccesses,
                     userId = uid / 100000,
                     uid = uid,
                 )

@@ -107,8 +107,15 @@ data class AppInterceptStats(
     val frameworkBreakdown: Map<String, Int>,
     val nativeBreakdown: Map<String, Int>,
     val portsCount: Int = 0,
+    val portAccesses: List<PortAccess> = emptyList(),
     val userId: Int = 0,
     val uid: Int = 0,
+)
+
+data class PortAccess(
+    val port: Int,
+    val protocol: String,
+    val count: Int,
 )
 
 data class HookCount(
