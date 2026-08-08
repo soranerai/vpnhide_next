@@ -56,6 +56,7 @@ internal fun AppPickerScreen(
     onUpdate: (List<AppEntry>) -> Unit,
     sortedIds: List<String>,
     onOpenAppSettings: (AppEntry) -> Unit,
+    onLockedSystemClick: () -> Unit,
     listState: LazyListState,
     topContentPadding: Dp = 0.dp,
     modifier: Modifier = Modifier,
@@ -127,6 +128,7 @@ internal fun AppPickerScreen(
                                 app = app,
                                 listMode = listMode,
                                 installed = installed,
+                                systemTargetable = !app.isCoreSystemUid(),
                                 onToggle = { layer ->
                                     val newList =
                                         apps.map {
@@ -169,6 +171,7 @@ internal fun AppPickerScreen(
                                     onUpdate(newList)
                                 },
                                 onSettingsClick = { onOpenAppSettings(app) },
+                                onLockedSystemClick = onLockedSystemClick,
                             )
                         }
                     }

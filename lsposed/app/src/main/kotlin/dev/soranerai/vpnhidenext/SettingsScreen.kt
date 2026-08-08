@@ -62,9 +62,9 @@ import dev.soranerai.vpnhidenext.db.JAVA_HOOK_BIT_HIDE_VPN_APPS
 import dev.soranerai.vpnhidenext.db.JAVA_HOOK_BIT_SELF_HIDE
 import dev.soranerai.vpnhidenext.db.SettingsBackupHelper
 import dev.soranerai.vpnhidenext.ui.theme.TelBlue
+import dev.soranerai.vpnhidenext.ui.theme.TelCyan
 import dev.soranerai.vpnhidenext.ui.theme.TelGreen
 import dev.soranerai.vpnhidenext.ui.theme.TelOrange
-import dev.soranerai.vpnhidenext.ui.theme.TelPurple
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -155,7 +155,7 @@ fun SettingsScreen(
                 SectionHeader(
                     stringResource(R.string.settings_section_testing),
                     icon = Icons.Default.Science,
-                    tint = TelPurple,
+                    tint = TelCyan,
                     modifier = Modifier.padding(start = 16.dp),
                 )
             }
@@ -165,7 +165,7 @@ fun SettingsScreen(
                         title = stringResource(R.string.settings_diagnostics_detail_title),
                         subtitle = stringResource(R.string.settings_diagnostics_detail_desc),
                         icon = Icons.Default.Assessment,
-                        iconTint = TelPurple,
+                        iconTint = TelCyan,
                         onClick = onOpenDiagnosticsDetail,
                     )
                 }

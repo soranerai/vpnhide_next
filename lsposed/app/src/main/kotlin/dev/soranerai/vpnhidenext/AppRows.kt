@@ -30,10 +30,12 @@ internal fun AppRow(
     app: AppEntry,
     listMode: PolicyListMode,
     installed: InstalledModules,
+    systemTargetable: Boolean,
     onToggle: (Layer) -> Unit,
     onToggleAll: () -> Unit,
     onTogglePort: () -> Unit,
     onSettingsClick: () -> Unit,
+    onLockedSystemClick: () -> Unit,
 ) {
     Surface(
         modifier =
@@ -41,7 +43,9 @@ internal fun AppRow(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 4.dp)
                 .clip(RoundedCornerShape(16.dp))
-                .clickable { onToggleAll() },
+                .clickable {
+                    if (systemTargetable) onToggleAll() else onLockedSystemClick()
+                },
         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
     ) {
         Row(
@@ -80,6 +84,23 @@ internal fun AppRow(
                 )
                 Spacer(Modifier.height(2.dp))
                 UidChip(app.uid)
+                if (app.isSystem) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        AppMetadataChip(
+                            text = stringResource(R.string.app_badge_system),
+                            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        if (app.isAutomaticallySelectedSystem(listMode)) {
+                            AppMetadataChip(
+                                text = stringResource(R.string.app_badge_auto_selected),
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                            )
+                        }
+                    }
+                }
             }
 
             IconButton(onClick = onSettingsClick) {
@@ -97,13 +118,35 @@ internal fun AppRow(
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (installed.kmod) {
-                    ProtectionChip("N", app.kmod, true, app.userId, listMode) { onToggle(Layer.KMOD) }
+                    ProtectionChip("N", app.kmod, systemTargetable, app.userId, listMode) { onToggle(Layer.KMOD) }
                 }
 
-                ProtectionChip("F", app.lsposed, true, app.userId, listMode) { onToggle(Layer.LSPOSED) }
-                ProtectionChip("P", app.portHiding, true, app.userId, listMode) { onTogglePort() }
+                ProtectionChip("F", app.lsposed, systemTargetable, app.userId, listMode) { onToggle(Layer.LSPOSED) }
+                ProtectionChip("P", app.portHiding, systemTargetable, app.userId, listMode) { onTogglePort() }
             }
         }
+    }
+}
+
+@Composable
+private fun AppMetadataChip(
+    text: String,
+    containerColor: Color,
+    contentColor: Color,
+) {
+    Surface(
+        shape = RoundedCornerShape(4.dp),
+        color = containerColor,
+        contentColor = contentColor,
+    ) {
+        Text(
+            text = text,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp),
+        )
     }
 }
 

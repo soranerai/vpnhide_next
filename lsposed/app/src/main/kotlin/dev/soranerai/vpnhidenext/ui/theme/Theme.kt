@@ -15,13 +15,13 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Density
 import androidx.core.view.WindowCompat
 
-// Expressive "Telegram-style" Palette
-val TelBlue = Color(0xFF50A2E9)
+// VPN-oriented palette: green for protection, blue/cyan for network layers.
+val TelBlue = Color(0xFF4AA8E8)
+val TelCyan = Color(0xFF28BCC8)
+val TelGreen = Color(0xFF43C978)
 val TelPink = Color(0xFFF06292)
-val TelGreen = Color(0xFF4CAF50)
 val TelRed = Color(0xFFF44336)
 val TelOrange = Color(0xFFFF9800)
-val TelPurple = Color(0xFF9575CD)
 
 // AMOLED Surfaces
 val AmoledBackground = Color.Black
@@ -30,74 +30,97 @@ val AmoledSurfaceVariant = Color(0xFF1E1E1E)
 val AmoledText = Color(0xFFE0E0E0)
 val AmoledSubtext = Color(0xFFB0B0B0)
 
-// Vibrant Light Palette
-val TelLightPrimary = Color(0xFF0088CC) // Telegram Blue
-val TelLightBackground = Color(0xFFF2F2F2)
+// Cool neutral surfaces avoid the previous beige tint.
+val TelLightBackground = Color(0xFFF4F7F9)
 val TelLightSurface = Color.White
-val TelLightText = Color(0xFF222222)
+val TelLightText = Color(0xFF172027)
 
 private val ExpressiveDarkColorScheme =
     darkColorScheme(
         primary = TelGreen,
+        primaryContainer = Color(0xFF124D2D),
+        onPrimaryContainer = Color(0xFFBDF4D1),
         secondary = TelBlue,
-        tertiary = TelPink,
-        background = Color(0xFF1C1C1C),
-        surface = Color(0xFF242424),
-        surfaceVariant = Color(0xFF2C2C2C),
+        secondaryContainer = Color(0xFF173F59),
+        onSecondaryContainer = Color(0xFFCBEAFF),
+        tertiary = TelCyan,
+        tertiaryContainer = Color(0xFF12454A),
+        onTertiaryContainer = Color(0xFFC4F5F7),
+        background = Color(0xFF0D1216),
+        surface = Color(0xFF141B20),
+        surfaceVariant = Color(0xFF202A31),
         onPrimary = Color.Black,
         onSecondary = Color.White,
+        onTertiary = Color.Black,
         onBackground = AmoledText,
         onSurface = AmoledText,
-        onSurfaceVariant = AmoledSubtext,
+        onSurfaceVariant = Color(0xFFB6C2CA),
         error = TelRed,
-        outline = Color(0xFF333333),
+        outline = Color(0xFF65747E),
+        outlineVariant = Color(0xFF35434C),
     )
 
 private val ExpressiveAmoledColorScheme =
     darkColorScheme(
         primary = TelGreen,
+        primaryContainer = Color(0xFF0D4225),
+        onPrimaryContainer = Color(0xFFBDF4D1),
         secondary = TelBlue,
-        tertiary = TelPink,
+        secondaryContainer = Color(0xFF12384F),
+        onSecondaryContainer = Color(0xFFCBEAFF),
+        tertiary = TelCyan,
+        tertiaryContainer = Color(0xFF0E3C40),
+        onTertiaryContainer = Color(0xFFC4F5F7),
         background = Color.Black,
         surface = Color.Black,
         surfaceVariant = Color(0xFF161616),
         onPrimary = Color.Black,
         onSecondary = Color.White,
+        onTertiary = Color.Black,
         onBackground = AmoledText,
         onSurface = AmoledText,
         onSurfaceVariant = AmoledSubtext,
         error = TelRed,
-        outline = Color(0xFF222222),
+        outline = Color(0xFF607079),
+        outlineVariant = Color(0xFF29343A),
     )
 
 private val ExpressiveLightColorScheme =
     lightColorScheme(
-        primary = TelGreen,
-        secondary = TelBlue,
-        tertiary = TelPink,
+        primary = Color(0xFF168A4A),
+        primaryContainer = Color(0xFFD5F5E1),
+        onPrimaryContainer = Color(0xFF083C21),
+        secondary = Color(0xFF256FA6),
+        secondaryContainer = Color(0xFFDCEEFF),
+        onSecondaryContainer = Color(0xFF123A56),
+        tertiary = Color(0xFF087F8C),
+        tertiaryContainer = Color(0xFFC9F3F5),
+        onTertiaryContainer = Color(0xFF083B40),
         background = TelLightBackground,
         surface = TelLightSurface,
-        surfaceVariant = Color(0xFFE8E8E8),
+        surfaceVariant = Color(0xFFE7EDF1),
         onPrimary = Color.White,
         onSecondary = Color.White,
+        onTertiary = Color.White,
         onBackground = TelLightText,
         onSurface = TelLightText,
-        onSurfaceVariant = Color(0xFF757575),
+        onSurfaceVariant = Color(0xFF53616B),
         error = TelRed,
+        outline = Color(0xFF74818A),
+        outlineVariant = Color(0xFFC7D0D7),
     )
 
 @Composable
 fun VpnHideTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     pureBlack: Boolean = true,
-    dynamicColor: Boolean = false, // User complained about blidness/lack of punch, so we prefer our expressive palette over generic Monet
+    dynamicColor: Boolean = false, // Keep the app palette stable unless dynamic colors are explicitly requested.
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val colorScheme =
         when {
-            // We override dynamicColor here because user specifically asked for EXPRESSIVE colors,
-            // and Monet can often be too pastel/muted depending on wallpaper.
+            // Optional Monet colors remain available for callers that explicitly opt in.
             dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
                 if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
             }

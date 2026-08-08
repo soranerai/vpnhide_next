@@ -758,6 +758,7 @@ private fun AppProtection.toJson(): JSONObject =
         put("kmod", kmod)
         put("lsposed", lsposed)
         put("portHiding", portHiding)
+        if (systemPolicyExplicit) put("systemPolicyExplicit", true)
         kernelHookMask?.let { put("kernelHookMask", it) }
         javaHookMask?.let { put("javaHookMask", it) }
     }
@@ -770,6 +771,7 @@ private fun JSONObject.toAppProtection(): AppProtection =
         kmod = optBoolean("kmod", false),
         lsposed = optBoolean("lsposed", false),
         portHiding = optBoolean("portHiding", false),
+        systemPolicyExplicit = optBoolean("systemPolicyExplicit", false),
         kernelHookMask = if (has("kernelHookMask")) getLong("kernelHookMask") else null,
         javaHookMask = if (has("javaHookMask")) getLong("javaHookMask") else null,
     )

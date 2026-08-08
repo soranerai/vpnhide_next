@@ -23,9 +23,12 @@ hint, and per-layer selections are passed to the backend. The backend queries
 Package Manager and computes effective UID snapshots.
 
 The frontend must never compute the allowlist complement, write UID target
-files, or truncate the effective target set. The backend protects system,
-privileged, manager, and non-`/data/app` packages and rejects an oversized
-effective snapshot.
+files, or truncate the effective target set. The backend protects system and
+privileged packages by default and rejects an oversized effective snapshot.
+An app entry with `systemPolicyExplicit: true` may override that default for a
+Package Manager-verified system package on a per-layer basis. Missing markers
+retain the protected legacy behavior; root and core system appIds remain
+ineligible targets.
 
 ## Apply flow
 

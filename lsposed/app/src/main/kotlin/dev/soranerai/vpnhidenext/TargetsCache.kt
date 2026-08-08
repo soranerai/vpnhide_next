@@ -36,6 +36,7 @@ internal data class TargetsSnapshot(
     val kmodTargets: Set<Pair<String, Int>>,
     val lsposedTargets: Set<Pair<String, Int>>,
     val portsObservers: Set<Pair<String, Int>>,
+    val systemPolicyExplicitApps: Set<Pair<String, Int>>,
     val portRules: Map<Pair<String, Int>, List<PortRule>>,
     val kernelHookMasks: Map<Pair<String, Int>, Long>,
     val javaHookMasks: Map<Pair<String, Int>, Long>,
@@ -181,6 +182,8 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                 kmodTargets = apps.filter { it.kmod }.map { it.packageName to it.userId }.toSet(),
                 lsposedTargets = apps.filter { it.lsposed }.map { it.packageName to it.userId }.toSet(),
                 portsObservers = apps.filter { it.portHiding }.map { it.packageName to it.userId }.toSet(),
+                systemPolicyExplicitApps =
+                    apps.filter { it.systemPolicyExplicit }.map { it.packageName to it.userId }.toSet(),
                 portRules = portRulesMap,
                 kernelHookMasks =
                     apps
@@ -251,6 +254,7 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             kmodTargets = emptySet(),
             lsposedTargets = emptySet(),
             portsObservers = emptySet(),
+            systemPolicyExplicitApps = emptySet(),
             portRules = emptyMap(),
             kernelHookMasks = emptyMap(),
             javaHookMasks = emptyMap(),
