@@ -253,9 +253,11 @@
     <string name="builtin_update_downloading_progress">Downloading %1$s&#8230; %2$d%%</string>
     <string name="builtin_update_validating">Checking checksums and archive contents&#8230;</string>
     <string name="builtin_update_ready">Download verified. Review the warning to continue.</string>
+    <string name="builtin_update_preparing_install">Preparing verified archives for installation&#8230;</string>
     <string name="builtin_update_continue">Continue</string>
     <string name="builtin_update_confirm_title">Update the bridge and kernel?</string>
     <string name="builtin_update_confirm_message">VPNHide Next will install bridge and kernel version %1$s (%2$s). The active boot image will be backed up first. Flashing a kernel can cause a bootloop; make sure you have an external recovery method.</string>
+    <string name="builtin_update_debug_warning">Debug mode is active: SHA-256 verification is disabled and this may reinstall the current version.</string>
     <string name="builtin_update_mode_normal">Normal (recommended)</string>
     <string name="builtin_update_mode_normal_desc">Use the standard image. This is the correct choice for most devices.</string>
     <string name="builtin_update_mode_bypass">Bypass (compatibility)</string>
@@ -374,6 +376,9 @@
     <string name="settings_toggle_hide_self_desc">Hides the VPNHide Next package itself from protected apps.</string>
     <string name="settings_toggle_update_check_title">Check for updates in background</string>
     <string name="settings_toggle_update_check_desc">Periodically checks GitHub Releases in the background and sends a notification when a new version is available.</string>
+    <string name="settings_builtin_update_debug_title">Unsafe update debug mode</string>
+    <string name="settings_builtin_update_debug_desc">Allows reinstalling the current built-in kernel release without SHA-256 verification. Use only for development.</string>
+    <string name="settings_builtin_update_debug_unlocked">Update debug mode unlocked</string>
     <string name="settings_toggle_health_check_title">Protection health check</string>
     <string name="settings_toggle_health_check_desc">Notifies you if the kernel module or LSPosed hooks fail to activate after a reboot, so a silent failure doesn\'t go unnoticed.</string>
     <string name="settings_battery_optimization_title">Disable battery optimization</string>

@@ -199,6 +199,7 @@ internal fun SettingsSwitchRow(
     icon: ImageVector? = null,
     iconTint: Color = MaterialTheme.colorScheme.primary,
     enabled: Boolean = true,
+    onLabelClick: (() -> Unit)? = null,
 ) {
     Row(
         modifier =
@@ -211,7 +212,12 @@ internal fun SettingsSwitchRow(
             SettingsRowIcon(icon = icon, tint = iconTint)
             Spacer(Modifier.width(12.dp))
         }
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier =
+                Modifier
+                    .weight(1f)
+                    .then(if (onLabelClick != null) Modifier.clickable(onClick = onLabelClick) else Modifier),
+        ) {
             Text(title, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
             Spacer(Modifier.height(2.dp))
             Text(

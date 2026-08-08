@@ -41,6 +41,7 @@ private const val MAX_AK3_CORE_BYTES = 256 * 1024
 internal data class BuiltInUpdateTarget(
     val installedVersion: String,
     val unameR: String,
+    val debugMode: Boolean = false,
 )
 
 internal data class BuiltInUpdateMetadata(
@@ -64,6 +65,7 @@ internal data class BuiltInUpdateInfo(
     val metadata: BuiltInUpdateMetadata,
     val kernelAsset: KernelReleaseAsset,
     val unameR: String,
+    val debugMode: Boolean = false,
 )
 
 internal enum class KernelSelectionFailure {
@@ -127,6 +129,10 @@ internal sealed interface BuiltInUpdateState {
         val hasBypass: Boolean,
     ) : BuiltInUpdateState
 
+    data class PreparingInstall(
+        val info: BuiltInUpdateInfo,
+    ) : BuiltInUpdateState
+
     data class BackingUp(
         val info: BuiltInUpdateInfo,
     ) : BuiltInUpdateState
@@ -154,6 +160,7 @@ internal sealed interface BuiltInUpdateState {
 internal fun parseBuiltInUpdateMetadata(
     raw: String,
     installedVersion: String,
+    debugMode: Boolean = false,
 ): BuiltInUpdateMetadata? {
     val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
     val bridgeVersion = json.optString("version")
@@ -172,6 +179,7 @@ internal fun parseBuiltInUpdateMetadata(
         kernelVersionCode,
         kernelReleasesApi,
         installedVersion,
+        debugMode,
     )
 }
 
@@ -184,11 +192,15 @@ internal fun validateBuiltInUpdateMetadataFields(
     kernelVersionCode: Int,
     kernelReleasesApi: String,
     installedVersion: String,
+    debugMode: Boolean = false,
 ): BuiltInUpdateMetadata? {
-    if (!isNewerVersion(kernelVersion, installedVersion)) return null
+    val versionAllowed =
+        isNewerVersion(kernelVersion, installedVersion) ||
+            (debugMode && baseVersion(kernelVersion) == baseVersion(installedVersion))
+    if (!versionAllowed) return null
     if (bridgeVersionCode < 0 || kernelVersionCode < 0) return null
     if (baseVersion(bridgeVersion) != baseVersion(kernelVersion)) return null
-    if (!bridgeSha256.matches(Regex("[0-9a-f]{64}"))) return null
+    if (!debugMode && !bridgeSha256.matches(Regex("[0-9a-f]{64}"))) return null
     if (!isTrustedBridgeUrl(bridgeZipUrl)) return null
     if (kernelReleasesApi != TRUSTED_KERNEL_RELEASES_API) return null
     return BuiltInUpdateMetadata(
@@ -202,7 +214,10 @@ internal fun validateBuiltInUpdateMetadataFields(
     )
 }
 
-internal fun parseKernelReleaseAssets(raw: String): List<KernelReleaseAsset> {
+internal fun parseKernelReleaseAssets(
+    raw: String,
+    debugMode: Boolean = false,
+): List<KernelReleaseAsset> {
     val releases = runCatching { JSONArray(raw) }.getOrNull() ?: return emptyList()
     val result = mutableListOf<KernelReleaseAsset>()
     for (i in 0 until releases.length()) {
@@ -216,7 +231,7 @@ internal fun parseKernelReleaseAssets(raw: String): List<KernelReleaseAsset> {
             val name = asset.optString("name")
             val url = asset.optString("browser_download_url")
             val digest = asset.optString("digest").removePrefix("sha256:").lowercase()
-            if (!digest.matches(Regex("[0-9a-f]{64}"))) continue
+            if (!debugMode && !digest.matches(Regex("[0-9a-f]{64}"))) continue
             if (!isTrustedKernelAssetUrl(url, tag, name)) continue
             result += KernelReleaseAsset(tag, name, url, digest)
         }
@@ -229,6 +244,7 @@ internal fun selectKernelAsset(
     installedVersion: String,
     assets: List<KernelReleaseAsset>,
     maximumVersion: String? = null,
+    allowCurrentVersion: Boolean = false,
 ): KernelSelectionResult {
     val running =
         detectRunningKernel(runningRelease)
@@ -243,7 +259,11 @@ internal fun selectKernelAsset(
 
     for (asset in assets) {
         val releaseCode = versionTagToCode(asset.releaseTag) ?: continue
-        if (releaseCode <= installedCode || releaseCode > maximumCode) continue
+        if (releaseCode < installedCode || (!allowCurrentVersion && releaseCode == installedCode) ||
+            releaseCode > maximumCode
+        ) {
+            continue
+        }
         val match = KERNEL_ASSET_NAME.matchEntire(asset.name) ?: continue
         val candidateMajorMinor = "${match.groupValues[1]}.${match.groupValues[2]}"
         val patch = match.groupValues[3].toIntOrNull() ?: continue
@@ -397,6 +417,9 @@ internal object BuiltInUpdateCache {
                 return
             }
         if (isBusy(_state.value)) return
+        // Block repeated confirmation immediately. Repacking and validating the controlled
+        // bridge/AK3 archives happens before the root backup and can take a visible moment.
+        _state.value = BuiltInUpdateState.PreparingInstall(info)
         operationScope.launch {
             val result =
                 withContext(Dispatchers.IO) {
@@ -465,8 +488,8 @@ internal object BuiltInUpdateCache {
 
 private fun isBusy(state: BuiltInUpdateState): Boolean =
     state is BuiltInUpdateState.Downloading || state is BuiltInUpdateState.Validating ||
-        state is BuiltInUpdateState.BackingUp || state is BuiltInUpdateState.InstallingBridge ||
-        state is BuiltInUpdateState.FlashingKernel
+        state is BuiltInUpdateState.PreparingInstall || state is BuiltInUpdateState.BackingUp ||
+        state is BuiltInUpdateState.InstallingBridge || state is BuiltInUpdateState.FlashingKernel
 
 private sealed interface BuiltInCheckOutcome {
     data object None : BuiltInCheckOutcome
@@ -486,12 +509,12 @@ private fun checkForBuiltInUpdate(target: BuiltInUpdateTarget): BuiltInCheckOutc
             downloadSmallText(BUILT_IN_METADATA_URL, MAX_BUILT_IN_METADATA_BYTES)
                 ?: return BuiltInCheckOutcome.Failed(BuiltInUpdateError.METADATA)
         val metadata =
-            parseBuiltInUpdateMetadata(metadataRaw, target.installedVersion)
+            parseBuiltInUpdateMetadata(metadataRaw, target.installedVersion, target.debugMode)
                 ?: return BuiltInCheckOutcome.None
         val releasesRaw =
             downloadSmallText(metadata.kernelReleasesApi, MAX_RELEASES_METADATA_BYTES)
                 ?: return BuiltInCheckOutcome.Failed(BuiltInUpdateError.METADATA)
-        val assets = parseKernelReleaseAssets(releasesRaw)
+        val assets = parseKernelReleaseAssets(releasesRaw, target.debugMode)
         when (
             val selection =
                 selectKernelAsset(
@@ -499,11 +522,12 @@ private fun checkForBuiltInUpdate(target: BuiltInUpdateTarget): BuiltInCheckOutc
                     target.installedVersion,
                     assets,
                     maximumVersion = metadata.kernelVersion,
+                    allowCurrentVersion = target.debugMode,
                 )
         ) {
             is KernelSelectionResult.Selected -> {
                 BuiltInCheckOutcome.Available(
-                    BuiltInUpdateInfo(metadata, selection.asset, target.unameR),
+                    BuiltInUpdateInfo(metadata, selection.asset, target.unameR, target.debugMode),
                 )
             }
 
@@ -555,6 +579,7 @@ private fun downloadAndValidate(
             info.metadata.bridgeSha256,
             bridge,
             MAX_BRIDGE_ZIP_BYTES,
+            verifyChecksum = !info.debugMode,
         ) { onProgress("bridge", it) }
     if (bridgeError != null) {
         bridge.delete()
@@ -566,6 +591,7 @@ private fun downloadAndValidate(
             info.kernelAsset.sha256,
             kernel,
             MAX_KERNEL_ZIP_BYTES,
+            verifyChecksum = !info.debugMode,
         ) { onProgress("kernel", it) }
     if (kernelError != null) {
         bridge.delete()
@@ -592,6 +618,7 @@ private fun downloadFile(
     expectedSha256: String,
     destination: File,
     maxBytes: Long,
+    verifyChecksum: Boolean = true,
     onProgress: (Int?) -> Unit,
 ): BuiltInUpdateError? {
     val partial = File(destination.parentFile, "${destination.name}.part")
@@ -620,7 +647,7 @@ private fun downloadFile(
                 }
             }
             val actual = digest.digest().joinToString("") { "%02x".format(it) }
-            if (actual != expectedSha256) return BuiltInUpdateError.CHECKSUM
+            if (verifyChecksum && actual != expectedSha256) return BuiltInUpdateError.CHECKSUM
             if (!partial.renameTo(destination)) return BuiltInUpdateError.STORAGE
             null
         } finally {
@@ -676,12 +703,13 @@ private fun validateZipEntries(
         count++
         if (count > MAX_ZIP_ENTRIES) return false
         val name = entry.name
-        if (name.isBlank() || name.startsWith('/') || name.contains('\\') ||
-            name.split('/').any { it == ".." || it.isBlank() }
+        val normalizedName = if (entry.isDirectory) name.removeSuffix("/") else name
+        if (normalizedName.isBlank() || normalizedName.startsWith('/') || normalizedName.contains('\\') ||
+            normalizedName.split('/').any { it == "." || it == ".." || it.isBlank() }
         ) {
             return false
         }
-        if (!names.add(name) || !foldedNames.add(name.lowercase())) return false
+        if (!names.add(normalizedName) || !foldedNames.add(normalizedName.lowercase())) return false
         if (entry.size < 0 || entry.size > maxExpandedBytes) return false
         expanded += entry.size
         if (expanded > maxExpandedBytes) return false

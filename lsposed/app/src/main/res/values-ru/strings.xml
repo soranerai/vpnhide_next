@@ -216,9 +216,11 @@
     <string name="builtin_update_downloading_progress">Скачивание %1$s&#8230; %2$d%%</string>
     <string name="builtin_update_validating">Проверка контрольных сумм и содержимого архивов&#8230;</string>
     <string name="builtin_update_ready">Загрузка проверена. Ознакомьтесь с предупреждением для продолжения.</string>
+    <string name="builtin_update_preparing_install">Подготовка проверенных архивов к установке&#8230;</string>
     <string name="builtin_update_continue">Продолжить</string>
     <string name="builtin_update_confirm_title">Обновить мост и ядро?</string>
     <string name="builtin_update_confirm_message">VPNHide Next установит мост и ядро версии %1$s (%2$s). Перед прошивкой будет создана резервная копия активного boot. Прошивка ядра может привести к бутлупу — убедитесь, что у вас есть внешний способ восстановления.</string>
+    <string name="builtin_update_debug_warning">Включён режим отладки: проверка SHA-256 отключена, возможна повторная установка текущей версии.</string>
     <string name="builtin_update_mode_normal">Обычный (рекомендуется)</string>
     <string name="builtin_update_mode_normal_desc">Использовать стандартный образ. Подходит большинству устройств.</string>
     <string name="builtin_update_mode_bypass">Bypass (совместимость)</string>
@@ -321,6 +323,9 @@
     <string name="settings_toggle_hide_self_title">Скрывать VPNHide Next автоматически</string>
     <string name="settings_toggle_hide_self_desc">Скрывает пакет самого VPNHide Next от защищаемых приложений.</string>
     <string name="settings_toggle_update_check_title">Проверять обновления в фоне</string>
+    <string name="settings_builtin_update_debug_title">Небезопасный режим отладки обновлений</string>
+    <string name="settings_builtin_update_debug_desc">Разрешает повторную установку текущего встроенного ядра без проверки SHA-256. Только для разработки.</string>
+    <string name="settings_builtin_update_debug_unlocked">Режим отладки обновлений разблокирован</string>
     <string name="settings_toggle_update_check_desc">Периодически проверяет GitHub Releases в фоне и присылает уведомление, когда выходит новая версия.</string>
     <string name="settings_toggle_health_check_title">Проверка работоспособности защиты</string>
     <string name="settings_toggle_health_check_desc">Уведомляет, если модуль ядра или хуки LSPosed не поднялись после перезагрузки, чтобы тихий отказ не остался незамеченным.</string>

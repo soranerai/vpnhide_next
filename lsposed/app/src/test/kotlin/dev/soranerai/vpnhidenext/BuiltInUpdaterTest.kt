@@ -5,7 +5,9 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
+import java.util.zip.ZipEntry
 import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 class BuiltInUpdaterTest {
     private fun asset(
@@ -112,6 +114,53 @@ class BuiltInUpdaterTest {
     }
 
     @Test
+    fun `debug metadata permits current version without checksum`() {
+        val metadata =
+            validateBuiltInUpdateMetadataFields(
+                bridgeVersion = "v2.3.0",
+                bridgeVersionCode = 20300,
+                bridgeZipUrl =
+                    "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-bridge.zip",
+                bridgeSha256 = "",
+                kernelVersion = "v2.3.0",
+                kernelVersionCode = 20300,
+                kernelReleasesApi =
+                    "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
+                installedVersion = "2.3.0",
+                debugMode = true,
+            )
+        assertEquals("v2.3.0", metadata?.kernelVersion)
+    }
+
+    @Test
+    fun `debug selector permits asset from current release`() {
+        val result =
+            selectKernelAsset(
+                "6.1.157-android14-Wild",
+                "2.3.0",
+                listOf(asset("6.1.162-android14-2026-03-AnyKernel3.zip", "v2.3.0")),
+                maximumVersion = "v2.3.0",
+                allowCurrentVersion = true,
+            )
+        assertEquals(
+            "6.1.162-android14-2026-03-AnyKernel3.zip",
+            (result as KernelSelectionResult.Selected).asset.name,
+        )
+    }
+
+    @Test
+    fun `rapid tap unlocker requires ten consecutive fast taps`() {
+        val unlocker = RapidTapUnlocker()
+        repeat(9) { tap -> assertTrue(!unlocker.recordTap(tap * 100L)) }
+        assertTrue(unlocker.recordTap(900L))
+
+        repeat(5) { tap -> assertTrue(!unlocker.recordTap(2_000L + tap * 100L)) }
+        assertTrue(!unlocker.recordTap(3_500L))
+        repeat(8) { tap -> assertTrue(!unlocker.recordTap(3_600L + tap * 100L)) }
+        assertTrue(unlocker.recordTap(4_400L))
+    }
+
+    @Test
     fun `selector never crosses the version advertised by update metadata`() {
         val result =
             selectKernelAsset(
@@ -152,6 +201,28 @@ class BuiltInUpdaterTest {
     }
 
     @Test
+    fun `kernel validator accepts standard explicit directory entries`() {
+        val archive = Files.createTempFile("vpnhide-ak3-directories-", ".zip").toFile()
+        try {
+            ZipOutputStream(archive.outputStream()).use { output ->
+                listOf("tools/", "META-INF/", "META-INF/com/", "META-INF/com/google/", "META-INF/com/google/android/")
+                    .forEach { directory ->
+                        output.putNextEntry(ZipEntry(directory))
+                        output.closeEntry()
+                    }
+                REQUIRED_KERNEL_TEST_ENTRIES.forEach { (name, contents) ->
+                    output.putNextEntry(ZipEntry(name))
+                    output.write(contents.toByteArray())
+                    output.closeEntry()
+                }
+            }
+            assertEquals(false, validateKernelZip(archive))
+        } finally {
+            archive.delete()
+        }
+    }
+
+    @Test
     fun `generated root scripts have valid shell syntax`() {
         assertShellSyntax(buildBootBackupScript("6.1.157-android14-11-gabcdef"))
         assertShellSyntax(buildBridgeInstallScript("/data/user/0/app/cache/bridge.zip", "2.3.0"))
@@ -164,5 +235,17 @@ class BuiltInUpdaterTest {
         process.outputStream.bufferedWriter().use { it.write(script) }
         val error = process.errorStream.bufferedReader().readText()
         assertEquals(error, 0, process.waitFor())
+    }
+
+    private companion object {
+        val REQUIRED_KERNEL_TEST_ENTRIES =
+            mapOf(
+                "Image" to "image",
+                "anykernel.sh" to "#!/system/bin/sh",
+                "tools/ak3-core.sh" to "show_kernel_menu",
+                "tools/busybox" to "busybox",
+                "tools/magiskboot" to "magiskboot",
+                "META-INF/com/google/android/update-binary" to "#!/system/bin/sh",
+            )
     }
 }
