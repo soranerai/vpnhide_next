@@ -34,6 +34,7 @@ The output looks like `6.1.75-android14-11-g...` — the generation is `android1
 | `6.1.xxx-android14-...` | android14-6.1 |
 | `6.6.xxx-android15-...` | android15-6.6 |
 | `6.12.xxx-android16-...` | android16-6.12 |
+| `6.18.xxx-android17-...` | android17-6.18 |
 
 ## Local build with kernel source
 

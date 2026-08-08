@@ -27,7 +27,7 @@ Kernel kretprobes modify kernel function behavior, not userspace code. The targe
 
 All symbols used (`register_kretprobe`, `proc_create`, `seq_read`, etc.) are part of the stable GKI KMI, so the same `Module.symvers` CRCs work across all devices running the same GKI generation. The C source is identical across generations -- only the kernel headers and CRCs differ.
 
-CI builds are provided for all 7 GKI generations: `android12-5.10` through `android16-6.12`.
+CI builds are provided for all 8 GKI generations: `android12-5.10` through `android17-6.18`.
 
 ## Build
 

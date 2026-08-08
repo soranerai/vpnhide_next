@@ -68,6 +68,7 @@ GKI_VARIANTS = (
     "android14-6.1",
     "android15-6.6",
     "android16-6.12",
+    "android17-6.18",
 )
 
 DEFAULT_KMI = "android14-6.1"
