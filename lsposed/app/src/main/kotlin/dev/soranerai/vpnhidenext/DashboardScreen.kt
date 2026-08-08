@@ -76,15 +76,26 @@ fun DashboardScreen(
     val state by DashboardCache.state.collectAsState()
     val updateInfo by UpdateCheckCache.info.collectAsState()
     val kmodUpdateState by KmodUpdateCache.state.collectAsState()
+    val builtInUpdateState by BuiltInUpdateCache.state.collectAsState()
     val kmodUpdateTarget =
         remember(state) {
             val dashboard = state ?: return@remember null
             val installed = dashboard.kmod as? ModuleState.Installed ?: return@remember null
+            if (!installed.isKmodType) return@remember null
             resolveKmodUpdateTarget(
                 installedVersion = installed.version,
                 installedKmi = installed.gkiVariant,
                 unameR = dashboard.kmodLoadStatus?.unameR,
             )
+        }
+    val builtInUpdateTarget =
+        remember(state) {
+            val dashboard = state ?: return@remember null
+            val installed = dashboard.kmod as? ModuleState.Installed ?: return@remember null
+            if (installed.isKmodType) return@remember null
+            val version = installed.version?.takeIf { it.isNotBlank() } ?: return@remember null
+            val unameR = dashboard.kmodLoadStatus?.unameR?.takeIf { it.isNotBlank() } ?: return@remember null
+            BuiltInUpdateTarget(version, unameR)
         }
     var showChangelog by remember { mutableStateOf(false) }
     var changelogData by remember { mutableStateOf<ChangelogData?>(null) }
@@ -110,6 +121,10 @@ fun DashboardScreen(
         kmodUpdateTarget?.let { KmodUpdateCache.ensureFresh(scope, it) }
     }
 
+    LaunchedEffect(builtInUpdateTarget) {
+        builtInUpdateTarget?.let { BuiltInUpdateCache.ensureFresh(it) }
+    }
+
     if (showChangelog && changelogData != null) {
         ChangelogDialog(
             data = changelogData!!,
@@ -126,6 +141,7 @@ fun DashboardScreen(
                 DiagnosticsCache.retry(scope, context)
                 InterceptStatsCache.refresh(scope, context)
                 kmodUpdateTarget?.let { KmodUpdateCache.refresh(scope, it) }
+                builtInUpdateTarget?.let { BuiltInUpdateCache.refresh(it) }
 
                 val startTime = System.currentTimeMillis()
                 kotlinx.coroutines.delay(50) // Allow loading flags to transition to true
@@ -171,6 +187,7 @@ fun DashboardScreen(
                     selfNeedsRestart = selfNeedsRestart,
                     updateInfo = updateInfo,
                     kmodUpdateState = kmodUpdateState,
+                    builtInUpdateState = builtInUpdateState,
                     scope = scope,
                     context = context,
                     onOpenInterceptStats = onOpenInterceptStats,
@@ -240,6 +257,7 @@ private fun DashboardContent(
     selfNeedsRestart: Boolean,
     updateInfo: UpdateInfo?,
     kmodUpdateState: KmodUpdateState,
+    builtInUpdateState: BuiltInUpdateState,
     scope: kotlinx.coroutines.CoroutineScope,
     context: android.content.Context,
     onOpenInterceptStats: () -> Unit,
@@ -349,6 +367,10 @@ private fun DashboardContent(
         if (kmodUpdateState != KmodUpdateState.None) {
             Spacer(Modifier.height(12.dp))
             KmodUpdateCard(kmodUpdateState, scope, context)
+        }
+        if (builtInUpdateState != BuiltInUpdateState.None) {
+            Spacer(Modifier.height(12.dp))
+            BuiltInUpdateCard(builtInUpdateState, context)
         }
 
         Spacer(Modifier.height(12.dp))
@@ -878,6 +900,270 @@ private fun KmodUpdateCard(
         }
     }
 }
+
+@Composable
+private fun BuiltInUpdateCard(
+    state: BuiltInUpdateState,
+    context: android.content.Context,
+) {
+    var showConfirm by remember { mutableStateOf(false) }
+    var showReboot by remember { mutableStateOf(false) }
+    var imageMode by remember { mutableStateOf(KernelImageMode.NORMAL) }
+
+    LaunchedEffect(state) {
+        if (state is BuiltInUpdateState.ReadyToConfirm) {
+            imageMode = KernelImageMode.NORMAL
+            showConfirm = true
+        }
+        if (state is BuiltInUpdateState.AwaitingReboot) showReboot = true
+    }
+
+    val ready = state as? BuiltInUpdateState.ReadyToConfirm
+    if (showConfirm && ready != null) {
+        AlertDialog(
+            onDismissRequest = { showConfirm = false },
+            icon = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
+            title = { Text(stringResource(R.string.builtin_update_confirm_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        stringResource(
+                            R.string.builtin_update_confirm_message,
+                            normalizeVersion(ready.info.metadata.kernelVersion),
+                            ready.info.kernelAsset.name,
+                        ),
+                    )
+                    Row(
+                        modifier =
+                            Modifier.fillMaxWidth().clickable { imageMode = KernelImageMode.NORMAL },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(
+                            selected = imageMode == KernelImageMode.NORMAL,
+                            onClick = { imageMode = KernelImageMode.NORMAL },
+                        )
+                        Column {
+                            Text(stringResource(R.string.builtin_update_mode_normal), fontWeight = FontWeight.SemiBold)
+                            Text(
+                                stringResource(R.string.builtin_update_mode_normal_desc),
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                    }
+                    if (ready.hasBypass) {
+                        Row(
+                            modifier =
+                                Modifier.fillMaxWidth().clickable { imageMode = KernelImageMode.BYPASS },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = imageMode == KernelImageMode.BYPASS,
+                                onClick = { imageMode = KernelImageMode.BYPASS },
+                            )
+                            Column {
+                                Text(stringResource(R.string.builtin_update_mode_bypass), fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    stringResource(R.string.builtin_update_mode_bypass_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirm = false
+                        BuiltInUpdateCache.install(ready.info, imageMode)
+                    },
+                ) { Text(stringResource(R.string.builtin_update_confirm_action)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showConfirm = false }) { Text(stringResource(R.string.cancel)) }
+            },
+        )
+    }
+
+    val awaitingReboot = state as? BuiltInUpdateState.AwaitingReboot
+    if (showReboot && awaitingReboot != null) {
+        AlertDialog(
+            onDismissRequest = { showReboot = false },
+            icon = { Icon(Icons.Default.RestartAlt, contentDescription = null) },
+            title = { Text(stringResource(R.string.builtin_update_reboot_title)) },
+            text = {
+                Text(
+                    stringResource(
+                        R.string.builtin_update_reboot_message,
+                        awaitingReboot.version,
+                        awaitingReboot.backupPath,
+                    ),
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showReboot = false
+                        BuiltInUpdateCache.reboot()
+                    },
+                ) { Text(stringResource(R.string.builtin_update_reboot_now)) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showReboot = false }) {
+                    Text(stringResource(R.string.builtin_update_reboot_later))
+                }
+            },
+        )
+    }
+
+    val info =
+        when (state) {
+            is BuiltInUpdateState.Available -> state.info
+            is BuiltInUpdateState.Downloading -> state.info
+            is BuiltInUpdateState.Validating -> state.info
+            is BuiltInUpdateState.ReadyToConfirm -> state.info
+            is BuiltInUpdateState.BackingUp -> state.info
+            is BuiltInUpdateState.InstallingBridge -> state.info
+            is BuiltInUpdateState.FlashingKernel -> state.info
+            is BuiltInUpdateState.Failed -> state.info
+            else -> null
+        }
+    val subtitle =
+        when (state) {
+            is BuiltInUpdateState.Available -> {
+                stringResource(
+                    R.string.builtin_update_available,
+                    normalizeVersion(state.info.metadata.kernelVersion),
+                    state.info.kernelAsset.name,
+                )
+            }
+
+            is BuiltInUpdateState.Downloading -> {
+                state.progress?.let {
+                    stringResource(R.string.builtin_update_downloading_progress, state.component, it)
+                } ?: stringResource(R.string.builtin_update_downloading, state.component)
+            }
+
+            is BuiltInUpdateState.Validating -> {
+                stringResource(R.string.builtin_update_validating)
+            }
+
+            is BuiltInUpdateState.ReadyToConfirm -> {
+                stringResource(R.string.builtin_update_ready)
+            }
+
+            is BuiltInUpdateState.BackingUp -> {
+                stringResource(R.string.builtin_update_backing_up)
+            }
+
+            is BuiltInUpdateState.InstallingBridge -> {
+                stringResource(R.string.builtin_update_installing_bridge)
+            }
+
+            is BuiltInUpdateState.FlashingKernel -> {
+                stringResource(R.string.builtin_update_flashing_kernel)
+            }
+
+            is BuiltInUpdateState.AwaitingReboot -> {
+                stringResource(
+                    R.string.builtin_update_awaiting_reboot,
+                    state.version,
+                )
+            }
+
+            is BuiltInUpdateState.Failed -> {
+                builtInErrorText(state.error)
+            }
+
+            BuiltInUpdateState.None -> {
+                return
+            }
+        }
+
+    Card(
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp).fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Column(Modifier.weight(1f)) {
+                Text(
+                    stringResource(R.string.builtin_update_title),
+                    style = MaterialTheme.typography.titleSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+                Text(subtitle, style = MaterialTheme.typography.bodySmall)
+            }
+            Spacer(Modifier.width(12.dp))
+            when (state) {
+                is BuiltInUpdateState.Available -> {
+                    Button(
+                        onClick = { BuiltInUpdateCache.download(context, state.info) },
+                    ) { Text(stringResource(R.string.update_download)) }
+                }
+
+                is BuiltInUpdateState.ReadyToConfirm -> {
+                    Button(onClick = { showConfirm = true }) {
+                        Text(stringResource(R.string.builtin_update_continue))
+                    }
+                }
+
+                is BuiltInUpdateState.AwaitingReboot -> {
+                    Button(onClick = { showReboot = true }) {
+                        Text(stringResource(R.string.kmod_update_reboot))
+                    }
+                }
+
+                is BuiltInUpdateState.Failed -> {
+                    if (info != null) {
+                        OutlinedButton(onClick = { BuiltInUpdateCache.download(context, info) }) {
+                            Text(stringResource(R.string.retry))
+                        }
+                    }
+                }
+
+                is BuiltInUpdateState.Downloading,
+                is BuiltInUpdateState.Validating,
+                is BuiltInUpdateState.BackingUp,
+                is BuiltInUpdateState.InstallingBridge,
+                is BuiltInUpdateState.FlashingKernel,
+                -> {
+                    CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 3.dp)
+                }
+
+                BuiltInUpdateState.None -> {
+                    Unit
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun builtInErrorText(error: BuiltInUpdateError): String =
+    stringResource(
+        when (error) {
+            BuiltInUpdateError.METADATA -> R.string.builtin_update_error_metadata
+            BuiltInUpdateError.UNSUPPORTED_KERNEL -> R.string.builtin_update_error_unsupported
+            BuiltInUpdateError.NO_COMPATIBLE_KERNEL -> R.string.builtin_update_error_no_kernel
+            BuiltInUpdateError.KERNEL_DOWNGRADE -> R.string.builtin_update_error_downgrade
+            BuiltInUpdateError.DOWNLOAD -> R.string.builtin_update_error_download
+            BuiltInUpdateError.CHECKSUM -> R.string.builtin_update_error_checksum
+            BuiltInUpdateError.INVALID_BRIDGE -> R.string.builtin_update_error_bridge
+            BuiltInUpdateError.INVALID_KERNEL -> R.string.builtin_update_error_kernel
+            BuiltInUpdateError.STORAGE -> R.string.builtin_update_error_storage
+            BuiltInUpdateError.ROOT_DENIED -> R.string.builtin_update_error_root
+            BuiltInUpdateError.BACKUP_FAILED -> R.string.builtin_update_error_backup
+            BuiltInUpdateError.UNSUPPORTED_ROOT_MANAGER -> R.string.builtin_update_error_manager
+            BuiltInUpdateError.BRIDGE_INSTALL_FAILED -> R.string.builtin_update_error_bridge_install
+            BuiltInUpdateError.KERNEL_INSTALL_FAILED -> R.string.builtin_update_error_kernel_install
+            BuiltInUpdateError.REBOOT_FAILED -> R.string.builtin_update_error_reboot
+        },
+    )
 
 @Composable
 private fun ChangelogDialog(
