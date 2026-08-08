@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.ConnectivityManager
 import android.net.Uri
 import android.os.PowerManager
+import android.os.SystemClock
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -46,6 +47,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -86,6 +88,10 @@ fun SettingsScreen(
     var updateCheckEnabled by remember { mutableStateOf(true) }
     var healthCheckEnabled by remember { mutableStateOf(true) }
     var selfTestVpnEnabled by remember { mutableStateOf(true) }
+    BuiltInUpdateDebugPrefs.initialize(context)
+    val builtInDebugUnlocked by BuiltInUpdateDebugPrefs.unlocked.collectAsState()
+    val builtInDebugEnabled by BuiltInUpdateDebugPrefs.enabled.collectAsState()
+    val debugTapUnlocker = remember { RapidTapUnlocker() }
     // Defaults to true (hidden) until the real check completes, so the row
     // doesn't flash in for a frame on every screen open.
     var batteryOptimizationIgnored by remember { mutableStateOf(true) }
@@ -251,8 +257,30 @@ fun SettingsScreen(
                                 setUpdateCheckEnabled(context, newValue)
                             }
                         },
+                        onLabelClick = {
+                            if (!builtInDebugUnlocked && debugTapUnlocker.recordTap(SystemClock.elapsedRealtime())) {
+                                BuiltInUpdateDebugPrefs.unlock(context)
+                                Toast
+                                    .makeText(
+                                        context,
+                                        context.getString(R.string.settings_builtin_update_debug_unlocked),
+                                        Toast.LENGTH_SHORT,
+                                    ).show()
+                            }
+                        },
                     )
                     SettingsRowDivider()
+                    if (builtInDebugUnlocked) {
+                        SettingsSwitchRow(
+                            title = stringResource(R.string.settings_builtin_update_debug_title),
+                            subtitle = stringResource(R.string.settings_builtin_update_debug_desc),
+                            checked = builtInDebugEnabled,
+                            icon = Icons.Default.BugReport,
+                            iconTint = MaterialTheme.colorScheme.error,
+                            onCheckedChange = { BuiltInUpdateDebugPrefs.setEnabled(context, it) },
+                        )
+                        SettingsRowDivider()
+                    }
                     SettingsSwitchRow(
                         title = stringResource(R.string.settings_toggle_health_check_title),
                         subtitle = stringResource(R.string.settings_toggle_health_check_desc),

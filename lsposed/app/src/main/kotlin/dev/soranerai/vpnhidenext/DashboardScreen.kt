@@ -72,11 +72,13 @@ fun DashboardScreen(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    BuiltInUpdateDebugPrefs.initialize(context)
 
     val state by DashboardCache.state.collectAsState()
     val updateInfo by UpdateCheckCache.info.collectAsState()
     val kmodUpdateState by KmodUpdateCache.state.collectAsState()
     val builtInUpdateState by BuiltInUpdateCache.state.collectAsState()
+    val builtInUpdateDebugEnabled by BuiltInUpdateDebugPrefs.enabled.collectAsState()
     val kmodUpdateTarget =
         remember(state) {
             val dashboard = state ?: return@remember null
@@ -89,13 +91,13 @@ fun DashboardScreen(
             )
         }
     val builtInUpdateTarget =
-        remember(state) {
+        remember(state, builtInUpdateDebugEnabled) {
             val dashboard = state ?: return@remember null
             val installed = dashboard.kmod as? ModuleState.Installed ?: return@remember null
             if (installed.isKmodType) return@remember null
             val version = installed.version?.takeIf { it.isNotBlank() } ?: return@remember null
             val unameR = dashboard.kmodLoadStatus?.unameR?.takeIf { it.isNotBlank() } ?: return@remember null
-            BuiltInUpdateTarget(version, unameR)
+            BuiltInUpdateTarget(version, unameR, builtInUpdateDebugEnabled)
         }
     var showChangelog by remember { mutableStateOf(false) }
     var changelogData by remember { mutableStateOf<ChangelogData?>(null) }
@@ -933,6 +935,13 @@ private fun BuiltInUpdateCard(
                             ready.info.kernelAsset.name,
                         ),
                     )
+                    if (ready.info.debugMode) {
+                        Text(
+                            stringResource(R.string.builtin_update_debug_warning),
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
                     Row(
                         modifier =
                             Modifier.fillMaxWidth().clickable { imageMode = KernelImageMode.NORMAL },
@@ -1022,6 +1031,7 @@ private fun BuiltInUpdateCard(
             is BuiltInUpdateState.Downloading -> state.info
             is BuiltInUpdateState.Validating -> state.info
             is BuiltInUpdateState.ReadyToConfirm -> state.info
+            is BuiltInUpdateState.PreparingInstall -> state.info
             is BuiltInUpdateState.BackingUp -> state.info
             is BuiltInUpdateState.InstallingBridge -> state.info
             is BuiltInUpdateState.FlashingKernel -> state.info
@@ -1050,6 +1060,10 @@ private fun BuiltInUpdateCard(
 
             is BuiltInUpdateState.ReadyToConfirm -> {
                 stringResource(R.string.builtin_update_ready)
+            }
+
+            is BuiltInUpdateState.PreparingInstall -> {
+                stringResource(R.string.builtin_update_preparing_install)
             }
 
             is BuiltInUpdateState.BackingUp -> {
@@ -1128,6 +1142,7 @@ private fun BuiltInUpdateCard(
 
                 is BuiltInUpdateState.Downloading,
                 is BuiltInUpdateState.Validating,
+                is BuiltInUpdateState.PreparingInstall,
                 is BuiltInUpdateState.BackingUp,
                 is BuiltInUpdateState.InstallingBridge,
                 is BuiltInUpdateState.FlashingKernel,
