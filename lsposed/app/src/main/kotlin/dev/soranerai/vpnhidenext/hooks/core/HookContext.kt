@@ -38,9 +38,6 @@ object HookContext {
     @Volatile
     var appJavaHookMasks: Map<Int, UInt>? = null
 
-    @Volatile
-    var statsBucketDurationMs: Long = 60_000L
-
     // Cache: "$userId:$packageName" -> is package VPN?
     val vpnPackageCache = ConcurrentHashMap<String, Boolean>()
 
@@ -247,48 +244,28 @@ object HookContext {
     }
 
     class RollingCounter {
-        private val bucketCounts = IntArray(NUM_BUCKETS)
-        private val bucketTimes = LongArray(NUM_BUCKETS)
+        private var pending = 0
 
-        // Reads HookContext.statsBucketDurationMs live on every call (instead of
-        // capturing it once at construction) and stores raw timestamps rather than
-        // pre-divided bucket numbers, so a retention-period change is reflected
-        // immediately without invalidating/clearing already-recorded data.
         @Synchronized
         fun increment() {
-            val durationMs = statsBucketDurationMs
-            val nowMs = System.currentTimeMillis()
-            val idx = ((nowMs / durationMs) % NUM_BUCKETS).toInt()
-            if (bucketTimes[idx] / durationMs != nowMs / durationMs) {
-                bucketCounts[idx] = 1
-                bucketTimes[idx] = nowMs
-            } else {
-                bucketCounts[idx]++
-            }
+            if (pending < Int.MAX_VALUE) pending++
         }
 
         @Synchronized
-        fun getSum(): Int {
-            val durationMs = statsBucketDurationMs
-            val nowMs = System.currentTimeMillis()
-            val windowMs = NUM_BUCKETS * durationMs
-            var sum = 0
-            for (i in 0 until NUM_BUCKETS) {
-                if (nowMs - bucketTimes[i] < windowMs) {
-                    sum += bucketCounts[i]
-                }
-            }
-            return sum
+        fun drain(): Int {
+            val value = pending
+            pending = 0
+            return value
+        }
+
+        @Synchronized
+        fun restore(value: Int) {
+            pending = (pending.toLong() + value).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
         }
 
         @Synchronized
         fun clear() {
-            bucketCounts.fill(0)
-            bucketTimes.fill(0)
-        }
-
-        companion object {
-            const val NUM_BUCKETS = 30
+            pending = 0
         }
     }
 }

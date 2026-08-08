@@ -407,7 +407,12 @@
     <string name="import_success">Settings imported and applied successfully</string>
     <string name="import_failed">Import failed: %1$s</string>
     <string name="dashboard_intercept_statistics">Intercept Statistics</string>
-    <string name="dashboard_stats_lifetime_hint_fmt">Showing telemetry since the last boot</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">Showing interceptions from the last 6 hours</string>
+    <string name="statistics_tab_hooks">Hooks</string>
+    <string name="statistics_tab_ports">Ports</string>
+    <string name="statistics_ports_title">Port access statistics</string>
+    <string name="statistics_ports_empty">No blocked port access has been recorded in the last 6 hours.</string>
+    <string name="statistics_unique_ports_fmt">%1$d unique</string>
 
     <string name="btn_clear">Clear</string>
 

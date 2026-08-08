@@ -354,7 +354,12 @@
     <string name="import_success">Настройки успешно импортированы и применены</string>
     <string name="import_failed">Ошибка импорта: %1$s</string>
     <string name="dashboard_intercept_statistics">Статистика перехватов</string>
-    <string name="dashboard_stats_lifetime_hint_fmt">Показывается статистика с момента последнего запуска</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">Показаны перехваты за последние 6 часов</string>
+    <string name="statistics_tab_hooks">Хуки</string>
+    <string name="statistics_tab_ports">Порты</string>
+    <string name="statistics_ports_title">Статистика обращений к портам</string>
+    <string name="statistics_ports_empty">За последние 6 часов обращений к заблокированным портам не было.</string>
+    <string name="statistics_unique_ports_fmt">Уникальных: %1$d</string>
 
     <!-- Statistics retention period -->
     <string name="stats_period_30m">30 минут</string>
