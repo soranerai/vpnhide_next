@@ -22,7 +22,7 @@ echo "Generating update-json for v${VERSION} (versionCode: $VERSION_CODE)"
 mkdir -p update-json
 ARTIFACT_DIR="$(mktemp -d)"
 trap 'rm -rf "$ARTIFACT_DIR"' EXIT
-KMOD_KMIS=("android12-5.10" "android13-5.10" "android13-5.15" "android14-5.15" "android14-6.1" "android15-6.6" "android16-6.12" "android17-6.18")
+KMOD_KMIS=("android12-5.10" "android13-5.10" "android13-5.15" "android14-5.15" "android14-6.1" "android15-6.6" "android16-6.12")
 for kmi in "${KMOD_KMIS[@]}"; do
     ARTIFACT="vpnhide-kmod-${kmi}.zip"
     ZIP_URL="${REPO}/releases/download/v${VERSION}/${ARTIFACT}"
@@ -60,3 +60,4 @@ cat > "update-json/update-bridge.json" <<EOJSON
 }
 EOJSON
 echo "  update-json/update-bridge.json"
+

@@ -25,7 +25,7 @@ The kernel module source code is hosted in a private repository:
 ## Building
 The CI pipeline (`.github/workflows/ci.yml`) automatically:
 1. Clones the private repo (with fine-grained PAT)
-2. Builds for all 8 GKI variants in DDK containers
+2. Builds for all 7 GKI variants in DDK containers
 3. Publishes `vpnhide-kmod-{kmi}.zip` as GitHub Release assets
 4. Publishes to Magisk/KernelSU update JSON
 
