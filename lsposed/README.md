@@ -35,7 +35,8 @@ The APK includes a Compose UI for managing target apps across all vpnhide module
 
 - Lists all installed apps with icons, names, and package names
 - Text search filter
-- System apps toggle (selected system apps always visible)
+- System apps toggle in both list modes; allowlist shows them selected by
+  default and requires a one-time safety confirmation before targeting them
 - Save atomically updates
   `/data/user_de/0/dev.soranerai.vpnhidenext/files/vpnhide_config.json`.
 - The root daemon watches this file and applies the complete policy without

@@ -12,14 +12,14 @@
     <string name="policy_mode_blacklist">Скрывать</string>
     <string name="policy_mode_allowlist">Показывать</string>
     <string name="policy_mode_blacklist_desc">Выбранные приложения не видят VPN-интерфейсы, порты и включённые хуки.</string>
-    <string name="policy_mode_allowlist_desc">Выбранные приложения остаются видимыми. Подходящие сторонние приложения скрываются, системные защищены.</string>
+    <string name="policy_mode_allowlist_desc">Выбранные приложения видят VPN. Системные приложения выбраны по умолчанию, но их можно изменить явно.</string>
     <string name="policy_mode_change_title">Сменить режим и сбросить всю защиту?</string>
     <string name="policy_mode_change_confirm">Сменить режим</string>
     <string name="policy_mode_allowlist_warning">Выбранные приложения станут исключениями. Остальные подходящие сторонние приложения будут скрыты. При сохранении будут очищены все цели приложений, локальные и глобальные hook overrides, а также локальные и глобальные правила портов.</string>
     <string name="policy_mode_blacklist_warning">Выбранные приложения снова станут целями сокрытия. При сохранении будут очищены все цели приложений, локальные и глобальные hook overrides, а также локальные и глобальные правила портов.</string>
     <string name="allowlist_add_all_shown">Добавить показанные в исключения</string>
     <string name="policy_mode_blacklist_summary">Скрывать VPN у выбранных · целей: %d</string>
-    <string name="policy_mode_allowlist_summary">Показывать VPN только выбранным · исключений: %d</string>
+    <string name="policy_mode_allowlist_summary">Показывать VPN только выбранным · ручных исключений: %d</string>
     <string name="policy_help_title">Как работает выбор защиты</string>
     <string name="policy_help_scope_title">1. Режимы защиты</string>
     <string name="policy_help_scope_intro">Выберите, какие приложения должны видеть VPN, а какие — не видеть его.</string>
@@ -32,7 +32,7 @@
     Включённые уровни защиты применяются к выбранным приложениям и скрывают от них VPN. Все остальные подходящие приложения работают без этой защиты.</string>
     <string name="policy_help_allowlist">Выбранные приложения ВИДЯТ VPN.
 
-    Включённые для них уровни становятся разрешениями. Все остальные подходящие сторонние приложения НЕ ВИДЯТ VPN.</string>
+    Включённые для них уровни становятся разрешениями. Все остальные подходящие приложения НЕ ВИДЯТ VPN. Системные приложения безопасно выбраны по умолчанию; их изменение может нарушить работу Android.</string>
     <string name="policy_help_layers">N — защита на уровне ядра, F — защита Android/LSPosed, P — скрытие портов.
 
     В режиме «Скрывать» включённый чип скрывает соответствующую часть VPN у выбранного приложения.
@@ -44,8 +44,12 @@
 
     В режиме «Показывать» выбранные приложения видят указанные порты, а остальные подходящие приложения — нет.
 
-    Системные и привилегированные приложения не затрагиваются.</string>
+    Системные приложения разрешены по умолчанию, но их можно изменить явно. Общие системные UID ядра остаются защищёнными.</string>
     <string name="ok">OK</string>
+    <string name="continue_action">Продолжить</string>
+    <string name="system_app_warning_title">Защита системного приложения</string>
+    <string name="system_app_warning_message">Сокрытие VPN от системных приложений может нарушить работу Android или отдельных системных функций. Продолжайте, только если понимаете возможные последствия.</string>
+    <string name="system_app_core_uid_locked">Общий системный UID нельзя безопасно использовать как цель</string>
 
     <!-- Port hiding -->
     <string name="ports_hint_safe">Безопасно для банков, госуслуг, маркетплейсов, не-браузерных приложений. Chromium-браузеры используют localhost для dev/PWA — их не стоит делать observer\'ами.</string>
@@ -88,7 +92,7 @@
     <string name="selected_count">%d выбрано</string>
     <string name="btn_save">Сохранить</string>
     <string name="action_refresh_apps">Обновить список приложений</string>
-    <string name="search_placeholder">Поиск приложений&#8230;</string>
+    <string name="search_placeholder">Название, пакет или UID&#8230;</string>
     <string name="filter_system">Системные</string>
     <string name="filter_show_system">Показать системные приложения</string>
     <string name="filter_russian_only">Только российские</string>
@@ -101,6 +105,9 @@
     <string name="sort_name_asc">По названию (А-Я)</string>
     <string name="sort_name_desc">По названию (Я-А)</string>
     <string name="sort_selected_first">Сначала выбранные</string>
+    <string name="sort_unselected_first">Сначала невыбранные</string>
+    <string name="app_badge_system">Системное</string>
+    <string name="app_badge_auto_selected">Выбрано автоматически</string>
 
     <!-- Root status -->
     <string name="root_error_title">Требуется root-доступ</string>

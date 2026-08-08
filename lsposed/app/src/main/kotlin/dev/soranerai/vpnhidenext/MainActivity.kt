@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
@@ -26,16 +27,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.focus.FocusRequester
-import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.nestedscroll.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
@@ -156,7 +157,6 @@ private fun MainScreen(
     val currentTab = Tab.values()[pagerState.currentPage]
     var selfNeedsRestart by remember { mutableStateOf<Boolean?>(startup.addedToTargets) }
     var searchQuery by remember { mutableStateOf("") }
-    var searchActive by remember { mutableStateOf(false) }
     var showSystem by remember { mutableStateOf(false) }
     var showRussianOnly by remember { mutableStateOf(false) }
     var showOnlySelected by remember { mutableStateOf(false) }
@@ -200,8 +200,6 @@ private fun MainScreen(
         }
     }
     val refreshRestart = selfNeedsRestart ?: false
-    val searchFocusRequester = remember { FocusRequester() }
-
     // Kick off both Protection caches lazily — only when the user
     // navigates to Protection. Moved out of here to reduce startup jank.
 
@@ -267,116 +265,115 @@ private fun MainScreen(
 
     LaunchedEffect(currentTab) {
         if (currentTab != Tab.Protection) {
-            searchActive = false
             searchQuery = ""
-        }
-    }
-
-    LaunchedEffect(searchActive) {
-        if (searchActive) {
-            searchFocusRequester.requestFocus()
         }
     }
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
             topBar = {
-                if (searchActive && currentTab == Tab.Protection) {
-                    SearchBar(
-                        inputField = {
-                            SearchBarDefaults.InputField(
-                                query = searchQuery,
-                                onQueryChange = { searchQuery = it },
-                                onSearch = {},
-                                expanded = false,
-                                onExpandedChange = {},
-                                placeholder = { Text(stringResource(R.string.search_placeholder)) },
-                                leadingIcon = {
-                                    IconButton(onClick = {
-                                        searchActive = false
-                                        searchQuery = ""
-                                    }) {
-                                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
-                                    }
-                                },
-                                trailingIcon = {
-                                    if (searchQuery.isNotEmpty()) {
-                                        IconButton(onClick = { searchQuery = "" }) {
-                                            Icon(Icons.Default.Clear, contentDescription = null)
-                                        }
-                                    }
-                                },
-                            )
-                        },
-                        expanded = false,
-                        onExpandedChange = {},
+                if (currentTab == Tab.Protection) {
+                    Box(
                         modifier =
                             Modifier
                                 .fillMaxWidth()
-                                .focusRequester(searchFocusRequester),
-                    ) {}
-                } else {
-                    TopAppBar(
-                        title = { Text(stringResource(R.string.app_name)) },
-                        colors =
-                            TopAppBarDefaults.topAppBarColors(
-                                containerColor = MaterialTheme.colorScheme.background,
-                                titleContentColor = MaterialTheme.colorScheme.onBackground,
-                            ),
-                        actions = {
-                            RefreshActionIcon(
-                                currentTab = currentTab,
-                                refreshRestart = refreshRestart,
-                                scope = scope,
-                                context = context,
-                            )
-                            IconButton(onClick = { showSettings = true }) {
+                                .background(MaterialTheme.colorScheme.background)
+                                .statusBarsPadding()
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                    ) {
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(32.dp),
+                            color = MaterialTheme.colorScheme.surfaceContainerHigh,
+                            tonalElevation = 2.dp,
+                        ) {
+                            Row(
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(min = 64.dp)
+                                        .padding(start = 20.dp, end = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Icon(
-                                    Icons.Default.Settings,
-                                    contentDescription = stringResource(R.string.settings_title),
+                                    Icons.Default.Search,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                            }
-                            if (currentTab == Tab.Protection) {
-                                IconButton(onClick = { searchActive = true }) {
+                                Spacer(Modifier.width(12.dp))
+                                BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = { searchQuery = it },
+                                    singleLine = true,
+                                    textStyle =
+                                        LocalTextStyle.current.copy(
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                        ),
+                                    cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.weight(1f),
+                                    decorationBox = { innerTextField ->
+                                        Box(contentAlignment = Alignment.CenterStart) {
+                                            if (searchQuery.isEmpty()) {
+                                                Text(
+                                                    stringResource(R.string.search_placeholder),
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 1,
+                                                    softWrap = false,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                )
+                                            }
+                                            innerTextField()
+                                        }
+                                    },
+                                )
+                                if (searchQuery.isNotEmpty()) {
+                                    IconButton(onClick = { searchQuery = "" }) {
+                                        Icon(Icons.Default.Clear, contentDescription = null)
+                                    }
+                                }
+                                RefreshActionIcon(
+                                    currentTab = currentTab,
+                                    refreshRestart = refreshRestart,
+                                    scope = scope,
+                                    context = context,
+                                )
+                                IconButton(onClick = { showSettings = true }) {
                                     Icon(
-                                        Icons.Default.Search,
-                                        contentDescription = null,
+                                        Icons.Default.Settings,
+                                        contentDescription = stringResource(R.string.settings_title),
                                     )
                                 }
                                 Box {
                                     val anyFilterActive =
-                                        (policyListMode != PolicyListMode.ALLOWLIST && (showSystem || showRussianOnly)) ||
+                                        showSystem ||
+                                            (policyListMode != PolicyListMode.ALLOWLIST && showRussianOnly) ||
                                             showOnlySelected || showOnlyWorkProfile ||
                                             sortOrder != AppSortOrder.NAME_ASC
                                     if (anyFilterActive) {
                                         FilledIconButton(onClick = { showFilterMenu = true }) {
-                                            Icon(
-                                                Icons.Default.FilterList,
-                                                contentDescription = null,
-                                            )
+                                            Icon(Icons.Default.FilterList, contentDescription = null)
                                         }
                                     } else {
                                         IconButton(onClick = { showFilterMenu = true }) {
-                                            Icon(
-                                                Icons.Default.FilterList,
-                                                contentDescription = null,
-                                            )
+                                            Icon(Icons.Default.FilterList, contentDescription = null)
                                         }
                                     }
                                     DropdownMenu(
                                         expanded = showFilterMenu,
                                         onDismissRequest = { showFilterMenu = false },
                                     ) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.filter_show_system)) },
+                                            onClick = { showSystem = !showSystem },
+                                            leadingIcon = { Checkbox(checked = showSystem, onCheckedChange = null) },
+                                        )
                                         if (policyListMode != PolicyListMode.ALLOWLIST) {
-                                            DropdownMenuItem(
-                                                text = { Text(stringResource(R.string.filter_show_system)) },
-                                                onClick = { showSystem = !showSystem },
-                                                leadingIcon = { Checkbox(checked = showSystem, onCheckedChange = null) },
-                                            )
                                             DropdownMenuItem(
                                                 text = { Text(stringResource(R.string.filter_russian_only)) },
                                                 onClick = { showRussianOnly = !showRussianOnly },
-                                                leadingIcon = { Checkbox(checked = showRussianOnly, onCheckedChange = null) },
+                                                leadingIcon = {
+                                                    Checkbox(checked = showRussianOnly, onCheckedChange = null)
+                                                },
                                             )
                                         }
                                         if (policyListMode != PolicyListMode.ALLOWLIST && showRussianOnly) {
@@ -473,8 +470,44 @@ private fun MainScreen(
                                                 )
                                             },
                                         )
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.sort_unselected_first)) },
+                                            onClick = {
+                                                sortOrder = AppSortOrder.UNSELECTED_FIRST
+                                                showFilterMenu = false
+                                            },
+                                            leadingIcon = {
+                                                RadioButton(
+                                                    selected = sortOrder == AppSortOrder.UNSELECTED_FIRST,
+                                                    onClick = null,
+                                                )
+                                            },
+                                        )
                                     }
                                 }
+                            }
+                        }
+                    }
+                } else {
+                    TopAppBar(
+                        title = { Text(stringResource(R.string.app_name)) },
+                        colors =
+                            TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.background,
+                                titleContentColor = MaterialTheme.colorScheme.onBackground,
+                            ),
+                        actions = {
+                            RefreshActionIcon(
+                                currentTab = currentTab,
+                                refreshRestart = refreshRestart,
+                                scope = scope,
+                                context = context,
+                            )
+                            IconButton(onClick = { showSettings = true }) {
+                                Icon(
+                                    Icons.Default.Settings,
+                                    contentDescription = stringResource(R.string.settings_title),
+                                )
                             }
                         },
                     )
@@ -531,7 +564,6 @@ private fun MainScreen(
                                             onListModeChange = {
                                                 policyListMode = it
                                                 if (it == PolicyListMode.ALLOWLIST) {
-                                                    showSystem = false
                                                     showRussianOnly = false
                                                 }
                                             },

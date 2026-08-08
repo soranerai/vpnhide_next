@@ -12,6 +12,7 @@ internal data class AppEntry(
     // Protection (VPN) flags
     val kmod: Boolean = false,
     val lsposed: Boolean = false,
+    val systemPolicyExplicit: Boolean = false,
     // Port Hiding
     val portHiding: Boolean = false,
     val portRules: List<PortRule> = emptyList(),
@@ -22,6 +23,8 @@ internal data class AppEntry(
     val anyProtection get() = kmod || lsposed
     val hasHookOverride get() = kernelHookMask != null || javaHookMask != null
 }
+
+internal fun AppEntry.isCoreSystemUid(): Boolean = isSystem && uid % 100000 < 10000
 
 internal enum class PortProtocol { TCP, UDP, BOTH }
 
@@ -39,7 +42,7 @@ internal data class PortRule(
 
 internal enum class Layer { KMOD, LSPOSED }
 
-internal enum class AppSortOrder { NAME_ASC, NAME_DESC, SELECTED_FIRST }
+internal enum class AppSortOrder { NAME_ASC, NAME_DESC, SELECTED_FIRST, UNSELECTED_FIRST }
 
 internal data class InstalledModules(
     val kmod: Boolean,

@@ -12,14 +12,14 @@
     <string name="policy_mode_blacklist">Hide</string>
     <string name="policy_mode_allowlist">Show</string>
     <string name="policy_mode_blacklist_desc">Selected apps are hidden from VPN interfaces, ports and enabled hooks.</string>
-    <string name="policy_mode_allowlist_desc">Selected apps remain visible. Eligible third-party apps are hidden; system apps are protected.</string>
+    <string name="policy_mode_allowlist_desc">Selected apps remain visible. System apps are selected by default but can be changed explicitly.</string>
     <string name="policy_mode_change_title">Change mode and reset all protection?</string>
     <string name="policy_mode_change_confirm">Change mode</string>
     <string name="policy_mode_allowlist_warning">Selected apps become exceptions. Other eligible third-party apps will be hidden. This will clear all app targets, local and global hook overrides, and local and global port rules when you save.</string>
     <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. This will clear all app targets, local and global hook overrides, and local and global port rules when you save.</string>
     <string name="allowlist_add_all_shown">Add shown to exceptions</string>
     <string name="policy_mode_blacklist_summary">Hide VPN from selected apps · %d target(s)</string>
-    <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d exception(s)</string>
+    <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d manual exception(s)</string>
     <string name="policy_help_title">How protection selection works</string>
     <string name="policy_help_scope_title">1. Protection modes</string>
     <string name="policy_help_scope_intro">Choose which apps should see the VPN and which apps should not.</string>
@@ -32,7 +32,7 @@
     Enabled protection layers are applied to the selected apps and hide the VPN from them. Other eligible apps work without this protection.</string>
     <string name="policy_help_allowlist">Selected apps CAN SEE THE VPN.
 
-    Enabled layers become permissions for those apps. Other eligible third-party apps CANNOT SEE THE VPN.</string>
+    Enabled layers become permissions for those apps. Other eligible apps CANNOT SEE THE VPN. System apps are selected safely by default; changing them may disrupt Android.</string>
     <string name="policy_help_layers">N = kernel protection, F = Android/LSPosed protection, P = port hiding.
 
     In Hide mode, an enabled chip hides that part of the VPN from the selected app.
@@ -44,8 +44,12 @@
 
     In Show mode, selected apps can see the listed ports, while other eligible apps cannot.
 
-    System and privileged apps are not affected.</string>
+    System apps are allowed by default but can be changed explicitly. Shared core system UIDs remain protected.</string>
     <string name="ok">OK</string>
+    <string name="continue_action">Continue</string>
+    <string name="system_app_warning_title">System app protection</string>
+    <string name="system_app_warning_message">Hiding VPN information from system apps may disrupt Android or individual system features. Continue only if you understand the consequences.</string>
+    <string name="system_app_core_uid_locked">Shared core system UID cannot be targeted safely</string>
 
     <!-- Port hiding -->
     <string name="ports_chip" translatable="false">P</string>
@@ -90,7 +94,7 @@
     <string name="selected_count">%d selected</string>
     <string name="btn_save">Save</string>
     <string name="action_refresh_apps">Refresh app list</string>
-    <string name="search_placeholder">Search apps&#8230;</string>
+    <string name="search_placeholder">Name, package, or UID&#8230;</string>
     <string name="filter_system">System</string>
     <string name="filter_show_system">Show system apps</string>
     <string name="filter_russian_only">Russian apps only</string>
@@ -103,6 +107,9 @@
     <string name="sort_name_asc">Name (A-Z)</string>
     <string name="sort_name_desc">Name (Z-A)</string>
     <string name="sort_selected_first">Selected first</string>
+    <string name="sort_unselected_first">Unselected first</string>
+    <string name="app_badge_system">System</string>
+    <string name="app_badge_auto_selected">Auto-selected</string>
 
 
     <!-- Root status -->

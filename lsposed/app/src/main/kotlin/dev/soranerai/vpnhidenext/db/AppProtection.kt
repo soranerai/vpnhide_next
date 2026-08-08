@@ -7,6 +7,9 @@ internal data class AppProtection(
     val kmod: Boolean = false,
     val lsposed: Boolean = false,
     val portHiding: Boolean = false,
+    // System packages are protected by default. This marker distinguishes an
+    // intentional per-layer override from a legacy/default policy entry.
+    val systemPolicyExplicit: Boolean = false,
     // null = no override, inherit the global hook mask
     val kernelHookMask: Long? = null,
     val javaHookMask: Long? = null,

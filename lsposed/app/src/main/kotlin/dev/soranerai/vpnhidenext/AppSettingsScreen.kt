@@ -38,10 +38,10 @@ import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.db.DbPortRule
 import dev.soranerai.vpnhidenext.db.PolicyListMode
 import dev.soranerai.vpnhidenext.ui.theme.TelBlue
+import dev.soranerai.vpnhidenext.ui.theme.TelCyan
 import dev.soranerai.vpnhidenext.ui.theme.TelGreen
 import dev.soranerai.vpnhidenext.ui.theme.TelOrange
 import dev.soranerai.vpnhidenext.ui.theme.TelPink
-import dev.soranerai.vpnhidenext.ui.theme.TelPurple
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -228,7 +228,7 @@ internal fun AppSettingsScreen(
                             }
 
                             1 -> {
-                                HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelPurple)
+                                HookPage(app = app, hooks = ALL_JAVA_HOOKS, isKernel = false, accent = TelCyan)
                             }
 
                             else -> {
@@ -267,7 +267,7 @@ internal fun AppSettingsScreen(
                             } else {
                                 listOf(
                                     PillTab(Icons.Filled.Memory, "N", accent = TelBlue),
-                                    PillTab(Icons.Filled.Code, "F", accent = TelPurple),
+                                    PillTab(Icons.Filled.Code, "F", accent = TelCyan),
                                     PillTab(Icons.Filled.Dns, "P", accent = TelPink),
                                 )
                             },

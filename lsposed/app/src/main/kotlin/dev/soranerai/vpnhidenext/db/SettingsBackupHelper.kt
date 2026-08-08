@@ -44,6 +44,7 @@ internal object SettingsBackupHelper {
                 appObj.put("kmod", app.kmod)
                 appObj.put("lsposed", app.lsposed)
                 appObj.put("portHiding", app.portHiding)
+                if (app.systemPolicyExplicit) appObj.put("systemPolicyExplicit", true)
 
                 // Nested granular port rules
                 val rules = portRuleDao.getRulesForAppSync(app.packageName, app.userId)
@@ -146,6 +147,7 @@ internal object SettingsBackupHelper {
                             val kmod = appObj.optBoolean("kmod", false)
                             val lsposed = appObj.optBoolean("lsposed", false)
                             val portHiding = appObj.optBoolean("portHiding", false)
+                            val systemPolicyExplicit = appObj.optBoolean("systemPolicyExplicit", false)
 
                             // Set uid = 0 so dynamic healing in TargetsCache.reload resolves system package UIDs properly
                             appDao.insertAppProtection(
@@ -156,6 +158,7 @@ internal object SettingsBackupHelper {
                                     kmod = kmod,
                                     lsposed = lsposed,
                                     portHiding = portHiding,
+                                    systemPolicyExplicit = systemPolicyExplicit,
                                 ),
                             )
 

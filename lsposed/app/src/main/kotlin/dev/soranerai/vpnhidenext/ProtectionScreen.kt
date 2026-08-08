@@ -65,6 +65,37 @@ internal fun ProtectionScreen(
     var pendingMode by remember { mutableStateOf<PolicyListMode?>(null) }
     var modeResetPending by remember { mutableStateOf(false) }
     var showModeHelp by remember { mutableStateOf(false) }
+    var pendingSystemApps by remember { mutableStateOf<List<AppEntry>?>(null) }
+    var pendingSystemWarningMode by remember { mutableStateOf<PolicyListMode?>(null) }
+    val warningPrefs =
+        remember { context.getSharedPreferences("vpnhide_prefs", android.content.Context.MODE_PRIVATE) }
+
+    fun systemWarningKey(mode: PolicyListMode): String =
+        when (mode) {
+            PolicyListMode.BLACKLIST -> "system_target_warning_blacklist_ack_v1"
+            PolicyListMode.ALLOWLIST -> "system_target_warning_allowlist_ack_v1"
+        }
+
+    fun normalizeSystemOverrides(candidate: List<AppEntry>): List<AppEntry> {
+        val kmodAvailable = targets?.kmodModuleInstalled == true
+        return candidate.map { it.withNormalizedSystemPolicy(listMode, kmodAvailable) }
+    }
+
+    fun stageApps(candidate: List<AppEntry>) {
+        val normalized = normalizeSystemOverrides(candidate)
+        val previous = apps.associateBy { it.packageName to it.userId }
+        val risky =
+            normalized.any { next ->
+                val old = previous[next.packageName to next.userId] ?: return@any false
+                isRiskySystemTransition(old, next, listMode)
+            }
+        if (risky && !warningPrefs.getBoolean(systemWarningKey(listMode), false)) {
+            pendingSystemApps = normalized
+            pendingSystemWarningMode = listMode
+        } else {
+            apps = normalized
+        }
+    }
 
     LaunchedEffect(snackMessage) {
         snackMessage?.let {
@@ -101,6 +132,10 @@ internal fun ProtectionScreen(
                     .filter { it.packageName != selfPkg }
                     .map { app ->
                         val key = app.packageName to app.userId
+                        val coreSystemUid = app.isSystem && app.uid % 100000 < 10000
+                        val explicit = key in t.systemPolicyExplicitApps && !coreSystemUid
+                        val implicitSystemException =
+                            listMode == PolicyListMode.ALLOWLIST && app.isSystem && !explicit
                         AppEntry(
                             packageName = app.packageName,
                             label = app.label,
@@ -108,9 +143,31 @@ internal fun ProtectionScreen(
                             isSystem = app.isSystem,
                             userId = app.userId,
                             uid = app.uid,
-                            kmod = key in t.kmodTargets,
-                            lsposed = key in t.lsposedTargets,
-                            portHiding = key in t.portsObservers,
+                            kmod =
+                                if (implicitSystemException) {
+                                    t.kmodModuleInstalled
+                                } else if (app.isSystem && !explicit) {
+                                    false
+                                } else {
+                                    key in t.kmodTargets
+                                },
+                            lsposed =
+                                if (implicitSystemException) {
+                                    true
+                                } else if (app.isSystem && !explicit) {
+                                    false
+                                } else {
+                                    key in t.lsposedTargets
+                                },
+                            systemPolicyExplicit = explicit,
+                            portHiding =
+                                if (implicitSystemException) {
+                                    true
+                                } else if (app.isSystem && !explicit) {
+                                    false
+                                } else {
+                                    key in t.portsObservers
+                                },
                             portRules = t.portRules[key] ?: emptyList(),
                             kernelHookMask = t.kernelHookMasks[key],
                             javaHookMask = t.javaHookMasks[key],
@@ -140,7 +197,7 @@ internal fun ProtectionScreen(
         val kmodInstalled = targets?.kmodModuleInstalled == true
         val visibleKeys = sortedIds.toSet()
         var addedCount = 0
-        apps =
+        val candidate =
             apps.map { entry ->
                 val key = "${entry.packageName}:${entry.userId}"
                 if (key !in visibleKeys) return@map entry
@@ -153,6 +210,7 @@ internal fun ProtectionScreen(
                     portHiding = true,
                 )
             }
+        stageApps(candidate)
         snackMessage =
             if (addedCount > 0) {
                 context.getString(R.string.bulk_protect_added, addedCount)
@@ -174,6 +232,8 @@ internal fun ProtectionScreen(
         onListModeChange(originalListMode)
         modeResetPending = false
         pendingMode = null
+        pendingSystemApps = null
+        pendingSystemWarningMode = null
         snackMessage = null
     }
 
@@ -188,9 +248,12 @@ internal fun ProtectionScreen(
                 showOnlySelected = showOnlySelected,
                 showOnlyWorkProfile = showOnlyWorkProfile,
                 sortOrder = sortOrder,
-                onUpdate = { newList -> apps = newList },
+                onUpdate = ::stageApps,
                 sortedIds = sortedIds,
                 onOpenAppSettings = onOpenAppSettings,
+                onLockedSystemClick = {
+                    snackMessage = context.getString(R.string.system_app_core_uid_locked)
+                },
                 listState = listState,
                 topContentPadding = 114.dp,
                 modifier = Modifier.weight(1f),
@@ -238,7 +301,12 @@ internal fun ProtectionScreen(
                 }
             }
 
-            val selectedCount = apps.count { it.anyProtection || it.portHiding }
+            val selectedCount =
+                if (listMode == PolicyListMode.ALLOWLIST) {
+                    apps.manualSelectionCount(listMode)
+                } else {
+                    apps.count { it.isSelectedForPicker() }
+                }
             val summaryBackgroundColor =
                 if (isSystemInDarkTheme()) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
             val summaryContentColor =
@@ -306,12 +374,14 @@ internal fun ProtectionScreen(
                         }
                         TextButton(
                             onClick = {
+                                val kmodAvailable = targets?.kmodModuleInstalled == true
                                 apps =
                                     apps.map {
                                         it.copy(
-                                            kmod = false,
-                                            lsposed = false,
-                                            portHiding = false,
+                                            kmod = selected == PolicyListMode.ALLOWLIST && it.isSystem && kmodAvailable,
+                                            lsposed = selected == PolicyListMode.ALLOWLIST && it.isSystem,
+                                            systemPolicyExplicit = false,
+                                            portHiding = selected == PolicyListMode.ALLOWLIST && it.isSystem,
                                             portRules = emptyList(),
                                             kernelHookMask = null,
                                             javaHookMask = null,
@@ -328,6 +398,44 @@ internal fun ProtectionScreen(
                         ) {
                             Text(stringResource(R.string.policy_mode_change_confirm))
                         }
+                    }
+                },
+            )
+        }
+
+        pendingSystemApps?.let { candidate ->
+            val warningMode = pendingSystemWarningMode ?: listMode
+            AlertDialog(
+                onDismissRequest = {
+                    pendingSystemApps = null
+                    pendingSystemWarningMode = null
+                },
+                title = { Text(stringResource(R.string.system_app_warning_title)) },
+                text = { Text(stringResource(R.string.system_app_warning_message)) },
+                dismissButton = {
+                    TextButton(
+                        onClick = {
+                            pendingSystemApps = null
+                            pendingSystemWarningMode = null
+                        },
+                    ) {
+                        Text(stringResource(R.string.cancel))
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            warningPrefs.edit().putBoolean(systemWarningKey(warningMode), true).apply()
+                            apps = candidate
+                            pendingSystemApps = null
+                            pendingSystemWarningMode = null
+                        },
+                        colors =
+                            ButtonDefaults.textButtonColors(
+                                contentColor = MaterialTheme.colorScheme.error,
+                            ),
+                    ) {
+                        Text(stringResource(R.string.continue_action))
                     }
                 },
             )
@@ -416,9 +524,7 @@ internal fun ProtectionScreen(
                                     val kernelHookMask = existing?.kernelHookMask
                                     val javaHookMask = existing?.javaHookMask
 
-                                    if (!entry.kmod && !entry.lsposed && !entry.portHiding &&
-                                        kernelHookMask == null && javaHookMask == null
-                                    ) {
+                                    if (!entry.shouldPersistPolicy(kernelHookMask, javaHookMask)) {
                                         return@mapNotNull null
                                     }
 
@@ -429,6 +535,7 @@ internal fun ProtectionScreen(
                                         kmod = entry.kmod,
                                         lsposed = entry.lsposed,
                                         portHiding = entry.portHiding,
+                                        systemPolicyExplicit = entry.systemPolicyExplicit,
                                         kernelHookMask = kernelHookMask,
                                         javaHookMask = javaHookMask,
                                     )
@@ -502,6 +609,7 @@ private fun isDirty(
     if (current.size != original.size) return true
     return current.any { c ->
         val o = original.find { it.packageName == c.packageName && it.userId == c.userId } ?: return@any true
-        c.kmod != o.kmod || c.lsposed != o.lsposed || c.portHiding != o.portHiding
+        c.kmod != o.kmod || c.lsposed != o.lsposed || c.portHiding != o.portHiding ||
+            c.systemPolicyExplicit != o.systemPolicyExplicit
     }
 }

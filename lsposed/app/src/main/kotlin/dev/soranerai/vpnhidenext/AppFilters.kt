@@ -5,6 +5,53 @@ import dev.soranerai.vpnhidenext.db.PolicyListMode
 /** Filter the staged rows rendered by the picker, not the last saved snapshot. */
 internal fun AppEntry.isSelectedForPicker(): Boolean = anyProtection || portHiding
 
+internal fun AppEntry.isAutomaticallySelectedSystem(listMode: PolicyListMode): Boolean =
+    listMode == PolicyListMode.ALLOWLIST && isSystem && !systemPolicyExplicit
+
+internal fun List<AppEntry>.manualSelectionCount(listMode: PolicyListMode): Int =
+    count { it.isSelectedForPicker() && !it.isAutomaticallySelectedSystem(listMode) }
+
+internal fun AppEntry.withNormalizedSystemPolicy(
+    listMode: PolicyListMode,
+    kmodAvailable: Boolean,
+): AppEntry {
+    if (!isSystem || isCoreSystemUid()) return this
+    val safeKmod = listMode == PolicyListMode.ALLOWLIST && kmodAvailable
+    val safeFramework = listMode == PolicyListMode.ALLOWLIST
+    val isSafe = kmod == safeKmod && lsposed == safeFramework && portHiding == safeFramework
+    return copy(systemPolicyExplicit = !isSafe)
+}
+
+internal fun isRiskySystemTransition(
+    old: AppEntry,
+    next: AppEntry,
+    listMode: PolicyListMode,
+): Boolean {
+    if (!next.isSystem || next.isCoreSystemUid()) return false
+    return when (listMode) {
+        PolicyListMode.BLACKLIST -> {
+            (!old.kmod && next.kmod) ||
+                (!old.lsposed && next.lsposed) ||
+                (!old.portHiding && next.portHiding)
+        }
+
+        PolicyListMode.ALLOWLIST -> {
+            (old.kmod && !next.kmod) ||
+                (old.lsposed && !next.lsposed) ||
+                (old.portHiding && !next.portHiding)
+        }
+    }
+}
+
+internal fun AppEntry.shouldPersistPolicy(
+    kernelHookMask: Long?,
+    javaHookMask: Long?,
+): Boolean {
+    val hasExtraPolicy = kernelHookMask != null || javaHookMask != null || portRules.isNotEmpty()
+    if (isSystem && !systemPolicyExplicit) return hasExtraPolicy
+    return kmod || lsposed || portHiding || systemPolicyExplicit || hasExtraPolicy
+}
+
 internal fun filterAndSortApps(
     apps: List<AppEntry>,
     listMode: PolicyListMode,
@@ -16,16 +63,15 @@ internal fun filterAndSortApps(
     sortOrder: AppSortOrder,
 ): List<AppEntry> {
     val query = searchQuery.trim().lowercase()
-    val useSystemFilter = listMode == PolicyListMode.BLACKLIST && showSystem
     val useRussianFilter = listMode == PolicyListMode.BLACKLIST && showRussianOnly
 
     val filtered =
         apps.filter { app ->
-            (useSystemFilter || !app.isSystem || app.isSelectedForPicker()) &&
+            systemAppIsVisible(app, listMode, showSystem) &&
                 (!useRussianFilter || isRussianApp(app.packageName, app.label)) &&
                 (!showOnlySelected || app.isSelectedForPicker()) &&
                 (!showOnlyWorkProfile || app.userId != 0) &&
-                (query.isEmpty() || app.label.lowercase().contains(query) || app.packageName.lowercase().contains(query))
+                app.matchesSearch(query)
         }
 
     return when (sortOrder) {
@@ -42,5 +88,33 @@ internal fun filterAndSortApps(
                 compareByDescending<AppEntry> { it.isSelectedForPicker() }.thenBy { it.label.lowercase() },
             )
         }
+
+        AppSortOrder.UNSELECTED_FIRST -> {
+            filtered.sortedWith(
+                compareBy<AppEntry> { it.isSelectedForPicker() }.thenBy { it.label.lowercase() },
+            )
+        }
+    }
+}
+
+private fun AppEntry.matchesSearch(query: String): Boolean =
+    query.isEmpty() ||
+        label.lowercase().contains(query) ||
+        packageName.lowercase().contains(query) ||
+        uid.toString().contains(query)
+
+private fun systemAppIsVisible(
+    app: AppEntry,
+    listMode: PolicyListMode,
+    showSystem: Boolean,
+): Boolean {
+    if (!app.isSystem || showSystem) return true
+    return when (listMode) {
+        PolicyListMode.BLACKLIST -> app.isSelectedForPicker()
+
+        // Implicit system exceptions are selected in allowlist, but must not
+        // flood the normal app list. Keep only intentionally overridden rows
+        // visible after the user turns the system-app filter back off.
+        PolicyListMode.ALLOWLIST -> app.systemPolicyExplicit
     }
 }
