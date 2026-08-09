@@ -42,6 +42,42 @@ class BuiltInUpdaterTest {
     }
 
     @Test
+    fun `selector accepts vendor suffix without android tag`() {
+        val result =
+            selectKernelAsset(
+                runningRelease = "6.1.145+blue-spark",
+                installedVersion = "2.2.2",
+                assets =
+                    listOf(
+                        asset("6.1.162-android14-2026-03-AnyKernel3.zip"),
+                        asset("6.6.142-android15-lts-AnyKernel3.zip"),
+                    ),
+            )
+        assertEquals(
+            "6.1.162-android14-2026-03-AnyKernel3.zip",
+            (result as KernelSelectionResult.Selected).asset.name,
+        )
+    }
+
+    @Test
+    fun `selector refuses to guess generation for untagged multi generation kernel`() {
+        val result =
+            selectKernelAsset(
+                runningRelease = "5.10.250+blue-spark",
+                installedVersion = "2.2.2",
+                assets =
+                    listOf(
+                        asset("5.10.260-android12-lts-AnyKernel3.zip"),
+                        asset("5.10.260-android13-lts-AnyKernel3.zip"),
+                    ),
+            )
+        assertEquals(
+            KernelSelectionFailure.NO_COMPATIBLE_ASSET,
+            (result as KernelSelectionResult.Failed).reason,
+        )
+    }
+
+    @Test
     fun `selector reports compatible assets that would downgrade`() {
         val result =
             selectKernelAsset(

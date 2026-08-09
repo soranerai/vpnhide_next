@@ -256,6 +256,7 @@ internal fun selectKernelAsset(
     var compatible = false
     var selected: KernelReleaseAsset? = null
     var selectedPatch = Int.MAX_VALUE
+    val untaggedCompatibleGenerations = mutableSetOf<String>()
 
     for (asset in assets) {
         val releaseCode = versionTagToCode(asset.releaseTag) ?: continue
@@ -268,12 +269,22 @@ internal fun selectKernelAsset(
         val candidateMajorMinor = "${match.groupValues[1]}.${match.groupValues[2]}"
         val patch = match.groupValues[3].toIntOrNull() ?: continue
         val generation = match.groupValues[4]
-        if (candidateMajorMinor != majorMinor || generation != running.fourth) continue
+        if (candidateMajorMinor != majorMinor) continue
+        if (running.fourth != null && generation != running.fourth) continue
         compatible = true
+        // A vendor uname without an androidNN tag is safe to update only when
+        // the candidate set identifies one Android kernel generation. Never
+        // guess between (for example) android12 and android13 assets.
+        if (running.fourth == null && patch >= currentPatch) {
+            untaggedCompatibleGenerations += generation
+        }
         if (patch >= currentPatch && patch < selectedPatch) {
             selected = asset
             selectedPatch = patch
         }
+    }
+    if (running.fourth == null && untaggedCompatibleGenerations.size > 1) {
+        return KernelSelectionResult.Failed(KernelSelectionFailure.NO_COMPATIBLE_ASSET)
     }
     return when {
         selected != null -> KernelSelectionResult.Selected(selected)
@@ -286,11 +297,12 @@ private data class RunningKernel(
     val first: Int,
     val second: Int,
     val third: Int,
-    val fourth: String,
+    val fourth: String?,
 )
 
-private val RUNNING_KERNEL = Regex("""^(\d+)\.(\d+)\.(\d+).*-(android\d+)(?:-.*)?$""")
+private val RUNNING_KERNEL = Regex("""^(\d+)\.(\d+)\.(\d+)(?:[^0-9].*)?$""")
 private val KERNEL_ASSET_NAME = Regex("""^(\d+)\.(\d+)\.(\d+)-(android\d+)-.+-AnyKernel3\.zip$""")
+private val KERNEL_ANDROID_BRANCH = Regex("""(?:^|[^A-Za-z0-9])android(\d+)(?:[^A-Za-z0-9]|$)""")
 
 private fun detectRunningKernel(value: String): RunningKernel? {
     val match = RUNNING_KERNEL.matchEntire(value.trim()) ?: return null
@@ -298,7 +310,11 @@ private fun detectRunningKernel(value: String): RunningKernel? {
         match.groupValues[1].toIntOrNull() ?: return null,
         match.groupValues[2].toIntOrNull() ?: return null,
         match.groupValues[3].toIntOrNull() ?: return null,
-        match.groupValues[4],
+        KERNEL_ANDROID_BRANCH
+            .find(value.trim())
+            ?.groupValues
+            ?.get(1)
+            ?.let { "android$it" },
     )
 }
 

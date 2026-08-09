@@ -75,4 +75,10 @@ class KmodUpdaterTest {
         val target = resolveKmodUpdateTarget("v2.2.2", null, "6.1.80-android14-g123")
         assertEquals(KmodUpdateTarget("v2.2.2", "android14-6.1"), target)
     }
+
+    @Test
+    fun `vendor suffix supplies deterministic variant for legacy module prop`() {
+        val target = resolveKmodUpdateTarget("v2.2.2", null, "6.1.145+blue-spark")
+        assertEquals(KmodUpdateTarget("v2.2.2", "android14-6.1"), target)
+    }
 }
