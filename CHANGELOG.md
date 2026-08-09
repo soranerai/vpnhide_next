@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.4.0
+
+### Added
+- Add six-hour interception statistics with a dedicated per-app port history screen
+- The app can now download, verify, back up, and install paired VPNHide bridge and built-in kernel updates, with Normal/Bypass image selection and reboot controls.
+
+### Changed
+- System apps can now be selected as protection targets with safe allowlist defaults, clear automatic-selection labels, manual exception counts, an always-visible expressive name/package/UID search bar with embedded actions, compact locked-UID guidance, and a cooler green/blue theme.
+
 ## v2.3.0
 
 ### Added
