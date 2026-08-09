@@ -41,6 +41,7 @@ The project implements a two-component hiding model that combines low-level syst
   * *Blacklist Mode*: Hides VPN interfaces and socket options only from explicitly selected applications.
   * *Whitelist Mode*: Hides VPN from all installed applications except those explicitly selected in the exclusion list.
 * **Dynamic Port Rules**: Kernel-level blocking and redirection of connections to local VPN daemon ports using the `security_socket_connect` / `security_socket_bind` hooks. Port rules are managed dynamically without relying on iptables rules or ProcFS.
+* **Port Access Monitoring**: Ability to track and monitor which network ports targeted applications are requesting access to.
 * **Dynamic Hook Configuration**: Hiding parameters and protection levels can be toggled on the fly via the `/dev/vpnhide_ctrl` control device. Changes are applied immediately without rebooting.
 * **Automatic Controller Hiding**: The VPN client applications and the VPNHide Next manager are automatically hidden from target applications at runtime.
 * **Work Profile Support**: Full separation of hiding logic and target lists between the primary user and isolated Android work profiles (Multi-user/Work Profile).
