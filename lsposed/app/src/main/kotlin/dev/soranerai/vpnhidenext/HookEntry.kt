@@ -208,6 +208,7 @@ class HookEntry : IXposedHookLoadPackage {
                         var javaHookMask = 0xFFFFFFFFu
                         val uids = mutableSetOf<Int>()
                         val prefixes = mutableListOf<String>()
+                        val activeVpnIfaces = mutableSetOf<String>()
                         val appJavaHookMasks = mutableMapOf<Int, UInt>()
                         var coverIface: String? = null
                         var statsClearGen: Int? = null
@@ -218,6 +219,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 synchronized(HookContext.uidLock) {
                                     HookContext.systemServerTargetUids = uids.toSet()
                                     HookContext.systemServerIfacePrefixes = prefixes.toList()
+                                    HookContext.systemServerActiveVpnIfaces = activeVpnIfaces.toSet()
                                     HookContext.cachedJavaHooksMask = javaHookMask
                                     HookContext.appJavaHookMasks = appJavaHookMasks.toMap()
                                     HookContext.cachedPhysicalIfaceName = coverIface
@@ -234,6 +236,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 }
                                 uids.clear()
                                 prefixes.clear()
+                                activeVpnIfaces.clear()
                                 appJavaHookMasks.clear()
                                 javaHookMask = 0xFFFFFFFFu
                                 coverIface = null
@@ -270,6 +273,13 @@ class HookEntry : IXposedHookLoadPackage {
                                 val prefixStr = line.substringAfter("iface_prefixes:").trim()
                                 if (prefixStr.isNotEmpty()) {
                                     prefixStr.split(" ").forEach { prefixes.add(it) }
+                                }
+                            } else if (line.startsWith("active_vpn_ifaces:")) {
+                                val ifaceStr = line.substringAfter("active_vpn_ifaces:").trim()
+                                if (ifaceStr.isNotEmpty()) {
+                                    ifaceStr.split(" ").forEach { iface ->
+                                        if (iface.isNotEmpty()) activeVpnIfaces.add(iface)
+                                    }
                                 }
                             } else if (line.startsWith("cover_iface:")) {
                                 val value = line.substringAfter("cover_iface:").trim()

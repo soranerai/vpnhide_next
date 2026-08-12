@@ -70,6 +70,12 @@ These are boot diagnostics, not policy storage.
 Hook status is exposed through the read-only control device where supported.
 No policy or debug coordination file is written to `/data/system`.
 
+The read-only control-device status includes `active_vpn_ifaces`, the current
+space-separated list of VPN interface names discovered by the root daemon.
+LSPosed uses this dynamic list in addition to generated and configured
+interface-prefix matchers, so multiple simultaneously active tunnels remain
+consistent across the native and Java layers.
+
 The app reads kmod intercept history through the root-side
 `vpnhide-ctl stats_history` helper. The helper connects to the daemon's
 abstract `vpnhide.stats.v1` socket, returns interval deltas, and keeps the ring

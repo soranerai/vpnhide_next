@@ -64,8 +64,28 @@ pub fn matches_vpn(name: &[u8]) -> bool {
     if starts_with_ci(name, b"tap") {
         return true;
     }
+    // Android VPN/tunnel interfaces using the ap family
+    if starts_with_ci(name, b"ap") {
+        return true;
+    }
     // WireGuard kernel
     if starts_with_ci(name, b"wg") {
+        return true;
+    }
+    // Tailscale userspace interfaces
+    if starts_with_ci(name, b"tailscale") {
+        return true;
+    }
+    // Tailscale short interface names
+    if starts_with_ci(name, b"ts") {
+        return true;
+    }
+    // Hurricane Electric IPv6 tunnel
+    if starts_with_ci(name, b"he-ipv6") {
+        return true;
+    }
+    // ZeroTier interfaces
+    if starts_with_ci(name, b"zt") {
         return true;
     }
     // PPTP / L2TP PPP tunnels
@@ -110,8 +130,18 @@ mod tests {
         assert!(matches_vpn(b"tun"), "matches_vpn('tun')");
         assert!(matches_vpn(b"tun1234"), "matches_vpn('tun1234')");
         assert!(matches_vpn(b"tap0"), "matches_vpn('tap0')");
+        assert!(matches_vpn(b"ap0"), "matches_vpn('ap0')");
+        assert!(matches_vpn(b"AP_VPN0"), "matches_vpn('AP_VPN0')");
         assert!(matches_vpn(b"wg0"), "matches_vpn('wg0')");
         assert!(matches_vpn(b"wg-client"), "matches_vpn('wg-client')");
+        assert!(matches_vpn(b"tailscale0"), "matches_vpn('tailscale0')");
+        assert!(matches_vpn(b"Tailscale"), "matches_vpn('Tailscale')");
+        assert!(matches_vpn(b"ts0"), "matches_vpn('ts0')");
+        assert!(matches_vpn(b"TS-android"), "matches_vpn('TS-android')");
+        assert!(matches_vpn(b"he-ipv6"), "matches_vpn('he-ipv6')");
+        assert!(matches_vpn(b"he-ipv6-1"), "matches_vpn('he-ipv6-1')");
+        assert!(matches_vpn(b"zt0"), "matches_vpn('zt0')");
+        assert!(matches_vpn(b"ZT-one"), "matches_vpn('ZT-one')");
         assert!(matches_vpn(b"ppp0"), "matches_vpn('ppp0')");
         assert!(matches_vpn(b"ipsec0"), "matches_vpn('ipsec0')");
         assert!(matches_vpn(b"xfrm0"), "matches_vpn('xfrm0')");
