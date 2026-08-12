@@ -928,8 +928,11 @@ private fun BuiltInUpdateCard(
             title = {
                 Text(
                     stringResource(
-                        if (ready.info.bridgeOnly) R.string.builtin_bridge_update_confirm_title
-                        else R.string.builtin_update_confirm_title,
+                        if (ready.info.bridgeOnly) {
+                            R.string.builtin_bridge_update_confirm_title
+                        } else {
+                            R.string.builtin_update_confirm_title
+                        },
                     ),
                 )
             },
@@ -937,10 +940,15 @@ private fun BuiltInUpdateCard(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         stringResource(
-                            if (ready.info.bridgeOnly) R.string.builtin_bridge_update_confirm_message
-                            else R.string.builtin_update_confirm_message,
+                            if (ready.info.bridgeOnly) {
+                                R.string.builtin_bridge_update_confirm_message
+                            } else {
+                                R.string.builtin_update_confirm_message
+                            },
                             normalizeVersion(ready.info.metadata.bridgeVersion),
-                            ready.info.kernelAsset?.name.orEmpty(),
+                            ready.info.kernelAsset
+                                ?.name
+                                .orEmpty(),
                         ),
                     )
                     if (ready.info.debugMode) {
@@ -950,21 +958,23 @@ private fun BuiltInUpdateCard(
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    if (!ready.info.bridgeOnly) Row(
-                        modifier =
-                            Modifier.fillMaxWidth().clickable { imageMode = KernelImageMode.NORMAL },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        RadioButton(
-                            selected = imageMode == KernelImageMode.NORMAL,
-                            onClick = { imageMode = KernelImageMode.NORMAL },
-                        )
-                        Column {
-                            Text(stringResource(R.string.builtin_update_mode_normal), fontWeight = FontWeight.SemiBold)
-                            Text(
-                                stringResource(R.string.builtin_update_mode_normal_desc),
-                                style = MaterialTheme.typography.bodySmall,
+                    if (!ready.info.bridgeOnly) {
+                        Row(
+                            modifier =
+                                Modifier.fillMaxWidth().clickable { imageMode = KernelImageMode.NORMAL },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            RadioButton(
+                                selected = imageMode == KernelImageMode.NORMAL,
+                                onClick = { imageMode = KernelImageMode.NORMAL },
                             )
+                            Column {
+                                Text(stringResource(R.string.builtin_update_mode_normal), fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    stringResource(R.string.builtin_update_mode_normal_desc),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
                         }
                     }
                     if (!ready.info.bridgeOnly && ready.hasBypass) {
@@ -997,8 +1007,11 @@ private fun BuiltInUpdateCard(
                 ) {
                     Text(
                         stringResource(
-                            if (ready.info.bridgeOnly) R.string.builtin_bridge_update_confirm_action
-                            else R.string.builtin_update_confirm_action,
+                            if (ready.info.bridgeOnly) {
+                                R.string.builtin_bridge_update_confirm_action
+                            } else {
+                                R.string.builtin_update_confirm_action
+                            },
                         ),
                     )
                 }
@@ -1018,8 +1031,11 @@ private fun BuiltInUpdateCard(
             text = {
                 Text(
                     stringResource(
-                        if (awaitingReboot.backupPath == null) R.string.builtin_bridge_update_reboot_message
-                        else R.string.builtin_update_reboot_message,
+                        if (awaitingReboot.backupPath == null) {
+                            R.string.builtin_bridge_update_reboot_message
+                        } else {
+                            R.string.builtin_update_reboot_message
+                        },
                         awaitingReboot.version,
                         awaitingReboot.backupPath.orEmpty(),
                     ),
@@ -1058,10 +1074,15 @@ private fun BuiltInUpdateCard(
         when (state) {
             is BuiltInUpdateState.Available -> {
                 stringResource(
-                    if (state.info.bridgeOnly) R.string.builtin_bridge_update_available
-                    else R.string.builtin_update_available,
+                    if (state.info.bridgeOnly) {
+                        R.string.builtin_bridge_update_available
+                    } else {
+                        R.string.builtin_update_available
+                    },
                     normalizeVersion(state.info.metadata.bridgeVersion),
-                    state.info.kernelAsset?.name.orEmpty(),
+                    state.info.kernelAsset
+                        ?.name
+                        .orEmpty(),
                 )
             }
 
@@ -1097,8 +1118,11 @@ private fun BuiltInUpdateCard(
 
             is BuiltInUpdateState.AwaitingReboot -> {
                 stringResource(
-                    if (state.backupPath == null) R.string.builtin_bridge_update_awaiting_reboot
-                    else R.string.builtin_update_awaiting_reboot,
+                    if (state.backupPath == null) {
+                        R.string.builtin_bridge_update_awaiting_reboot
+                    } else {
+                        R.string.builtin_update_awaiting_reboot
+                    },
                     state.version,
                 )
             }
@@ -1125,8 +1149,11 @@ private fun BuiltInUpdateCard(
             Column(Modifier.weight(1f)) {
                 Text(
                     stringResource(
-                        if (info?.bridgeOnly == true) R.string.builtin_bridge_update_title
-                        else R.string.builtin_update_title,
+                        if (info?.bridgeOnly == true) {
+                            R.string.builtin_bridge_update_title
+                        } else {
+                            R.string.builtin_update_title
+                        },
                     ),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,

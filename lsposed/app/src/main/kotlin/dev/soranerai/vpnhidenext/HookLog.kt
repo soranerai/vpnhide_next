@@ -17,6 +17,8 @@ internal object HookLog {
         enabled = false
     }
 
+    internal fun isEnabled(): Boolean = enabled
+
     fun i(msg: String) {
         if (enabled) XposedBridge.log(msg)
     }

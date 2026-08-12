@@ -52,6 +52,35 @@ object HookContext {
     var selfUid: Int = -1
     val uidLock = Any()
 
+    /**
+     * The result of the cheap, common part of a framework-hook callback.
+     * Keeping the effective UID here prevents the callback from resolving
+     * Binder identity again when it records an interception.
+     */
+    data class HookCallContext(
+        val uid: Int,
+    )
+
+    /**
+     * Fast path shared by hooks whose target is the Binder caller. A null
+     * result means that the hook is disabled for this UID or that the UID is
+     * not in the current target snapshot.
+     */
+    fun captureHookContext(bitIndex: Int): HookCallContext? = captureHookContextForMask(1u shl bitIndex)
+
+    fun captureHookContext(
+        firstBitIndex: Int,
+        secondBitIndex: Int,
+    ): HookCallContext? = captureHookContextForMask((1u shl firstBitIndex) or (1u shl secondBitIndex))
+
+    private fun captureHookContextForMask(bitMask: UInt): HookCallContext? {
+        val uid = resolveEffectiveUid()
+        val mask = appJavaHookMasks?.get(uid) ?: cachedJavaHooksMask ?: 0xFFFFFFFFu
+        if ((mask and bitMask) == 0u) return null
+        if (!loadTargetUids().contains(uid)) return null
+        return HookCallContext(uid)
+    }
+
     fun getInheritedCallingUid(): Int? {
         val stack = callingUidStack.get()
         if (stack != null && stack.isNotEmpty()) {
@@ -91,20 +120,26 @@ object HookContext {
         return (mask and (1u shl bitIndex)) != 0u
     }
 
-    fun recordIntercept(hookName: String) {
-        val callingUid = Binder.getCallingUid()
-        val targetUid =
-            if (callingUid == 1000) {
-                currentCallbackUid.get() ?: return
-            } else {
-                callingUid
-            }
-        if (!loadTargetUids().contains(targetUid)) return
+    fun recordIntercept(
+        hookName: String,
+        targetUid: Int,
+    ) {
         if (targetUid == selfUid) return
 
         val appStats = hookStats.computeIfAbsent(targetUid) { ConcurrentHashMap() }
         appStats.computeIfAbsent(hookName) { RollingCounter() }.increment()
         hookStatsChanged.set(true)
+    }
+
+    /**
+     * Compatibility overload for deeper sanitizers that do not yet receive
+     * the callback context. It still avoids the second target-set lookup;
+     * hot callbacks should use the UID-aware overload above.
+     */
+    fun recordIntercept(hookName: String) {
+        val callingUid = Binder.getCallingUid()
+        val targetUid = if (callingUid == 1000) currentCallbackUid.get() ?: return else callingUid
+        recordIntercept(hookName, targetUid)
     }
 
     fun loadTargetUids(): Set<Int> {

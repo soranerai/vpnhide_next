@@ -157,13 +157,10 @@ object ConnectivityHook {
                 getDefaultProxyMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(4, HookContext.resolveEffectiveUid())) return
-                        val callingUid = Binder.getCallingUid()
-                        if (HookContext.loadTargetUids().contains(callingUid)) {
-                            if (param.result != null) {
-                                HookLog.i("VpnHide: Suppressing getDefaultProxy() for target UID $callingUid")
-                                param.result = null
-                            }
+                        val context = HookContext.captureHookContext(4) ?: return
+                        if (param.result != null) {
+                            HookLog.i("VpnHide: Suppressing getDefaultProxy() for target UID ${context.uid}")
+                            param.result = null
                         }
                     }
                 },
@@ -184,13 +181,10 @@ object ConnectivityHook {
                 getProxyForNetworkMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(4, HookContext.resolveEffectiveUid())) return
-                        val callingUid = Binder.getCallingUid()
-                        if (HookContext.loadTargetUids().contains(callingUid)) {
-                            if (param.result != null) {
-                                HookLog.i("VpnHide: Suppressing getProxyForNetwork() for target UID $callingUid")
-                                param.result = null
-                            }
+                        val context = HookContext.captureHookContext(4) ?: return
+                        if (param.result != null) {
+                            HookLog.i("VpnHide: Suppressing getProxyForNetwork() for target UID ${context.uid}")
+                            param.result = null
                         }
                     }
                 },
@@ -224,10 +218,8 @@ object ConnectivityHook {
                 networkMethod,
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(4, HookContext.resolveEffectiveUid())) return
+                        HookContext.captureHookContext(4) ?: return
                         HookContext.csInstance = param.thisObject
-                        val callingUid = Binder.getCallingUid()
-                        if (!HookContext.loadTargetUids().contains(callingUid)) return
                         sanitizer(param)
                     }
                 },
