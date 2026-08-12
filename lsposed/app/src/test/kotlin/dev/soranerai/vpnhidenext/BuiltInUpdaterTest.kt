@@ -150,6 +150,26 @@ class BuiltInUpdaterTest {
     }
 
     @Test
+    fun `accepts bridge update when built-in kernel is already current`() {
+        val metadata =
+            validateBuiltInUpdateMetadataFields(
+                bridgeVersion = "2.4.0",
+                bridgeVersionCode = 20400,
+                bridgeZipUrl =
+                    "https://github.com/soranerai/vpnhide_next/releases/download/v2.4.0/vpnhide-bridge.zip",
+                bridgeSha256 = "a".repeat(64),
+                kernelVersion = "2.4.0",
+                kernelVersionCode = 20400,
+                kernelReleasesApi =
+                    "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
+                installedVersion = "2.4.0",
+                installedBridgeVersion = "2.3.0",
+            )
+
+        assertEquals("2.4.0", metadata?.bridgeVersion)
+    }
+
+    @Test
     fun `debug metadata permits current version without checksum`() {
         val metadata =
             validateBuiltInUpdateMetadataFields(

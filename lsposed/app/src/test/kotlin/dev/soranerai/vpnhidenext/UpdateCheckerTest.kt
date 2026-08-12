@@ -64,6 +64,21 @@ class CompatibilityResolverTest {
     }
 
     @Test
+    fun `requests the old bridge even when the built-in component is newer`() {
+        assertEquals(
+            CompatibilityResult.Requires("bridge", "2.4.0"),
+            CompatibilityResolver.resolve(
+                InstalledComponentVersions(
+                    lsposed = "2.4.0",
+                    bridge = "2.3.0",
+                    builtIn = "2.4.0",
+                    kmod = null,
+                ),
+            ),
+        )
+    }
+
+    @Test
     fun `unknown app versions remain unknown instead of being treated as broken`() {
         assertEquals(
             CompatibilityResult.Unknown,
