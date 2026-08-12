@@ -33,6 +33,9 @@ object HookContext {
     var systemServerIfacePrefixes: List<String>? = null
 
     @Volatile
+    var systemServerActiveVpnIfaces: Set<String>? = null
+
+    @Volatile
     var cachedJavaHooksMask: UInt? = null
 
     @Volatile
@@ -134,7 +137,10 @@ object HookContext {
 
     fun loadIfacePrefixes(): List<String> = systemServerIfacePrefixes ?: emptyList()
 
+    fun loadActiveVpnInterfaces(): Set<String> = systemServerActiveVpnIfaces ?: emptySet()
+
     fun isVpnInterfaceName(name: String): Boolean {
+        if (loadActiveVpnInterfaces().any { it.equals(name, ignoreCase = true) }) return true
         if (IfaceLists.isVpnIface(name)) return true
         val prefixes = loadIfacePrefixes()
         for (prefix in prefixes) {
@@ -207,6 +213,7 @@ object HookContext {
     fun invalidateTargetUids() {
         systemServerTargetUids = null
         systemServerIfacePrefixes = null
+        systemServerActiveVpnIfaces = null
         vpnPackageCache.clear()
     }
 

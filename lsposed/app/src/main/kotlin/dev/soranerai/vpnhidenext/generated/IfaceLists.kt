@@ -11,8 +11,18 @@ internal object IfaceLists {
         if (n.startsWith("tun") && !n.startsWith("tunl")) return true
         // OpenVPN bridged
         if (n.startsWith("tap")) return true
+        // Android VPN/tunnel interfaces using the ap family
+        if (n.startsWith("ap")) return true
         // WireGuard kernel
         if (n.startsWith("wg")) return true
+        // Tailscale userspace interfaces
+        if (n.startsWith("tailscale")) return true
+        // Tailscale short interface names
+        if (n.startsWith("ts")) return true
+        // Hurricane Electric IPv6 tunnel
+        if (n.startsWith("he-ipv6")) return true
+        // ZeroTier interfaces
+        if (n.startsWith("zt")) return true
         // PPTP / L2TP PPP tunnels
         if (n.startsWith("ppp")) return true
         // Android built-in IPsec VPN

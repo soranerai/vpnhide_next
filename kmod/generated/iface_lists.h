@@ -88,8 +88,23 @@ static inline bool vpnhide_iface_is_vpn(const char *name)
 	/* OpenVPN bridged */
 	if (vpnhide_iface_starts_with_ci(name, "tap"))
 		return true;
+	/* Android VPN/tunnel interfaces using the ap family */
+	if (vpnhide_iface_starts_with_ci(name, "ap"))
+		return true;
 	/* WireGuard kernel */
 	if (vpnhide_iface_starts_with_ci(name, "wg"))
+		return true;
+	/* Tailscale userspace interfaces */
+	if (vpnhide_iface_starts_with_ci(name, "tailscale"))
+		return true;
+	/* Tailscale short interface names */
+	if (vpnhide_iface_starts_with_ci(name, "ts"))
+		return true;
+	/* Hurricane Electric IPv6 tunnel */
+	if (vpnhide_iface_starts_with_ci(name, "he-ipv6"))
+		return true;
+	/* ZeroTier interfaces */
+	if (vpnhide_iface_starts_with_ci(name, "zt"))
 		return true;
 	/* PPTP / L2TP PPP tunnels */
 	if (vpnhide_iface_starts_with_ci(name, "ppp"))

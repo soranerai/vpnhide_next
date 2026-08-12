@@ -30,8 +30,28 @@ match = { prefix = "tap" }
 note = "OpenVPN bridged"
 
 [[vpn]]
+match = { prefix = "ap" }
+note = "Android VPN/tunnel interfaces using the ap family"
+
+[[vpn]]
 match = { prefix = "wg" }
 note = "WireGuard kernel"
+
+[[vpn]]
+match = { prefix = "tailscale" }
+note = "Tailscale userspace interfaces"
+
+[[vpn]]
+match = { prefix = "ts" }
+note = "Tailscale short interface names"
+
+[[vpn]]
+match = { prefix = "he-ipv6" }
+note = "Hurricane Electric IPv6 tunnel"
+
+[[vpn]]
+match = { prefix = "zt" }
+note = "ZeroTier interfaces"
 
 [[vpn]]
 match = { prefix = "ppp" }
@@ -86,11 +106,51 @@ name = "tap0"
 is_vpn = true
 
 [[test]]
+name = "ap0"
+is_vpn = true
+
+[[test]]
+name = "AP_VPN0"
+is_vpn = true
+
+[[test]]
 name = "wg0"
 is_vpn = true
 
 [[test]]
 name = "wg-client"    # prefix wg, then any suffix
+is_vpn = true
+
+[[test]]
+name = "tailscale0"
+is_vpn = true
+
+[[test]]
+name = "Tailscale"
+is_vpn = true
+
+[[test]]
+name = "ts0"
+is_vpn = true
+
+[[test]]
+name = "TS-android"
+is_vpn = true
+
+[[test]]
+name = "he-ipv6"
+is_vpn = true
+
+[[test]]
+name = "he-ipv6-1"
+is_vpn = true
+
+[[test]]
+name = "zt0"
+is_vpn = true
+
+[[test]]
+name = "ZT-one"
 is_vpn = true
 
 [[test]]

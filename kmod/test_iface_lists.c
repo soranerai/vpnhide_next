@@ -28,8 +28,18 @@ int main(void)
 	check("tun", true);
 	check("tun1234", true);
 	check("tap0", true);
+	check("ap0", true);
+	check("AP_VPN0", true);
 	check("wg0", true);
 	check("wg-client", true);
+	check("tailscale0", true);
+	check("Tailscale", true);
+	check("ts0", true);
+	check("TS-android", true);
+	check("he-ipv6", true);
+	check("he-ipv6-1", true);
+	check("zt0", true);
+	check("ZT-one", true);
 	check("ppp0", true);
 	check("ipsec0", true);
 	check("xfrm0", true);
@@ -73,6 +83,6 @@ int main(void)
 		fprintf(stderr, "%d test(s) failed\n", failures);
 		return 1;
 	}
-	printf("OK: 44 vectors passed\n");
+	printf("OK: 54 vectors passed\n");
 	return 0;
 }
