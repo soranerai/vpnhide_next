@@ -161,32 +161,34 @@ class DashboardRepository(
     private fun buildModuleVersionIssue(
         moduleVersion: String,
         appVersion: String,
+        component: String = "kmod",
     ): String {
         val normalizedModuleVersion = normalizeVersion(moduleVersion)
         val normalizedAppVersion = normalizeVersion(appVersion)
+        val componentName = if (component == "bridge") "bridge" else "kmod"
         return when (compareSemver(normalizedModuleVersion, normalizedAppVersion)) {
             null, 0 -> {
-                res.getString(
-                    R.string.dashboard_issue_kmod_version_mismatch,
-                    moduleVersion,
-                    appVersion,
-                )
+                if (componentName == "bridge") {
+                    res.getString(R.string.dashboard_issue_bridge_version_mismatch, moduleVersion, appVersion)
+                } else {
+                    res.getString(R.string.dashboard_issue_kmod_version_mismatch, moduleVersion, appVersion)
+                }
             }
 
             in Int.MIN_VALUE..-1 -> {
-                res.getString(
-                    R.string.dashboard_issue_update_kmod,
-                    moduleVersion,
-                    appVersion,
-                )
+                if (componentName == "bridge") {
+                    res.getString(R.string.dashboard_issue_update_bridge, moduleVersion, appVersion)
+                } else {
+                    res.getString(R.string.dashboard_issue_update_kmod, moduleVersion, appVersion)
+                }
             }
 
             else -> {
-                res.getString(
-                    R.string.dashboard_issue_update_app_for_kmod,
-                    moduleVersion,
-                    appVersion,
-                )
+                if (componentName == "bridge") {
+                    res.getString(R.string.dashboard_issue_update_app_for_bridge, moduleVersion, appVersion)
+                } else {
+                    res.getString(R.string.dashboard_issue_update_app_for_kmod, moduleVersion, appVersion)
+                }
             }
         }
     }
@@ -453,23 +455,34 @@ class DashboardRepository(
 
             val appVersion = BuildConfig.VERSION_NAME
             if (kmod is ModuleState.Installed) {
+                val builtInMode = !kmod.isKmodType
                 val installedNativeVersion =
                     kmodLoadStatus?.runtimeVersion ?: kmod.version
                 val compatibility =
                     CompatibilityResolver.resolve(
                         InstalledComponentVersions(
                             lsposed = appVersion,
-                            bridge = null,
-                            builtIn = null,
-                            kmod = installedNativeVersion,
+                            // In built-in mode module.prop belongs to the
+                            // bridge package, while load_status reports the
+                            // version of the embedded kernel component.
+                            bridge = kmodProp.version.takeIf { builtInMode },
+                            builtIn = kmodLoadStatus?.runtimeVersion.takeIf { builtInMode },
+                            kmod = installedNativeVersion.takeIf { !builtInMode },
                         ),
                     )
                 VpnHideLog.i(
                     TAG,
                     "component compatibility: app=$appVersion native=$installedNativeVersion result=$compatibility",
                 )
-                if (compatibility is CompatibilityResult.Requires && installedNativeVersion != null) {
-                    warn(buildModuleVersionIssue(installedNativeVersion, compatibility.version))
+                if (compatibility is CompatibilityResult.Requires) {
+                    val installedVersion =
+                        when (compatibility.component) {
+                            "bridge" -> kmodProp.version
+                            else -> installedNativeVersion
+                        }
+                    if (installedVersion != null) {
+                        warn(buildModuleVersionIssue(installedVersion, compatibility.version, compatibility.component))
+                    }
                 }
             }
             val totalTargets = lsposedTargetCount + kmodTargetCount
