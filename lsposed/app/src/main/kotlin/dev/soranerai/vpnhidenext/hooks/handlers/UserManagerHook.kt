@@ -43,23 +43,24 @@ object UserManagerHook {
                 "getUserInfo",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) ||
-                            HookContext.isInternalCheck.get() == true
-                        ) {
-                            return
-                        }
-                        if (!HookContext.isTargetCaller()) return
+                        if (HookContext.isInternalCheck.get() == true) return
+                        val context = HookContext.captureHookContext(6) ?: return
 
-                        val callingUid = Binder.getCallingUid()
+                        val callingUid = context.uid
                         val userInfo = param.result
                         val userId = if (userInfo != null) XposedHelpers.getIntField(userInfo, "id") else null
-                        val stackTrace = if (callingUid == 1000) "\n" + android.util.Log.getStackTraceString(Throwable()) else ""
+                        val stackTrace =
+                            if (callingUid == 1000 && HookLog.isEnabled()) {
+                                "\n" + android.util.Log.getStackTraceString(Throwable())
+                            } else {
+                                ""
+                            }
                         HookLog.i(
                             "VpnHide: getUserInfo(userId=$userId) called by uid $callingUid, cbUid=${HookContext.currentCallbackUid.get()}, inheritedUid=${HookContext.getInheritedCallingUid()}$stackTrace",
                         )
 
                         if (userInfo != null && userId != null && isManagedProfileInternal(param.thisObject, userId)) {
-                            HookContext.recordIntercept("UserManager")
+                            HookContext.recordIntercept("UserManager", context.uid)
                             var flags = XposedHelpers.getIntField(userInfo, "flags")
                             flags = flags and 0x00000020.inv() // FLAG_MANAGED_PROFILE
                             flags = flags and 0x00001000.inv() // FLAG_PROFILE
@@ -85,21 +86,17 @@ object UserManagerHook {
                 "isProfile",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) ||
-                            HookContext.isInternalCheck.get() == true
-                        ) {
-                            return
-                        }
-                        if (!HookContext.isTargetCaller()) return
+                        if (HookContext.isInternalCheck.get() == true) return
+                        val context = HookContext.captureHookContext(6) ?: return
 
-                        val callingUid = Binder.getCallingUid()
+                        val callingUid = context.uid
                         val userId = param.args.getOrNull(0) as? Int
                         HookLog.i(
                             "VpnHide: isProfile(userId=$userId) called by uid $callingUid, cbUid=${HookContext.currentCallbackUid.get()}, inheritedUid=${HookContext.getInheritedCallingUid()}",
                         )
 
                         if (userId != null && isManagedProfileInternal(param.thisObject, userId)) {
-                            HookContext.recordIntercept("UserManager")
+                            HookContext.recordIntercept("UserManager", context.uid)
                             param.result = false
                             HookLog.i("VpnHide: Spoofed isProfile(userId=$userId) to false for uid $callingUid")
                         }
@@ -116,14 +113,10 @@ object UserManagerHook {
                 "getProfiles",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) ||
-                            HookContext.isInternalCheck.get() == true
-                        ) {
-                            return
-                        }
-                        if (!HookContext.isTargetCaller()) return
+                        if (HookContext.isInternalCheck.get() == true) return
+                        val context = HookContext.captureHookContext(6) ?: return
 
-                        val callingUid = Binder.getCallingUid()
+                        val callingUid = context.uid
                         HookLog.i(
                             "VpnHide: getProfiles called by uid $callingUid, cbUid=${HookContext.currentCallbackUid.get()}, inheritedUid=${HookContext.getInheritedCallingUid()}",
                         )
@@ -147,7 +140,7 @@ object UserManagerHook {
                             }
 
                         if (filteredList.size != result.size) {
-                            HookContext.recordIntercept("UserManager")
+                            HookContext.recordIntercept("UserManager", context.uid)
                             param.result = filteredList
                             HookLog.i(
                                 "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfiles (Original: ${result.size}) for uid $callingUid",
@@ -166,14 +159,10 @@ object UserManagerHook {
                 "getProfileIds",
                 object : XC_MethodHook() {
                     override fun afterHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) ||
-                            HookContext.isInternalCheck.get() == true
-                        ) {
-                            return
-                        }
-                        if (!HookContext.isTargetCaller()) return
+                        if (HookContext.isInternalCheck.get() == true) return
+                        val context = HookContext.captureHookContext(6) ?: return
 
-                        val callingUid = Binder.getCallingUid()
+                        val callingUid = context.uid
                         HookLog.i(
                             "VpnHide: getProfileIds called by uid $callingUid, cbUid=${HookContext.currentCallbackUid.get()}, inheritedUid=${HookContext.getInheritedCallingUid()}",
                         )
@@ -190,7 +179,7 @@ object UserManagerHook {
                             }
 
                         if (filteredList.size != result.size) {
-                            HookContext.recordIntercept("UserManager")
+                            HookContext.recordIntercept("UserManager", context.uid)
                             param.result = filteredList.toIntArray()
                             HookLog.i(
                                 "VpnHide: Filtered ${result.size - filteredList.size} managed profile(s) from getProfileIds (Original: ${result.size}) for uid $callingUid",
@@ -209,22 +198,23 @@ object UserManagerHook {
                 "getProfileParent",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) ||
-                            HookContext.isInternalCheck.get() == true
-                        ) {
-                            return
-                        }
-                        if (!HookContext.isTargetCaller()) return
+                        if (HookContext.isInternalCheck.get() == true) return
+                        val context = HookContext.captureHookContext(6) ?: return
 
-                        val callingUid = Binder.getCallingUid()
+                        val callingUid = context.uid
                         val userId = param.args.getOrNull(0) as? Int
-                        val stackTrace = if (callingUid == 1000) "\n" + android.util.Log.getStackTraceString(Throwable()) else ""
+                        val stackTrace =
+                            if (callingUid == 1000 && HookLog.isEnabled()) {
+                                "\n" + android.util.Log.getStackTraceString(Throwable())
+                            } else {
+                                ""
+                            }
                         HookLog.i(
                             "VpnHide: getProfileParent(userId=$userId) called by uid $callingUid, cbUid=${HookContext.currentCallbackUid.get()}, inheritedUid=${HookContext.getInheritedCallingUid()}$stackTrace",
                         )
 
                         if (userId != null && isManagedProfileInternal(param.thisObject, userId)) {
-                            HookContext.recordIntercept("UserManager")
+                            HookContext.recordIntercept("UserManager", context.uid)
                             param.result = null
                             HookLog.i("VpnHide: Spoofed getProfileParent(userId=$userId) to null for uid $callingUid")
                         }
@@ -241,21 +231,17 @@ object UserManagerHook {
                 "getProfileParentId",
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
-                        if (!HookContext.isJavaHookActive(6, HookContext.resolveEffectiveUid()) ||
-                            HookContext.isInternalCheck.get() == true
-                        ) {
-                            return
-                        }
-                        if (!HookContext.isTargetCaller()) return
+                        if (HookContext.isInternalCheck.get() == true) return
+                        val context = HookContext.captureHookContext(6) ?: return
 
-                        val callingUid = Binder.getCallingUid()
+                        val callingUid = context.uid
                         val userId = param.args.getOrNull(0) as? Int
                         HookLog.i(
                             "VpnHide: getProfileParentId(userId=$userId) called by uid $callingUid, cbUid=${HookContext.currentCallbackUid.get()}, inheritedUid=${HookContext.getInheritedCallingUid()}",
                         )
 
                         if (userId != null && isManagedProfileInternal(param.thisObject, userId)) {
-                            HookContext.recordIntercept("UserManager")
+                            HookContext.recordIntercept("UserManager", context.uid)
                             param.result = userId
                             HookLog.i("VpnHide: Spoofed getProfileParentId(userId=$userId) to $userId for uid $callingUid")
                         }

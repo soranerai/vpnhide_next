@@ -18,12 +18,12 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(1, HookContext.resolveEffectiveUid())) return
-                    if (writingCopy.get() == true || !HookContext.isTargetCaller()) return
+                    val context = HookContext.captureHookContext(1) ?: return
+                    if (writingCopy.get() == true) return
                     val nc = param.thisObject as NetworkCapabilities
                     val copy = NetworkCapabilities(nc)
                     if (!sanitizeNetworkCapabilities(copy)) return
-                    HookContext.recordIntercept("NetworkCapabilities")
+                    HookContext.recordIntercept("NetworkCapabilities", context.uid)
 
                     val parcel = param.args[0] as android.os.Parcel
                     val flags = param.args[1] as Int
@@ -49,11 +49,11 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(2, HookContext.resolveEffectiveUid())) return
-                    if (writingCopy.get() == true || !HookContext.isTargetCaller()) return
+                    val context = HookContext.captureHookContext(2) ?: return
+                    if (writingCopy.get() == true) return
                     val ni = param.thisObject as NetworkInfo
                     if (XposedHelpers.getIntField(ni, "mNetworkType") != ConnectivityHook.TYPE_VPN) return
-                    HookContext.recordIntercept("NetworkInfo")
+                    HookContext.recordIntercept("NetworkInfo", context.uid)
 
                     val cs = HookContext.getConnectivityService()
                     val physicalNet = if (cs != null) ConnectivityHook.getPhysicalNetwork(cs) else null
@@ -151,10 +151,8 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(3, HookContext.resolveEffectiveUid())) return
+                    val context = HookContext.captureHookContext(3) ?: return
                     if (writingNetCopy.get() == true) return
-                    val target = HookContext.isTargetCaller()
-                    if (!target) return
 
                     val net = param.thisObject as android.net.Network
                     writingNetCopy.set(true)
@@ -163,7 +161,7 @@ object ParcelHooks {
                         val nc = ConnectivityHook.getNetworkCapabilitiesSafe(cs, net) ?: return
 
                         if (nc.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
-                            HookContext.recordIntercept("Network")
+                            HookContext.recordIntercept("Network", context.uid)
                             val physicalNet = ConnectivityHook.getPhysicalNetwork(cs)
                             if (physicalNet != null) {
                                 val parcel = param.args[0] as android.os.Parcel
@@ -189,12 +187,12 @@ object ParcelHooks {
             Integer.TYPE,
             object : XC_MethodHook() {
                 override fun beforeHookedMethod(param: MethodHookParam) {
-                    if (!HookContext.isJavaHookActive(0, HookContext.resolveEffectiveUid())) return
-                    if (writingCopy.get() == true || !HookContext.isTargetCaller()) return
+                    val context = HookContext.captureHookContext(0) ?: return
+                    if (writingCopy.get() == true) return
                     val lp = param.thisObject as LinkProperties
                     val isVpn = lp.interfaceName?.let { HookContext.isVpnInterfaceName(it) } ?: false
                     if (isVpn) {
-                        HookContext.recordIntercept("LinkProperties")
+                        HookContext.recordIntercept("LinkProperties", context.uid)
                         val cs = HookContext.getConnectivityService()
                         val physicalLp = if (cs != null) ConnectivityHook.getPhysicalLinkProperties(cs) else null
                         if (physicalLp != null) {
