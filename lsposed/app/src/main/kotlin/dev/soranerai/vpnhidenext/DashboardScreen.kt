@@ -97,7 +97,7 @@ fun DashboardScreen(
             if (installed.isKmodType) return@remember null
             val version = installed.version?.takeIf { it.isNotBlank() } ?: return@remember null
             val unameR = dashboard.kmodLoadStatus?.unameR?.takeIf { it.isNotBlank() } ?: return@remember null
-            BuiltInUpdateTarget(version, unameR, builtInUpdateDebugEnabled)
+            BuiltInUpdateTarget(version, unameR, builtInUpdateDebugEnabled, installed.bridgeVersion)
         }
     var showChangelog by remember { mutableStateOf(false) }
     var changelogData by remember { mutableStateOf<ChangelogData?>(null) }
@@ -925,14 +925,22 @@ private fun BuiltInUpdateCard(
         AlertDialog(
             onDismissRequest = { showConfirm = false },
             icon = { Icon(Icons.Default.WarningAmber, contentDescription = null) },
-            title = { Text(stringResource(R.string.builtin_update_confirm_title)) },
+            title = {
+                Text(
+                    stringResource(
+                        if (ready.info.bridgeOnly) R.string.builtin_bridge_update_confirm_title
+                        else R.string.builtin_update_confirm_title,
+                    ),
+                )
+            },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         stringResource(
-                            R.string.builtin_update_confirm_message,
-                            normalizeVersion(ready.info.metadata.kernelVersion),
-                            ready.info.kernelAsset.name,
+                            if (ready.info.bridgeOnly) R.string.builtin_bridge_update_confirm_message
+                            else R.string.builtin_update_confirm_message,
+                            normalizeVersion(ready.info.metadata.bridgeVersion),
+                            ready.info.kernelAsset?.name.orEmpty(),
                         ),
                     )
                     if (ready.info.debugMode) {
@@ -942,7 +950,7 @@ private fun BuiltInUpdateCard(
                             fontWeight = FontWeight.Bold,
                         )
                     }
-                    Row(
+                    if (!ready.info.bridgeOnly) Row(
                         modifier =
                             Modifier.fillMaxWidth().clickable { imageMode = KernelImageMode.NORMAL },
                         verticalAlignment = Alignment.CenterVertically,
@@ -959,7 +967,7 @@ private fun BuiltInUpdateCard(
                             )
                         }
                     }
-                    if (ready.hasBypass) {
+                    if (!ready.info.bridgeOnly && ready.hasBypass) {
                         Row(
                             modifier =
                                 Modifier.fillMaxWidth().clickable { imageMode = KernelImageMode.BYPASS },
@@ -986,7 +994,14 @@ private fun BuiltInUpdateCard(
                         showConfirm = false
                         BuiltInUpdateCache.install(ready.info, imageMode)
                     },
-                ) { Text(stringResource(R.string.builtin_update_confirm_action)) }
+                ) {
+                    Text(
+                        stringResource(
+                            if (ready.info.bridgeOnly) R.string.builtin_bridge_update_confirm_action
+                            else R.string.builtin_update_confirm_action,
+                        ),
+                    )
+                }
             },
             dismissButton = {
                 TextButton(onClick = { showConfirm = false }) { Text(stringResource(R.string.cancel)) }
@@ -1003,9 +1018,10 @@ private fun BuiltInUpdateCard(
             text = {
                 Text(
                     stringResource(
-                        R.string.builtin_update_reboot_message,
+                        if (awaitingReboot.backupPath == null) R.string.builtin_bridge_update_reboot_message
+                        else R.string.builtin_update_reboot_message,
                         awaitingReboot.version,
-                        awaitingReboot.backupPath,
+                        awaitingReboot.backupPath.orEmpty(),
                     ),
                 )
             },
@@ -1042,9 +1058,10 @@ private fun BuiltInUpdateCard(
         when (state) {
             is BuiltInUpdateState.Available -> {
                 stringResource(
-                    R.string.builtin_update_available,
-                    normalizeVersion(state.info.metadata.kernelVersion),
-                    state.info.kernelAsset.name,
+                    if (state.info.bridgeOnly) R.string.builtin_bridge_update_available
+                    else R.string.builtin_update_available,
+                    normalizeVersion(state.info.metadata.bridgeVersion),
+                    state.info.kernelAsset?.name.orEmpty(),
                 )
             }
 
@@ -1080,7 +1097,8 @@ private fun BuiltInUpdateCard(
 
             is BuiltInUpdateState.AwaitingReboot -> {
                 stringResource(
-                    R.string.builtin_update_awaiting_reboot,
+                    if (state.backupPath == null) R.string.builtin_bridge_update_awaiting_reboot
+                    else R.string.builtin_update_awaiting_reboot,
                     state.version,
                 )
             }
@@ -1106,7 +1124,10 @@ private fun BuiltInUpdateCard(
         ) {
             Column(Modifier.weight(1f)) {
                 Text(
-                    stringResource(R.string.builtin_update_title),
+                    stringResource(
+                        if (info?.bridgeOnly == true) R.string.builtin_bridge_update_title
+                        else R.string.builtin_update_title,
+                    ),
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.Bold,
                 )

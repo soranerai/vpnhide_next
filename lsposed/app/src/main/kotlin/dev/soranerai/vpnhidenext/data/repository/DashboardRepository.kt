@@ -307,6 +307,7 @@ class DashboardRepository(
                         targetCount = kmodTargetCount,
                         gkiVariant = kmodProp.gkiVariant,
                         isKmodType = isKmodType,
+                        bridgeVersion = kmodProp.version.takeIf { !isKmodType },
                     )
                 } else {
                     ModuleState.NotInstalled

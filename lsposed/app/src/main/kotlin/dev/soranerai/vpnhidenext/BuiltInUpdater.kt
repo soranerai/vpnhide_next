@@ -42,6 +42,7 @@ internal data class BuiltInUpdateTarget(
     val installedVersion: String,
     val unameR: String,
     val debugMode: Boolean = false,
+    val installedBridgeVersion: String? = null,
 )
 
 internal data class BuiltInUpdateMetadata(
@@ -63,10 +64,13 @@ internal data class KernelReleaseAsset(
 
 internal data class BuiltInUpdateInfo(
     val metadata: BuiltInUpdateMetadata,
-    val kernelAsset: KernelReleaseAsset,
+    val kernelAsset: KernelReleaseAsset?,
     val unameR: String,
     val debugMode: Boolean = false,
-)
+) {
+    val bridgeOnly: Boolean
+        get() = kernelAsset == null
+}
 
 internal enum class KernelSelectionFailure {
     UNSUPPORTED_RUNNING_KERNEL,
@@ -147,7 +151,7 @@ internal sealed interface BuiltInUpdateState {
 
     data class AwaitingReboot(
         val version: String,
-        val backupPath: String,
+        val backupPath: String?,
     ) : BuiltInUpdateState
 
     data class Failed(
@@ -161,6 +165,7 @@ internal fun parseBuiltInUpdateMetadata(
     raw: String,
     installedVersion: String,
     debugMode: Boolean = false,
+    installedBridgeVersion: String? = null,
 ): BuiltInUpdateMetadata? {
     val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
     val bridgeVersion = json.optString("version")
@@ -180,6 +185,7 @@ internal fun parseBuiltInUpdateMetadata(
         kernelReleasesApi,
         installedVersion,
         debugMode,
+        installedBridgeVersion,
     )
 }
 
@@ -193,9 +199,11 @@ internal fun validateBuiltInUpdateMetadataFields(
     kernelReleasesApi: String,
     installedVersion: String,
     debugMode: Boolean = false,
+    installedBridgeVersion: String? = null,
 ): BuiltInUpdateMetadata? {
     val versionAllowed =
         isNewerVersion(kernelVersion, installedVersion) ||
+            (installedBridgeVersion != null && isNewerVersion(bridgeVersion, installedBridgeVersion)) ||
             (debugMode && baseVersion(kernelVersion) == baseVersion(installedVersion))
     if (!versionAllowed) return null
     if (bridgeVersionCode < 0 || kernelVersionCode < 0) return null
@@ -427,11 +435,11 @@ internal object BuiltInUpdateCache {
                 _state.value = BuiltInUpdateState.Failed(info, BuiltInUpdateError.STORAGE)
                 return
             }
-        val kernel =
-            kernelFile ?: run {
-                _state.value = BuiltInUpdateState.Failed(info, BuiltInUpdateError.STORAGE)
-                return
-            }
+        if (!info.bridgeOnly && kernelFile == null) {
+            _state.value = BuiltInUpdateState.Failed(info, BuiltInUpdateError.STORAGE)
+            return
+        }
+        val kernel = kernelFile
         if (isBusy(_state.value)) return
         // Block repeated confirmation immediately. Repacking and validating the controlled
         // bridge/AK3 archives happens before the root backup and can take a visible moment.
@@ -440,8 +448,8 @@ internal object BuiltInUpdateCache {
             val result =
                 withContext(Dispatchers.IO) {
                     val suffix = System.currentTimeMillis()
-                    val preparedBridge = File(kernel.parentFile, "vpnhide-bridge-app-$suffix.zip")
-                    val preparedKernel = File(kernel.parentFile, "vpnhide-selected-$suffix.zip")
+                    val preparedBridge = File(bridge.parentFile, "vpnhide-bridge-app-$suffix.zip")
+                    val preparedKernel = kernel?.let { File(bridge.parentFile, "vpnhide-selected-$suffix.zip") }
                     try {
                         if (!prepareBridgeForAppInstall(bridge, preparedBridge)) {
                             return@withContext InstallResult.Failed(BuiltInUpdateError.INVALID_BRIDGE)
@@ -449,11 +457,13 @@ internal object BuiltInUpdateCache {
                         if (!validateBridgeZip(preparedBridge, info.metadata)) {
                             return@withContext InstallResult.Failed(BuiltInUpdateError.INVALID_BRIDGE)
                         }
-                        if (!prepareNonInteractiveAk3(kernel, preparedKernel)) {
-                            return@withContext InstallResult.Failed(BuiltInUpdateError.INVALID_KERNEL)
-                        }
-                        if (validateKernelZip(preparedKernel) == null) {
-                            return@withContext InstallResult.Failed(BuiltInUpdateError.INVALID_KERNEL)
+                        if (kernel != null && preparedKernel != null) {
+                            if (!prepareNonInteractiveAk3(kernel, preparedKernel)) {
+                                return@withContext InstallResult.Failed(BuiltInUpdateError.INVALID_KERNEL)
+                            }
+                            if (validateKernelZip(preparedKernel) == null) {
+                                return@withContext InstallResult.Failed(BuiltInUpdateError.INVALID_KERNEL)
+                            }
                         }
                         installBuiltInWithRoot(
                             preparedBridge,
@@ -464,7 +474,7 @@ internal object BuiltInUpdateCache {
                         )
                     } finally {
                         preparedBridge.delete()
-                        preparedKernel.delete()
+                        preparedKernel?.delete()
                     }
                 }
             clearDownloads()
@@ -472,7 +482,7 @@ internal object BuiltInUpdateCache {
                 when (result) {
                     is InstallResult.Success -> {
                         BuiltInUpdateState.AwaitingReboot(
-                            normalizeVersion(info.metadata.kernelVersion),
+                            normalizeVersion(info.metadata.bridgeVersion),
                             result.backupPath,
                         )
                     }
@@ -525,8 +535,19 @@ private fun checkForBuiltInUpdate(target: BuiltInUpdateTarget): BuiltInCheckOutc
             downloadSmallText(BUILT_IN_METADATA_URL, MAX_BUILT_IN_METADATA_BYTES)
                 ?: return BuiltInCheckOutcome.Failed(BuiltInUpdateError.METADATA)
         val metadata =
-            parseBuiltInUpdateMetadata(metadataRaw, target.installedVersion, target.debugMode)
+            parseBuiltInUpdateMetadata(
+                metadataRaw,
+                target.installedVersion,
+                target.debugMode,
+                target.installedBridgeVersion,
+            )
                 ?: return BuiltInCheckOutcome.None
+        val kernelUpdateAvailable = isNewerVersion(metadata.kernelVersion, target.installedVersion)
+        if (!kernelUpdateAvailable) {
+            return BuiltInCheckOutcome.Available(
+                BuiltInUpdateInfo(metadata, null, target.unameR, target.debugMode),
+            )
+        }
         val releasesRaw =
             downloadSmallText(metadata.kernelReleasesApi, MAX_RELEASES_METADATA_BYTES)
                 ?: return BuiltInCheckOutcome.Failed(BuiltInUpdateError.METADATA)
@@ -566,7 +587,7 @@ private fun checkForBuiltInUpdate(target: BuiltInUpdateTarget): BuiltInCheckOutc
 private sealed interface DownloadResult {
     data class Ready(
         val bridge: File,
-        val kernel: File,
+        val kernel: File?,
         val hasBypass: Boolean,
     ) : DownloadResult
 
@@ -586,9 +607,9 @@ private fun downloadAndValidate(
         return DownloadResult.Failed(BuiltInUpdateError.STORAGE)
     }
     val bridge = File(context.cacheDir, "vpnhide-bridge-${baseVersion(info.metadata.bridgeVersion)}.zip")
-    val kernel = File(context.cacheDir, info.kernelAsset.name)
+    val kernel = info.kernelAsset?.let { File(context.cacheDir, it.name) }
     bridge.delete()
-    kernel.delete()
+    kernel?.delete()
     val bridgeError =
         downloadFile(
             info.metadata.bridgeZipUrl,
@@ -601,32 +622,35 @@ private fun downloadAndValidate(
         bridge.delete()
         return DownloadResult.Failed(bridgeError)
     }
-    val kernelError =
-        downloadFile(
-            info.kernelAsset.url,
-            info.kernelAsset.sha256,
-            kernel,
-            MAX_KERNEL_ZIP_BYTES,
-            verifyChecksum = !info.debugMode,
-        ) { onProgress("kernel", it) }
-    if (kernelError != null) {
-        bridge.delete()
-        kernel.delete()
-        return DownloadResult.Failed(kernelError)
+    if (kernel != null) {
+        val kernelAsset = info.kernelAsset ?: error("kernel asset missing")
+        val kernelError =
+            downloadFile(
+                kernelAsset.url,
+                kernelAsset.sha256,
+                kernel,
+                MAX_KERNEL_ZIP_BYTES,
+                verifyChecksum = !info.debugMode,
+            ) { onProgress("kernel", it) }
+        if (kernelError != null) {
+            bridge.delete()
+            kernel.delete()
+            return DownloadResult.Failed(kernelError)
+        }
     }
     onValidating()
     if (!validateBridgeZip(bridge, info.metadata)) {
         bridge.delete()
-        kernel.delete()
+        kernel?.delete()
         return DownloadResult.Failed(BuiltInUpdateError.INVALID_BRIDGE)
     }
-    val kernelValidation = validateKernelZip(kernel)
-    if (kernelValidation == null) {
+    val kernelValidation = kernel?.let(::validateKernelZip)
+    if (kernel != null && kernelValidation == null) {
         bridge.delete()
         kernel.delete()
         return DownloadResult.Failed(BuiltInUpdateError.INVALID_KERNEL)
     }
-    return DownloadResult.Ready(bridge, kernel, kernelValidation)
+    return DownloadResult.Ready(bridge, kernel, kernelValidation == true)
 }
 
 private fun downloadFile(
@@ -877,7 +901,7 @@ esac
 
 private sealed interface InstallResult {
     data class Success(
-        val backupPath: String,
+        val backupPath: String?,
     ) : InstallResult
 
     data class Failed(
@@ -888,11 +912,12 @@ private sealed interface InstallResult {
 
 private fun installBuiltInWithRoot(
     bridge: File,
-    kernel: File,
+    kernel: File?,
     info: BuiltInUpdateInfo,
     mode: KernelImageMode,
     onStage: (BuiltInUpdateState) -> Unit,
 ): InstallResult {
+    if (kernel == null) return installBridgeOnlyWithRoot(bridge, info, onStage)
     onStage(BuiltInUpdateState.BackingUp(info))
     val modeValue = if (mode == KernelImageMode.BYPASS) "bypass" else "normal"
     val (backupExit, backupOutput) = suExec(buildBootBackupScript(info.unameR), timeoutSec = 180)
@@ -940,6 +965,29 @@ private fun installBuiltInWithRoot(
         return InstallResult.Failed(error, backup)
     }
     return InstallResult.Success(backup)
+}
+
+private fun installBridgeOnlyWithRoot(
+    bridge: File,
+    info: BuiltInUpdateInfo,
+    onStage: (BuiltInUpdateState) -> Unit,
+): InstallResult {
+    onStage(BuiltInUpdateState.InstallingBridge(info))
+    val (exit, output) =
+        suExec(
+            buildBridgeInstallScript(bridge.absolutePath, baseVersion(info.metadata.bridgeVersion)),
+            timeoutSec = 180,
+        )
+    if (exit != 0) {
+        val error =
+            when {
+                exit == -1 || output.contains("vpnhide_error=root") -> BuiltInUpdateError.ROOT_DENIED
+                output.contains("vpnhide_error=manager") -> BuiltInUpdateError.UNSUPPORTED_ROOT_MANAGER
+                else -> BuiltInUpdateError.BRIDGE_INSTALL_FAILED
+            }
+        return InstallResult.Failed(error)
+    }
+    return InstallResult.Success(null)
 }
 
 private fun extractBackupPath(output: String): String? =
