@@ -343,6 +343,8 @@
     <string name="settings_battery_optimization_desc">Некоторые прошивки (MIUI, EMUI, ColorOS, One UI) откладывают или убивают фоновые проверки, если приложение не в исключениях — это нужно, чтобы проверки ниже действительно работали.</string>
     <string name="settings_toggle_self_test_vpn_title">Автотест без VPN</string>
     <string name="settings_toggle_self_test_vpn_desc">Если VPN не подключён, на время полной диагностики незаметно поднимает локальный тестовый туннель, а затем убирает его. Выключите, чтобы проверки запускались только при реально подключённом VPN.</string>
+    <string name="settings_toggle_dynamic_vpn_ports_title">Блокировать динамические порты VPN-сервисов</string>
+    <string name="settings_toggle_dynamic_vpn_ports_desc">В denylist выбранные приложения теряют доступ к портам VPN-сервисов. В allowlist невыбранные теряют доступ только к этим портам, а выбранные полностью исключены.</string>
 
     <!-- Уведомление о доступном обновлении -->
     <string name="update_notification_channel_name">Обновления приложения</string>
