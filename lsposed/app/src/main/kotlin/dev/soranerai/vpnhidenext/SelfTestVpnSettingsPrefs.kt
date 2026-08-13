@@ -2,6 +2,7 @@ package dev.soranerai.vpnhidenext
 
 import android.content.Context
 import dev.soranerai.vpnhidenext.db.AppDatabase
+import dev.soranerai.vpnhidenext.db.DatabaseSync
 import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 
 /**
@@ -23,4 +24,20 @@ internal suspend fun setSelfTestVpnEnabled(
     val dao = db.globalConfigDao()
     val current = dao.getConfig() ?: DbGlobalConfig()
     dao.insertConfig(current.copy(selfTestVpnEnabled = enabled))
+}
+
+internal suspend fun getDynamicVpnPortBlocking(context: Context): Boolean {
+    val config = AppDatabase.getInstance(context).globalConfigDao().getConfig() ?: DbGlobalConfig()
+    return config.dynamicVpnPortBlocking
+}
+
+internal suspend fun setDynamicVpnPortBlocking(
+    context: Context,
+    enabled: Boolean,
+) {
+    val db = AppDatabase.getInstance(context)
+    val dao = db.globalConfigDao()
+    val current = dao.getConfig() ?: DbGlobalConfig()
+    dao.insertConfig(current.copy(dynamicVpnPortBlocking = enabled))
+    DatabaseSync.sync(context)
 }

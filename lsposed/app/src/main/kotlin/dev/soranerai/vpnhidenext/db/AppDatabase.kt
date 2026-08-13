@@ -830,6 +830,7 @@ private fun DbGlobalConfig.toJson(): JSONObject =
         put("updateCheckEnabled", updateCheckEnabled)
         put("healthCheckEnabled", healthCheckEnabled)
         put("selfTestVpnEnabled", selfTestVpnEnabled)
+        put("dynamicVpnPortBlocking", dynamicVpnPortBlocking)
     }
 
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
@@ -845,4 +846,5 @@ private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
         updateCheckEnabled = optBoolean("updateCheckEnabled", true),
         healthCheckEnabled = optBoolean("healthCheckEnabled", true),
         selfTestVpnEnabled = optBoolean("selfTestVpnEnabled", true),
+        dynamicVpnPortBlocking = optBoolean("dynamicVpnPortBlocking", false),
     )
