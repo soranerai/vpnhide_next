@@ -11,6 +11,12 @@ import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
 
 object ConnectivityHook {
+    @Volatile
+    private var lastUsablePhysicalLinkProperties: LinkProperties? = null
+
+    @Volatile
+    private var lastUsablePhysicalIfaceName: String? = null
+
     fun hookConnectivityService(classLoader: ClassLoader) {
         val csClass =
             try {
@@ -457,25 +463,56 @@ object ConnectivityHook {
      * networks here: doing so can pair one network's properties with another
      * network's interface name.
      */
-    private fun getDaemonPhysicalNetwork(cs: Any): android.net.Network? {
+    private fun getDaemonPhysicalNetwork(
+        cs: Any,
+        requireUsableLinkProperties: Boolean = true,
+    ): android.net.Network? {
         val ifaceName = HookContext.cachedPhysicalIfaceName ?: return null
         val networks = XposedHelpers.callMethod(cs, "getAllNetworks") as? Array<*> ?: return null
 
         for (netObj in networks) {
             val net = netObj as? android.net.Network ?: continue
             val lp = XposedHelpers.callMethod(cs, "getLinkProperties", net) as? LinkProperties
-            if (lp?.interfaceName == ifaceName) return net
+            if (lp?.interfaceName == ifaceName &&
+                (!requireUsableLinkProperties || isUsablePhysicalLinkProperties(lp))
+            ) {
+                return net
+            }
         }
         return null
     }
 
+    /**
+     * A mobile NetworkAgent is briefly registered with an empty LinkProperties
+     * while IpClient applies the interface address and resolver configuration.
+     * Never use that transition snapshot as the physical cover network: doing
+     * so exposes an empty DNS list to the target application.
+     */
+    private fun isUsablePhysicalLinkProperties(lp: LinkProperties): Boolean =
+        lp.interfaceName != null &&
+            lp.dnsServers.isNotEmpty() &&
+            lp.routes.any { route -> route.destination?.prefixLength == 0 }
+
     fun getPhysicalLinkProperties(cs: Any): LinkProperties? {
         val token = Binder.clearCallingIdentity()
         try {
-            val daemonNet = getDaemonPhysicalNetwork(cs)
+            val ifaceName = HookContext.cachedPhysicalIfaceName
+            val daemonNet = getDaemonPhysicalNetwork(cs, requireUsableLinkProperties = false)
             if (daemonNet != null) {
                 val lp = XposedHelpers.callMethod(cs, "getLinkProperties", daemonNet) as? LinkProperties
-                if (lp != null) return lp
+                if (lp != null && isUsablePhysicalLinkProperties(lp)) {
+                    val snapshot = copyLinkProperties(lp)
+                    lastUsablePhysicalLinkProperties = snapshot
+                    lastUsablePhysicalIfaceName = lp.interfaceName
+                    return snapshot
+                }
+            }
+
+            // During mobile handover the NetworkAgent can temporarily expose
+            // the right interface with empty addresses/DNS/routes. Reuse only
+            // the last complete snapshot for that same interface.
+            if (ifaceName != null && ifaceName == lastUsablePhysicalIfaceName) {
+                return lastUsablePhysicalLinkProperties?.let { copyLinkProperties(it) }
             }
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to get physical link properties: ${t.message}")
@@ -483,6 +520,12 @@ object ConnectivityHook {
             Binder.restoreCallingIdentity(token)
         }
         return null
+    }
+
+    private fun copyLinkProperties(source: LinkProperties): LinkProperties {
+        val ctor = LinkProperties::class.java.getDeclaredConstructor(LinkProperties::class.java)
+        ctor.isAccessible = true
+        return ctor.newInstance(source) as LinkProperties
     }
 
     fun getPhysicalNetwork(cs: Any): android.net.Network? {
