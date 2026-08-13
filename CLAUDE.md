@@ -40,7 +40,9 @@ Single-command builds for both CI and local — the same scripts run in both pla
 - **kmod**: `./kmod/build.py --kmi <kmi>` (or `--all`). Auto-spawns the DDK podman/docker container if you're not already inside it; CI passes `--inside-container` to skip the spawn. The DDK image tag is `DDK_IMAGE_TAG` in `kmod/build.py` — `.github/workflows/ci.yml` mirrors it, bump both together.
 - **lsposed APK**: `cd lsposed && ./gradlew :app:assembleRelease`.
 
-The Rust cdylib (`lsposed/native/build.rs`) passes `-Wl,-z,max-page-size=16384` so the resulting `.so` file loads cleanly on 16 KiB-page Android devices (Pixel 8 Pro on Android 16, future hardware). Don't strip that flag.
+The private native repository builds the Rust cdylib with the 16 KiB-page
+alignment required by modern Android devices. The public repo consumes the
+resulting prebuilt `.so` from CI; do not add a public native source copy.
 
 ## Design notes
 

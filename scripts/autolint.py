@@ -50,11 +50,6 @@ def main() -> int:
         action="store_true",
         help="Skip slow Gradle linting/testing tasks",
     )
-    parser.add_argument(
-        "--skip-rust",
-        action="store_true",
-        help="Skip Rust linting/testing tasks",
-    )
     args = parser.parse_args()
 
     # Keep track of failed checks if we want to run all and report at the end

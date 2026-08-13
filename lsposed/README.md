@@ -76,7 +76,10 @@ adb logcat | grep VpnHide
 
 Requires JDK 17 or later. Output: `app/build/outputs/apk/debug/app-debug.apk`.
 
-The build cross-compiles `lsposed/native/` (Rust crate) for `aarch64-linux-android` via cargo-ndk and bundles the resulting `libvpnhide_checks.so` into the APK's `jniLibs/`, plus auto-generated UniFFI Kotlin bindings under package `dev.soranerai.vpnhidenext.checks`. Both steps are driven by [Gobley](https://github.com/gobley/gobley) Gradle plugins (`dev.gobley.cargo` + `dev.gobley.uniffi`) — no manual `cargo` invocation needed. See [../docs/development.md](../docs/development.md#prerequisites) for the full prereq list.
+The diagnostic Rust library is built in the private `vpnhide_next_private`
+repository. CI downloads its prebuilt `libvpnhide_checks.so` into the APK's
+`jniLibs/`; local builds can use `../scripts/build-app.sh` with the private
+checkout available. The committed UniFFI Kotlin bindings stay in this repo.
 
 ## License
 

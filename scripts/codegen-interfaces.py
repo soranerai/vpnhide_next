@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""Render the four iface-list matchers + their unit tests from
+"""Render the public iface-list matchers + their unit tests from
 data/interfaces.toml.
 
-Generates one match function per target (kmod C, zygisk Rust,
-lsposed/native Rust, lsposed Kotlin) so all four platforms agree on
-which interface names are VPN tunnels, plus per-language test files
-seeded from the same [[test]] vectors so CI catches drift instantly.
+Generates matchers for the public kernel-module and Kotlin consumers.
+The private native consumers generate their own Rust copy from the same
+source in the private repository.
 
 Re-run after editing data/interfaces.toml and commit the regenerated
 files. CI's lint job re-runs the codegen and fails on drift.
@@ -28,8 +27,6 @@ TOML_PATH = REPO_ROOT / "data" / "interfaces.toml"
 # import paths stay short and obvious.
 OUT_KMOD = REPO_ROOT / "kmod" / "generated" / "iface_lists.h"
 OUT_KMOD_TEST = REPO_ROOT / "kmod" / "test_iface_lists.c"
-OUT_ZYGISK = REPO_ROOT / "zygisk" / "src" / "generated" / "iface_lists.rs"
-OUT_LSP_NATIVE = REPO_ROOT / "lsposed" / "native" / "src" / "generated" / "iface_lists.rs"
 OUT_LSP_KT = (
     REPO_ROOT
     / "lsposed"
@@ -376,118 +373,7 @@ def emit_kmod_test(tests: list[TestVector]) -> str:
     return "\n".join(lines)
 
 
-# ---------------------------------------------------------------------------
-# Rust emitter (zygisk + lsposed/native — same body)
-# ---------------------------------------------------------------------------
-
-
-def emit_rust(rules: list[Rule], tests: list[TestVector]) -> str:
-    lines: list[str] = []
-    lines.append(f"// {GENERATED_HEADER_LINE}")
-    lines.append("")
-    lines.append("#![allow(dead_code)]")
-    lines.append("")
-    lines.append("fn starts_with_ci(name: &[u8], prefix: &[u8]) -> bool {")
-    lines.append("    if name.len() < prefix.len() {")
-    lines.append("        return false;")
-    lines.append("    }")
-    lines.append("    for (i, &p) in prefix.iter().enumerate() {")
-    lines.append("        if name[i].to_ascii_lowercase() != p {")
-    lines.append("            return false;")
-    lines.append("        }")
-    lines.append("    }")
-    lines.append("    true")
-    lines.append("}")
-    lines.append("")
-    lines.append("fn starts_with_then_digits_ci(name: &[u8], prefix: &[u8]) -> bool {")
-    lines.append("    if !starts_with_ci(name, prefix) {")
-    lines.append("        return false;")
-    lines.append("    }")
-    lines.append("    let rest = &name[prefix.len()..];")
-    lines.append("    !rest.is_empty() && rest.iter().all(|b| b.is_ascii_digit())")
-    lines.append("}")
-    lines.append("")
-    lines.append("fn equals_ci(name: &[u8], other: &[u8]) -> bool {")
-    lines.append("    if name.len() != other.len() {")
-    lines.append("        return false;")
-    lines.append("    }")
-    lines.append("    name.iter()")
-    lines.append("        .zip(other.iter())")
-    lines.append("        .all(|(a, b)| a.to_ascii_lowercase() == *b)")
-    lines.append("}")
-    lines.append("")
-    lines.append("fn contains_ci(haystack: &[u8], needle: &[u8]) -> bool {")
-    lines.append("    if needle.is_empty() {")
-    lines.append("        return true;")
-    lines.append("    }")
-    lines.append("    if needle.len() > haystack.len() {")
-    lines.append("        return false;")
-    lines.append("    }")
-    lines.append("    for start in 0..=haystack.len() - needle.len() {")
-    lines.append("        let window = &haystack[start..start + needle.len()];")
-    lines.append("        if window")
-    lines.append("            .iter()")
-    lines.append("            .zip(needle.iter())")
-    lines.append("            .all(|(a, b)| a.eq_ignore_ascii_case(b))")
-    lines.append("        {")
-    lines.append("            return true;")
-    lines.append("        }")
-    lines.append("    }")
-    lines.append("    false")
-    lines.append("}")
-    lines.append("")
-    lines.append("/// True if the name matches any VPN-iface rule from data/interfaces.toml.")
-    lines.append("pub fn matches_vpn(name: &[u8]) -> bool {")
-    lines.append("    if name.is_empty() {")
-    lines.append("        return false;")
-    lines.append("    }")
-    for r in rules:
-        if r.note:
-            lines.append(f"    // {r.note}")
-        if r.needle == "tun" and r.kind == "prefix":
-            lines.append('    if starts_with_ci(name, b"tun") && !starts_with_ci(name, b"tunl") {')
-            lines.append("        return true;")
-            lines.append("    }")
-            continue
-        if r.kind == "exact":
-            fn = "equals_ci"
-        elif r.kind == "prefix":
-            fn = "starts_with_ci"
-        elif r.kind == "prefix_digits":
-            fn = "starts_with_then_digits_ci"
-        elif r.kind == "contains":
-            fn = "contains_ci"
-        lines.append(f"    if {fn}(name, {rust_byte_lit(r.needle)}) {{")
-        lines.append("        return true;")
-        lines.append("    }")
-    lines.append("    false")
-    lines.append("}")
-    lines.append("")
-    # Test module — generated assertions are wide; skip rustfmt rather
-    # than wrap each assertion across 5 lines.
-    lines.append("#[cfg(test)]")
-    lines.append("#[rustfmt::skip]")
-    lines.append("mod tests {")
-    lines.append("    use super::*;")
-    lines.append("")
-    lines.append("    #[test]")
-    lines.append("    fn generated_vectors() {")
-    for t in tests:
-        # `assert!(x, msg)` / `assert!(!x, msg)` instead of
-        # `assert_eq!(x, true/false, msg)` — clippy::bool_assert_comparison
-        # would otherwise fire on every generated row when contributors
-        # run `cargo clippy --tests`.
-        prefix = "" if t.is_vpn else "!"
-        lines.append(
-            f"        assert!({prefix}matches_vpn({rust_byte_lit(t.name)}), "
-            f'"matches_vpn({t.name!r})");'
-        )
-    lines.append("    }")
-    lines.append("}")
-    lines.append("")
-    return "\n".join(lines)
-
-
+# Rust generation lives in the private repository.
 # ---------------------------------------------------------------------------
 # Kotlin emitter (production code + separate test class)
 # ---------------------------------------------------------------------------
@@ -570,12 +456,9 @@ def write_if_changed(path: Path, content: str) -> bool:
 
 def main() -> int:
     rules, tests = load()
-    rust_body = emit_rust(rules, tests)
     outputs = {
         OUT_KMOD: emit_kmod(rules),
         OUT_KMOD_TEST: emit_kmod_test(tests),
-        OUT_ZYGISK: rust_body,
-        OUT_LSP_NATIVE: rust_body,
         OUT_LSP_KT: emit_kotlin(rules),
         OUT_LSP_KT_TEST: emit_kotlin_test(tests),
     }

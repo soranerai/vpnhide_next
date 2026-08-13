@@ -10,7 +10,7 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * Covers the `(kernel KMI × series)` → (kmod zip, variant, zygisk?)
+ * Covers the `(kernel KMI × series)` → (kmod zip, variant)
  * decision table in [buildNativeInstallRecommendation]. Deliberately
  * paranoid about the reported edge cases — a custom kernel whose
  * `uname -r` lacks the `androidNN` tag, the Android 15 ROM over an
@@ -61,9 +61,8 @@ class BuildNativeInstallRecommendationTest {
     @Test
     fun `Android 15 ROM on android12-5_10 kernel — reporter's scenario`() {
         // Previous regression: the Android-release fallback turned this
-        // into (Android 15, 5.10), which isn't in the shipping table,
-        // so the app recommended zygisk. With the KMI-only match it
-        // correctly lands on android12-5.10.
+        // into (Android 15, 5.10), which isn't in the shipping table.
+        // With the KMI-only match it correctly lands on android12-5.10.
         val r = buildNativeInstallRecommendation("5.10.253-android12-Glow-v4.7", "Android 15")!!
         assertTrue(r.preferKmod)
         assertEquals("android12-5.10", r.recommendedGkiVariant)
