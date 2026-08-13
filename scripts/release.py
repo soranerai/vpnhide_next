@@ -18,7 +18,6 @@ What it does, atomically:
   * Regenerate `CHANGELOG.md` and `update-json/changelog.md`.
   * Write `X.Y.Z` into the `VERSION` file.
   * Patch the pinned version in:
-      - `kmod/module/module.prop` (version, versionCode)
       - `lsposed/app/build.gradle.kts`                 (versionName, versionCode)
 
 `versionCode` is derived as `major*10000 + minor*100 + patch`.
@@ -157,7 +156,6 @@ def main() -> int:
 
     # Source files must all exist.
     files = [
-        REPO_ROOT / "kmod/module/module.prop",
         REPO_ROOT / "lsposed/app/build.gradle.kts",
     ]
     for f in files:
@@ -181,11 +179,9 @@ def main() -> int:
     console.print("  [green]✓[/green] VERSION")
 
     # Version-bearing source files.
-    update_module_prop(REPO_ROOT / "kmod/module/module.prop", version, version_code)
     update_gradle_kts(REPO_ROOT / "lsposed/app/build.gradle.kts", version, version_code)
     regenerate_compatibility_matrix()
 
-    console.print("  [green]✓[/green] kmod/module/module.prop")
     console.print("  [green]✓[/green] lsposed/app/build.gradle.kts")
     console.print("  [green]✓[/green] generated compatibility matrix")
 

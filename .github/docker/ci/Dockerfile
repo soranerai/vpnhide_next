@@ -16,9 +16,6 @@ RUN apt-get update && \
         build-essential pkg-config \
         cmake ninja-build \
         openjdk-17-jdk-headless \
-        bc kmod cpio flex bison libssl-dev libelf-dev \
-        binutils-aarch64-linux-gnu \
-        clang-format \
         shellcheck \
         git && \
     rm -rf /var/lib/apt/lists/*
@@ -42,19 +39,3 @@ RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" && \
     yes | sdkmanager --licenses > /dev/null 2>&1 && \
     sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" && \
     chmod -R a+rx "${ANDROID_HOME}"
-
-# ── Google AOSP clang (for kmod) ─────────────────────────────────────
-# Same toolchain that built the Pixel GKI kernel — avoids ABI mismatches
-# that cause bootloops with distro clang.
-ENV AOSP_CLANG_VERSION=clang-r487747c
-ENV AOSP_CLANG_DIR=/opt/aosp-clang
-
-RUN git clone --depth=1 --filter=blob:none --sparse \
-        -b android-gs-shusky-6.1-android16 \
-        https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86 \
-        /tmp/clang-repo && \
-    cd /tmp/clang-repo && \
-    git sparse-checkout set ${AOSP_CLANG_VERSION} && \
-    mv ${AOSP_CLANG_VERSION} ${AOSP_CLANG_DIR} && \
-    rm -rf /tmp/clang-repo && \
-    chmod -R a+rx ${AOSP_CLANG_DIR}

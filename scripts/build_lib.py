@@ -1,6 +1,6 @@
 """Shared helpers for build scripts.
 
-Used by kmod/build.py and scripts/build-version.py.
+Used by scripts/build-version.py.
 
 Stdlib-only on purpose: scripts/build-version.py is invoked from
 lsposed/app/build.gradle.kts on every Gradle build, so adding pip/uv
@@ -10,29 +10,8 @@ tools available.
 
 from __future__ import annotations
 
-import re
 import subprocess
-import zipfile
 from pathlib import Path
-
-
-def make_zip(source_dir: Path, output_zip: Path) -> None:
-    """Create a zip archive from source_dir contents."""
-    with zipfile.ZipFile(output_zip, "w", zipfile.ZIP_DEFLATED) as zf:
-        for file_path in source_dir.rglob("*"):
-            if file_path.is_file():
-                arcname = file_path.relative_to(source_dir)
-                zf.write(file_path, arcname)
-
-
-def version_sort_key(name: str) -> tuple[int, ...]:
-    """Sort key that orders strings by their embedded integer runs.
-
-    Used to pick the highest version when multiple toolchain directories
-    coexist (NDK 25.0.1 vs 100.0.0, clang-r450b vs clang-r498344b) where
-    plain lexicographic sort gives the wrong answer.
-    """
-    return tuple(int(part) for part in re.findall(r"\d+", name))
 
 
 def get_build_version(repo_root: Path | None = None) -> str:

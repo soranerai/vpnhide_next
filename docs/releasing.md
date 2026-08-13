@@ -16,7 +16,7 @@
    Atomically:
    - rotates every fragment under `changelog.d/` into `history[0]` with `version: "0.6.2"` and deletes the fragment files,
    - writes `0.6.2` to `VERSION`,
-   - patches `versionName`/`versionCode` in the public module metadata and `build.gradle.kts`,
+   - patches `versionName`/`versionCode` in the public APK metadata and `build.gradle.kts`,
    - regenerates `CHANGELOG.md` and `update-json/changelog.md`.
 3. Commit, tag, push:
    ```sh
@@ -45,7 +45,7 @@ components to the positional version.
    ```sh
    ./scripts/update-json.sh
    ```
-   The script downloads each published kmod artifact and records its SHA-256
+   The script downloads each published backend kmod artifact and records its SHA-256
    digest in the matching metadata file. The app requires this digest before
    it will offer root-assisted installation.
 6. Commit and push:
@@ -79,6 +79,8 @@ This string goes into:
 - APK `versionName` (visible in Android Settings → Apps, diagnostic debug zip, `BuildConfig.VERSION_NAME`)
 - Inside the zip filenames (only for release tags; dev artifacts in CI keep a stable name)
 
-The committed `module.prop` files are **not** modified — `kmod/build.py` stages a copy, patch the version there, and zip. `lsposed/app/build.gradle.kts` evaluates `build-version.py` at configure time and sets `versionName` dynamically.
+The backend owns native module metadata and packaging. The public
+`lsposed/app/build.gradle.kts` evaluates `build-version.py` at configure time
+and sets `versionName` dynamically.
 
 `versionCode` stays at the value baked in by the last `release.py` run (monotonically increasing integer required by Android/Magisk).

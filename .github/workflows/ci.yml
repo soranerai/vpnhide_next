@@ -59,10 +59,7 @@ jobs:
           path: kmod-artifacts/vpnhide-kmod-${{ matrix.kmi }}.zip
           if-no-files-found: warn
 
-  # kmod-qemu (the runtime boot-in-QEMU gate) moved to vpnhide_next_private's
-  # CI: it needs kmod/vpnhide_kmod.c to rebuild the module against each
-  # ddk-qemu image's exact baked kernel tree (required for CFI/vermagic
-  # match), and that source only lives in the private repo now.
+  # Runtime kernel-module/QEMU tests run in the private backend repository.
 
   lsposed:
     needs: setup

@@ -57,7 +57,7 @@ Works on KernelSU, Magisk, and any other root solution.
 
 For apps with aggressive anti-tamper SDKs, full VPN hiding requires covering both native and Java API paths without any hooks in the target app's process:
 
-- **[kmod](../kmod/)** covers native: `ioctl`, `getifaddrs` (netlink), `/proc/net/route`.
+- **kmod/KPatch** covers native: `ioctl`, `getifaddrs` (netlink), `/proc/net/route`.
 - **This module** covers Java APIs: `NetworkCapabilities`, `NetworkInfo`, `LinkProperties` via `writeToParcel()` in `system_server`.
 
 Together they provide complete VPN hiding with zero footprint in the target process.

@@ -1,14 +1,12 @@
 # Single source of truth for VPN-like network interface name patterns.
 # A name matching any rule below is treated as a tunnel and hidden from
-# target apps (kmod) / from the calling process (lsposed).
+# target apps / from the calling process (lsposed).
 #
 # Read at codegen time by scripts/codegen-interfaces.py, which renders
-# three matchers (kmod C, lsposed-native Rust, lsposed
-# Kotlin). Sync between platforms is enforced by a CI lint step that
-# re-runs the codegen and fails if the generated files drift.
+# the public Kotlin matcher. Backend-native consumers generate their own
+# copy from this source in the private repository.
 #
-# Match grammar (intentionally tiny so all four targets implement it
-# identically without depending on a regex engine — kernel C has none):
+# Match grammar (intentionally tiny so all consumers implement it identically):
 #
 #   { exact   = "lo"     }                          name == "lo"
 #   { prefix  = "rmnet"  }                          name.starts_with("rmnet")
@@ -18,7 +16,7 @@
 # All matches are ASCII case-insensitive.
 #
 # [[test]] entries below feed into the generated unit tests in each
-# language target — they verify that all four matchers agree on a fixed
+# language target — they verify that the public matcher agrees on a fixed
 # set of inputs. CI runs them on every PR.
 
 [[vpn]]
@@ -87,7 +85,7 @@ traffic-shaping ifaces (different shape: `if` + letter, not + digit)."""
 
 # ── Test vectors ──────────────────────────────────────────────────────
 # Array of {name, is_vpn} fixtures. Codegen renders these into per-
-# language unit tests so all four matchers stay in lockstep.
+# language unit tests so the public matcher stays in lockstep with the source.
 
 [[test]]
 name = "tun0"

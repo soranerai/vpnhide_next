@@ -6,8 +6,6 @@ How to build vpnhide_next from source.
 
 - **JDK 17 or later** — what the CI image installs (`openjdk-17-jdk-headless`); local builds with JDK 21 also work. The `lsposed/app` Gradle build sets `sourceCompatibility = 17` and `jvmTarget = "17"`.
 - **Android SDK** — install `platforms;android-35`, `build-tools;35.0.0`, `platform-tools` (via Android Studio or `cmdline-tools`). Export `ANDROID_HOME`.
-- **`podman` or `docker`** — only for building the kernel module via DDK images. See [kmod/BUILDING.md](../kmod/BUILDING.md).
-- **`zip`** — packaging module zips.
 - **`adb`** — installing builds on a device.
 
 The diagnostic Rust library and kernel backend are built in the private
@@ -21,8 +19,6 @@ in this repository.
 | Path | Component |
 |---|---|
 | `lsposed/` | LSPosed module + target-picker Android app (Kotlin, Compose) |
-| `kmod/` | Kernel module (C, kretprobes) |
-| `portshide/` | Localhost port blocker (shell + iptables) |
 | `scripts/` | Release & changelog tooling |
 | `update-json/` | Magisk/KSU update metadata |
 | `docs/` | Contributor documentation (this directory) |
@@ -59,15 +55,8 @@ cd lsposed && ./gradlew :app:assembleRelease
 # → lsposed/app/build/outputs/apk/release/app-release.apk
 ```
 
-### kernel module
-
-```sh
-./kmod/build.py --kmi android14-6.1   # one variant
-./kmod/build.py --all                  # every supported GKI
-# → vpnhide-kmod-<kmi>.zip at the repo root
-```
-
-The script auto-spawns the `ghcr.io/ylarod/ddk-min:<kmi>-<TAG>` container via podman/docker (same image CI uses). For local kernel-source builds via `direnv` and the GKI matrix details, see [kmod/BUILDING.md](../kmod/BUILDING.md).
+Kernel modules and KPatch builds are produced in the private backend
+repository. This public repository only consumes their release artifacts.
 
 ## Install on device
 
@@ -75,11 +64,10 @@ The script auto-spawns the `ghcr.io/ylarod/ddk-min:<kmi>-<TAG>` container via po
 # APK
 adb install -r lsposed/app/build/outputs/apk/release/app-release.apk
 
-# kmod: push to device, install via the Magisk or KernelSU manager app
-adb push vpnhide-kmod.zip /sdcard/Download/
+# Install the backend-produced kmod/KPatch package via the manager app.
 ```
 
-After flashing kmod, reboot the device.
+After installing a kernel component, reboot the device.
 
 ## CI lints (run before pushing)
 
@@ -97,11 +85,6 @@ git diff --quiet  # must be clean
 # Python (ruff, config in pyproject.toml). uvx runs without installing anything global.
 uvx ruff format --check
 uvx ruff check
-
-# C (kernel module)
-clang-format --dry-run --Werror kmod/vpnhide_kmod.c
-# Host-side test of the generated VPN-iface matcher used by the kernel module
-gcc -O2 -Wall -Werror -o /tmp/test_iface_lists kmod/test_iface_lists.c && /tmp/test_iface_lists
 
 # Kotlin
 ktlint "lsposed/**/*.kt"
@@ -123,4 +106,3 @@ See [releasing.md](releasing.md#build-versions) for details.
 
 - [releasing.md](releasing.md) — version bump, tag, release flow
 - [changelog.md](changelog.md) — how changelog entries flow from JSON → markdown
-- [kmod/BUILDING.md](../kmod/BUILDING.md) — kernel-module build deep dive
