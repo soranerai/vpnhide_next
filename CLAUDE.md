@@ -8,7 +8,6 @@ tooling that follows the AGENTS-convention picks it up automatically.
 
 ## Project layout
 
-- `kmod/` — kernel module (hiding interfaces + ports), kretprobes-based
 - `lsposed/` — LSPosed module + Compose target-picker app
 
 ## Read before touching code
@@ -20,7 +19,6 @@ These short files cover everything specific to this repo. Skipping them leads to
 - [docs/state.md](docs/state.md) — every persistent path / proc entry / iptables chain the project touches; who writes, who reads, lifetime
 - [docs/changelog.md](docs/changelog.md) — changelog storage (`changelog.d/` fragments + history JSON), `./scripts/changelog.py` usage
 - [docs/releasing.md](docs/releasing.md) — `./scripts/release.py` usage, version-bump flow
-- [kmod/BUILDING.md](kmod/BUILDING.md) — kernel-module build (one-command DDK via `./kmod/build.py`, GKI matrix, troubleshooting)
 
 ## Workflow rules
 
@@ -37,7 +35,6 @@ These short files cover everything specific to this repo. Skipping them leads to
 
 Single-command builds for both CI and local — the same scripts run in both places.
 
-- **kmod**: `./kmod/build.py --kmi <kmi>` (or `--all`). Auto-spawns the DDK podman/docker container if you're not already inside it; CI passes `--inside-container` to skip the spawn. The DDK image tag is `DDK_IMAGE_TAG` in `kmod/build.py` — `.github/workflows/ci.yml` mirrors it, bump both together.
 - **lsposed APK**: `cd lsposed && ./gradlew :app:assembleRelease`.
 
 The private native repository builds the Rust cdylib with the 16 KiB-page
@@ -45,5 +42,3 @@ alignment required by modern Android devices. The public repo consumes the
 resulting prebuilt `.so` from CI; do not add a public native source copy.
 
 ## Design notes
-
-- **KPatch-Next KPM:** `kmod/` currently uses kretprobes and requires per-GKI-generation builds (kernel headers + `Module.symvers`). Porting to a [KPatch-Next](https://github.com/KernelSU-Next/KPatch-Next) KPM would produce a single binary for kernels 3.18–6.12, eliminating the multi-GKI build problem. Tradeoff: adds KPatch-Next as a hard dependency (already bundled in KernelSU-Next).

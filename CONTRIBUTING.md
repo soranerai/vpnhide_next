@@ -38,7 +38,6 @@ Keep messages focused on *why*, not *what* — the diff already shows what chang
 
 - **Kotlin**: Follow official Kotlin style guide. Use `ktlint` to check.
 - **Rust**: Use `rustfmt` and `clippy`.
-- **C**: Follow Linux kernel coding style for `kmod`.
 
 ## UI/UX guidelines
 
