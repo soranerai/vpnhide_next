@@ -124,7 +124,8 @@ dependencies {
     // (checks/vpnhide_checks.*.kt) — normally injected automatically by the
     // Gobley uniffi plugin, which we don't run here since libvpnhide_checks.so
     // is prebuilt in the private repo. Versions match what Gobley 0.3.7 pins
-    // (gobley.gradle.DependencyVersions: JNA 5.18.1, atomicfu 0.26.1).
+    // Versions match the generated UniFFI bindings used by the private
+    // native library (JNA 5.18.1, atomicfu 0.26.1).
     implementation("net.java.dev.jna:jna:5.18.1@aar")
     implementation("org.jetbrains.kotlinx:atomicfu:0.26.1")
 

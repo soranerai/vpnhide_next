@@ -6,8 +6,6 @@
 target-version = "py312"  # CI image (Ubuntu 24.04) ships Python 3.12
 line-length = 100
 extend-exclude = [
-    # third-party / vendored — not our code, don't lint
-    "zygisk/third_party",
     # cargo build outputs that may contain stray .py files
     "**/target",
     # local-only worktrees / agent state, untracked

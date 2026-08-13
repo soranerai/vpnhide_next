@@ -19,7 +19,6 @@ What it does, atomically:
   * Write `X.Y.Z` into the `VERSION` file.
   * Patch the pinned version in:
       - `kmod/module/module.prop` (version, versionCode)
-      - `lsposed/native/Cargo.toml`                    (first `version = "..."`)
       - `lsposed/app/build.gradle.kts`                 (versionName, versionCode)
 
 `versionCode` is derived as `major*10000 + minor*100 + patch`.
@@ -86,14 +85,6 @@ def update_module_prop(path: Path, version: str, version_code: int) -> None:
             (re.compile(r"^version=.*$", re.M), f"version=v{version}"),
             (re.compile(r"^versionCode=.*$", re.M), f"versionCode={version_code}"),
         ],
-    )
-
-
-def update_cargo_toml(path: Path, version: str) -> None:
-    """Replace the first `version = "..."` line — package version sits at top."""
-    patch_file(
-        path,
-        [(re.compile(r'^version = "[^"]*"$', re.M), f'version = "{version}"')],
     )
 
 
@@ -168,7 +159,6 @@ def main() -> int:
     files = [
         REPO_ROOT / "kmod/module/module.prop",
         REPO_ROOT / "lsposed/app/build.gradle.kts",
-        REPO_ROOT / "lsposed/native/Cargo.toml",
     ]
     for f in files:
         if not f.exists():
@@ -192,12 +182,10 @@ def main() -> int:
 
     # Version-bearing source files.
     update_module_prop(REPO_ROOT / "kmod/module/module.prop", version, version_code)
-    update_cargo_toml(REPO_ROOT / "lsposed/native/Cargo.toml", version)
     update_gradle_kts(REPO_ROOT / "lsposed/app/build.gradle.kts", version, version_code)
     regenerate_compatibility_matrix()
 
     console.print("  [green]✓[/green] kmod/module/module.prop")
-    console.print("  [green]✓[/green] lsposed/native/Cargo.toml")
     console.print("  [green]✓[/green] lsposed/app/build.gradle.kts")
     console.print("  [green]✓[/green] generated compatibility matrix")
 

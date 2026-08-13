@@ -1,8 +1,7 @@
 # CI image for vpnhide_next.
 #
-# Bakes in everything needed for all three modules:
-#   - Rust + NDK + cargo-ndk (zygisk)
-#   - JDK 17 (lsposed, test-app)
+# Bakes in everything needed for the public build:
+#   - JDK 17 (lsposed)
 #   - Google AOSP clang + cross-compile tools (kmod)
 #
 # Rebuilt by ci-image.yml when this Dockerfile changes (and monthly).
@@ -24,7 +23,7 @@ RUN apt-get update && \
         git && \
     rm -rf /var/lib/apt/lists/*
 
-# ── ktlint (for lsposed / test-app Kotlin) ──────────────────────────
+# ── ktlint (for lsposed Kotlin) ─────────────────────────────────────
 ENV KTLINT_VERSION=1.8.0
 RUN curl -fsSL -o /usr/local/bin/ktlint \
         "https://github.com/pinterest/ktlint/releases/download/${KTLINT_VERSION}/ktlint" && \
@@ -43,37 +42,6 @@ RUN mkdir -p "${ANDROID_HOME}/cmdline-tools" && \
     yes | sdkmanager --licenses > /dev/null 2>&1 && \
     sdkmanager "platform-tools" "platforms;android-35" "build-tools;35.0.0" && \
     chmod -R a+rx "${ANDROID_HOME}"
-
-# ── Rust toolchain (for zygisk) ──────────────────────────────────────
-# Pin both rustc and cargo-ndk versions so monthly image rebuilds don't
-# silently drift. Bump together with local toolchain when needed; CI
-# stays reproducible against an exact version.
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH \
-    RUST_VERSION=1.95.0 \
-    CARGO_NDK_VERSION=4.1.2
-
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | \
-        sh -s -- -y --default-toolchain "${RUST_VERSION}" --profile minimal --no-modify-path && \
-    rustup target add aarch64-linux-android && \
-    rustup component add rustfmt clippy && \
-    cargo install cargo-ndk --version "${CARGO_NDK_VERSION}" --locked && \
-    chmod -R a+w /usr/local/rustup /usr/local/cargo
-
-# ── Android NDK (for zygisk) ─────────────────────────────────────────
-ENV ANDROID_NDK_VERSION=r28b
-ENV ANDROID_NDK_HOME=/opt/android-ndk
-# Gobley's cargo plugin reads ANDROID_NDK_ROOT (not _HOME) to find the NDK
-# when looking up the toolchain library directory for Android Rust targets.
-ENV ANDROID_NDK_ROOT=/opt/android-ndk
-
-RUN curl -fsSL -o /tmp/ndk.zip \
-        "https://dl.google.com/android/repository/android-ndk-${ANDROID_NDK_VERSION}-linux.zip" && \
-    unzip -q /tmp/ndk.zip -d /opt && \
-    mv "/opt/android-ndk-${ANDROID_NDK_VERSION}" "${ANDROID_NDK_HOME}" && \
-    rm /tmp/ndk.zip && \
-    chmod -R a+rx "${ANDROID_NDK_HOME}"
 
 # ── Google AOSP clang (for kmod) ─────────────────────────────────────
 # Same toolchain that built the Pixel GKI kernel — avoids ABI mismatches

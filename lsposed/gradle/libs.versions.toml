@@ -4,7 +4,6 @@ kotlin = "2.1.20"
 compose-bom = "2025.04.00"
 activity-compose = "1.10.1"
 core-ktx = "1.16.0"
-gobley = "0.3.7"
 room = "2.6.1"
 ksp = "2.1.20-1.0.31"
 work = "2.10.0"
@@ -27,6 +26,4 @@ android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-atomicfu = { id = "org.jetbrains.kotlin.plugin.atomicfu", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
-gobley-cargo = { id = "dev.gobley.cargo", version.ref = "gobley" }
-gobley-uniffi = { id = "dev.gobley.uniffi", version.ref = "gobley" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }

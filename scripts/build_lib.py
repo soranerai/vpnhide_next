@@ -1,7 +1,6 @@
 """Shared helpers for build scripts.
 
-Used by kmod/build.py, portshide/build-zip.py, zygisk/build.py,
-and scripts/build-version.py.
+Used by kmod/build.py and scripts/build-version.py.
 
 Stdlib-only on purpose: scripts/build-version.py is invoked from
 lsposed/app/build.gradle.kts on every Gradle build, so adding pip/uv

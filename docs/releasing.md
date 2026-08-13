@@ -16,7 +16,7 @@
    Atomically:
    - rotates every fragment under `changelog.d/` into `history[0]` with `version: "0.6.2"` and deletes the fragment files,
    - writes `0.6.2` to `VERSION`,
-   - patches `versionName`/`versionCode` in every module.prop, Cargo.toml, and `build.gradle.kts`,
+   - patches `versionName`/`versionCode` in the public module metadata and `build.gradle.kts`,
    - regenerates `CHANGELOG.md` and `update-json/changelog.md`.
 3. Commit, tag, push:
    ```sh
