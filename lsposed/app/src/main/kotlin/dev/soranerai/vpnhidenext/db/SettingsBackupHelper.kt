@@ -93,7 +93,6 @@ internal object SettingsBackupHelper {
             globalObj.put("listMode", config.listMode.name)
             globalObj.put("kernelHookMask", config.kernelHookMask)
             globalObj.put("javaHookMask", config.javaHookMask)
-            globalObj.put("dynamicVpnPortBlocking", config.dynamicVpnPortBlocking)
             json.put("global_config", globalObj)
 
             json.toString(4) // Format with 4 spaces indent
@@ -130,7 +129,6 @@ internal object SettingsBackupHelper {
                                 listMode = listMode,
                                 kernelHookMask = kernelMask,
                                 javaHookMask = javaMask,
-                                dynamicVpnPortBlocking = globalObj.optBoolean("dynamicVpnPortBlocking", false),
                             ),
                         )
                     } else {
