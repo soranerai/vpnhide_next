@@ -79,6 +79,8 @@
     <string name="add_rule">Add Rule</string>
     <string name="err_rule_redundant">Redundant: covered by \"%s\"</string>
     <string name="err_rule_exists">This rule already exists</string>
+    <string name="err_port_range">Enter a port from 1 to 65535.</string>
+    <string name="err_port_start_after_end">Start port cannot be greater than end port.</string>
     
     <!-- Interface Prefixes -->
     <string name="iface_prefixes_title">Tun Interfaces</string>
@@ -618,7 +620,8 @@
     <string name="ports_new_rule_title">New Port Rule</string>
     <string name="ports_edit_rule_title">Edit Port Rule</string>
     <string name="ports_label_placeholder">e.g. My Server</string>
-    <string name="ports_default_range_hint">Default: All ports (1-65535)</string>
+    <string name="ports_range_hint">Allowed range: 1–65535</string>
+    <string name="ports_range_size_hint">Range contains %1$d port(s)</string>
     <string name="ports_redundant_rules_removed_warning">%1$d redundant rule(s) will be removed</string>
     <string name="chip_native">Native</string>
     <string name="chip_framework">Framework</string>

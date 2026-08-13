@@ -77,6 +77,8 @@
     <string name="add_rule">Добавить правило</string>
     <string name="err_rule_redundant">Дубликат: перекрывается \"%s\"</string>
     <string name="err_rule_exists">Такое правило уже существует</string>
+    <string name="err_port_range">Введите порт от 1 до 65535.</string>
+    <string name="err_port_start_after_end">Начальный порт не может быть больше конечного.</string>
     
     <!-- Interface Prefixes -->
     <string name="iface_prefixes_title">Tun интерфейсы</string>
@@ -526,7 +528,8 @@
     <string name="ports_new_rule_title">Новое правило портов</string>
     <string name="ports_edit_rule_title">Редактировать правило</string>
     <string name="ports_label_placeholder">например, Мой Сервер</string>
-    <string name="ports_default_range_hint">По умолчанию: все порты (1-65535)</string>
+    <string name="ports_range_hint">Допустимый диапазон: 1–65535</string>
+    <string name="ports_range_size_hint">В диапазоне портов: %1$d</string>
     <string name="ports_redundant_rules_removed_warning">%1$d избыточных правил будет удалено</string>
     <string name="chip_native">Native</string>
     <string name="chip_framework">Framework</string>

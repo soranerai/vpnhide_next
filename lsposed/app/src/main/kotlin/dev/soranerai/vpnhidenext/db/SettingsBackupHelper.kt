@@ -3,6 +3,7 @@ package dev.soranerai.vpnhidenext.db
 import android.content.Context
 import dev.soranerai.vpnhidenext.PortProtocol
 import dev.soranerai.vpnhidenext.TargetsCache
+import dev.soranerai.vpnhidenext.isValidPortRange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -169,6 +170,7 @@ internal object SettingsBackupHelper {
                                     val ruleObj = rulesArray.getJSONObject(j)
                                     val start = ruleObj.getInt("startPort")
                                     val end = ruleObj.getInt("endPort")
+                                    if (!isValidPortRange(start, end)) continue
                                     val proto = PortProtocol.valueOf(ruleObj.getString("protocol"))
                                     val label = ruleObj.optString("label", "")
                                     val enabled = ruleObj.optBoolean("enabled", true)
@@ -198,6 +200,7 @@ internal object SettingsBackupHelper {
                             val ruleObj = massArray.getJSONObject(i)
                             val start = ruleObj.getInt("startPort")
                             val end = ruleObj.getInt("endPort")
+                            if (!isValidPortRange(start, end)) continue
                             val proto = PortProtocol.valueOf(ruleObj.getString("protocol"))
                             val label = ruleObj.optString("label", "")
                             val enabled = ruleObj.optBoolean("enabled", true)

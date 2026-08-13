@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import dev.soranerai.vpnhidenext.PortProtocol
+import dev.soranerai.vpnhidenext.isValidPortRange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -143,7 +144,7 @@ internal class AppDatabase private constructor(
                 val portRulesArray = root.optJSONArray("portRules")
                 if (portRulesArray != null) {
                     for (i in 0 until portRulesArray.length()) {
-                        portRulesList.add(portRulesArray.getJSONObject(i).toDbPortRule())
+                        portRulesArray.getJSONObject(i).toDbPortRule().takeIf { isValidPortRange(it.startPort, it.endPort) }?.let(portRulesList::add)
                     }
                 }
 
@@ -151,7 +152,7 @@ internal class AppDatabase private constructor(
                 val massRulesArray = root.optJSONArray("massPortRules")
                 if (massRulesArray != null) {
                     for (i in 0 until massRulesArray.length()) {
-                        massRulesList.add(massRulesArray.getJSONObject(i).toDbMassPortRule())
+                        massRulesArray.getJSONObject(i).toDbMassPortRule().takeIf { isValidPortRange(it.startPort, it.endPort) }?.let(massRulesList::add)
                     }
                 }
 
@@ -343,6 +344,7 @@ internal class AppDatabase private constructor(
                 }
 
             override suspend fun insertRule(rule: DbPortRule) {
+                if (!isValidPortRange(rule.startPort, rule.endPort)) return
                 synchronized(lock) {
                     val list = config.portRules.toMutableList()
                     val id =
@@ -363,7 +365,7 @@ internal class AppDatabase private constructor(
             override suspend fun insertRules(rules: List<DbPortRule>) {
                 synchronized(lock) {
                     val list = config.portRules.toMutableList()
-                    for (rule in rules) {
+                    for (rule in rules.filter { isValidPortRange(it.startPort, it.endPort) }) {
                         val id =
                             if (rule.id == 0L) {
                                 (list.maxOfOrNull { it.id } ?: 0L) + 1L
@@ -422,6 +424,7 @@ internal class AppDatabase private constructor(
                 }
 
             override suspend fun insertMassRule(rule: DbMassPortRule) {
+                if (!isValidPortRange(rule.startPort, rule.endPort)) return
                 synchronized(lock) {
                     val list = config.massPortRules.toMutableList()
                     val id =
@@ -442,7 +445,7 @@ internal class AppDatabase private constructor(
             override suspend fun insertMassRules(rules: List<DbMassPortRule>) {
                 synchronized(lock) {
                     val list = config.massPortRules.toMutableList()
-                    for (rule in rules) {
+                    for (rule in rules.filter { isValidPortRange(it.startPort, it.endPort) }) {
                         val id =
                             if (rule.id == 0L) {
                                 (list.maxOfOrNull { it.id } ?: 0L) + 1L
@@ -625,8 +628,7 @@ internal class AppDatabase private constructor(
                                 } else {
                                     PortProtocol.TCP
                                 }
-                            portRules.add(
-                                DbPortRule(
+                            val rule = DbPortRule(
                                     id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L,
                                     packageName = if (pkgIdx >= 0) cursor.getString(pkgIdx) else "",
                                     userId = if (userIdx >= 0) cursor.getInt(userIdx) else 0,
@@ -635,8 +637,8 @@ internal class AppDatabase private constructor(
                                     protocol = proto,
                                     label = if (labelIdx >= 0) cursor.getString(labelIdx) else "",
                                     enabled = if (enabledIdx >= 0) cursor.getInt(enabledIdx) == 1 else true,
-                                ),
-                            )
+                                )
+                            if (isValidPortRange(rule.startPort, rule.endPort)) portRules.add(rule)
                         }
                     }
                 } catch (e: Exception) {
@@ -662,16 +664,15 @@ internal class AppDatabase private constructor(
                                 } else {
                                     PortProtocol.TCP
                                 }
-                            massPortRules.add(
-                                DbMassPortRule(
+                            val rule = DbMassPortRule(
                                     id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L,
                                     startPort = if (startIdx >= 0) cursor.getInt(startIdx) else 0,
                                     endPort = if (endIdx >= 0) cursor.getInt(endIdx) else 0,
                                     protocol = proto,
                                     label = if (labelIdx >= 0) cursor.getString(labelIdx) else "",
                                     enabled = if (enabledIdx >= 0) cursor.getInt(enabledIdx) == 1 else true,
-                                ),
-                            )
+                                )
+                            if (isValidPortRange(rule.startPort, rule.endPort)) massPortRules.add(rule)
                         }
                     }
                 } catch (e: Exception) {

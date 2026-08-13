@@ -975,6 +975,10 @@ private fun PortRuleScreen(
     var endPort by remember { mutableStateOf(initialRule?.endPort?.toString() ?: "") }
     var protocol by remember { mutableStateOf(initialRule?.protocol ?: PortProtocol.BOTH) }
 
+    val startValue = startPort.toIntOrNull()
+    val endValue = endPort.toIntOrNull()
+    val rangeViolation = validatePortRange(startValue, endValue)
+
     val fieldColors =
         OutlinedTextFieldDefaults.colors(
             focusedBorderColor = TelPink,
@@ -985,15 +989,15 @@ private fun PortRuleScreen(
     val currentRule =
         PortRule(
             id = initialRule?.id ?: "",
-            startPort = startPort.toIntOrNull() ?: (endPort.toIntOrNull() ?: 1),
-            endPort = endPort.toIntOrNull() ?: (startPort.toIntOrNull() ?: 65535),
+            startPort = startValue ?: MIN_PORT,
+            endPort = endValue ?: MAX_PORT,
             protocol = protocol,
             label = label,
             enabled = true,
         )
 
-    val violationLocal = validateRule(currentRule, existingRules)
-    val violationMass = validateRule(currentRule, massRules)
+    val violationLocal = if (rangeViolation == RuleViolationType.NONE) validateRule(currentRule, existingRules) else RuleViolation(rangeViolation)
+    val violationMass = if (rangeViolation == RuleViolationType.NONE) validateRule(currentRule, massRules) else RuleViolation(rangeViolation)
     val violation = if (violationMass.type != RuleViolationType.NONE) violationMass else violationLocal
 
     Scaffold(
@@ -1040,7 +1044,7 @@ private fun PortRuleScreen(
                     Text(stringResource(R.string.cancel))
                 }
                 Button(
-                    enabled = violation.type == RuleViolationType.NONE,
+                    enabled = rangeViolation == RuleViolationType.NONE && violation.type == RuleViolationType.NONE,
                     onClick = {
                         onConfirm(
                             currentRule.copy(
@@ -1087,28 +1091,46 @@ private fun PortRuleScreen(
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 OutlinedTextField(
                     value = startPort,
-                    onValueChange = { if (it.length <= 5) startPort = it.filter { c -> c.isDigit() } },
+                    onValueChange = { startPort = it.filter { c -> c.isDigit() }.take(5) },
                     label = { Text(stringResource(R.string.port_start)) },
                     placeholder = { Text("1") },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     shape = RoundedCornerShape(12.dp),
                     colors = fieldColors,
                     modifier = Modifier.weight(1f),
+                    isError = rangeViolation == RuleViolationType.INVALID_START || rangeViolation == RuleViolationType.START_AFTER_END,
+                    supportingText =
+                        if (rangeViolation == RuleViolationType.INVALID_START || rangeViolation == RuleViolationType.START_AFTER_END) {
+                            { Text(stringResource(if (rangeViolation == RuleViolationType.START_AFTER_END) R.string.err_port_start_after_end else R.string.err_port_range)) }
+                        } else {
+                            null
+                        },
                 )
                 OutlinedTextField(
                     value = endPort,
-                    onValueChange = { if (it.length <= 5) endPort = it.filter { c -> c.isDigit() } },
+                    onValueChange = { endPort = it.filter { c -> c.isDigit() }.take(5) },
                     label = { Text(stringResource(R.string.port_end)) },
                     placeholder = { Text(if (startPort.isEmpty()) "65535" else startPort) },
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                     shape = RoundedCornerShape(12.dp),
                     colors = fieldColors,
                     modifier = Modifier.weight(1f),
+                    isError = rangeViolation == RuleViolationType.INVALID_END || rangeViolation == RuleViolationType.START_AFTER_END,
+                    supportingText =
+                        if (rangeViolation == RuleViolationType.INVALID_END || rangeViolation == RuleViolationType.START_AFTER_END) {
+                            { Text(stringResource(if (rangeViolation == RuleViolationType.START_AFTER_END) R.string.err_port_start_after_end else R.string.err_port_range)) }
+                        } else {
+                            null
+                        },
                 )
             }
 
             Text(
-                stringResource(R.string.ports_default_range_hint),
+                if (startValue != null && endValue != null && rangeViolation == RuleViolationType.NONE) {
+                    stringResource(R.string.ports_range_size_hint, endValue - startValue + 1)
+                } else {
+                    stringResource(R.string.ports_range_hint)
+                },
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f),
             )
@@ -1140,6 +1162,8 @@ private fun PortRuleScreen(
             if (violation.type != RuleViolationType.NONE) {
                 val msg =
                     when (violation.type) {
+                        RuleViolationType.INVALID_START, RuleViolationType.INVALID_END -> stringResource(R.string.err_port_range)
+                        RuleViolationType.START_AFTER_END -> stringResource(R.string.err_port_start_after_end)
                         RuleViolationType.DUPLICATE -> {
                             stringResource(R.string.err_rule_exists)
                         }
