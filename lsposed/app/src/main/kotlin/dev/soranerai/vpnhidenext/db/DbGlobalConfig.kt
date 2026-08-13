@@ -22,7 +22,6 @@ internal data class DbGlobalConfig(
     val updateCheckEnabled: Boolean = true,
     val healthCheckEnabled: Boolean = true,
     val selfTestVpnEnabled: Boolean = true,
-    val dynamicVpnPortBlocking: Boolean = false,
 )
 
 internal interface GlobalConfigDao {

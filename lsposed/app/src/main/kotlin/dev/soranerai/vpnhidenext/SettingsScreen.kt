@@ -88,7 +88,6 @@ fun SettingsScreen(
     var updateCheckEnabled by remember { mutableStateOf(true) }
     var healthCheckEnabled by remember { mutableStateOf(true) }
     var selfTestVpnEnabled by remember { mutableStateOf(true) }
-    var dynamicVpnPortBlocking by remember { mutableStateOf(false) }
     BuiltInUpdateDebugPrefs.initialize(context)
     val builtInDebugUnlocked by BuiltInUpdateDebugPrefs.unlocked.collectAsState()
     val builtInDebugEnabled by BuiltInUpdateDebugPrefs.enabled.collectAsState()
@@ -104,7 +103,6 @@ fun SettingsScreen(
             updateCheckEnabled = getUpdateCheckEnabled(context)
             healthCheckEnabled = getHealthCheckEnabled(context)
             selfTestVpnEnabled = getSelfTestVpnEnabled(context)
-            dynamicVpnPortBlocking = getDynamicVpnPortBlocking(context)
         }
         batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
     }
@@ -308,20 +306,6 @@ fun SettingsScreen(
                             selfTestVpnEnabled = newValue
                             scope.launch(Dispatchers.IO) {
                                 setSelfTestVpnEnabled(context, newValue)
-                            }
-                        },
-                    )
-                    SettingsRowDivider()
-                    SettingsSwitchRow(
-                        title = stringResource(R.string.settings_toggle_dynamic_vpn_ports_title),
-                        subtitle = stringResource(R.string.settings_toggle_dynamic_vpn_ports_desc),
-                        checked = dynamicVpnPortBlocking,
-                        icon = Icons.Default.VpnKey,
-                        iconTint = TelOrange,
-                        onCheckedChange = { newValue ->
-                            dynamicVpnPortBlocking = newValue
-                            scope.launch(Dispatchers.IO) {
-                                setDynamicVpnPortBlocking(context, newValue)
                             }
                         },
                     )
