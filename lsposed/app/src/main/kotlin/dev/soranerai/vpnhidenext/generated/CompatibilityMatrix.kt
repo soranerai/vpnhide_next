@@ -40,4 +40,10 @@ internal val compatibilityMatrix: List<CompatibleRelease> =
             builtIn = "2.4.0",
             kmod = "2.4.0",
         ),
+        CompatibleRelease(
+            lsposed = "2.5.0",
+            bridge = "2.5.0",
+            builtIn = "2.5.0",
+            kmod = "2.5.0",
+        ),
     )

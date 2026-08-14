@@ -1,3 +1,19 @@
+## v2.5.0
+
+### Changed
+- LSPosed now hides all active VPN interfaces reported by the daemon
+- Optimize LSPosed hook callbacks by reusing effective UID context
+- Recognize ap, Tailscale, HE IPv6, ZeroTier, and short Tailscale interfaces as VPN tunnels
+- Improved port rule editing with strict range validation and inline guidance
+- Disabled CONFIG_USER_NS in built-in build to eliminate indirect kernel modification indicator
+- Optimized eBPF hooks (-3.5% wall -3.3% CPU)
+- Optimized readdir hooks (-3.5% wall -3% CPU)
+- Other minor optimizations
+
+### Fixed
+- Show built-in bridge updates independently when the embedded kernel is already current
+- Avoid exposing incomplete mobile LinkProperties during network handover by reusing the last complete snapshot for the same interface.
+
 ## v2.4.0
 
 ### Added
@@ -42,8 +58,3 @@
 ### Fixed
 - Resolve native module and control tool paths dynamically to support custom module folders (e.g. vpnhide_kpatch).
 - Fixed detection via system call (syscall) timing attacks in the built-in mode
-
-## v2.1.3
-
-### Fixed
-- fixed path hiding

@@ -1,6 +1,61 @@
 {
   "history": [
     {
+      "version": "2.5.0",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "LSPosed now hides all active VPN interfaces reported by the daemon",
+              "ru": "LSPosed теперь скрывает все активные VPN-интерфейсы, переданные демоном"
+            },
+            {
+              "en": "Optimize LSPosed hook callbacks by reusing effective UID context",
+              "ru": "Оптимизированы callback-и LSPosed-хуков за счёт повторного использования контекста effective UID"
+            },
+            {
+              "en": "Recognize ap, Tailscale, HE IPv6, ZeroTier, and short Tailscale interfaces as VPN tunnels",
+              "ru": "Добавлено распознавание интерфейсов ap, Tailscale, HE IPv6, ZeroTier и коротких имён Tailscale как VPN-туннелей"
+            },
+            {
+              "en": "Improved port rule editing with strict range validation and inline guidance",
+              "ru": "Улучшено добавление правил портов: строгая проверка диапазонов и подсказки в форме"
+            },
+            {
+              "en": "Disabled CONFIG_USER_NS in built-in build to eliminate indirect kernel modification indicator",
+              "ru": "Отключен CONFIG_USER_NS в built-in, что устраняет косвенный признак модификации ядра"
+            },
+            {
+              "en": "Optimized eBPF hooks (-3.5% wall -3.3% CPU)",
+              "ru": "Оптимизированы хуки ebpf (-3.5% wall -3.3% CPU)"
+            },
+            {
+              "en": "Optimized readdir hooks (-3.5% wall -3% CPU)",
+              "ru": "Оптимизированы хуки readdir (-3.5% wall -3% CPU)"
+            },
+            {
+              "en": "Other minor optimizations",
+              "ru": "Прочие мелкие оптимизации"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Show built-in bridge updates independently when the embedded kernel is already current",
+              "ru": "Теперь показывается отдельное обновление моста, если встроенное ядро уже актуально"
+            },
+            {
+              "en": "Avoid exposing incomplete mobile LinkProperties during network handover by reusing the last complete snapshot for the same interface.",
+              "ru": "Теперь не выдаваются неполные LinkProperties мобильной сети во время переключения: для того же интерфейса используется последний полный снимок."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.4.0",
       "sections": [
         {
