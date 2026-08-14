@@ -77,6 +77,12 @@ jobs:
       - name: Mark workspace safe
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
+      - name: Install python3 if missing
+        run: |
+          if ! command -v python3 >/dev/null 2>&1; then
+            apt-get update && apt-get install -y --no-install-recommends python3
+          fi
+
       - name: Verify generated compatibility matrix
         run: |
           python3 scripts/codegen-compatibility.py
