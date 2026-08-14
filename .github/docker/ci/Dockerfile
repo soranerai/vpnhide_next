@@ -16,6 +16,7 @@ RUN apt-get update && \
         build-essential pkg-config \
         cmake ninja-build \
         openjdk-17-jdk-headless \
+        python3 \
         shellcheck \
         git && \
     rm -rf /var/lib/apt/lists/*
