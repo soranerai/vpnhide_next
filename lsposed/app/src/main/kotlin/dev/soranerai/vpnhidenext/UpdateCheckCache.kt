@@ -40,7 +40,7 @@ internal object UpdateCheckCache {
     // millis; drift doesn't matter — all we need is "was X hours ago".
     private var lastCheckMs: Long? = null
     private var inflight: Job? = null
-    @Volatile private var generation = 0L
+    private val generation = RequestGeneration()
 
     fun ensureFresh(
         scope: CoroutineScope,
@@ -50,7 +50,7 @@ internal object UpdateCheckCache {
         val last = lastCheckMs
         val fresh = last != null && System.currentTimeMillis() - last < STALE_MS
         if (fresh || inflight?.isActive == true) return
-        val requestGeneration = ++generation
+        val requestGeneration = generation.next()
         inflight = scope.launch { run(context, currentVersion, requestGeneration) }
     }
 
@@ -60,17 +60,17 @@ internal object UpdateCheckCache {
         currentVersion: String,
     ) {
         inflight?.cancel()
-        val requestGeneration = ++generation
+        val requestGeneration = generation.next()
         inflight = scope.launch { run(context, currentVersion, requestGeneration) }
     }
 
     fun setEnabled(enabled: Boolean) {
         if (enabled) {
-            generation++
+            generation.next()
             lastCheckMs = null
             return
         }
-        generation++
+        generation.next()
         inflight?.cancel()
         _info.value = null
         lastCheckMs = System.currentTimeMillis()
@@ -86,7 +86,7 @@ internal object UpdateCheckCache {
             return
         }
         val result = withContext(Dispatchers.IO) { checkForUpdate(currentVersion) }
-        if (generation != requestGeneration) return
+        if (!generation.isCurrent(requestGeneration)) return
         if (!getUpdateCheckEnabled(context)) {
             setEnabled(false)
             return

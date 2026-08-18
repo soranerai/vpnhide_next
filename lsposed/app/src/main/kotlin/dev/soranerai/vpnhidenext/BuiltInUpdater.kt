@@ -372,7 +372,7 @@ internal object BuiltInUpdateCache {
     val state: StateFlow<BuiltInUpdateState> = _state.asStateFlow()
     private var target: BuiltInUpdateTarget? = null
     private var checkJob: Job? = null
-    private var generation = 0L
+    private val generation = RequestGeneration()
     private var bridgeFile: File? = null
     private var kernelFile: File? = null
 
@@ -384,14 +384,14 @@ internal object BuiltInUpdateCache {
     fun refresh(updateTarget: BuiltInUpdateTarget) {
         if (isBusy(_state.value)) return
         checkJob?.cancel()
-        val requestGeneration = ++generation
+        val requestGeneration = generation.next()
         clearDownloads()
         target = updateTarget
         _state.value = BuiltInUpdateState.None
         checkJob =
             operationScope.launch {
                 val result = withContext(Dispatchers.IO) { checkForBuiltInUpdate(updateTarget) }
-                if (target != updateTarget || generation != requestGeneration) return@launch
+                if (target != updateTarget || !generation.isCurrent(requestGeneration)) return@launch
                 _state.value =
                     when (result) {
                         is BuiltInCheckOutcome.Available -> BuiltInUpdateState.Available(result.info)

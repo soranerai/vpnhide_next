@@ -1,6 +1,7 @@
 package dev.soranerai.vpnhidenext
 
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -9,7 +10,19 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-internal abstract class AsyncCache<T> {
+internal class RequestGeneration {
+    private var value = 0L
+
+    @Synchronized
+    fun next(): Long = ++value
+
+    @Synchronized
+    fun isCurrent(request: Long): Boolean = value == request
+}
+
+internal abstract class AsyncCache<T>(
+    private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
+) {
     private val _state = MutableStateFlow<T?>(null)
     val state: StateFlow<T?> = _state.asStateFlow()
 
@@ -18,11 +31,11 @@ internal abstract class AsyncCache<T> {
 
     protected var inflight: Job? = null
     protected val lock = Any()
-    private var generation = 0L
+    private val generation = RequestGeneration()
 
     fun invalidate() {
         synchronized(lock) {
-            generation++
+            generation.next()
             inflight?.cancel()
             inflight = null
             _state.value = null
@@ -40,18 +53,18 @@ internal abstract class AsyncCache<T> {
     ) {
         synchronized(lock) {
             inflight?.cancel()
-            val requestGeneration = ++generation
+            val requestGeneration = generation.next()
             _loading.value = true
             inflight =
                 scope.launch {
                     try {
-                        val next = withContext(Dispatchers.IO) { block() }
+                        val next = withContext(ioDispatcher) { block() }
                         synchronized(lock) {
-                            if (generation == requestGeneration) _state.value = next
+                            if (generation.isCurrent(requestGeneration)) _state.value = next
                         }
                     } finally {
                         synchronized(lock) {
-                            if (generation == requestGeneration) _loading.value = false
+                            if (generation.isCurrent(requestGeneration)) _loading.value = false
                         }
                     }
                 }
@@ -64,18 +77,18 @@ internal abstract class AsyncCache<T> {
     ) {
         synchronized(lock) {
             if (_state.value != null || inflight?.isActive == true) return
-            val requestGeneration = ++generation
+            val requestGeneration = generation.next()
             _loading.value = true
             inflight =
                 scope.launch {
                     try {
-                        val next = withContext(Dispatchers.IO) { block() }
+                        val next = withContext(ioDispatcher) { block() }
                         synchronized(lock) {
-                            if (generation == requestGeneration) _state.value = next
+                            if (generation.isCurrent(requestGeneration)) _state.value = next
                         }
                     } finally {
                         synchronized(lock) {
-                            if (generation == requestGeneration) _loading.value = false
+                            if (generation.isCurrent(requestGeneration)) _loading.value = false
                         }
                     }
                 }
