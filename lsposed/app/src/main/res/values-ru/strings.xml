@@ -366,11 +366,11 @@
     <string name="settings_toggle_hide_vpn_apps_desc">Автоматически скрывает установленные VPN-приложения от других защищаемых приложений.</string>
     <string name="settings_toggle_hide_self_title">Скрывать VPNHide Next автоматически</string>
     <string name="settings_toggle_hide_self_desc">Скрывает пакет самого VPNHide Next от защищаемых приложений.</string>
-    <string name="settings_toggle_update_check_title">Проверять обновления в фоне</string>
+    <string name="settings_toggle_update_check_title">Проверять обновления</string>
     <string name="settings_builtin_update_debug_title">Небезопасный режим отладки обновлений</string>
     <string name="settings_builtin_update_debug_desc">Разрешает повторную установку текущего встроенного ядра без проверки SHA-256. Только для разработки.</string>
     <string name="settings_builtin_update_debug_unlocked">Режим отладки обновлений разблокирован</string>
-    <string name="settings_toggle_update_check_desc">Периодически проверяет GitHub Releases в фоне и присылает уведомление, когда выходит новая версия.</string>
+    <string name="settings_toggle_update_check_desc">Проверяет GitHub Releases в фоне и в приложении. При отключении проверка обновлений полностью прекращается.</string>
     <string name="settings_toggle_health_check_title">Проверка работоспособности защиты</string>
     <string name="settings_toggle_health_check_desc">Уведомляет, если модуль ядра или хуки LSPosed не поднялись после перезагрузки, чтобы тихий отказ не остался незамеченным.</string>
     <string name="settings_battery_optimization_title">Отключить оптимизацию батареи</string>

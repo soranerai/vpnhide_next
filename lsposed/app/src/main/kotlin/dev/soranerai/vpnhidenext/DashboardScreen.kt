@@ -108,7 +108,7 @@ fun DashboardScreen(
     // populated or an inflight job hasn't finished yet.
     LaunchedEffect(Unit) {
         DashboardCache.ensureLoaded(scope, context, selfNeedsRestart)
-        UpdateCheckCache.ensureFresh(scope, BuildConfig.VERSION_NAME)
+        UpdateCheckCache.ensureFresh(scope, context, BuildConfig.VERSION_NAME)
         if (shouldShowChangelog(context)) {
             val data = withContext(Dispatchers.IO) { loadChangelog(context) }
             if (data != null) {

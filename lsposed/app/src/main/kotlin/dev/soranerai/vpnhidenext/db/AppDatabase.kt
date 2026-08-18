@@ -144,7 +144,12 @@ internal class AppDatabase private constructor(
                 val portRulesArray = root.optJSONArray("portRules")
                 if (portRulesArray != null) {
                     for (i in 0 until portRulesArray.length()) {
-                        portRulesArray.getJSONObject(i).toDbPortRule().takeIf { isValidPortRange(it.startPort, it.endPort) }?.let(portRulesList::add)
+                        portRulesArray
+                            .getJSONObject(
+                                i,
+                            ).toDbPortRule()
+                            .takeIf { isValidPortRange(it.startPort, it.endPort) }
+                            ?.let(portRulesList::add)
                     }
                 }
 
@@ -152,7 +157,12 @@ internal class AppDatabase private constructor(
                 val massRulesArray = root.optJSONArray("massPortRules")
                 if (massRulesArray != null) {
                     for (i in 0 until massRulesArray.length()) {
-                        massRulesArray.getJSONObject(i).toDbMassPortRule().takeIf { isValidPortRange(it.startPort, it.endPort) }?.let(massRulesList::add)
+                        massRulesArray
+                            .getJSONObject(
+                                i,
+                            ).toDbMassPortRule()
+                            .takeIf { isValidPortRange(it.startPort, it.endPort) }
+                            ?.let(massRulesList::add)
                     }
                 }
 
@@ -628,7 +638,8 @@ internal class AppDatabase private constructor(
                                 } else {
                                     PortProtocol.TCP
                                 }
-                            val rule = DbPortRule(
+                            val rule =
+                                DbPortRule(
                                     id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L,
                                     packageName = if (pkgIdx >= 0) cursor.getString(pkgIdx) else "",
                                     userId = if (userIdx >= 0) cursor.getInt(userIdx) else 0,
@@ -664,7 +675,8 @@ internal class AppDatabase private constructor(
                                 } else {
                                     PortProtocol.TCP
                                 }
-                            val rule = DbMassPortRule(
+                            val rule =
+                                DbMassPortRule(
                                     id = if (idIdx >= 0) cursor.getLong(idIdx) else 0L,
                                     startPort = if (startIdx >= 0) cursor.getInt(startIdx) else 0,
                                     endPort = if (endIdx >= 0) cursor.getInt(endIdx) else 0,

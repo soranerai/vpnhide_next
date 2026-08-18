@@ -24,5 +24,6 @@ internal suspend fun setUpdateCheckEnabled(
     val dao = db.globalConfigDao()
     val current = dao.getConfig() ?: DbGlobalConfig()
     dao.insertConfig(current.copy(updateCheckEnabled = enabled))
+    UpdateCheckCache.setEnabled(enabled)
     if (enabled) UpdateCheckScheduler.schedule(context) else UpdateCheckScheduler.cancel(context)
 }

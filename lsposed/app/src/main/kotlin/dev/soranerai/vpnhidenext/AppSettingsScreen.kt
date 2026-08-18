@@ -996,8 +996,22 @@ private fun PortRuleScreen(
             enabled = true,
         )
 
-    val violationLocal = if (rangeViolation == RuleViolationType.NONE) validateRule(currentRule, existingRules) else RuleViolation(rangeViolation)
-    val violationMass = if (rangeViolation == RuleViolationType.NONE) validateRule(currentRule, massRules) else RuleViolation(rangeViolation)
+    val violationLocal =
+        if (rangeViolation ==
+            RuleViolationType.NONE
+        ) {
+            validateRule(currentRule, existingRules)
+        } else {
+            RuleViolation(rangeViolation)
+        }
+    val violationMass =
+        if (rangeViolation ==
+            RuleViolationType.NONE
+        ) {
+            validateRule(currentRule, massRules)
+        } else {
+            RuleViolation(rangeViolation)
+        }
     val violation = if (violationMass.type != RuleViolationType.NONE) violationMass else violationLocal
 
     Scaffold(
@@ -1101,7 +1115,19 @@ private fun PortRuleScreen(
                     isError = rangeViolation == RuleViolationType.INVALID_START || rangeViolation == RuleViolationType.START_AFTER_END,
                     supportingText =
                         if (rangeViolation == RuleViolationType.INVALID_START || rangeViolation == RuleViolationType.START_AFTER_END) {
-                            { Text(stringResource(if (rangeViolation == RuleViolationType.START_AFTER_END) R.string.err_port_start_after_end else R.string.err_port_range)) }
+                            {
+                                Text(
+                                    stringResource(
+                                        if (rangeViolation ==
+                                            RuleViolationType.START_AFTER_END
+                                        ) {
+                                            R.string.err_port_start_after_end
+                                        } else {
+                                            R.string.err_port_range
+                                        },
+                                    ),
+                                )
+                            }
                         } else {
                             null
                         },
@@ -1118,7 +1144,19 @@ private fun PortRuleScreen(
                     isError = rangeViolation == RuleViolationType.INVALID_END || rangeViolation == RuleViolationType.START_AFTER_END,
                     supportingText =
                         if (rangeViolation == RuleViolationType.INVALID_END || rangeViolation == RuleViolationType.START_AFTER_END) {
-                            { Text(stringResource(if (rangeViolation == RuleViolationType.START_AFTER_END) R.string.err_port_start_after_end else R.string.err_port_range)) }
+                            {
+                                Text(
+                                    stringResource(
+                                        if (rangeViolation ==
+                                            RuleViolationType.START_AFTER_END
+                                        ) {
+                                            R.string.err_port_start_after_end
+                                        } else {
+                                            R.string.err_port_range
+                                        },
+                                    ),
+                                )
+                            }
                         } else {
                             null
                         },
@@ -1162,8 +1200,14 @@ private fun PortRuleScreen(
             if (violation.type != RuleViolationType.NONE) {
                 val msg =
                     when (violation.type) {
-                        RuleViolationType.INVALID_START, RuleViolationType.INVALID_END -> stringResource(R.string.err_port_range)
-                        RuleViolationType.START_AFTER_END -> stringResource(R.string.err_port_start_after_end)
+                        RuleViolationType.INVALID_START, RuleViolationType.INVALID_END -> {
+                            stringResource(R.string.err_port_range)
+                        }
+
+                        RuleViolationType.START_AFTER_END -> {
+                            stringResource(R.string.err_port_start_after_end)
+                        }
+
                         RuleViolationType.DUPLICATE -> {
                             stringResource(R.string.err_rule_exists)
                         }

@@ -418,8 +418,8 @@
     <string name="settings_toggle_hide_vpn_apps_desc">Automatically hides installed VPN apps from other protected apps.</string>
     <string name="settings_toggle_hide_self_title">Auto-hide VPNHide Next</string>
     <string name="settings_toggle_hide_self_desc">Hides the VPNHide Next package itself from protected apps.</string>
-    <string name="settings_toggle_update_check_title">Check for updates in background</string>
-    <string name="settings_toggle_update_check_desc">Periodically checks GitHub Releases in the background and sends a notification when a new version is available.</string>
+    <string name="settings_toggle_update_check_title">Check for updates</string>
+    <string name="settings_toggle_update_check_desc">Checks GitHub Releases in the background and in the app for new versions.</string>
     <string name="settings_builtin_update_debug_title">Unsafe update debug mode</string>
     <string name="settings_builtin_update_debug_desc">Allows reinstalling the current built-in kernel release without SHA-256 verification. Use only for development.</string>
     <string name="settings_builtin_update_debug_unlocked">Update debug mode unlocked</string>

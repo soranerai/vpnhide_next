@@ -1,8 +1,8 @@
 package dev.soranerai.vpnhidenext
 
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -51,30 +51,33 @@ internal fun BackendGateScreen(
     val kmodState by KmodUpdateCache.state.collectAsState()
     val builtInState by BuiltInUpdateCache.state.collectAsState()
     var confirmBuiltIn by remember { mutableStateOf<BuiltInUpdateInfo?>(null) }
-    val recommendation = remember(state) {
-        state.nativeInstallRecommendation
-            ?: state.kernelVersion?.let { buildNativeInstallRecommendation(it, "") }
-    }
+    val recommendation =
+        remember(state) {
+            state.nativeInstallRecommendation
+                ?: state.kernelVersion?.let { buildNativeInstallRecommendation(it, "") }
+        }
     val allowKmodRepair = state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE
-    val kmodTarget = remember(recommendation, allowKmodRepair) {
-        if (allowKmodRepair) resolveKmodInstallTarget(recommendation?.recommendedGkiVariant) else null
-    }
+    val kmodTarget =
+        remember(recommendation, allowKmodRepair) {
+            if (allowKmodRepair) resolveKmodInstallTarget(recommendation?.recommendedGkiVariant) else null
+        }
     val installedNative = state.kmod as? ModuleState.Installed
     val bridgeOnlyRepair =
         state.diagnostics.backendKind == BackendKind.BUILT_IN &&
             state.diagnostics.bridge.status != DiagnosticStatus.AVAILABLE
-    val builtInTarget = remember(state, recommendation) {
-        if (state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || bridgeOnlyRepair) {
-            resolveBuiltInInstallTarget(
-                state.kernelVersion ?: recommendation?.kernelVersion,
-                installedVersion = installedNative?.version ?: "0.0.0",
-                installedBridgeVersion = installedNative?.bridgeVersion,
-                forceBridgeRepair = bridgeOnlyRepair,
-            )
-        } else {
-            null
+    val builtInTarget =
+        remember(state, recommendation) {
+            if (state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || bridgeOnlyRepair) {
+                resolveBuiltInInstallTarget(
+                    state.kernelVersion ?: recommendation?.kernelVersion,
+                    installedVersion = installedNative?.version ?: "0.0.0",
+                    installedBridgeVersion = installedNative?.bridgeVersion,
+                    forceBridgeRepair = bridgeOnlyRepair,
+                )
+            } else {
+                null
+            }
         }
-    }
 
     LaunchedEffect(kmodTarget) { kmodTarget?.let { KmodUpdateCache.ensureFresh(scope, it) } }
     LaunchedEffect(builtInTarget) { builtInTarget?.let { BuiltInUpdateCache.ensureFresh(it) } }
@@ -91,10 +94,11 @@ internal fun BackendGateScreen(
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
         Box(Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .verticalScroll(rememberScrollState())
-                    .padding(horizontal = 24.dp, vertical = 28.dp),
+                modifier =
+                    Modifier
+                        .fillMaxSize()
+                        .verticalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp, vertical = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(18.dp))
@@ -152,39 +156,68 @@ internal fun BackendGateScreen(
                             )
                             Spacer(Modifier.height(10.dp))
                         }
-                        if (allowKmodRepair) when (val s = kmodState) {
-                            is KmodUpdateState.Available -> GateActionCard(
-                                title = stringResource(R.string.gate_kmod_option),
-                                subtitle = s.info.kmi,
-                                icon = Icons.Default.SystemUpdate,
-                                onClick = { KmodUpdateCache.install(scope, context, s.info) },
-                            )
-                            is KmodUpdateState.AwaitingReboot -> RebootCard { KmodUpdateCache.reboot(scope) }
-                            is KmodUpdateState.Failed -> RetryCard { kmodTarget?.let { KmodUpdateCache.refresh(scope, it) } }
-                            else -> Unit
-                        }
-                        if (builtInTarget != null) when (val s = builtInState) {
-                            is BuiltInUpdateState.Available -> GateActionCard(
-                                title = stringResource(
-                                    if (bridgeOnlyRepair) R.string.gate_bridge_option else R.string.gate_builtin_option,
-                                ),
-                                subtitle = stringResource(
-                                    if (bridgeOnlyRepair) R.string.gate_bridge_subtitle else R.string.gate_builtin_subtitle,
-                                ),
-                                icon = Icons.Default.SystemUpdate,
-                                onClick = { BuiltInUpdateCache.download(context, s.info) },
-                            )
-                            is BuiltInUpdateState.ReadyToConfirm -> {
-                                GateActionCard(
-                                    title = stringResource(R.string.gate_builtin_confirm),
-                                    subtitle = s.info.metadata.kernelVersion,
-                                    icon = Icons.Default.Build,
-                                    onClick = { confirmBuiltIn = s.info },
-                                )
+                        if (allowKmodRepair) {
+                            when (val s = kmodState) {
+                                is KmodUpdateState.Available -> {
+                                    GateActionCard(
+                                        title = stringResource(R.string.gate_kmod_option),
+                                        subtitle = s.info.kmi,
+                                        icon = Icons.Default.SystemUpdate,
+                                        onClick = { KmodUpdateCache.install(scope, context, s.info) },
+                                    )
+                                }
+
+                                is KmodUpdateState.AwaitingReboot -> {
+                                    RebootCard { KmodUpdateCache.reboot(scope) }
+                                }
+
+                                is KmodUpdateState.Failed -> {
+                                    RetryCard { kmodTarget?.let { KmodUpdateCache.refresh(scope, it) } }
+                                }
+
+                                else -> {
+                                    Unit
+                                }
                             }
-                            is BuiltInUpdateState.AwaitingReboot -> RebootCard { BuiltInUpdateCache.reboot() }
-                            is BuiltInUpdateState.Failed -> RetryCard { builtInTarget?.let { BuiltInUpdateCache.refresh(it) } }
-                            else -> Unit
+                        }
+                        if (builtInTarget != null) {
+                            when (val s = builtInState) {
+                                is BuiltInUpdateState.Available -> {
+                                    GateActionCard(
+                                        title =
+                                            stringResource(
+                                                if (bridgeOnlyRepair) R.string.gate_bridge_option else R.string.gate_builtin_option,
+                                            ),
+                                        subtitle =
+                                            stringResource(
+                                                if (bridgeOnlyRepair) R.string.gate_bridge_subtitle else R.string.gate_builtin_subtitle,
+                                            ),
+                                        icon = Icons.Default.SystemUpdate,
+                                        onClick = { BuiltInUpdateCache.download(context, s.info) },
+                                    )
+                                }
+
+                                is BuiltInUpdateState.ReadyToConfirm -> {
+                                    GateActionCard(
+                                        title = stringResource(R.string.gate_builtin_confirm),
+                                        subtitle = s.info.metadata.kernelVersion,
+                                        icon = Icons.Default.Build,
+                                        onClick = { confirmBuiltIn = s.info },
+                                    )
+                                }
+
+                                is BuiltInUpdateState.AwaitingReboot -> {
+                                    RebootCard { BuiltInUpdateCache.reboot() }
+                                }
+
+                                is BuiltInUpdateState.Failed -> {
+                                    RetryCard { builtInTarget?.let { BuiltInUpdateCache.refresh(it) } }
+                                }
+
+                                else -> {
+                                    Unit
+                                }
+                            }
                         }
                         if ((!allowKmodRepair || kmodTarget == null || kmodState == KmodUpdateState.None) &&
                             (builtInTarget == null || builtInState == BuiltInUpdateState.None)
@@ -203,9 +236,16 @@ internal fun BackendGateScreen(
         AlertDialog(
             onDismissRequest = { confirmBuiltIn = null },
             title = { Text(stringResource(R.string.gate_builtin_confirm_title)) },
-            text = { Text(stringResource(R.string.builtin_update_confirm_message, info.metadata.bridgeVersion, info.metadata.kernelVersion)) },
+            text = {
+                Text(
+                    stringResource(R.string.builtin_update_confirm_message, info.metadata.bridgeVersion, info.metadata.kernelVersion),
+                )
+            },
             confirmButton = {
-                Button(onClick = { confirmBuiltIn = null; BuiltInUpdateCache.install(info, KernelImageMode.NORMAL) }) {
+                Button(onClick = {
+                    confirmBuiltIn = null
+                    BuiltInUpdateCache.install(info, KernelImageMode.NORMAL)
+                }) {
                     Text(stringResource(R.string.builtin_update_confirm_action))
                 }
             },
@@ -215,7 +255,12 @@ internal fun BackendGateScreen(
 }
 
 @Composable
-private fun GateRow(index: Int, labelRes: Int, diagnostic: ComponentDiagnostic, kind: BackendKind? = null) {
+private fun GateRow(
+    index: Int,
+    labelRes: Int,
+    diagnostic: ComponentDiagnostic,
+    kind: BackendKind? = null,
+) {
     val available = diagnostic.status == DiagnosticStatus.AVAILABLE
     val color by animateColorAsState(
         if (available) Color(0xFF35B56A) else MaterialTheme.colorScheme.error,
@@ -228,18 +273,22 @@ private fun GateRow(index: Int, labelRes: Int, diagnostic: ComponentDiagnostic, 
     ) {
         Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
             Box(Modifier.size(30.dp).background(color.copy(alpha = .14f), CircleShape), contentAlignment = Alignment.Center) {
-                if (available) Icon(Icons.Default.CheckCircle, null, tint = color, modifier = Modifier.size(19.dp))
-                else Icon(Icons.Default.ErrorOutline, null, tint = color, modifier = Modifier.size(19.dp))
+                if (available) {
+                    Icon(Icons.Default.CheckCircle, null, tint = color, modifier = Modifier.size(19.dp))
+                } else {
+                    Icon(Icons.Default.ErrorOutline, null, tint = color, modifier = Modifier.size(19.dp))
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
                 Text(stringResource(labelRes), fontWeight = FontWeight.Medium)
                 Text(
-                    text = when (kind) {
-                        BackendKind.KMOD -> stringResource(R.string.diagnostics_backend_kmod)
-                        BackendKind.BUILT_IN -> stringResource(R.string.diagnostics_backend_builtin)
-                        else -> stringResource(gateStatusString(diagnostic.status))
-                    },
+                    text =
+                        when (kind) {
+                            BackendKind.KMOD -> stringResource(R.string.diagnostics_backend_kmod)
+                            BackendKind.BUILT_IN -> stringResource(R.string.diagnostics_backend_builtin)
+                            else -> stringResource(gateStatusString(diagnostic.status))
+                        },
                     style = MaterialTheme.typography.bodySmall,
                     color = color,
                 )
@@ -250,7 +299,12 @@ private fun GateRow(index: Int, labelRes: Int, diagnostic: ComponentDiagnostic, 
 }
 
 @Composable
-private fun GateActionCard(title: String, subtitle: String, icon: androidx.compose.ui.graphics.vector.ImageVector, onClick: () -> Unit) {
+private fun GateActionCard(
+    title: String,
+    subtitle: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
     OutlinedCard(onClick = onClick, modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
@@ -285,19 +339,19 @@ internal fun BackendDiagnostics.isReady(): Boolean =
         bridge.status == DiagnosticStatus.AVAILABLE &&
         lsposed.status == DiagnosticStatus.AVAILABLE
 
-private fun KmodUpdateState.isBusy(): Boolean =
-    this is KmodUpdateState.Downloading || this is KmodUpdateState.Installing
+private fun KmodUpdateState.isBusy(): Boolean = this is KmodUpdateState.Downloading || this is KmodUpdateState.Installing
 
 private fun BuiltInUpdateState.isBusy(): Boolean =
     this is BuiltInUpdateState.Downloading || this is BuiltInUpdateState.Validating ||
         this is BuiltInUpdateState.PreparingInstall || this is BuiltInUpdateState.BackingUp ||
         this is BuiltInUpdateState.InstallingBridge || this is BuiltInUpdateState.FlashingKernel
 
-private fun gateStatusString(status: DiagnosticStatus): Int = when (status) {
-    DiagnosticStatus.AVAILABLE -> R.string.diagnostics_status_available
-    DiagnosticStatus.MISSING -> R.string.diagnostics_status_missing
-    DiagnosticStatus.INACTIVE -> R.string.diagnostics_status_inactive
-    DiagnosticStatus.BROKEN -> R.string.diagnostics_status_broken
-    DiagnosticStatus.BLOCKED -> R.string.diagnostics_status_blocked
-    DiagnosticStatus.UNKNOWN -> R.string.diagnostics_status_unknown
-}
+private fun gateStatusString(status: DiagnosticStatus): Int =
+    when (status) {
+        DiagnosticStatus.AVAILABLE -> R.string.diagnostics_status_available
+        DiagnosticStatus.MISSING -> R.string.diagnostics_status_missing
+        DiagnosticStatus.INACTIVE -> R.string.diagnostics_status_inactive
+        DiagnosticStatus.BROKEN -> R.string.diagnostics_status_broken
+        DiagnosticStatus.BLOCKED -> R.string.diagnostics_status_blocked
+        DiagnosticStatus.UNKNOWN -> R.string.diagnostics_status_unknown
+    }

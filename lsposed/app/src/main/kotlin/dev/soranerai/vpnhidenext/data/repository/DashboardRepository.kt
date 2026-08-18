@@ -120,7 +120,7 @@ class DashboardRepository(
             
             """.trimIndent()
 
-            val (_, out) = suExec(script)
+        val (_, out) = suExec(script)
         return RawDashboardSnapshot(parseKeyValue(out))
     }
 
@@ -409,7 +409,9 @@ class DashboardRepository(
                         LsposedState.Active(lsposedRuntime.version, lsposedTargetCount)
                     }
 
-                    LsposedRuntime.Inactive -> LsposedState.InstalledInactive(hookVersion)
+                    LsposedRuntime.Inactive -> {
+                        LsposedState.InstalledInactive(hookVersion)
+                    }
                 }
             VpnHideLog.i(
                 TAG,
@@ -458,12 +460,17 @@ class DashboardRepository(
                 if (compatibility is CompatibilityResult.Requires) {
                     diagnostics =
                         when (compatibility.component) {
-                            "bridge" -> diagnostics.copy(
-                                bridge = ComponentDiagnostic(DiagnosticStatus.BROKEN, "version"),
-                            )
-                            else -> diagnostics.copy(
-                                backend = ComponentDiagnostic(DiagnosticStatus.BROKEN, "version"),
-                            )
+                            "bridge" -> {
+                                diagnostics.copy(
+                                    bridge = ComponentDiagnostic(DiagnosticStatus.BROKEN, "version"),
+                                )
+                            }
+
+                            else -> {
+                                diagnostics.copy(
+                                    backend = ComponentDiagnostic(DiagnosticStatus.BROKEN, "version"),
+                                )
+                            }
                         }
                     val installedVersion =
                         when (compatibility.component) {
