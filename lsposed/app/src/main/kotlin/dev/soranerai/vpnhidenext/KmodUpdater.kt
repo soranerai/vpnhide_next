@@ -167,6 +167,7 @@ internal object KmodUpdateCache {
     val state: StateFlow<KmodUpdateState> = _state.asStateFlow()
     private var target: KmodUpdateTarget? = null
     private var checkJob: Job? = null
+    private var generation = 0L
 
     fun ensureFresh(
         scope: CoroutineScope,
@@ -182,6 +183,7 @@ internal object KmodUpdateCache {
     ) {
         if (_state.value is KmodUpdateState.Downloading || _state.value is KmodUpdateState.Installing) return
         checkJob?.cancel()
+        val requestGeneration = ++generation
         target = updateTarget
         _state.value = KmodUpdateState.None
         checkJob =
@@ -190,7 +192,7 @@ internal object KmodUpdateCache {
                     withContext(Dispatchers.IO) {
                         checkForKmodUpdate(updateTarget)
                     }
-                if (target == updateTarget) {
+                if (target == updateTarget && generation == requestGeneration) {
                     _state.value = info?.let(KmodUpdateState::Available) ?: KmodUpdateState.None
                 }
             }

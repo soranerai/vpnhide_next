@@ -18,10 +18,15 @@ internal abstract class AsyncCache<T> {
 
     protected var inflight: Job? = null
     protected val lock = Any()
+    private var generation = 0L
 
     fun invalidate() {
         synchronized(lock) {
+            generation++
+            inflight?.cancel()
+            inflight = null
             _state.value = null
+            _loading.value = false
         }
     }
 
@@ -35,14 +40,19 @@ internal abstract class AsyncCache<T> {
     ) {
         synchronized(lock) {
             inflight?.cancel()
+            val requestGeneration = ++generation
             _loading.value = true
             inflight =
                 scope.launch {
                     try {
                         val next = withContext(Dispatchers.IO) { block() }
-                        _state.value = next
+                        synchronized(lock) {
+                            if (generation == requestGeneration) _state.value = next
+                        }
                     } finally {
-                        _loading.value = false
+                        synchronized(lock) {
+                            if (generation == requestGeneration) _loading.value = false
+                        }
                     }
                 }
         }
@@ -54,14 +64,19 @@ internal abstract class AsyncCache<T> {
     ) {
         synchronized(lock) {
             if (_state.value != null || inflight?.isActive == true) return
+            val requestGeneration = ++generation
             _loading.value = true
             inflight =
                 scope.launch {
                     try {
                         val next = withContext(Dispatchers.IO) { block() }
-                        _state.value = next
+                        synchronized(lock) {
+                            if (generation == requestGeneration) _state.value = next
+                        }
                     } finally {
-                        _loading.value = false
+                        synchronized(lock) {
+                            if (generation == requestGeneration) _loading.value = false
+                        }
                     }
                 }
         }
