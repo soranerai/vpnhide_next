@@ -7,7 +7,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.HelpOutline
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -294,7 +294,7 @@ internal fun ProtectionScreen(
                     modifier = Modifier.size(40.dp),
                 ) {
                     Icon(
-                        Icons.Default.HelpOutline,
+                        Icons.AutoMirrored.Filled.HelpOutline,
                         contentDescription = stringResource(R.string.policy_help_title),
                         modifier = Modifier.size(20.dp),
                     )

@@ -609,6 +609,7 @@ private fun checkActiveLinkProperties(
     return CheckResult(name, passed, detail)
 }
 
+@Suppress("DEPRECATION") // allNetworks is required here to inspect every active network, not only the default.
 private fun checkLinkPropertiesDns(
     cm: ConnectivityManager,
     name: String,
