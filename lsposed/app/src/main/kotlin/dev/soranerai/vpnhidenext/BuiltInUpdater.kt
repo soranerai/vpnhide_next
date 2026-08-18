@@ -43,6 +43,7 @@ internal data class BuiltInUpdateTarget(
     val unameR: String,
     val debugMode: Boolean = false,
     val installedBridgeVersion: String? = null,
+    val forceBridgeRepair: Boolean = false,
 )
 
 internal data class BuiltInUpdateMetadata(
@@ -166,6 +167,7 @@ internal fun parseBuiltInUpdateMetadata(
     installedVersion: String,
     debugMode: Boolean = false,
     installedBridgeVersion: String? = null,
+    forceBridgeRepair: Boolean = false,
 ): BuiltInUpdateMetadata? {
     val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
     val bridgeVersion = json.optString("version")
@@ -186,6 +188,7 @@ internal fun parseBuiltInUpdateMetadata(
         installedVersion,
         debugMode,
         installedBridgeVersion,
+        forceBridgeRepair,
     )
 }
 
@@ -200,9 +203,11 @@ internal fun validateBuiltInUpdateMetadataFields(
     installedVersion: String,
     debugMode: Boolean = false,
     installedBridgeVersion: String? = null,
+    forceBridgeRepair: Boolean = false,
 ): BuiltInUpdateMetadata? {
     val versionAllowed =
-        isNewerVersion(kernelVersion, installedVersion) ||
+        forceBridgeRepair ||
+            isNewerVersion(kernelVersion, installedVersion) ||
             (installedBridgeVersion != null && isNewerVersion(bridgeVersion, installedBridgeVersion)) ||
             (debugMode && baseVersion(kernelVersion) == baseVersion(installedVersion))
     if (!versionAllowed) return null
@@ -512,6 +517,21 @@ internal object BuiltInUpdateCache {
     }
 }
 
+internal fun resolveBuiltInInstallTarget(
+    unameR: String?,
+    installedVersion: String = "0.0.0",
+    installedBridgeVersion: String? = null,
+    forceBridgeRepair: Boolean = false,
+): BuiltInUpdateTarget? =
+    unameR?.trim()?.takeIf { it.isNotBlank() }?.let {
+        BuiltInUpdateTarget(
+            installedVersion,
+            it,
+            installedBridgeVersion = installedBridgeVersion,
+            forceBridgeRepair = forceBridgeRepair,
+        )
+    }
+
 private fun isBusy(state: BuiltInUpdateState): Boolean =
     state is BuiltInUpdateState.Downloading || state is BuiltInUpdateState.Validating ||
         state is BuiltInUpdateState.PreparingInstall || state is BuiltInUpdateState.BackingUp ||
@@ -540,9 +560,11 @@ private fun checkForBuiltInUpdate(target: BuiltInUpdateTarget): BuiltInCheckOutc
                 target.installedVersion,
                 target.debugMode,
                 target.installedBridgeVersion,
+                target.forceBridgeRepair,
             )
                 ?: return BuiltInCheckOutcome.None
-        val kernelUpdateAvailable = isNewerVersion(metadata.kernelVersion, target.installedVersion)
+        val kernelUpdateAvailable =
+            !target.forceBridgeRepair && isNewerVersion(metadata.kernelVersion, target.installedVersion)
         if (!kernelUpdateAvailable) {
             return BuiltInCheckOutcome.Available(
                 BuiltInUpdateInfo(metadata, null, target.unameR, target.debugMode),

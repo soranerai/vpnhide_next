@@ -45,9 +45,11 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.lifecycleScope
+import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.db.PolicyListMode
+import dev.soranerai.vpnhidenext.domain.models.DashboardState
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -87,6 +89,8 @@ private sealed class RootState {
 fun VpnHideApp(onReady: () -> Unit = {}) {
     VpnHideTheme {
         var rootState by remember { mutableStateOf<RootState?>(null) }
+        var backendState by remember { mutableStateOf<DashboardState?>(null) }
+        var gateRefresh by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
         LaunchedEffect(Unit) {
             val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
@@ -104,8 +108,15 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
             rootState =
                 when {
                     !res.rootGranted -> RootState.Denied
-                    !res.kmodActive -> RootState.KmodMissing
                     else -> RootState.Granted(res)
+                }
+        }
+
+        LaunchedEffect(rootState, gateRefresh) {
+            val granted = rootState as? RootState.Granted ?: return@LaunchedEffect
+            backendState =
+                withContext(Dispatchers.IO) {
+                    DashboardRepository(context.applicationContext).loadDashboardState(false)
                 }
         }
 
@@ -132,7 +143,18 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
             }
 
             is RootState.Granted -> {
-                MainScreen(startup = (rootState as RootState.Granted).startup, onReady = onReady)
+                val dashboard = backendState
+                Box(Modifier.fillMaxSize()) {
+                    MainScreen(startup = (rootState as RootState.Granted).startup, onReady = onReady)
+                    if (dashboard != null && !dashboard.diagnostics.isReady()) {
+                        BackendGateScreen(
+                            state = dashboard,
+                            scope = rememberCoroutineScope(),
+                            context = context,
+                            onRefresh = { gateRefresh++ },
+                        )
+                    }
+                }
             }
         }
     }
@@ -252,7 +274,7 @@ private fun MainScreen(
         val observer =
             LifecycleEventObserver { _, event ->
                 if (event == Lifecycle.Event.ON_RESUME) {
-                    UpdateCheckCache.ensureFresh(scope, BuildConfig.VERSION_NAME)
+                    UpdateCheckCache.ensureFresh(scope, context, BuildConfig.VERSION_NAME)
                     if (AppListCache.apps.value != null) {
                         AppListCache.refresh(scope, context)
                         TargetsCache.refresh(scope, context)
@@ -1020,7 +1042,7 @@ private fun RefreshActionIcon(
                     loading = dashboardLoading,
                     onRefresh = {
                         DashboardCache.refresh(scope, context, refreshRestart)
-                        UpdateCheckCache.refresh(scope, BuildConfig.VERSION_NAME)
+                        UpdateCheckCache.refresh(scope, context, BuildConfig.VERSION_NAME)
                     },
                 )
             }

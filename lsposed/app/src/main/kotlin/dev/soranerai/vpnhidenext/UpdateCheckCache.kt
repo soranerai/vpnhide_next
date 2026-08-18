@@ -1,5 +1,6 @@
 package dev.soranerai.vpnhidenext
 
+import android.content.Context
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -42,24 +43,44 @@ internal object UpdateCheckCache {
 
     fun ensureFresh(
         scope: CoroutineScope,
+        context: Context,
         currentVersion: String,
     ) {
         val last = lastCheckMs
         val fresh = last != null && System.currentTimeMillis() - last < STALE_MS
         if (fresh || inflight?.isActive == true) return
-        inflight = scope.launch { run(currentVersion) }
+        inflight = scope.launch { run(context, currentVersion) }
     }
 
     fun refresh(
         scope: CoroutineScope,
+        context: Context,
         currentVersion: String,
     ) {
         inflight?.cancel()
-        inflight = scope.launch { run(currentVersion) }
+        inflight = scope.launch { run(context, currentVersion) }
     }
 
-    private suspend fun run(currentVersion: String) {
+    fun setEnabled(enabled: Boolean) {
+        if (enabled) {
+            lastCheckMs = null
+            return
+        }
+        inflight?.cancel()
+        _info.value = null
+        lastCheckMs = System.currentTimeMillis()
+    }
+
+    private suspend fun run(context: Context, currentVersion: String) {
+        if (!getUpdateCheckEnabled(context)) {
+            setEnabled(false)
+            return
+        }
         val result = withContext(Dispatchers.IO) { checkForUpdate(currentVersion) }
+        if (!getUpdateCheckEnabled(context)) {
+            setEnabled(false)
+            return
+        }
         _info.value = result
         lastCheckMs = System.currentTimeMillis()
     }

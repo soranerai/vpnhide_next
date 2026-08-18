@@ -62,17 +62,6 @@ internal class HealthCheckWorker(
                 echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id 2>/dev/null)"
                 [ -f $kmodModuleDir/module.prop ] && echo "kmod_installed=1" || echo "kmod_installed=0"
                 [ -c $DEV_NODE ] && echo "kmod_active=1" || echo "kmod_active=0"
-                LSP_INSTALLED=0
-                LSP_DISABLED=0
-                for dir in /data/adb/modules/lsposed /data/adb/modules_update/lsposed; do
-                  if [ -f "${'$'}dir/module.prop" ]; then
-                    LSP_INSTALLED=1
-                    [ -f "${'$'}dir/disable" ] && LSP_DISABLED=1
-                    break
-                  fi
-                done
-                echo "lsp_installed=${'$'}LSP_INSTALLED"
-                echo "lsp_disabled=${'$'}LSP_DISABLED"
                 """.trimIndent()
             val (_, out) = suExecAsync(script)
             val props = parseHealthKeyValue(out)
@@ -92,7 +81,7 @@ internal class HealthCheckWorker(
                 }
             }
 
-            if (lsposedTargetCount > 0 && props["lsp_installed"] == "1" && props["lsp_disabled"] != "1") {
+            if (lsposedTargetCount > 0 && props["kmod_active"] == "1") {
                 val (_, hookStatusOut) = suExecAsync("$kmodCtl hook_status 2>/dev/null || true")
                 val hookProps = parseHealthKeyValue(hookStatusOut)
                 val hookBootId = hookProps["boot_id"]?.trim()

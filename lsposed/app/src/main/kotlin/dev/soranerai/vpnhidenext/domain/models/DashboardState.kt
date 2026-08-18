@@ -169,6 +169,8 @@ fun List<AppInterceptStats>.summarize(topHooksLimit: Int = 5): InterceptStatsSum
 data class DashboardState(
     val kmod: ModuleState,
     val lsposed: LsposedState,
+    val diagnostics: BackendDiagnostics,
+    val kernelVersion: String?,
     val nativeInstallRecommendation: NativeInstallRecommendation?,
     val kmodLoadStatus: KmodLoadStatus?,
     val protection: ProtectionCheck,

@@ -43,6 +43,7 @@ internal class UpdateCheckWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
+            if (!getUpdateCheckEnabled(applicationContext)) return@withContext Result.success()
             val info = checkForUpdate(BuildConfig.VERSION_NAME) ?: return@withContext Result.success()
 
             val prefs = applicationContext.getSharedPreferences(UPDATE_PREFS_NAME, Context.MODE_PRIVATE)
