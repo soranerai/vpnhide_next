@@ -254,7 +254,13 @@ fun SettingsScreen(
                             val previous = updateCheckEnabled
                             updateCheckEnabled = newValue
                             scope.launch(Dispatchers.IO) {
-                                setUpdateCheckEnabled(context, newValue)
+                                runCatching { setUpdateCheckEnabled(context, newValue) }
+                                    .onFailure {
+                                        withContext(Dispatchers.Main) {
+                                            updateCheckEnabled = previous
+                                            Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
                             }
                         },
                         onLabelClick = {
@@ -291,7 +297,13 @@ fun SettingsScreen(
                             val previous = healthCheckEnabled
                             healthCheckEnabled = newValue
                             scope.launch(Dispatchers.IO) {
-                                setHealthCheckEnabled(context, newValue)
+                                runCatching { setHealthCheckEnabled(context, newValue) }
+                                    .onFailure {
+                                        withContext(Dispatchers.Main) {
+                                            healthCheckEnabled = previous
+                                            Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
                             }
                         },
                     )
@@ -303,9 +315,16 @@ fun SettingsScreen(
                         icon = Icons.Default.VpnKey,
                         iconTint = TelOrange,
                         onCheckedChange = { newValue ->
+                            val previous = selfTestVpnEnabled
                             selfTestVpnEnabled = newValue
                             scope.launch(Dispatchers.IO) {
-                                setSelfTestVpnEnabled(context, newValue)
+                                runCatching { setSelfTestVpnEnabled(context, newValue) }
+                                    .onFailure {
+                                        withContext(Dispatchers.Main) {
+                                            selfTestVpnEnabled = previous
+                                            Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
                             }
                         },
                     )

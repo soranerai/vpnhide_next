@@ -429,6 +429,7 @@
     <string name="settings_battery_optimization_desc">Some OEM firmware (MIUI, EMUI, ColorOS, One UI) delays or kills background checks unless the app is exempt — needed for the checks below to actually run reliably.</string>
     <string name="settings_toggle_self_test_vpn_title">Auto-test without VPN</string>
     <string name="settings_toggle_self_test_vpn_desc">If no VPN is connected, silently raises a local-only test tunnel just long enough to run the full diagnostics battery, then tears it down. Turn off to only run checks with a real VPN connected.</string>
+    <string name="settings_save_failed">Could not save this setting. The previous value was restored.</string>
 
     <!-- Update-available notification -->
     <string name="update_notification_channel_name">App updates</string>
