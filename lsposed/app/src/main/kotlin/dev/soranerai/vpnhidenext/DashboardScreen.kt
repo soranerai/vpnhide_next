@@ -119,13 +119,7 @@ fun DashboardScreen(
         }
     }
 
-    LaunchedEffect(kmodUpdateTarget) {
-        kmodUpdateTarget?.let { KmodUpdateCache.ensureFresh(scope, it) }
-    }
-
-    LaunchedEffect(builtInUpdateTarget) {
-        builtInUpdateTarget?.let { BuiltInUpdateCache.ensureFresh(it) }
-    }
+    DashboardUpdateEffects(scope, kmodUpdateTarget, builtInUpdateTarget)
 
     if (showChangelog && changelogData != null) {
         ChangelogDialog(
