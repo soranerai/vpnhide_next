@@ -759,13 +759,21 @@ internal class AppDatabase private constructor(
  * compatible with version 1, so migration only records the new version.
  */
 internal fun migrateConfigJson(root: JSONObject): JSONObject {
-    val version = root.optInt("schemaVersion", 0)
-    return when (version) {
-        0 -> JSONObject(root.toString()).put("schemaVersion", CURRENT_CONFIG_SCHEMA_VERSION)
-        CURRENT_CONFIG_SCHEMA_VERSION -> root
-        else -> error("Unsupported VPNHide config schema version: $version")
+    val version = migratedConfigSchemaVersion(
+        if (root.has("schemaVersion")) root.optInt("schemaVersion") else null,
+    )
+    return if (root.has("schemaVersion")) {
+        root
+    } else {
+        JSONObject(root.toString()).put("schemaVersion", version)
     }
 }
+
+internal fun migratedConfigSchemaVersion(version: Int?): Int =
+    when (version ?: 0) {
+        0, CURRENT_CONFIG_SCHEMA_VERSION -> CURRENT_CONFIG_SCHEMA_VERSION
+        else -> error("Unsupported VPNHide config schema version: $version")
+    }
 
 // ── JSON Conversion Helpers ──────────────────────────────────────────
 
