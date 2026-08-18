@@ -92,15 +92,44 @@ class DashboardRepository(
     private fun collectDashboardSnapshot(): RawDashboardSnapshot {
         val script =
             """
+            id | grep -q 'uid=0' && echo "root=1" || echo "root=0"
             echo "kmod_prop=${'$'}(cat $kmodModuleDir/module.prop 2>/dev/null | base64 | tr -d '\n')"
             echo "uname=${'$'}(uname -r)"
             echo "boot_id=${'$'}(cat /proc/sys/kernel/random/boot_id)"
             echo "load_status=${'$'}(cat $KMOD_LOAD_STATUS_FILE 2>/dev/null | base64 | tr -d '\n')"
             echo "load_dmesg=${'$'}(cat $KMOD_LOAD_DMESG_FILE 2>/dev/null | tail -n 50 | base64 | tr -d '\n')"
-            # Newer private kmod/kpatch control tools query the running
-            # driver through /dev. Older tools simply produce no output.
-            [ -c $DEV_NODE ] && echo "device_version=${'$'}($kmodCtl version kmod 2>/dev/null || true)"
-            [ -c $DEV_NODE ] && echo "lsmod=1" || echo "lsmod=0"
+            # module.prop proves only that a bridge package is present. It
+            # must never be used as proof that the kernel backend is active.
+            BRIDGE_KMOD=0
+            BRIDGE_KPATCH=0
+            BRIDGE_VALID=0
+            BRIDGE_DISABLED=0
+            for d in /data/adb/modules/vpnhide_kmod /data/adb/modules_update/vpnhide_kmod; do
+              if [ -f "${'$'}d/module.prop" ]; then
+                BRIDGE_KMOD=1
+                [ -f "${'$'}d/disable" ] && BRIDGE_DISABLED=1
+                [ -x "${'$'}d/vpnhide-ctl" ] && BRIDGE_VALID=1
+              fi
+            done
+            for d in /data/adb/modules/vpnhide_kpatch /data/adb/modules_update/vpnhide_kpatch; do
+              if [ -f "${'$'}d/module.prop" ]; then
+                BRIDGE_KPATCH=1
+                [ -f "${'$'}d/disable" ] && BRIDGE_DISABLED=1
+                [ -x "${'$'}d/vpnhide-ctl" ] && BRIDGE_VALID=1
+              fi
+            done
+            echo "bridge_kmod=${'$'}BRIDGE_KMOD"
+            echo "bridge_kpatch=${'$'}BRIDGE_KPATCH"
+            echo "bridge_valid=${'$'}BRIDGE_VALID"
+            echo "bridge_disabled=${'$'}BRIDGE_DISABLED"
+            [ -c $DEV_NODE ] && echo "ctrl_device=1" || echo "ctrl_device=0"
+            [ -x $kmodCtl ] && echo "ctrl_tool=1" || echo "ctrl_tool=0"
+            if [ -c $DEV_NODE ] && [ -x $kmodCtl ] && $kmodCtl version kmod >/dev/null 2>&1; then
+              echo "ctrl_responding=1"
+              echo "device_version=${'$'}($kmodCtl version kmod 2>/dev/null || true)"
+            else
+              echo "ctrl_responding=0"
+            fi
             grep -q "vpnhide" /proc/modules 2>/dev/null && echo "is_kmod=1" || echo "is_kmod=0"
             
             # LSPosed framework
@@ -119,7 +148,7 @@ class DashboardRepository(
             echo "lsp_disabled=${'$'}LSP_DISABLED"
             """.trimIndent()
 
-        val (_, out) = suExec(script)
+            val (_, out) = suExec(script)
         return RawDashboardSnapshot(parseKeyValue(out))
     }
 
@@ -285,9 +314,13 @@ class DashboardRepository(
 
             // kmod
             val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))
-            val hasKmodDevice = snapshot.get("lsmod") == "1"
+            val hasKmodDevice = snapshot.get("ctrl_device") == "1"
             val isKmodType = snapshot.get("is_kmod") == "1"
-            val isKmodInstalled = kmodProp.installed || hasKmodDevice
+            val isKmodInstalled =
+                kmodProp.installed ||
+                    hasKmodDevice ||
+                    snapshot.get("bridge_kmod") == "1" ||
+                    snapshot.get("bridge_kpatch") == "1"
             val kmodActive = hasKmodDevice
             val kmodLoadStatus = readKmodLoadStatus(snapshot, currentBootId.trim())
             val kmodTargetCount =
@@ -367,6 +400,35 @@ class DashboardRepository(
                     kmodRaw
                 }
             VpnHideLog.i(TAG, "kmod (with brokenReason): $kmod")
+
+            val (_, hookStatusRaw) =
+                if (snapshot.get("ctrl_responding") == "1") {
+                    suExec("$kmodCtl hook_status 2>/dev/null || true")
+                } else {
+                    1 to ""
+                }
+            val hookProps = parseKeyValue(hookStatusRaw)
+            val hookBootId = hookProps["boot_id"]
+            val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
+            val frameworkInstalled = snapshot.get("lsp_installed") == "1"
+            val frameworkDisabled = snapshot.get("lsp_disabled") == "1"
+            var diagnostics =
+                BackendDiagnosticsEvaluator.evaluate(
+                    BackendProbeFacts(
+                        root = snapshot.get("root") == "1",
+                        controlDevice = snapshot.get("ctrl_device") == "1",
+                        controlTool = snapshot.get("ctrl_tool") == "1",
+                        controlToolResponding = snapshot.get("ctrl_responding") == "1",
+                        bridgeKmod = snapshot.get("bridge_kmod") == "1",
+                        bridgeKpatch = snapshot.get("bridge_kpatch") == "1",
+                        bridgeValid = snapshot.get("bridge_valid") == "1",
+                        bridgeDisabled = snapshot.get("bridge_disabled") == "1",
+                        loadedKmod = snapshot.get("is_kmod") == "1",
+                        lsposedInstalled = frameworkInstalled,
+                        lsposedDisabled = frameworkDisabled,
+                        lsposedHooksActive = hooksActiveThisBoot,
+                    ),
+                )
             val nativeInstallRecommendation =
                 kernelRecommendation?.takeIf { kmod is ModuleState.NotInstalled }
             VpnHideLog.i(
@@ -377,11 +439,7 @@ class DashboardRepository(
             )
 
             // lsposed hook status
-            val (_, hookStatusRaw) = suExec("$kmodCtl hook_status 2>/dev/null || true")
-            val hookProps = parseKeyValue(hookStatusRaw)
             val hookVersion = hookProps["version"]
-            val hookBootId = hookProps["boot_id"]
-            val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
             val lsposedTargetCount = appsSync.count { it.lsposed }
             val lsposedFramework = detectLsposedFramework(snapshot)
             val lsposedConfig =
@@ -441,9 +499,16 @@ class DashboardRepository(
             )
 
             // ── Issues ──
-            val hasNative = kmod is ModuleState.Installed
-            if (!hasNative) {
-                err(res.getString(R.string.dashboard_issue_no_native))
+            val hasNative = diagnostics.backend.status == DiagnosticStatus.AVAILABLE
+            when (diagnostics.backend.status) {
+                DiagnosticStatus.MISSING -> err(res.getString(R.string.dashboard_issue_backend_missing))
+                DiagnosticStatus.INACTIVE -> err(res.getString(R.string.dashboard_issue_backend_inactive))
+                else -> Unit
+            }
+            when (diagnostics.bridge.status) {
+                DiagnosticStatus.MISSING -> err(res.getString(R.string.dashboard_issue_bridge_missing))
+                DiagnosticStatus.BROKEN -> err(res.getString(R.string.dashboard_issue_bridge_broken))
+                else -> Unit
             }
             if (lsposedFramework is LsposedFramework.NotInstalled && lsposed !is LsposedState.Active) {
                 err(res.getString(R.string.dashboard_issue_lsposed_not_installed))
@@ -476,6 +541,15 @@ class DashboardRepository(
                     "component compatibility: app=$appVersion native=$installedNativeVersion result=$compatibility",
                 )
                 if (compatibility is CompatibilityResult.Requires) {
+                    diagnostics =
+                        when (compatibility.component) {
+                            "bridge" -> diagnostics.copy(
+                                bridge = ComponentDiagnostic(DiagnosticStatus.BROKEN, "version"),
+                            )
+                            else -> diagnostics.copy(
+                                backend = ComponentDiagnostic(DiagnosticStatus.BROKEN, "version"),
+                            )
+                        }
                     val installedVersion =
                         when (compatibility.component) {
                             "bridge" -> kmodProp.version
@@ -649,6 +723,8 @@ class DashboardRepository(
             DashboardState(
                 kmod = kmod,
                 lsposed = lsposed,
+                diagnostics = diagnostics,
+                kernelVersion = kernelRaw.trim().ifBlank { null },
                 nativeInstallRecommendation = nativeInstallRecommendation,
                 kmodLoadStatus = kmodLoadStatus,
                 protection = protection,

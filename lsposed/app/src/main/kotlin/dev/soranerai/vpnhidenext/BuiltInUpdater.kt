@@ -512,6 +512,9 @@ internal object BuiltInUpdateCache {
     }
 }
 
+internal fun resolveBuiltInInstallTarget(unameR: String?): BuiltInUpdateTarget? =
+    unameR?.trim()?.takeIf { it.isNotBlank() }?.let { BuiltInUpdateTarget("0.0.0", it) }
+
 private fun isBusy(state: BuiltInUpdateState): Boolean =
     state is BuiltInUpdateState.Downloading || state is BuiltInUpdateState.Validating ||
         state is BuiltInUpdateState.PreparingInstall || state is BuiltInUpdateState.BackingUp ||

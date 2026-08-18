@@ -110,6 +110,9 @@ internal fun resolveKmodUpdateTarget(
     return KmodUpdateTarget(version, kmi)
 }
 
+internal fun resolveKmodInstallTarget(kmi: String?): KmodUpdateTarget? =
+    kmi?.takeIf { it in SUPPORTED_KMOD_KMIS }?.let { KmodUpdateTarget("0.0.0", it) }
+
 internal fun parseKmodUpdateMetadata(
     raw: String,
     kmi: String,
@@ -217,6 +220,12 @@ internal object KmodUpdateCache {
                 } else {
                     KmodUpdateState.Failed(info, result)
                 }
+        }
+    }
+
+    fun reboot(scope: CoroutineScope) {
+        scope.launch(Dispatchers.IO) {
+            suExec("svc power reboot", timeoutSec = 5)
         }
     }
 }

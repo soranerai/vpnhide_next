@@ -48,6 +48,8 @@ import androidx.lifecycle.lifecycleScope
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.DbMassPortRule
 import dev.soranerai.vpnhidenext.db.PolicyListMode
+import dev.soranerai.vpnhidenext.data.repository.DashboardRepository
+import dev.soranerai.vpnhidenext.domain.models.DashboardState
 import dev.soranerai.vpnhidenext.ui.theme.VpnHideTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -87,6 +89,8 @@ private sealed class RootState {
 fun VpnHideApp(onReady: () -> Unit = {}) {
     VpnHideTheme {
         var rootState by remember { mutableStateOf<RootState?>(null) }
+        var backendState by remember { mutableStateOf<DashboardState?>(null) }
+        var gateRefresh by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
         LaunchedEffect(Unit) {
             val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
@@ -104,9 +108,15 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
             rootState =
                 when {
                     !res.rootGranted -> RootState.Denied
-                    !res.kmodActive -> RootState.KmodMissing
                     else -> RootState.Granted(res)
                 }
+        }
+
+        LaunchedEffect(rootState, gateRefresh) {
+            val granted = rootState as? RootState.Granted ?: return@LaunchedEffect
+            backendState = withContext(Dispatchers.IO) {
+                DashboardRepository(context.applicationContext).loadDashboardState(false)
+            }
         }
 
         when (rootState) {
@@ -132,9 +142,31 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
             }
 
             is RootState.Granted -> {
-                MainScreen(startup = (rootState as RootState.Granted).startup, onReady = onReady)
+                val dashboard = backendState
+                if (dashboard == null) {
+                    BackendGateLoadingScreen()
+                    LaunchedEffect(Unit) { onReady() }
+                } else if (dashboard.diagnostics.isReady()) {
+                    MainScreen(startup = (rootState as RootState.Granted).startup, onReady = onReady)
+                } else {
+                    LaunchedEffect(Unit) { onReady() }
+                    BackendGateScreen(
+                        state = dashboard,
+                        scope = rememberCoroutineScope(),
+                        context = context,
+                        onRefresh = { gateRefresh++ },
+                    )
+                }
             }
+
         }
+    }
+}
+
+@Composable
+private fun BackendGateLoadingScreen() {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+        CircularProgressIndicator()
     }
 }
 
