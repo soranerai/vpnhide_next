@@ -759,10 +759,9 @@ internal class AppDatabase private constructor(
  * compatible with version 1, so migration only records the new version.
  */
 internal fun migrateConfigJson(root: JSONObject): JSONObject {
-    val version = migratedConfigSchemaVersion(
-        if (root.has("schemaVersion")) root.optInt("schemaVersion") else null,
-    )
-    return if (root.has("schemaVersion")) {
+    val sourceVersion = root.takeIf { it.has("schemaVersion") }?.optInt("schemaVersion")
+    val version = migratedConfigSchemaVersion(sourceVersion)
+    return if (sourceVersion == CURRENT_CONFIG_SCHEMA_VERSION) {
         root
     } else {
         JSONObject(root.toString()).put("schemaVersion", version)
