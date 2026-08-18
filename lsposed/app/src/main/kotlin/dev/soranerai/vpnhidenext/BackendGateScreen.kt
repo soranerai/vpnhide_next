@@ -188,7 +188,7 @@ internal fun BackendGateScreen(
             text = { Text(stringResource(R.string.builtin_update_confirm_message, info.metadata.bridgeVersion, info.metadata.kernelVersion)) },
             confirmButton = {
                 Button(onClick = { confirmBuiltIn = null; BuiltInUpdateCache.install(info, KernelImageMode.NORMAL) }) {
-                    Text(stringResource(R.string.builtin_update_install))
+                    Text(stringResource(R.string.builtin_update_confirm_action))
                 }
             },
             dismissButton = { TextButton(onClick = { confirmBuiltIn = null }) { Text(stringResource(R.string.cancel)) } },
@@ -220,7 +220,7 @@ private fun GateRow(index: Int, labelRes: Int, diagnostic: ComponentDiagnostic, 
                     text = when (kind) {
                         BackendKind.KMOD -> stringResource(R.string.diagnostics_backend_kmod)
                         BackendKind.BUILT_IN -> stringResource(R.string.diagnostics_backend_builtin)
-                    else -> stringResource(gateStatusString(diagnostic.status)),
+                        else -> stringResource(gateStatusString(diagnostic.status))
                     },
                     style = MaterialTheme.typography.bodySmall,
                     color = color,
