@@ -143,30 +143,20 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
 
             is RootState.Granted -> {
                 val dashboard = backendState
-                if (dashboard == null) {
-                    BackendGateLoadingScreen()
-                    LaunchedEffect(Unit) { onReady() }
-                } else if (dashboard.diagnostics.isReady()) {
+                Box(Modifier.fillMaxSize()) {
                     MainScreen(startup = (rootState as RootState.Granted).startup, onReady = onReady)
-                } else {
-                    LaunchedEffect(Unit) { onReady() }
-                    BackendGateScreen(
-                        state = dashboard,
-                        scope = rememberCoroutineScope(),
-                        context = context,
-                        onRefresh = { gateRefresh++ },
-                    )
+                    if (dashboard != null && !dashboard.diagnostics.isReady()) {
+                        BackendGateScreen(
+                            state = dashboard,
+                            scope = rememberCoroutineScope(),
+                            context = context,
+                            onRefresh = { gateRefresh++ },
+                        )
+                    }
                 }
             }
 
         }
-    }
-}
-
-@Composable
-private fun BackendGateLoadingScreen() {
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        CircularProgressIndicator()
     }
 }
 

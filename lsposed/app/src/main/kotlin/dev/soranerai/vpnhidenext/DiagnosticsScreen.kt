@@ -991,22 +991,6 @@ internal suspend fun exportDebugZip(
                             suExec("cat /proc/kallsyms 2>/dev/null | grep -w $sym | head -3")
                         appendLine("$sym: ${line.trim().ifEmpty { "(not found)" }}")
                     }
-                    appendLine()
-                    appendLine("=== LSPosed configuration ===")
-                    val (_, lsposedDb) =
-                        suExec(
-                            "sqlite3 /data/adb/lspd/config/modules_config.db " +
-                                "\"SELECT mid, module_pkg_name, enabled FROM modules WHERE module_pkg_name LIKE '%vpnhide%';\" 2>/dev/null",
-                        )
-                    appendLine(lsposedDb.ifEmpty { "(not available or module not in LSPosed)" })
-                    val (_, lsposedScope) =
-                        suExec(
-                            "sqlite3 /data/adb/lspd/config/modules_config.db " +
-                                "\"SELECT s.app_pkg_name FROM scope s JOIN modules m ON s.mid=m.mid WHERE m.module_pkg_name LIKE '%vpnhide%';\" 2>/dev/null",
-                        )
-                    if (lsposedScope.isNotBlank()) {
-                        appendLine("Scope: ${lsposedScope.trim()}")
-                    }
                 }
             files["modules.txt"] = moduleInfo
 

@@ -1,7 +1,7 @@
 package dev.soranerai.vpnhidenext
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
@@ -9,13 +9,12 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
@@ -38,6 +37,7 @@ import dev.soranerai.vpnhidenext.domain.models.BackendKind
 import dev.soranerai.vpnhidenext.domain.models.ComponentDiagnostic
 import dev.soranerai.vpnhidenext.domain.models.DashboardState
 import dev.soranerai.vpnhidenext.domain.models.DiagnosticStatus
+import dev.soranerai.vpnhidenext.domain.models.ModuleState
 import dev.soranerai.vpnhidenext.domain.usecase.buildNativeInstallRecommendation
 import kotlinx.coroutines.CoroutineScope
 
@@ -55,11 +55,25 @@ internal fun BackendGateScreen(
         state.nativeInstallRecommendation
             ?: state.kernelVersion?.let { buildNativeInstallRecommendation(it, "") }
     }
-    val kmodTarget = remember(recommendation) {
-        resolveKmodInstallTarget(recommendation?.recommendedGkiVariant)
+    val allowKmodRepair = state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE
+    val kmodTarget = remember(recommendation, allowKmodRepair) {
+        if (allowKmodRepair) resolveKmodInstallTarget(recommendation?.recommendedGkiVariant) else null
     }
+    val installedNative = state.kmod as? ModuleState.Installed
+    val bridgeOnlyRepair =
+        state.diagnostics.backendKind == BackendKind.BUILT_IN &&
+            state.diagnostics.bridge.status != DiagnosticStatus.AVAILABLE
     val builtInTarget = remember(state, recommendation) {
-        resolveBuiltInInstallTarget(state.kernelVersion ?: recommendation?.kernelVersion)
+        if (state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || bridgeOnlyRepair) {
+            resolveBuiltInInstallTarget(
+                state.kernelVersion ?: recommendation?.kernelVersion,
+                installedVersion = installedNative?.version ?: "0.0.0",
+                installedBridgeVersion = installedNative?.bridgeVersion,
+                forceBridgeRepair = bridgeOnlyRepair,
+            )
+        } else {
+            null
+        }
     }
 
     LaunchedEffect(kmodTarget) { kmodTarget?.let { KmodUpdateCache.ensureFresh(scope, it) } }
@@ -75,9 +89,12 @@ internal fun BackendGateScreen(
     )
 
     Surface(modifier = Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
-        BoxWithConstraints(Modifier.fillMaxSize()) {
+        Box(Modifier.fillMaxSize()) {
             Column(
-                modifier = Modifier.fillMaxSize().padding(horizontal = 24.dp, vertical = 28.dp),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 28.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Spacer(Modifier.height(18.dp))
@@ -121,26 +138,21 @@ internal fun BackendGateScreen(
                     GateRow(3, R.string.diagnostics_lsposed, state.diagnostics.lsposed)
                 }
 
-                AnimatedContent(
-                    targetState = ready to busy,
-                    label = "gate_actions",
-                ) { (isReady, isBusy) ->
-                    if (isReady) {
-                        Spacer(Modifier.height(22.dp))
-                        Button(onClick = onRefresh) {
-                            Icon(Icons.Default.Refresh, null)
-                            Spacer(Modifier.width(8.dp))
-                            Text(stringResource(R.string.gate_recheck))
-                        }
-                    } else if (!isBusy) {
+                if (!ready && !busy) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().animateContentSize(),
+                    ) {
                         Spacer(Modifier.height(18.dp))
-                        Text(
-                            text = stringResource(R.string.gate_fix_hint),
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.SemiBold,
-                        )
-                        Spacer(Modifier.height(10.dp))
-                        when (val s = kmodState) {
+                        val hasRepairChoice = (allowKmodRepair && kmodTarget != null) || builtInTarget != null
+                        if (hasRepairChoice) {
+                            Text(
+                                text = stringResource(R.string.gate_fix_hint),
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold,
+                            )
+                            Spacer(Modifier.height(10.dp))
+                        }
+                        if (allowKmodRepair) when (val s = kmodState) {
                             is KmodUpdateState.Available -> GateActionCard(
                                 title = stringResource(R.string.gate_kmod_option),
                                 subtitle = s.info.kmi,
@@ -151,10 +163,14 @@ internal fun BackendGateScreen(
                             is KmodUpdateState.Failed -> RetryCard { kmodTarget?.let { KmodUpdateCache.refresh(scope, it) } }
                             else -> Unit
                         }
-                        when (val s = builtInState) {
+                        if (builtInTarget != null) when (val s = builtInState) {
                             is BuiltInUpdateState.Available -> GateActionCard(
-                                title = stringResource(R.string.gate_builtin_option),
-                                subtitle = stringResource(R.string.gate_builtin_subtitle),
+                                title = stringResource(
+                                    if (bridgeOnlyRepair) R.string.gate_bridge_option else R.string.gate_builtin_option,
+                                ),
+                                subtitle = stringResource(
+                                    if (bridgeOnlyRepair) R.string.gate_bridge_subtitle else R.string.gate_builtin_subtitle,
+                                ),
                                 icon = Icons.Default.SystemUpdate,
                                 onClick = { BuiltInUpdateCache.download(context, s.info) },
                             )
@@ -170,7 +186,9 @@ internal fun BackendGateScreen(
                             is BuiltInUpdateState.Failed -> RetryCard { builtInTarget?.let { BuiltInUpdateCache.refresh(it) } }
                             else -> Unit
                         }
-                        if (kmodState == KmodUpdateState.None && builtInState == BuiltInUpdateState.None) {
+                        if ((!allowKmodRepair || kmodTarget == null || kmodState == KmodUpdateState.None) &&
+                            (builtInTarget == null || builtInState == BuiltInUpdateState.None)
+                        ) {
                             OutlinedButton(onClick = onRefresh) {
                                 Text(stringResource(R.string.gate_retry))
                             }

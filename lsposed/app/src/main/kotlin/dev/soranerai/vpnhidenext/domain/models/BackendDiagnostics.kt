@@ -40,8 +40,6 @@ data class BackendProbeFacts(
     val bridgeValid: Boolean,
     val bridgeDisabled: Boolean,
     val loadedKmod: Boolean,
-    val lsposedInstalled: Boolean,
-    val lsposedDisabled: Boolean,
     val lsposedHooksActive: Boolean,
 )
 
@@ -69,7 +67,10 @@ object BackendDiagnosticsEvaluator {
                 else -> ComponentDiagnostic(DiagnosticStatus.AVAILABLE)
             }
 
-        val backendActive = facts.controlDevice && facts.controlToolResponding
+        // /dev/vpnhide_ctrl is the runtime contract. The CLI is only a
+        // management client and may be unavailable while the backend is
+        // already active.
+        val backendActive = facts.controlDevice
         val backend =
             when {
                 !facts.controlDevice && !facts.controlTool -> ComponentDiagnostic(DiagnosticStatus.MISSING)
@@ -85,8 +86,6 @@ object BackendDiagnosticsEvaluator {
 
         val lsposed =
             when {
-                !facts.lsposedInstalled -> ComponentDiagnostic(DiagnosticStatus.MISSING)
-                facts.lsposedDisabled -> ComponentDiagnostic(DiagnosticStatus.INACTIVE)
                 !backendActive -> ComponentDiagnostic(DiagnosticStatus.BLOCKED)
                 facts.lsposedHooksActive -> ComponentDiagnostic(DiagnosticStatus.AVAILABLE)
                 else -> ComponentDiagnostic(DiagnosticStatus.INACTIVE)

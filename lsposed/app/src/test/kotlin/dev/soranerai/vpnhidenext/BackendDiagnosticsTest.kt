@@ -9,6 +9,27 @@ import org.junit.Test
 
 class BackendDiagnosticsTest {
     @Test
+    fun `control device proves active backend even when cli does not respond`() {
+        val result = BackendDiagnosticsEvaluator.evaluate(
+            BackendProbeFacts(
+                root = true,
+                controlDevice = true,
+                controlTool = false,
+                controlToolResponding = false,
+                bridgeKmod = true,
+                bridgeKpatch = false,
+                bridgeValid = true,
+                bridgeDisabled = false,
+                loadedKmod = true,
+                lsposedHooksActive = false,
+            ),
+        )
+
+        assertEquals(DiagnosticStatus.AVAILABLE, result.backend.status)
+        assertEquals(BackendKind.KMOD, result.backendKind)
+    }
+
+    @Test
     fun `module metadata does not prove backend activity`() {
         val result = BackendDiagnosticsEvaluator.evaluate(
             BackendProbeFacts(
@@ -21,8 +42,6 @@ class BackendDiagnosticsTest {
                 bridgeValid = true,
                 bridgeDisabled = false,
                 loadedKmod = false,
-                lsposedInstalled = true,
-                lsposedDisabled = false,
                 lsposedHooksActive = false,
             ),
         )
@@ -46,8 +65,6 @@ class BackendDiagnosticsTest {
                 bridgeValid = true,
                 bridgeDisabled = false,
                 loadedKmod = false,
-                lsposedInstalled = true,
-                lsposedDisabled = false,
                 lsposedHooksActive = true,
             ),
         )
@@ -70,8 +87,6 @@ class BackendDiagnosticsTest {
                 bridgeValid = false,
                 bridgeDisabled = false,
                 loadedKmod = false,
-                lsposedInstalled = false,
-                lsposedDisabled = false,
                 lsposedHooksActive = false,
             ),
         )

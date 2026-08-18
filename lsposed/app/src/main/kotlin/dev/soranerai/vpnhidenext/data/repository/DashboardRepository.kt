@@ -38,20 +38,6 @@ private sealed interface LsposedRuntime {
     ) : LsposedRuntime
 }
 
-private sealed interface LsposedFramework {
-    data object NotInstalled : LsposedFramework
-
-    data class Installed(
-        val disabled: Boolean,
-    ) : LsposedFramework
-}
-
-private sealed interface LsposedConfig {
-    data object ModuleNotConfigured : LsposedConfig
-
-    data object Disabled : LsposedConfig
-}
-
 private fun parseKeyValue(text: String): Map<String, String> =
     text
         .lines()
@@ -132,20 +118,6 @@ class DashboardRepository(
             fi
             grep -q "vpnhide" /proc/modules 2>/dev/null && echo "is_kmod=1" || echo "is_kmod=0"
             
-            # LSPosed framework
-            LSP_INSTALLED=0
-            LSP_DISABLED=0
-            for id in lsposed; do
-              for dir in /data/adb/modules/${'$'}id /data/adb/modules_update/${'$'}id; do
-                if [ -f ${'$'}dir/module.prop ]; then
-                  LSP_INSTALLED=1
-                  [ -f ${'$'}dir/disable ] && LSP_DISABLED=1
-                  break 2
-                fi
-              done
-            done
-            echo "lsp_installed=${'$'}LSP_INSTALLED"
-            echo "lsp_disabled=${'$'}LSP_DISABLED"
             """.trimIndent()
 
             val (_, out) = suExec(script)
@@ -275,19 +247,6 @@ class DashboardRepository(
         return "$major.$minor.$patch"
     }
 
-    private fun detectLsposedFramework(snapshot: RawDashboardSnapshot): LsposedFramework {
-        val installed = snapshot.get("lsp_installed") == "1"
-        val disabled = snapshot.get("lsp_disabled") == "1"
-        val framework =
-            if (installed) {
-                LsposedFramework.Installed(disabled = disabled)
-            } else {
-                LsposedFramework.NotInstalled
-            }
-        VpnHideLog.i(TAG, "lsposed framework: $framework")
-        return framework
-    }
-
     suspend fun loadDashboardState(selfNeedsRestart: Boolean): DashboardState =
         withContext(Dispatchers.IO) {
             val issues = mutableListOf<Issue>()
@@ -410,8 +369,6 @@ class DashboardRepository(
             val hookProps = parseKeyValue(hookStatusRaw)
             val hookBootId = hookProps["boot_id"]
             val hooksActiveThisBoot = hookBootId != null && hookBootId == currentBootId.trim()
-            val frameworkInstalled = snapshot.get("lsp_installed") == "1"
-            val frameworkDisabled = snapshot.get("lsp_disabled") == "1"
             var diagnostics =
                 BackendDiagnosticsEvaluator.evaluate(
                     BackendProbeFacts(
@@ -424,8 +381,6 @@ class DashboardRepository(
                         bridgeValid = snapshot.get("bridge_valid") == "1",
                         bridgeDisabled = snapshot.get("bridge_disabled") == "1",
                         loadedKmod = snapshot.get("is_kmod") == "1",
-                        lsposedInstalled = frameworkInstalled,
-                        lsposedDisabled = frameworkDisabled,
                         lsposedHooksActive = hooksActiveThisBoot,
                     ),
                 )
@@ -441,21 +396,6 @@ class DashboardRepository(
             // lsposed hook status
             val hookVersion = hookProps["version"]
             val lsposedTargetCount = appsSync.count { it.lsposed }
-            val lsposedFramework = detectLsposedFramework(snapshot)
-            val lsposedConfig =
-                when (lsposedFramework) {
-                    LsposedFramework.NotInstalled -> {
-                        LsposedConfig.ModuleNotConfigured
-                    }
-
-                    is LsposedFramework.Installed -> {
-                        if (lsposedFramework.disabled) {
-                            LsposedConfig.Disabled
-                        } else {
-                            null
-                        }
-                    }
-                }
             val lsposedRuntime: LsposedRuntime =
                 if (hooksActiveThisBoot) {
                     LsposedRuntime.Active(hookVersion)
@@ -469,33 +409,11 @@ class DashboardRepository(
                         LsposedState.Active(lsposedRuntime.version, lsposedTargetCount)
                     }
 
-                    LsposedRuntime.Inactive -> {
-                        when (lsposedConfig) {
-                            null -> {
-                                LsposedState.InstalledInactive(null)
-                            }
-
-                            LsposedConfig.ModuleNotConfigured -> {
-                                when (lsposedFramework) {
-                                    LsposedFramework.NotInstalled -> {
-                                        LsposedState.NotInstalled
-                                    }
-
-                                    is LsposedFramework.Installed -> {
-                                        LsposedState.InstalledInactive(null)
-                                    }
-                                }
-                            }
-
-                            LsposedConfig.Disabled -> {
-                                LsposedState.InstalledInactive(null)
-                            }
-                        }
-                    }
+                    LsposedRuntime.Inactive -> LsposedState.InstalledInactive(hookVersion)
                 }
             VpnHideLog.i(
                 TAG,
-                "lsposed: $lsposed (hookBootId=$hookBootId currentBootId=${currentBootId.trim()} framework=$lsposedFramework runtime=$lsposedRuntime config=$lsposedConfig)",
+                "lsposed: $lsposed (hookBootId=$hookBootId currentBootId=${currentBootId.trim()} runtime=$lsposedRuntime)",
             )
 
             // ── Issues ──
@@ -509,9 +427,6 @@ class DashboardRepository(
                 DiagnosticStatus.MISSING -> err(res.getString(R.string.dashboard_issue_bridge_missing))
                 DiagnosticStatus.BROKEN -> err(res.getString(R.string.dashboard_issue_bridge_broken))
                 else -> Unit
-            }
-            if (lsposedFramework is LsposedFramework.NotInstalled && lsposed !is LsposedState.Active) {
-                err(res.getString(R.string.dashboard_issue_lsposed_not_installed))
             }
             val brokenFields = hookProps["broken_fields"]?.takeIf { it.isNotBlank() }
             if (brokenFields != null) {

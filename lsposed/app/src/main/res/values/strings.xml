@@ -227,13 +227,14 @@
     <string name="gate_kmod_option">Install or repair kmod</string>
     <string name="gate_builtin_option">Install or repair built-in backend</string>
     <string name="gate_builtin_subtitle">kpatch bridge + matching kernel</string>
+    <string name="gate_bridge_option">Repair bridge only</string>
+    <string name="gate_bridge_subtitle">Keep the active built-in kernel</string>
     <string name="gate_builtin_confirm">Review built-in installation</string>
     <string name="gate_builtin_confirm_title">Install built-in backend?</string>
     <string name="gate_reboot">Reboot to apply changes</string>
     <string name="gate_recheck">Check again</string>
     <string name="gate_retry">Retry component discovery</string>
     <string name="gate_retry_download">Retry download</string>
-    <string name="dashboard_issue_lsposed_not_installed">LSPosed/Vector is not installed. Install it and enable the VPNHide Next module for System Framework.</string>
     <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>
     <string name="dashboard_issue_lsposed_config_unreadable">Failed to read LSPosed/Vector configuration. Reopen LSPosed/Vector, verify that VPNHide Next is enabled there, and then reopen VPNHide Next.</string>
     <string name="dashboard_issue_lsposed_not_enabled">VPNHide Next is present in LSPosed/Vector, but the module is disabled. Enable VPNHide Next in LSPosed/Vector and keep System Framework in its scope.</string>
