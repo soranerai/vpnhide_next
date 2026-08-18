@@ -13,6 +13,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
+private const val CURRENT_CONFIG_SCHEMA_VERSION = 1
+
 internal interface AppDao {
     fun getAllAppProtection(): Flow<List<AppProtection>>
 
@@ -125,7 +127,7 @@ internal class AppDatabase private constructor(
             }
             try {
                 val jsonStr = jsonFile.readText()
-                val root = JSONObject(jsonStr)
+                val root = migrateConfigJson(JSONObject(jsonStr))
 
                 val globalObj = root.optJSONObject("globalConfig")
                 val globalConfig = if (globalObj != null) globalObj.toDbGlobalConfig() else DbGlobalConfig()
@@ -192,6 +194,7 @@ internal class AppDatabase private constructor(
         synchronized(lock) {
             val root =
                 JSONObject().apply {
+                    put("schemaVersion", CURRENT_CONFIG_SCHEMA_VERSION)
                     put("globalConfig", config.globalConfig.toJson())
                     put("apps", JSONArray().apply { config.apps.values.forEach { put(it.toJson()) } })
                     put("portRules", JSONArray().apply { config.portRules.forEach { put(it.toJson()) } })
@@ -747,6 +750,20 @@ internal class AppDatabase private constructor(
                 Log.e("VpnHideDb", "Failed to delete legacy database file", e)
             }
         }
+    }
+}
+
+/**
+ * Normalizes persisted config JSON before the field-level readers consume it.
+ * Files written before schema versioning are version 0; their shape is already
+ * compatible with version 1, so migration only records the new version.
+ */
+internal fun migrateConfigJson(root: JSONObject): JSONObject {
+    val version = root.optInt("schemaVersion", 0)
+    return when (version) {
+        0 -> JSONObject(root.toString()).put("schemaVersion", CURRENT_CONFIG_SCHEMA_VERSION)
+        CURRENT_CONFIG_SCHEMA_VERSION -> root
+        else -> error("Unsupported VPNHide config schema version: $version")
     }
 }
 
