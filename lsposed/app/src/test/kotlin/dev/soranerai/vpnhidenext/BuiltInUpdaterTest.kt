@@ -2,6 +2,7 @@ package dev.soranerai.vpnhidenext
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import java.io.File
 import java.nio.file.Files
@@ -234,7 +235,7 @@ class BuiltInUpdaterTest {
     @Test
     fun `example AK3 archive validates and can be made non-interactive`() {
         val archive = File(System.getProperty("user.dir"), "../../ak3_kernel_example.zip").canonicalFile
-        assertTrue("missing example archive: $archive", archive.isFile)
+        assumeTrue("optional AK3 example archive is not present: $archive", archive.isFile)
         assertEquals(true, validateKernelZip(archive))
 
         val prepared = Files.createTempFile("vpnhide-ak3-test-", ".zip").toFile()
