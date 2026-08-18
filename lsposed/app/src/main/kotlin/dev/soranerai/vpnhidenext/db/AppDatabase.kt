@@ -12,7 +12,6 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
 
 internal interface AppDao {
     fun getAllAppProtection(): Flow<List<AppProtection>>
@@ -105,7 +104,7 @@ internal class AppDatabase private constructor(
     context: Context,
 ) {
     private val configFile = File(context.filesDir, "vpnhide_config.json")
-    private val atomicFile = android.util.AtomicFile(configFile)
+    private val jsonFile = AtomicJsonFile(configFile)
     private val lock = Any()
 
     @Volatile
@@ -120,12 +119,12 @@ internal class AppDatabase private constructor(
 
     private fun loadConfig() {
         synchronized(lock) {
-            if (!configFile.exists()) {
+            if (!jsonFile.exists()) {
                 config = VpnHideConfig()
                 return
             }
             try {
-                val jsonStr = atomicFile.openRead().use { it.reader().readText() }
+                val jsonStr = jsonFile.readText()
                 val root = JSONObject(jsonStr)
 
                 val globalObj = root.optJSONObject("globalConfig")
@@ -200,16 +199,10 @@ internal class AppDatabase private constructor(
                     put("ifacePrefixes", JSONArray().apply { config.ifacePrefixes.forEach { put(it) } })
                 }
             val jsonStr = root.toString(2)
-            var out: FileOutputStream? = null
             try {
-                out = atomicFile.startWrite()
-                out.write(jsonStr.toByteArray())
-                atomicFile.finishWrite(out)
+                jsonFile.writeText(jsonStr)
             } catch (e: Exception) {
                 Log.e("VpnHideDb", "Failed to write JSON config", e)
-                if (out != null) {
-                    atomicFile.failWrite(out)
-                }
             }
         }
     }
