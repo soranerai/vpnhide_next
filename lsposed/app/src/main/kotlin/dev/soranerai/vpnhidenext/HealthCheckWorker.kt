@@ -50,6 +50,7 @@ internal class HealthCheckWorker(
 ) : CoroutineWorker(context, params) {
     override suspend fun doWork(): Result =
         withContext(Dispatchers.IO) {
+            if (!getHealthCheckEnabled(applicationContext)) return@withContext Result.success()
             val db = AppDatabase.getInstance(applicationContext)
             val apps = db.appDao().getAllAppProtectionSync()
             val selfPkg = applicationContext.packageName

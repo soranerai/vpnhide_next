@@ -10,6 +10,8 @@ import android.os.ParcelFileDescriptor
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,6 +55,7 @@ import kotlin.coroutines.resume
  * backgrounded/closed), and a hard [AUTO_STOP_MS] timeout.
  */
 internal class SelfTestVpnService : VpnService() {
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private var tunFd: ParcelFileDescriptor? = null
     private var autoStopJob: Job? = null
     private var stopWatcherJob: Job? = null
@@ -115,12 +118,12 @@ internal class SelfTestVpnService : VpnService() {
                 return START_NOT_STICKY
             }
             autoStopJob =
-                CoroutineScope(Dispatchers.Default).launch {
+                serviceScope.launch {
                     delay(AUTO_STOP_MS)
                     teardown()
                 }
             stopWatcherJob =
-                CoroutineScope(Dispatchers.Default).launch {
+                serviceScope.launch {
                     stopRequested.first { it }
                     teardown()
                 }
@@ -134,6 +137,7 @@ internal class SelfTestVpnService : VpnService() {
 
     override fun onDestroy() {
         teardown()
+        serviceScope.cancel()
         lifecycleCallbacks?.let { application.unregisterActivityLifecycleCallbacks(it) }
         super.onDestroy()
     }

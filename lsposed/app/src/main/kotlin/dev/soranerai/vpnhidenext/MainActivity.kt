@@ -21,6 +21,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -416,7 +417,7 @@ private fun MainScreen(
                                                     showFilterMenu = false
                                                 },
                                                 leadingIcon = {
-                                                    Icon(Icons.Default.PlaylistAddCheck, contentDescription = null)
+                                                    Icon(Icons.AutoMirrored.Filled.PlaylistAddCheck, contentDescription = null)
                                                 },
                                             )
                                         }

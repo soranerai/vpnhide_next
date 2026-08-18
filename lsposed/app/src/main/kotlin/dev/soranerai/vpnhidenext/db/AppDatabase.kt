@@ -12,7 +12,8 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
-import java.io.FileOutputStream
+
+private const val CURRENT_CONFIG_SCHEMA_VERSION = 1
 
 internal interface AppDao {
     fun getAllAppProtection(): Flow<List<AppProtection>>
@@ -105,7 +106,7 @@ internal class AppDatabase private constructor(
     context: Context,
 ) {
     private val configFile = File(context.filesDir, "vpnhide_config.json")
-    private val atomicFile = android.util.AtomicFile(configFile)
+    private val jsonFile = AtomicJsonFile(configFile)
     private val lock = Any()
 
     @Volatile
@@ -120,13 +121,13 @@ internal class AppDatabase private constructor(
 
     private fun loadConfig() {
         synchronized(lock) {
-            if (!configFile.exists()) {
+            if (!jsonFile.exists()) {
                 config = VpnHideConfig()
                 return
             }
             try {
-                val jsonStr = atomicFile.openRead().use { it.reader().readText() }
-                val root = JSONObject(jsonStr)
+                val jsonStr = jsonFile.readText()
+                val root = migrateConfigJson(JSONObject(jsonStr))
 
                 val globalObj = root.optJSONObject("globalConfig")
                 val globalConfig = if (globalObj != null) globalObj.toDbGlobalConfig() else DbGlobalConfig()
@@ -193,6 +194,7 @@ internal class AppDatabase private constructor(
         synchronized(lock) {
             val root =
                 JSONObject().apply {
+                    put("schemaVersion", CURRENT_CONFIG_SCHEMA_VERSION)
                     put("globalConfig", config.globalConfig.toJson())
                     put("apps", JSONArray().apply { config.apps.values.forEach { put(it.toJson()) } })
                     put("portRules", JSONArray().apply { config.portRules.forEach { put(it.toJson()) } })
@@ -200,17 +202,7 @@ internal class AppDatabase private constructor(
                     put("ifacePrefixes", JSONArray().apply { config.ifacePrefixes.forEach { put(it) } })
                 }
             val jsonStr = root.toString(2)
-            var out: FileOutputStream? = null
-            try {
-                out = atomicFile.startWrite()
-                out.write(jsonStr.toByteArray())
-                atomicFile.finishWrite(out)
-            } catch (e: Exception) {
-                Log.e("VpnHideDb", "Failed to write JSON config", e)
-                if (out != null) {
-                    atomicFile.failWrite(out)
-                }
-            }
+            jsonFile.writeText(jsonStr)
         }
     }
 
@@ -760,6 +752,27 @@ internal class AppDatabase private constructor(
         }
     }
 }
+
+/**
+ * Normalizes persisted config JSON before the field-level readers consume it.
+ * Files written before schema versioning are version 0; their shape is already
+ * compatible with version 1, so migration only records the new version.
+ */
+internal fun migrateConfigJson(root: JSONObject): JSONObject {
+    val sourceVersion = root.takeIf { it.has("schemaVersion") }?.optInt("schemaVersion")
+    val version = migratedConfigSchemaVersion(sourceVersion)
+    return if (sourceVersion == CURRENT_CONFIG_SCHEMA_VERSION) {
+        root
+    } else {
+        JSONObject(root.toString()).put("schemaVersion", version)
+    }
+}
+
+internal fun migratedConfigSchemaVersion(version: Int?): Int =
+    when (version ?: 0) {
+        0, CURRENT_CONFIG_SCHEMA_VERSION -> CURRENT_CONFIG_SCHEMA_VERSION
+        else -> error("Unsupported VPNHide config schema version: $version")
+    }
 
 // ── JSON Conversion Helpers ──────────────────────────────────────────
 
