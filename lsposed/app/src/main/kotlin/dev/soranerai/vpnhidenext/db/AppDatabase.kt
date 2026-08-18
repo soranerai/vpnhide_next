@@ -199,11 +199,7 @@ internal class AppDatabase private constructor(
                     put("ifacePrefixes", JSONArray().apply { config.ifacePrefixes.forEach { put(it) } })
                 }
             val jsonStr = root.toString(2)
-            try {
-                jsonFile.writeText(jsonStr)
-            } catch (e: Exception) {
-                Log.e("VpnHideDb", "Failed to write JSON config", e)
-            }
+            jsonFile.writeText(jsonStr)
         }
     }
 
