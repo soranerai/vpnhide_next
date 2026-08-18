@@ -9,6 +9,8 @@ import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
@@ -38,7 +40,8 @@ internal class BootCompletedReceiver : BroadcastReceiver() {
         if (intent.action != Intent.ACTION_BOOT_COMPLETED) return
         val appContext = context.applicationContext
         val pendingResult = goAsync()
-        CoroutineScope(Dispatchers.IO).launch {
+        val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+        receiverScope.launch {
             try {
                 if (getHealthCheckEnabled(appContext)) {
                     val request =
@@ -52,6 +55,7 @@ internal class BootCompletedReceiver : BroadcastReceiver() {
                 }
             } finally {
                 pendingResult.finish()
+                receiverScope.cancel()
             }
         }
     }
