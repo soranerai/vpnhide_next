@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.BatteryAlert
 import androidx.compose.material.icons.filled.BugReport
 import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.FileOpen
 import androidx.compose.material.icons.filled.MonitorHeart
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Schedule
@@ -475,7 +476,7 @@ private fun BackupRestoreCard() {
                 )
 
                 SettingsSquareIconButton(
-                    icon = Icons.Default.Share,
+                    icon = Icons.Default.FileOpen,
                     contentDescription = stringResource(R.string.btn_import),
                     onClick = {
                         importLauncher.launch(
