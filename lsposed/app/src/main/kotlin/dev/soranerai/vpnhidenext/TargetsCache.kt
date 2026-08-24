@@ -66,6 +66,16 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
         }
     }
 
+    /**
+     * Refreshes after a policy write and does not return until the fresh
+     * snapshot has been published. Save flows use this as a commit barrier so
+     * the picker cannot be rehydrated from an older target snapshot.
+     */
+    suspend fun refreshAndWait(context: Context): TargetsSnapshot =
+        reloadNow {
+            reload(context.applicationContext)
+        }
+
     // Read only module status and Package Manager state. Policy selections
     // come from the app-owned JSON database; no target files are consulted.
     private const val SENTINEL = "===VPNHIDE-TARGETS-BOUNDARY==="
@@ -207,7 +217,6 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                 ifacePrefixes = ifacePrefixes,
                 uidToPkg = statusSnapshot.uidToPkg,
             )
-        updateState(snapshot)
         return snapshot
     }
 

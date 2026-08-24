@@ -1,7 +1,7 @@
 package dev.soranerai.vpnhidenext
 
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -45,6 +45,35 @@ internal abstract class AsyncCache<T>(
 
     protected fun updateState(value: T?) {
         _state.value = value
+    }
+
+    /**
+     * Reloads synchronously and returns only after the new value is published.
+     *
+     * Callers that mutate the source of a cache and then immediately update
+     * their UI must use this instead of [launchReload]. Otherwise an older
+     * asynchronous request can publish a stale snapshot after the mutation.
+     */
+    protected suspend fun reloadNow(block: suspend () -> T): T {
+        val requestGeneration: Long
+        synchronized(lock) {
+            inflight?.cancel()
+            inflight = null
+            requestGeneration = generation.next()
+            _loading.value = true
+        }
+
+        return try {
+            val next = withContext(ioDispatcher) { block() }
+            synchronized(lock) {
+                if (generation.isCurrent(requestGeneration)) _state.value = next
+            }
+            next
+        } finally {
+            synchronized(lock) {
+                if (generation.isCurrent(requestGeneration)) _loading.value = false
+            }
+        }
     }
 
     protected fun launchReload(

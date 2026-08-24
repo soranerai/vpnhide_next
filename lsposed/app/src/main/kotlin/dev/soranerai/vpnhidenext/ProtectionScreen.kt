@@ -558,7 +558,7 @@ internal fun ProtectionScreen(
                         DashboardCache.refresh(scope, context, selfNeedsRestart)
                         DiagnosticsCache.reset()
                         DiagnosticsCache.run(scope, context)
-                        TargetsCache.refresh(scope, context)
+                        TargetsCache.refreshAndWait(context)
                         originalApps = apps
                         originalListMode = listMode
                         modeResetPending = false
