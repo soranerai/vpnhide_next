@@ -5,7 +5,9 @@ import java.io.File
 import java.io.FileOutputStream
 
 /** Small persistence primitive for the app-owned atomically replaced JSON file. */
-internal class AtomicJsonFile(private val file: File) {
+internal class AtomicJsonFile(
+    private val file: File,
+) {
     private val atomicFile = AtomicFile(file)
 
     fun exists(): Boolean = file.exists()

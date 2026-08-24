@@ -1,3 +1,19 @@
+## v2.5.1
+
+### Added
+- Add a blocking animated backend setup screen with kmod and built-in repair flows
+
+### Changed
+- Separate bridge installation from active backend diagnostics
+- The update-check setting now disables all app update checks, including foreground checks.
+
+### Fixed
+- Disabling the protection health check now also stops an already queued worker from running.
+- Settings now restore the previous value and show an error when a setting cannot be persisted.
+- Treat vpnhide_ctrl presence as active and repair only the missing bridge
+- Prevent the protection picker from reverting newly saved targets after an asynchronous refresh
+- Use an import icon for the backup restore file picker
+
 ## v2.5.0
 
 ### Changed
@@ -49,12 +65,3 @@
 - VPN-app hiding now accounts for the calling app and preserves the manager's own VPN services.
 - LSPosed network hooks now consistently use the physical interface selected by the daemon.
 - Make protection modes and port rules easier to understand, with clearer Hide/Show controls, help text, allowlist port rules, and consistent refresh feedback
-
-## v2.2.0
-
-### Added
-- Added built-in mode kernel integration branch support and in-app announcement screen for kmod users
-
-### Fixed
-- Resolve native module and control tool paths dynamically to support custom module folders (e.g. vpnhide_kpatch).
-- Fixed detection via system call (syscall) timing attacks in the built-in mode

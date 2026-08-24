@@ -21,40 +21,45 @@ class AsyncCacheTest {
     }
 
     @Test
-    fun `reload publishes the newest value and clears loading`() = runTest {
-        val cache = IntCache(Dispatchers.Unconfined)
-        val scope = CoroutineScope(Dispatchers.Unconfined)
+    fun `reload publishes the newest value and clears loading`() =
+        runTest {
+            val cache = IntCache(Dispatchers.Unconfined)
+            val scope = CoroutineScope(Dispatchers.Unconfined)
 
-        cache.reload(scope, 42)
+            cache.reload(scope, 42)
 
-        assertEquals(42, cache.state.value)
-        assertFalse(cache.loading.value)
-    }
-
-    @Test
-    fun `synchronous reload publishes before returning`() = runTest {
-        val cache = IntCache(Dispatchers.Unconfined)
-
-        val value = cache.reloadNow(42)
-
-        assertEquals(42, value)
-        assertEquals(42, cache.state.value)
-        assertFalse(cache.loading.value)
-    }
+            assertEquals(42, cache.state.value)
+            assertFalse(cache.loading.value)
+        }
 
     @Test
-    fun `invalidate clears value and cancels loading state`() = runTest {
-        val cache = IntCache(Dispatchers.Unconfined)
-        val scope = CoroutineScope(Dispatchers.Unconfined)
-        cache.reload(scope, 42)
+    fun `synchronous reload publishes before returning`() =
+        runTest {
+            val cache = IntCache(Dispatchers.Unconfined)
 
-        cache.clear()
+            val value = cache.reloadNow(42)
 
-        assertNull(cache.state.value)
-        assertFalse(cache.loading.value)
-    }
+            assertEquals(42, value)
+            assertEquals(42, cache.state.value)
+            assertFalse(cache.loading.value)
+        }
 
-    private class IntCache(dispatcher: kotlinx.coroutines.CoroutineDispatcher) : AsyncCache<Int>(dispatcher) {
+    @Test
+    fun `invalidate clears value and cancels loading state`() =
+        runTest {
+            val cache = IntCache(Dispatchers.Unconfined)
+            val scope = CoroutineScope(Dispatchers.Unconfined)
+            cache.reload(scope, 42)
+
+            cache.clear()
+
+            assertNull(cache.state.value)
+            assertFalse(cache.loading.value)
+        }
+
+    private class IntCache(
+        dispatcher: kotlinx.coroutines.CoroutineDispatcher,
+    ) : AsyncCache<Int>(dispatcher) {
         fun reload(
             scope: CoroutineScope,
             value: Int,
@@ -62,7 +67,6 @@ class AsyncCacheTest {
 
         fun clear() = invalidate()
 
-        suspend fun reloadNow(value: Int): Int =
-            reloadNow { value }
+        suspend fun reloadNow(value: Int): Int = reloadNow { value }
     }
 }

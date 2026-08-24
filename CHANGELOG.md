@@ -5,6 +5,22 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.5.1
+
+### Added
+- Add a blocking animated backend setup screen with kmod and built-in repair flows
+
+### Changed
+- Separate bridge installation from active backend diagnostics
+- The update-check setting now disables all app update checks, including foreground checks.
+
+### Fixed
+- Disabling the protection health check now also stops an already queued worker from running.
+- Settings now restore the previous value and show an error when a setting cannot be persisted.
+- Treat vpnhide_ctrl presence as active and repair only the missing bridge
+- Prevent the protection picker from reverting newly saved targets after an asynchronous refresh
+- Use an import icon for the backup restore file picker
+
 ## v2.5.0
 
 ### Changed

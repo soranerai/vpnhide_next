@@ -1,6 +1,58 @@
 {
   "history": [
     {
+      "version": "2.5.1",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add a blocking animated backend setup screen with kmod and built-in repair flows",
+              "ru": "Добавлен блокирующий анимированный экран настройки backend с установкой и исправлением kmod или built-in"
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Separate bridge installation from active backend diagnostics",
+              "ru": "В диагностике теперь разделены наличие bridge и активность backend"
+            },
+            {
+              "en": "The update-check setting now disables all app update checks, including foreground checks.",
+              "ru": "Настройка проверки обновлений теперь отключает все проверки обновлений приложения, включая проверки на переднем плане."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Disabling the protection health check now also stops an already queued worker from running.",
+              "ru": "При отключении проверки работоспособности уже поставленная в очередь задача теперь тоже не запускается."
+            },
+            {
+              "en": "Settings now restore the previous value and show an error when a setting cannot be persisted.",
+              "ru": "Теперь при ошибке сохранения настройки приложение восстанавливает прежнее значение и показывает сообщение об ошибке."
+            },
+            {
+              "en": "Treat vpnhide_ctrl presence as active and repair only the missing bridge",
+              "ru": "Теперь наличие vpnhide_ctrl считается активным backend, и исправляется только отсутствующий bridge"
+            },
+            {
+              "en": "Prevent the protection picker from reverting newly saved targets after an asynchronous refresh",
+              "ru": "Исправлено возвращение списка защиты к старому состоянию после сохранения целей и асинхронного обновления"
+            },
+            {
+              "en": "Use an import icon for the backup restore file picker",
+              "ru": "Для выбора файла резервной копии теперь используется иконка импорта вместо иконки «Поделиться»"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.5.0",
       "sections": [
         {
