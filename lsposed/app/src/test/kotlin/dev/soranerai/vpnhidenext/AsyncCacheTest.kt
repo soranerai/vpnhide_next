@@ -32,6 +32,17 @@ class AsyncCacheTest {
     }
 
     @Test
+    fun `synchronous reload publishes before returning`() = runTest {
+        val cache = IntCache(Dispatchers.Unconfined)
+
+        val value = cache.reloadNow(42)
+
+        assertEquals(42, value)
+        assertEquals(42, cache.state.value)
+        assertFalse(cache.loading.value)
+    }
+
+    @Test
     fun `invalidate clears value and cancels loading state`() = runTest {
         val cache = IntCache(Dispatchers.Unconfined)
         val scope = CoroutineScope(Dispatchers.Unconfined)
@@ -50,5 +61,8 @@ class AsyncCacheTest {
         ) = launchReload(scope) { value }
 
         fun clear() = invalidate()
+
+        suspend fun reloadNow(value: Int): Int =
+            reloadNow { value }
     }
 }
