@@ -80,10 +80,9 @@ class HookEntry : IXposedHookLoadPackage {
                 object : XC_MethodHook() {
                     override fun beforeHookedMethod(param: MethodHookParam) {
                         val callingUid = Binder.getCallingUid()
-                        val uids = HookContext.systemServerTargetUids
                         val stack = HookContext.callingUidStack.get() ?: return
                         if (stack.isEmpty()) {
-                            if (callingUid != 1000 && uids != null && uids.contains(callingUid)) {
+                            if (callingUid != 1000 && HookContext.isTargetUid(callingUid)) {
                                 stack.add(callingUid)
                             } else {
                                 stack.add(1000)
@@ -212,12 +211,14 @@ class HookEntry : IXposedHookLoadPackage {
                         val appJavaHookMasks = mutableMapOf<Int, UInt>()
                         var coverIface: String? = null
                         var statsClearGen: Int? = null
+                        var lsposedExcludeMode = false
 
                         while (true) {
                             val line = reader.readLine() ?: break
                             if (line.isEmpty()) {
                                 synchronized(HookContext.uidLock) {
-                                    HookContext.systemServerTargetUids = uids.toSet()
+                                    HookContext.systemServerUidPolicy =
+                                        HookContext.TargetUidPolicy(uids.toSet(), lsposedExcludeMode)
                                     HookContext.systemServerIfacePrefixes = prefixes.toList()
                                     HookContext.systemServerActiveVpnIfaces = activeVpnIfaces.toSet()
                                     HookContext.cachedJavaHooksMask = javaHookMask
@@ -241,6 +242,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 javaHookMask = 0xFFFFFFFFu
                                 coverIface = null
                                 statsClearGen = null
+                                lsposedExcludeMode = false
                                 continue
                             }
 
@@ -269,6 +271,9 @@ class HookEntry : IXposedHookLoadPackage {
                                         uidStr.toIntOrNull()?.let { uids.add(it) }
                                     }
                                 }
+                            } else if (line.startsWith("lsposed_match_mode:")) {
+                                lsposedExcludeMode =
+                                    line.substringAfter("lsposed_match_mode:").trim().toIntOrNull() == 1
                             } else if (line.startsWith("iface_prefixes:")) {
                                 val prefixStr = line.substringAfter("iface_prefixes:").trim()
                                 if (prefixStr.isNotEmpty()) {

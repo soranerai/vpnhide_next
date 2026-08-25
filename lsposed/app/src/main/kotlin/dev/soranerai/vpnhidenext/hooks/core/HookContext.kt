@@ -10,6 +10,11 @@ import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 
 object HookContext {
+    data class TargetUidPolicy(
+        val uids: Set<Int>,
+        val excludeMode: Boolean,
+    )
+
     const val OWN_PACKAGE_NAME = "dev.soranerai.vpnhidenext"
 
     @Volatile
@@ -27,7 +32,7 @@ object HookContext {
     val isInternalCheck = ThreadLocal.withInitial { false }
 
     @Volatile
-    var systemServerTargetUids: Set<Int>? = null
+    var systemServerUidPolicy: TargetUidPolicy? = null
 
     @Volatile
     var systemServerIfacePrefixes: List<String>? = null
@@ -77,7 +82,7 @@ object HookContext {
         val uid = resolveEffectiveUid()
         val mask = appJavaHookMasks?.get(uid) ?: cachedJavaHooksMask ?: 0xFFFFFFFFu
         if ((mask and bitMask) == 0u) return null
-        if (!loadTargetUids().contains(uid)) return null
+        if (!isTargetUid(uid)) return null
         return HookCallContext(uid)
     }
 
@@ -95,10 +100,10 @@ object HookContext {
         if (callingUid == 1000) { // system_server is pushing data
             val cbUid = currentCallbackUid.get() ?: getInheritedCallingUid()
             if (cbUid != null) {
-                return loadTargetUids().contains(cbUid)
+                return isTargetUid(cbUid)
             }
         }
-        return loadTargetUids().contains(callingUid)
+        return isTargetUid(callingUid)
     }
 
     // Same uid resolution as isTargetCaller(), exposed so call sites can reuse it for isJavaHookActive().
@@ -150,24 +155,34 @@ object HookContext {
                     if (selfUid == -1) {
                         selfUid = getPackageUid(pm, OWN_PACKAGE_NAME, 0)
                         if (selfUid != -1) {
-                            systemServerTargetUids = null
+                            systemServerUidPolicy = null
                         }
                     }
                 }
             }
         }
 
-        systemServerTargetUids?.let {
-            return it
+        systemServerUidPolicy?.let {
+            return it.uids
         }
         synchronized(uidLock) {
-            systemServerTargetUids?.let {
-                return it
+            systemServerUidPolicy?.let {
+                return it.uids
             }
             val uids = mutableSetOf<Int>()
             if (selfUid != -1) uids.add(selfUid)
             return uids.toSet()
         }
+    }
+
+    fun isTargetUid(uid: Int): Boolean {
+        if (uid == 0 || uid == 1000 || uid.mod(100000) < 10000) return false
+        val policy = systemServerUidPolicy
+        if (policy != null) {
+            val listed = policy.uids.contains(uid)
+            return if (policy.excludeMode) !listed else listed
+        }
+        return loadTargetUids().contains(uid)
     }
 
     fun loadIfacePrefixes(): List<String> = systemServerIfacePrefixes ?: emptyList()
@@ -246,7 +261,7 @@ object HookContext {
     }
 
     fun invalidateTargetUids() {
-        systemServerTargetUids = null
+        systemServerUidPolicy = null
         systemServerIfacePrefixes = null
         systemServerActiveVpnIfaces = null
         vpnPackageCache.clear()
