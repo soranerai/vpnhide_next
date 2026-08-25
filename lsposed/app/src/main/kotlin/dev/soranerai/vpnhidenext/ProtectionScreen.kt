@@ -23,7 +23,6 @@ import androidx.compose.ui.unit.dp
 import dev.soranerai.vpnhidenext.db.AppDatabase
 import dev.soranerai.vpnhidenext.db.AppProtection
 import dev.soranerai.vpnhidenext.db.DatabaseSync
-import dev.soranerai.vpnhidenext.db.DbGlobalConfig
 import dev.soranerai.vpnhidenext.db.PolicyListMode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -77,8 +76,7 @@ internal fun ProtectionScreen(
         }
 
     fun normalizeSystemOverrides(candidate: List<AppEntry>): List<AppEntry> {
-        val kmodAvailable = targets?.kmodModuleInstalled == true
-        return candidate.map { it.withNormalizedSystemPolicy(listMode, kmodAvailable) }
+        return candidate.map { it.withNormalizedSystemPolicy(listMode) }
     }
 
     fun stageApps(candidate: List<AppEntry>) {
@@ -135,7 +133,7 @@ internal fun ProtectionScreen(
                         val coreSystemUid = app.isSystem && app.uid % 100000 < 10000
                         val explicit = key in t.systemPolicyExplicitApps && !coreSystemUid
                         val implicitSystemException =
-                            listMode == PolicyListMode.ALLOWLIST && app.isSystem && !explicit
+                            listMode == PolicyListMode.ALLOWLIST && app.isSystem && !coreSystemUid && !explicit
                         AppEntry(
                             packageName = app.packageName,
                             label = app.label,
@@ -145,7 +143,7 @@ internal fun ProtectionScreen(
                             uid = app.uid,
                             kmod =
                                 if (implicitSystemException) {
-                                    t.kmodModuleInstalled
+                                    true
                                 } else if (app.isSystem && !explicit) {
                                     false
                                 } else {
@@ -157,7 +155,7 @@ internal fun ProtectionScreen(
                                 } else if (app.isSystem && !explicit) {
                                     false
                                 } else {
-                                    key in t.lsposedTargets
+                                    key in t.lsposedEntries
                                 },
                             systemPolicyExplicit = explicit,
                             portHiding =
@@ -303,9 +301,9 @@ internal fun ProtectionScreen(
 
             val selectedCount =
                 if (listMode == PolicyListMode.ALLOWLIST) {
-                    apps.manualSelectionCount(listMode)
+                    apps.effectiveTargetUidCount(listMode)
                 } else {
-                    apps.count { it.isSelectedForPicker() }
+                    apps.effectiveTargetUidCount(listMode)
                 }
             val summaryBackgroundColor =
                 if (isSystemInDarkTheme()) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
@@ -374,14 +372,14 @@ internal fun ProtectionScreen(
                         }
                         TextButton(
                             onClick = {
-                                val kmodAvailable = targets?.kmodModuleInstalled == true
                                 apps =
                                     apps.map {
+                                        val eligibleSystem = it.isSystem && !it.isCoreSystemUid()
                                         it.copy(
-                                            kmod = selected == PolicyListMode.ALLOWLIST && it.isSystem && kmodAvailable,
-                                            lsposed = selected == PolicyListMode.ALLOWLIST && it.isSystem,
+                                            kmod = selected == PolicyListMode.ALLOWLIST && eligibleSystem,
+                                            lsposed = selected == PolicyListMode.ALLOWLIST && eligibleSystem,
                                             systemPolicyExplicit = false,
-                                            portHiding = selected == PolicyListMode.ALLOWLIST && it.isSystem,
+                                            portHiding = selected == PolicyListMode.ALLOWLIST && eligibleSystem,
                                             portRules = emptyList(),
                                             kernelHookMask = null,
                                             javaHookMask = null,
@@ -501,55 +499,52 @@ internal fun ProtectionScreen(
                 try {
                     val selfPkg = context.packageName
                     val db = AppDatabase.getInstance(context)
-                    if (modeResetPending) {
-                        db.resetProtectionConfig(listMode)
-                    } else {
-                        db.withTransaction {
-                            val appDao = db.appDao()
-                            val globalDao = db.globalConfigDao()
-                            val currentGlobal = globalDao.getConfig() ?: DbGlobalConfig()
-                            globalDao.insertConfig(currentGlobal.copy(listMode = listMode))
-                            // Hook-mask overrides are now edited live from AppSettingsScreen, not
-                            // staged in this list — read the current DB state so this save can't
-                            // clobber them with the stale snapshot captured when the tab loaded.
-                            val existingProtections = appDao.getAllAppProtectionSync()
-                            val existingMap = existingProtections.associateBy { it.packageName to it.userId }
-                            val appsMap = apps.associateBy { it.packageName to it.userId }
-
-                            val protections =
-                                appsMap.keys.mapNotNull { key ->
-                                    val (pkg, userId) = key
-                                    val entry = appsMap.getValue(key)
-                                    val existing = existingMap[key]
-                                    val kernelHookMask = existing?.kernelHookMask
-                                    val javaHookMask = existing?.javaHookMask
-
-                                    if (!entry.shouldPersistPolicy(kernelHookMask, javaHookMask)) {
-                                        return@mapNotNull null
-                                    }
-
-                                    AppProtection(
-                                        packageName = pkg,
-                                        userId = userId,
-                                        uid = entry.uid,
-                                        kmod = entry.kmod,
-                                        lsposed = entry.lsposed,
-                                        portHiding = entry.portHiding,
-                                        systemPolicyExplicit = entry.systemPolicyExplicit,
-                                        kernelHookMask = kernelHookMask,
-                                        javaHookMask = javaHookMask,
-                                    )
-                                }
-                            appDao.insertAppProtections(protections)
-
-                            val keysToKeep = protections.map { it.packageName to it.userId }.toSet()
-                            for (existing in existingProtections) {
-                                val key = existing.packageName to existing.userId
-                                if (existing.packageName == selfPkg || key in keysToKeep) continue
-                                appDao.deleteAppProtection(existing)
+                    val appDao = db.appDao()
+                    val existingProtections = appDao.getAllAppProtectionSync()
+                    val existingMap = existingProtections.associateBy { it.packageName to it.userId }
+                    val protections =
+                        apps.filter { it.uid.isEligiblePolicyUid() }.mapNotNull { stagedEntry ->
+                            // Re-normalize at the commit boundary. UI state is
+                            // staged asynchronously, so persistence must not
+                            // trust an older explicitness marker.
+                            val entry = stagedEntry.withNormalizedSystemPolicy(listMode)
+                            val existing = existingMap[entry.packageName to entry.userId]
+                            val kernelHookMask = if (modeResetPending) null else existing?.kernelHookMask
+                            val javaHookMask = if (modeResetPending) null else existing?.javaHookMask
+                            if (!entry.shouldPersistPolicy(listMode, kernelHookMask, javaHookMask)) {
+                                return@mapNotNull null
                             }
-                        }
+                            AppProtection(
+                                packageName = entry.packageName,
+                                userId = entry.userId,
+                                uid = entry.uid,
+                                kmod = entry.kmod,
+                                lsposed = entry.lsposed,
+                                portHiding = entry.portHiding,
+                                systemPolicyExplicit = entry.systemPolicyExplicit,
+                                kernelHookMask = kernelHookMask,
+                                javaHookMask = javaHookMask,
+                            )
+                        }.toMutableList()
+
+                    // The manager is deliberately absent from the picker but
+                    // remains an explicit all-disabled record in the policy.
+                    existingProtections.firstOrNull { it.packageName == selfPkg }?.let { self ->
+                        protections +=
+                            self.copy(
+                                kmod = false,
+                                lsposed = false,
+                                portHiding = false,
+                                kernelHookMask = if (modeResetPending) null else self.kernelHookMask,
+                                javaHookMask = if (modeResetPending) null else self.javaHookMask,
+                            )
                     }
+
+                    db.replaceProtectionPolicy(
+                        listMode = listMode,
+                        apps = protections,
+                        resetRulesAndOverrides = modeResetPending,
+                    )
 
                     val success =
                         dev.soranerai.vpnhidenext.db.DatabaseSync

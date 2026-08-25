@@ -1,5 +1,6 @@
 package dev.soranerai.vpnhidenext
 
+import dev.soranerai.vpnhidenext.db.AppProtection
 import dev.soranerai.vpnhidenext.db.PolicyListMode
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -70,17 +71,17 @@ class AppFiltersTest {
     @Test
     fun systemPolicyOverrideIsSparseAndModeAware() {
         val allowlistDefault = system.copy(kmod = true, lsposed = true, portHiding = true)
-        assertEquals(false, allowlistDefault.withNormalizedSystemPolicy(PolicyListMode.ALLOWLIST, true).systemPolicyExplicit)
+        assertEquals(false, allowlistDefault.withNormalizedSystemPolicy(PolicyListMode.ALLOWLIST).systemPolicyExplicit)
         assertEquals(
             true,
             allowlistDefault
                 .copy(lsposed = false)
-                .withNormalizedSystemPolicy(PolicyListMode.ALLOWLIST, true)
+                .withNormalizedSystemPolicy(PolicyListMode.ALLOWLIST)
                 .systemPolicyExplicit,
         )
         assertEquals(
             true,
-            system.copy(kmod = true).withNormalizedSystemPolicy(PolicyListMode.BLACKLIST, true).systemPolicyExplicit,
+            system.copy(kmod = true).withNormalizedSystemPolicy(PolicyListMode.BLACKLIST).systemPolicyExplicit,
         )
     }
 
@@ -97,12 +98,48 @@ class AppFiltersTest {
     @Test
     fun implicitSystemDefaultsStaySparseButExplicitDeselectionPersists() {
         val implicit = system.copy(kmod = true, lsposed = true, portHiding = true)
-        assertEquals(false, implicit.shouldPersistPolicy(null, null))
-        assertEquals(true, implicit.copy(portRules = listOf(PortRule(startPort = 443))).shouldPersistPolicy(null, null))
+        assertEquals(false, implicit.shouldPersistPolicy(PolicyListMode.BLACKLIST, null, null))
+        assertEquals(true, implicit.shouldPersistPolicy(PolicyListMode.ALLOWLIST, null, null))
         assertEquals(
             true,
-            system.copy(systemPolicyExplicit = true).shouldPersistPolicy(null, null),
+            implicit.copy(portRules = listOf(PortRule(startPort = 443))).shouldPersistPolicy(
+                PolicyListMode.BLACKLIST,
+                null,
+                null,
+            ),
         )
+        assertEquals(
+            true,
+            system.copy(systemPolicyExplicit = true).shouldPersistPolicy(PolicyListMode.ALLOWLIST, null, null),
+        )
+    }
+
+    @Test
+    fun v4MaterializesOnlyMissingEligibleSystemUidDefaults() {
+        val explicitDeselection =
+            AppProtection(
+                packageName = "com.android.explicit",
+                uid = 10004,
+                systemPolicyExplicit = true,
+            )
+        val defaults =
+            missingSystemPolicyDefaults(
+                listMode = PolicyListMode.ALLOWLIST,
+                configured = listOf(explicitDeselection),
+                systemPackages =
+                    setOf(
+                        "com.android.explicit" to 10004,
+                        "com.android.shared" to 10004,
+                        "com.android.default" to 10005,
+                        "com.android.core" to 1000,
+                    ),
+                selfPackage = "dev.soranerai.vpnhidenext",
+            )
+
+        assertEquals(listOf(10005), defaults.map { it.uid })
+        assertEquals(true, defaults.single().kmod)
+        assertEquals(true, defaults.single().lsposed)
+        assertEquals(true, defaults.single().portHiding)
     }
 
     @Test
@@ -133,6 +170,42 @@ class AppFiltersTest {
         )
         assertEquals(true, automaticSystem.isAutomaticallySelectedSystem(PolicyListMode.ALLOWLIST))
         assertEquals(false, manualSystem.isAutomaticallySelectedSystem(PolicyListMode.ALLOWLIST))
+    }
+
+    @Test
+    fun effectiveAllowlistCountIsHiddenEligibleUidsNotSerializedExceptions() {
+        val hidden = unselected.copy(uid = 10010)
+        val visible = selected.copy(uid = 10011, kmod = true, portHiding = true)
+        val visibleShared = visible.copy(packageName = "com.example.shared", uid = 10010)
+        val core = system.copy(uid = 1000, kmod = false, lsposed = false, portHiding = false)
+
+        assertEquals(1, listOf(hidden, visible, core).effectiveTargetUidCount(PolicyListMode.ALLOWLIST))
+        assertEquals(0, listOf(hidden, visible, visibleShared, core).effectiveTargetUidCount(PolicyListMode.ALLOWLIST))
+    }
+
+    @Test
+    fun dashboardLayerCountUsesAllowlistComplementAndDeduplicatesUids() {
+        val installed =
+            listOf(
+                AppSummary("com.example.hidden", 0, 10010, "Hidden", null, false),
+                AppSummary("com.example.visible", 0, 10011, "Visible", null, false),
+                AppSummary("com.android.default", 0, 10012, "System", null, true),
+                AppSummary("com.android.core", 0, 1000, "Core", null, true),
+            )
+        val configured =
+            listOf(
+                AppProtection("com.example.visible", uid = 10011, lsposed = true),
+            )
+
+        assertEquals(
+            1,
+            effectiveLayerTargetUidCount(
+                installed,
+                configured,
+                PolicyListMode.ALLOWLIST,
+                "dev.soranerai.vpnhidenext",
+            ) { it.lsposed },
+        )
     }
 
     @Test

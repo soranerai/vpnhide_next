@@ -53,6 +53,7 @@ import dev.soranerai.vpnhidenext.checks.checkTimestampingHw
 import dev.soranerai.vpnhidenext.checks.checkUdpPmtu
 import dev.soranerai.vpnhidenext.checks.checkUidRouteRulesLeak
 import dev.soranerai.vpnhidenext.db.AppDatabase
+import dev.soranerai.vpnhidenext.db.PolicyListMode
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.ui.theme.*
 import kotlinx.coroutines.Dispatchers
@@ -995,9 +996,8 @@ internal suspend fun exportDebugZip(
                 }
             files["modules.txt"] = moduleInfo
 
-            // Declarative policy. Effective UID expansion is owned by vpnhide-ctl
-            // and the daemon; the app must not treat legacy proc snapshots as
-            // its source of truth.
+            // Declarative policy. The app-owned config is authoritative; the
+            // backend only serializes its UID entries and list mode.
             val db = AppDatabase.getInstance(context)
             val protections = db.appDao().getAllAppProtectionSync()
             val globalConfig = db.globalConfigDao().getConfig()
@@ -1005,14 +1005,16 @@ internal suspend fun exportDebugZip(
             val (_, policyPreview) =
                 suExec(
                     "[ -x $kmodCtl ] && $kmodCtl preview '${policyFile.absolutePath.replace("'", "'\\''")}' " +
-                        "${context.applicationInfo.uid} 2>&1 || true",
+                        "2>&1 || true",
                 )
             val kmodTargets = protections.filter { it.kmod }
-            val lsposedTargets = protections.filter { it.lsposed }
+            val lsposedEntries = protections.filter { it.lsposed }
+            val lsposedShowList = globalConfig?.listMode == PolicyListMode.ALLOWLIST
             val targetsText =
                 buildString {
                     appendLine("=== declarative policy ===")
                     appendLine("mode=${globalConfig?.listMode?.name ?: "BLACKLIST"}")
+                    appendLine("lsposed_list_mode=${if (lsposedShowList) "SHOW" else "HIDE"}")
                     appendLine("config=${policyFile.absolutePath}")
                     appendLine()
                     appendLine("=== backend preview ===")
@@ -1033,11 +1035,17 @@ internal suspend fun exportDebugZip(
                         }
                     }
                     appendLine()
-                    appendLine("=== selected lsposed entries ===")
-                    if (lsposedTargets.isEmpty()) {
+                    appendLine(
+                        if (lsposedShowList) {
+                            "=== LSPosed UIDs that may see VPN ==="
+                        } else {
+                            "=== LSPosed UIDs from which VPN is hidden ==="
+                        },
+                    )
+                    if (lsposedEntries.isEmpty()) {
                         appendLine("(empty)")
                     } else {
-                        lsposedTargets.forEach { app ->
+                        lsposedEntries.forEach { app ->
                             val entry =
                                 if (app.userId == 0) {
                                     app.packageName

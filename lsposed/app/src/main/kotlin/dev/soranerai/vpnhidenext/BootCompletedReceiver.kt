@@ -43,6 +43,10 @@ internal class BootCompletedReceiver : BroadcastReceiver() {
         val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         receiverScope.launch {
             try {
+                // ABI v4 makes the app-owned JSON authoritative. Reconcile
+                // installed package UIDs before the post-boot health check;
+                // DatabaseSync then triggers the daemon's config watcher.
+                TargetsCache.reload(appContext)
                 if (getHealthCheckEnabled(appContext)) {
                     val request =
                         OneTimeWorkRequestBuilder<HealthCheckWorker>()

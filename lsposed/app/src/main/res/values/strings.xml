@@ -19,7 +19,7 @@
     <string name="policy_mode_blacklist_warning">Selected apps become hiding targets again. This will clear all app targets, local and global hook overrides, and local and global port rules when you save.</string>
     <string name="allowlist_add_all_shown">Add shown to exceptions</string>
     <string name="policy_mode_blacklist_summary">Hide VPN from selected apps · %d target(s)</string>
-    <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d manual exception(s)</string>
+    <string name="policy_mode_allowlist_summary">Show VPN only to selected apps · %d hidden target(s)</string>
     <string name="policy_help_title">How protection selection works</string>
     <string name="policy_help_scope_title">1. Protection modes</string>
     <string name="policy_help_scope_intro">Choose which apps should see the VPN and which apps should not.</string>

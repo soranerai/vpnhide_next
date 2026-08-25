@@ -79,7 +79,7 @@ object ConnectivityHook {
                                         }
                                     }
 
-                                if (uid != -1 && HookContext.loadTargetUids().contains(uid)) {
+                                if (uid != -1 && HookContext.isTargetUid(uid)) {
                                     var request: android.net.NetworkRequest? = null
                                     var clazz: Class<*>? = nri.javaClass
                                     while (clazz != null && clazz != Any::class.java) {
@@ -131,7 +131,7 @@ object ConnectivityHook {
                                     } else {
                                         param.args.getOrNull(0) as? Int
                                     }
-                                if (uid != null && HookContext.loadTargetUids().contains(uid)) {
+                                if (uid != null && HookContext.isTargetUid(uid)) {
                                     val nc = param.result as? NetworkCapabilities ?: return
                                     val copy = NetworkCapabilities(nc)
                                     if (ParcelHooks.sanitizeNetworkCapabilities(copy)) {

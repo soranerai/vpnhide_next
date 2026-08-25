@@ -17,6 +17,7 @@ import dev.soranerai.vpnhidenext.KmodStatsResponse
 import dev.soranerai.vpnhidenext.R
 import dev.soranerai.vpnhidenext.VpnHideLog
 import dev.soranerai.vpnhidenext.compareSemver
+import dev.soranerai.vpnhidenext.effectiveLayerTargetUidCount
 import dev.soranerai.vpnhidenext.domain.models.*
 import dev.soranerai.vpnhidenext.domain.usecase.buildNativeInstallRecommendation
 import dev.soranerai.vpnhidenext.isEnabledInPrefs
@@ -26,6 +27,7 @@ import dev.soranerai.vpnhidenext.normalizeVersion
 import dev.soranerai.vpnhidenext.suExec
 import dev.soranerai.vpnhidenext.versionsMismatch
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 
 private const val TAG = "VpnHide-Repository"
@@ -270,6 +272,12 @@ class DashboardRepository(
             val policyMode =
                 db.globalConfigDao().getConfig()?.listMode
                     ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
+            val installedApps =
+                if (selfNeedsRestart) {
+                    AppListCache.apps.value.orEmpty()
+                } else {
+                    AppListCache.apps.first { it != null }.orEmpty()
+                }
 
             // kmod
             val kmodProp = parseModuleProp(snapshot.decodeBase64("kmod_prop"))
@@ -284,7 +292,13 @@ class DashboardRepository(
             val kmodLoadStatus = readKmodLoadStatus(snapshot, currentBootId.trim())
             val kmodTargetCount =
                 if (isKmodInstalled) {
-                    appsSync.count { it.kmod && it.packageName != selfPkg }
+                    effectiveLayerTargetUidCount(
+                        installedApps = installedApps,
+                        configured = appsSync,
+                        listMode = policyMode,
+                        selfPackage = selfPkg,
+                        isListed = { it.kmod },
+                    )
                 } else {
                     0
                 }
@@ -395,7 +409,14 @@ class DashboardRepository(
 
             // lsposed hook status
             val hookVersion = hookProps["version"]
-            val lsposedTargetCount = appsSync.count { it.lsposed }
+            val lsposedTargetCount =
+                effectiveLayerTargetUidCount(
+                    installedApps = installedApps,
+                    configured = appsSync,
+                    listMode = policyMode,
+                    selfPackage = selfPkg,
+                    isListed = { it.lsposed },
+                )
             val lsposedRuntime: LsposedRuntime =
                 if (hooksActiveThisBoot) {
                     LsposedRuntime.Active(hookVersion)

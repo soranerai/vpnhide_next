@@ -10,6 +10,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 
 /**
@@ -34,7 +36,7 @@ internal data class TargetsSnapshot(
     val kmodModuleInstalled: Boolean,
     val kmodActive: Boolean,
     val kmodTargets: Set<Pair<String, Int>>,
-    val lsposedTargets: Set<Pair<String, Int>>,
+    val lsposedEntries: Set<Pair<String, Int>>,
     val portsObservers: Set<Pair<String, Int>>,
     val systemPolicyExplicitApps: Set<Pair<String, Int>>,
     val portRules: Map<Pair<String, Int>, List<PortRule>>,
@@ -43,10 +45,13 @@ internal data class TargetsSnapshot(
     val massPortRules: List<PortRule>,
     val ifacePrefixes: List<String>,
     val uidToPkg: Map<Int, String>,
+    val packageUids: Map<Pair<String, Int>, Int>,
+    val systemPackages: Set<Pair<String, Int>>,
 )
 
 internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
     val snapshot: StateFlow<TargetsSnapshot?> = state
+    private val reloadMutex = Mutex()
 
     fun ensureLoaded(
         scope: CoroutineScope,
@@ -81,19 +86,24 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
     private const val SENTINEL = "===VPNHIDE-TARGETS-BOUNDARY==="
     private const val END = "===VPNHIDE-TARGETS-END==="
 
-    internal suspend fun reload(appContext: Context): TargetsSnapshot {
+    internal suspend fun reload(appContext: Context): TargetsSnapshot =
+        reloadMutex.withLock { reloadLocked(appContext) }
+
+    private suspend fun reloadLocked(appContext: Context): TargetsSnapshot {
         val db = AppDatabase.getInstance(appContext)
         val appDao = db.appDao()
         val portRuleDao = db.portRuleDao()
         val massPortRuleDao = db.massPortRuleDao()
         val ifacePrefixDao = db.ifacePrefixDao()
+        val listMode =
+            db.globalConfigDao().getConfig()?.listMode
+                ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
 
         var dbPopulatedOrUpdated = false
 
         // Keep the manager package in the declarative policy with all layers
-        // disabled. In ALLOWLIST this makes it an ordinary unselected
-        // eligible package; in BLACKLIST the backend still force-targets it
-        // for self-tests.
+        // disabled. In ALLOWLIST it is an ordinary unlisted eligible UID; in
+        // BLACKLIST it remains outside every target list.
         val selfPkg = appContext.packageName
         val selfProto = appDao.getAppProtection(selfPkg, 0)
         if (selfProto == null) {
@@ -124,6 +134,8 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             lsmod | grep -q vpnhide_kmod && echo 1 || echo 0
             echo "$SENTINEL PM_LIST"
             pm list packages -U --user all 2>/dev/null || true
+            echo "$SENTINEL PM_SYSTEM"
+            pm list packages -s -U --user all 2>/dev/null || true
             echo "$END"
             """.trimIndent()
 
@@ -131,30 +143,44 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
         val statusSnapshot = parse(statusOut)
 
         // Database Healing:
-        // 1. Populate missing UIDs (if uid = 0)
+        // 1. Reconcile persisted UIDs with Package Manager. Policy ABI v4
+        //    treats this application-owned snapshot as authoritative.
         // 2. Prune uninstalled apps (if actualUid == 0 and not selfPkg)
-        if (statusSnapshot.uidToPkg.isNotEmpty()) {
+        if (statusSnapshot.packageUids.isNotEmpty()) {
             var modified = false
             for (app in apps) {
                 if (app.packageName == selfPkg) continue
 
                 val actualUid =
-                    statusSnapshot.uidToPkg.entries
-                        .find {
-                            it.value == app.packageName && (it.key / 100000) == app.userId
-                        }?.key ?: 0
+                    statusSnapshot.packageUids[app.packageName to app.userId] ?: 0
 
-                if (actualUid == 0) {
-                    // App was uninstalled!
+                if (actualUid == 0 || !actualUid.isEligiblePolicyUid()) {
+                    // Uninstalled and core-UID packages are not policy rows.
                     appDao.deleteAppProtection(app)
                     modified = true
-                } else if (app.uid == 0) {
-                    // Populate missing UID
+                } else if (app.uid != actualUid) {
+                    // Heal missing and stale UIDs after reinstall/restore.
                     appDao.insertAppProtection(app.copy(uid = actualUid))
                     modified = true
                 }
             }
             if (modified) {
+                apps = appDao.getAllAppProtectionSync()
+                dbPopulatedOrUpdated = true
+            }
+        }
+
+        // v3 relied on daemon-side PM expansion for implicit system
+        // exceptions. Materialize any missing v4 defaults in the app-owned
+        // config. Existing entries win by full UID, preserving explicit
+        // deselection and shared-UID policy.
+        if (listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.ALLOWLIST &&
+            statusSnapshot.systemPackages.isNotEmpty()
+        ) {
+            val defaults =
+                missingSystemPolicyDefaults(listMode, apps, statusSnapshot.systemPackages, selfPkg)
+            if (defaults.isNotEmpty()) {
+                appDao.insertAppProtections(defaults)
                 apps = appDao.getAllAppProtectionSync()
                 dbPopulatedOrUpdated = true
             }
@@ -184,13 +210,11 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
 
         val snapshot =
             TargetsSnapshot(
-                listMode =
-                    db.globalConfigDao().getConfig()?.listMode
-                        ?: dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
+                listMode = listMode,
                 kmodModuleInstalled = statusSnapshot.kmodModuleInstalled,
                 kmodActive = statusSnapshot.kmodActive,
                 kmodTargets = apps.filter { it.kmod }.map { it.packageName to it.userId }.toSet(),
-                lsposedTargets = apps.filter { it.lsposed }.map { it.packageName to it.userId }.toSet(),
+                lsposedEntries = apps.filter { it.lsposed }.map { it.packageName to it.userId }.toSet(),
                 portsObservers = apps.filter { it.portHiding }.map { it.packageName to it.userId }.toSet(),
                 systemPolicyExplicitApps =
                     apps.filter { it.systemPolicyExplicit }.map { it.packageName to it.userId }.toSet(),
@@ -216,6 +240,8 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                     },
                 ifacePrefixes = ifacePrefixes,
                 uidToPkg = statusSnapshot.uidToPkg,
+                packageUids = statusSnapshot.packageUids,
+                systemPackages = statusSnapshot.systemPackages,
             )
         return snapshot
     }
@@ -244,6 +270,7 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
         }
 
         val uidToPkg = mutableMapOf<Int, String>()
+        val packageUids = mutableMapOf<Pair<String, Int>, Int>()
         sections["PM_LIST"]?.lines()?.forEach { line ->
             if (!line.startsWith("package:")) return@forEach
             val parts = line.split(" uid:")
@@ -252,7 +279,20 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             val uidsStr = parts[1].trim()
             uidsStr.split(",").forEach { uidStr ->
                 val uid = uidStr.trim().toIntOrNull()
-                if (uid != null) uidToPkg[uid] = pkg
+                if (uid != null) {
+                    uidToPkg.putIfAbsent(uid, pkg)
+                    packageUids[pkg to (uid / 100000)] = uid
+                }
+            }
+        }
+        val systemPackages = mutableSetOf<Pair<String, Int>>()
+        sections["PM_SYSTEM"]?.lines()?.forEach { line ->
+            if (!line.startsWith("package:")) return@forEach
+            val parts = line.split(" uid:")
+            if (parts.size < 2) return@forEach
+            val pkg = parts[0].removePrefix("package:").trim()
+            parts[1].trim().split(",").forEach { uidStr ->
+                uidStr.trim().toIntOrNull()?.let { uid -> systemPackages.add(pkg to uid) }
             }
         }
 
@@ -261,7 +301,7 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             kmodModuleInstalled = sections["KMOD_MODULE_DIR"]?.trim() == "1",
             kmodActive = sections["LSMOD"]?.trim() == "1",
             kmodTargets = emptySet(),
-            lsposedTargets = emptySet(),
+            lsposedEntries = emptySet(),
             portsObservers = emptySet(),
             systemPolicyExplicitApps = emptySet(),
             portRules = emptyMap(),
@@ -270,6 +310,8 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             massPortRules = emptyList(),
             ifacePrefixes = emptyList(),
             uidToPkg = uidToPkg,
+            packageUids = packageUids,
+            systemPackages = systemPackages,
         )
     }
 }

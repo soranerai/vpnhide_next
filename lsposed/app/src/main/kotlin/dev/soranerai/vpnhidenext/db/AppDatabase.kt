@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import dev.soranerai.vpnhidenext.PortProtocol
+import dev.soranerai.vpnhidenext.isEligiblePolicyUid
 import dev.soranerai.vpnhidenext.isValidPortRange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -102,6 +103,25 @@ internal fun VpnHideConfig.resetProtectionForListMode(listMode: PolicyListMode):
     )
 }
 
+internal fun VpnHideConfig.withProtectionPolicySnapshot(
+    listMode: PolicyListMode,
+    apps: List<AppProtection>,
+    resetRulesAndOverrides: Boolean,
+): VpnHideConfig {
+    val appMap =
+        apps
+            .filter { it.uid.isEligiblePolicyUid() }
+            .associateBy { it.packageName to it.userId }
+    return if (resetRulesAndOverrides) {
+        resetProtectionForListMode(listMode).copy(apps = appMap)
+    } else {
+        copy(
+            globalConfig = globalConfig.copy(listMode = listMode),
+            apps = appMap,
+        )
+    }
+}
+
 internal class AppDatabase private constructor(
     context: Context,
 ) {
@@ -112,6 +132,8 @@ internal class AppDatabase private constructor(
     @Volatile
     private var config = VpnHideConfig()
 
+    // Retained for multi-table settings import. Protection policy commits use
+    // replaceProtectionPolicy(), which publishes no intermediate DAO state.
     private var inTransaction = false
     private val transactionLock = Any()
 
@@ -175,14 +197,22 @@ internal class AppDatabase private constructor(
                     }
                 }
 
+                val rejectedCoreKeys =
+                    appsMap
+                        .filterValues { it.uid != 0 && !it.uid.isEligiblePolicyUid() }
+                        .keys
                 config =
                     VpnHideConfig(
                         globalConfig = globalConfig,
-                        apps = appsMap,
-                        portRules = portRulesList,
+                        apps = appsMap - rejectedCoreKeys,
+                        portRules =
+                            portRulesList.filterNot {
+                                (it.packageName to it.userId) in rejectedCoreKeys
+                            },
                         massPortRules = massRulesList,
                         ifacePrefixes = prefixesList,
                     )
+                if (rejectedCoreKeys.isNotEmpty()) saveConfigInternal()
             } catch (e: Exception) {
                 Log.e("VpnHideDb", "Failed to load JSON config, fallback to default", e)
                 config = VpnHideConfig()
@@ -192,6 +222,24 @@ internal class AppDatabase private constructor(
 
     private fun saveConfigInternal() {
         synchronized(lock) {
+            // Package Manager resolution belongs to the app, so reject known
+            // core UIDs before publishing the authoritative JSON. UID 0 is
+            // retained only as a transient unresolved import record and is
+            // healed by TargetsCache before policy apply.
+            val rejectedKeys =
+                config.apps
+                    .filterValues { it.uid != 0 && !it.uid.isEligiblePolicyUid() }
+                    .keys
+            if (rejectedKeys.isNotEmpty()) {
+                config =
+                    config.copy(
+                        apps = config.apps - rejectedKeys,
+                        portRules =
+                            config.portRules.filterNot {
+                                (it.packageName to it.userId) in rejectedKeys
+                            },
+                    )
+            }
             val root =
                 JSONObject().apply {
                     put("schemaVersion", CURRENT_CONFIG_SCHEMA_VERSION)
@@ -226,6 +274,33 @@ internal class AppDatabase private constructor(
                 synchronized(transactionLock) {
                     inTransaction = false
                 }
+            }
+        }
+
+    /**
+     * Replaces the complete application policy as one durable snapshot.
+     *
+     * ProtectionScreen stages a full list in memory. Publishing that list via
+     * individual DAO calls used to expose intermediate states to observers;
+     * TargetsCache could then materialize an ALLOWLIST system default over an
+     * explicit deselection before the final JSON write. Keep the database lock
+     * for the whole replacement, write once, and notify only after commit.
+     */
+    suspend fun replaceProtectionPolicy(
+        listMode: PolicyListMode,
+        apps: List<AppProtection>,
+        resetRulesAndOverrides: Boolean,
+    ) =
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                config = config.withProtectionPolicySnapshot(listMode, apps, resetRulesAndOverrides)
+                saveConfigInternal()
+            }
+            DbNotifier.notifyChanged("app_protection")
+            DbNotifier.notifyChanged("global_config")
+            if (resetRulesAndOverrides) {
+                DbNotifier.notifyChanged("port_rules")
+                DbNotifier.notifyChanged("mass_port_rules")
             }
         }
 
