@@ -373,10 +373,29 @@
     <string name="settings_toggle_update_check_desc">Проверяет GitHub Releases в фоне и в приложении. При отключении проверка обновлений полностью прекращается.</string>
     <string name="settings_toggle_health_check_title">Проверка работоспособности защиты</string>
     <string name="settings_toggle_health_check_desc">Уведомляет, если модуль ядра или хуки LSPosed не поднялись после перезагрузки, чтобы тихий отказ не остался незамеченным.</string>
+    <string name="settings_toggle_target_refresh_title">Фоновая актуализация целей</string>
+    <string name="settings_toggle_target_refresh_desc">Периодически проверяет установленные приложения, обновляет UID и синхронизирует актуальную политику с ядром и LSPosed.</string>
     <string name="settings_battery_optimization_title">Отключить оптимизацию батареи</string>
     <string name="settings_battery_optimization_desc">Некоторые прошивки (MIUI, EMUI, ColorOS, One UI) откладывают или убивают фоновые проверки, если приложение не в исключениях — это нужно, чтобы проверки ниже действительно работали.</string>
     <string name="settings_toggle_self_test_vpn_title">Автотест без VPN</string>
     <string name="settings_toggle_self_test_vpn_desc">Если VPN не подключён, на время полной диагностики незаметно поднимает локальный тестовый туннель, а затем убирает его. Выключите, чтобы проверки запускались только при реально подключённом VPN.</string>
+    <string name="settings_about_project_title">О проекте</string>
+    <string name="settings_about_project_desc">Философия проекта, контакты и исходный код</string>
+    <string name="settings_about_project_philosophy_title">Философия проекта</string>
+    <string name="settings_about_project_philosophy">VPNHide Next развивается без доната и коммерческой модели. Приоритет проекта — максимально широкое покрытие, стабильность и производительность при минимальном влиянии на систему.</string>
+    <string name="settings_about_project_contacts_title">Связь</string>
+    <string name="settings_about_project_frontend_title">Frontend: приложение и LSPosed</string>
+    <string name="settings_about_project_frontend_desc">Android-приложение, декларативная политика, управление целями и интеграция с LSPosed.</string>
+    <string name="settings_about_project_frontend_link">github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_backend_title">Backend: kmod и kpatch</string>
+    <string name="settings_about_project_backend_desc">Исходный код модуля ядра kmod и kpatch-патчей с инструкциями по ручному применению патчей.</string>
+    <string name="settings_about_project_backend_link">github.com/soranerai/vpnhide_next_private</string>
+    <string name="settings_about_project_compatibility_title">Совместимость и границы поддержки</string>
+    <string name="settings_about_project_compatibility">kpatch-патчи поддерживают ядра 4.19–5.4 и все GKI2 в диапазоне 5.10–6.18. kmod поддерживает только GKI2. Реализация KPM отсутствует осознанно: для старых ядер практически невозможно стабильно реализовать интеграцию с полным покрытием, поэтому для них используется kpatch.</string>
+    <string name="settings_about_project_telegram_title">Telegram</string>
+    <string name="settings_about_project_open_link">Открыть ссылку</string>
+    <string name="settings_about_project_repository">Репозиторий: github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_telegram">Telegram: t.me/soranerai</string>
     <string name="settings_save_failed">Не удалось сохранить настройку. Восстановлено предыдущее значение.</string>
 
     <!-- Уведомление о доступном обновлении -->
@@ -593,16 +612,4 @@
     <string name="hook_desc_inet6_bind_ll">Блокирует вызовы bind() на адреса IPv6 link-local скрытого VPN-интерфейса для предотвращения сканирования через перебор scope_id.</string>
     <string name="hook_desc_udpv6_sendmsg_ll">Блокирует отправку пакетов (sendto) на адреса IPv6 link-local скрытого VPN-интерфейса для предотвращения детекции VPN-туннеля.</string>
 
-    <!-- Kpatch Announcement -->
-    <string name="kpatch_announcement_title">Built-in режим</string>
-    <string name="kpatch_announcement_subtitle">Монолитная интеграция прямо в код ядра для максимальной скрытности и стабильности</string>
-    <string name="kpatch_feature_overhead_title">Нулевой модульный оверхед</string>
-    <string name="kpatch_feature_overhead_desc">Логика сокрытия вшита непосредственно в исходный код ядра. Полностью исключает задержки маршрутизации вызовов и накладные расходы на выполнение.</string>
-    <string name="kpatch_feature_stealth_title">Абсолютная скрытность</string>
-    <string name="kpatch_feature_stealth_desc">Неуязвимость к timing-атакам на системные вызовы (syscall). Поскольку сокрытие работает нативно в самом ядре, а не как загружаемый модуль (LKM/KPM), оно не оставляет следов.</string>
-    <string name="kpatch_feature_stability_title">Монолитная стабильность</string>
-    <string name="kpatch_feature_stability_desc">Будучи скомпилированным единым целым с ядром, это решение является постоянным и неприкосновенным. Исключает рантайм-ошибки синхронизации или падение хуков.</string>
-    <string name="kpatch_announcement_optional_note">Примечание: Переход полностью добровольный. Стандартный внешний модуль (LKM) продолжит обновляться и поддерживаться в обычном режиме. Вы можете перейти на built-in версию ядра в любое удобное время.</string>
-    <string name="kpatch_action_repo">Открыть репозиторий</string>
-    <string name="kpatch_action_dismiss">Понятно</string>
 </resources>

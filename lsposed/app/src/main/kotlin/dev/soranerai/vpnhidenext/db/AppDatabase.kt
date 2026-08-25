@@ -930,6 +930,7 @@ private fun DbGlobalConfig.toJson(): JSONObject =
         put("debugLogging", debugLogging)
         put("updateCheckEnabled", updateCheckEnabled)
         put("healthCheckEnabled", healthCheckEnabled)
+        put("targetRefreshEnabled", targetRefreshEnabled)
         put("selfTestVpnEnabled", selfTestVpnEnabled)
     }
 
@@ -945,5 +946,6 @@ private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
         debugLogging = optInt("debugLogging", 0),
         updateCheckEnabled = optBoolean("updateCheckEnabled", true),
         healthCheckEnabled = optBoolean("healthCheckEnabled", true),
+        targetRefreshEnabled = optBoolean("targetRefreshEnabled", true),
         selfTestVpnEnabled = optBoolean("selfTestVpnEnabled", true),
     )

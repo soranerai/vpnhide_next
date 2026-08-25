@@ -425,10 +425,29 @@
     <string name="settings_builtin_update_debug_unlocked">Update debug mode unlocked</string>
     <string name="settings_toggle_health_check_title">Protection health check</string>
     <string name="settings_toggle_health_check_desc">Notifies you if the kernel module or LSPosed hooks fail to activate after a reboot, so a silent failure doesn\'t go unnoticed.</string>
+    <string name="settings_toggle_target_refresh_title">Background target refresh</string>
+    <string name="settings_toggle_target_refresh_desc">Periodically checks installed apps, updates UIDs, and synchronizes the current policy with the kernel and LSPosed.</string>
     <string name="settings_battery_optimization_title">Disable battery optimization</string>
     <string name="settings_battery_optimization_desc">Some OEM firmware (MIUI, EMUI, ColorOS, One UI) delays or kills background checks unless the app is exempt — needed for the checks below to actually run reliably.</string>
     <string name="settings_toggle_self_test_vpn_title">Auto-test without VPN</string>
     <string name="settings_toggle_self_test_vpn_desc">If no VPN is connected, silently raises a local-only test tunnel just long enough to run the full diagnostics battery, then tears it down. Turn off to only run checks with a real VPN connected.</string>
+    <string name="settings_about_project_title">About the project</string>
+    <string name="settings_about_project_desc">Project philosophy, contacts, and source code</string>
+    <string name="settings_about_project_philosophy_title">Project philosophy</string>
+    <string name="settings_about_project_philosophy">VPNHide Next is developed without donations or a commercial model. The project prioritizes broad coverage, stability, and performance with minimal impact on the system.</string>
+    <string name="settings_about_project_contacts_title">Contact</string>
+    <string name="settings_about_project_frontend_title">Frontend: app and LSPosed</string>
+    <string name="settings_about_project_frontend_desc">Android app, declarative policy, target management, and LSPosed integration.</string>
+    <string name="settings_about_project_frontend_link">github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_backend_title">Backend: kmod and kpatch</string>
+    <string name="settings_about_project_backend_desc">Kernel kmod source code and kpatch patches with instructions for manual patch application.</string>
+    <string name="settings_about_project_backend_link">github.com/soranerai/vpnhide_next_private</string>
+    <string name="settings_about_project_compatibility_title">Compatibility and support boundaries</string>
+    <string name="settings_about_project_compatibility">The kpatch patches support 4.19–5.4 kernels and all GKI2 kernels in the 5.10–6.18 range. kmod supports GKI2 only. KPM is intentionally not implemented: stable integration with full coverage is practically infeasible on older kernels, which is why kpatch is used for them.</string>
+    <string name="settings_about_project_telegram_title">Telegram</string>
+    <string name="settings_about_project_open_link">Open link</string>
+    <string name="settings_about_project_repository">Repository: github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_telegram">Telegram: t.me/soranerai</string>
     <string name="settings_save_failed">Could not save this setting. The previous value was restored.</string>
 
     <!-- Update-available notification -->
@@ -681,16 +700,4 @@
     <string name="self_test_vpn_session_name">VPNHide self-test (no real traffic)</string>
     <string name="dashboard_protection_vpn_off">-/-</string>
 
-    <!-- Kpatch Announcement -->
-    <string name="kpatch_announcement_title">Built-in mode</string>
-    <string name="kpatch_announcement_subtitle">Monolithic kernel integration for maximum stealth and stability</string>
-    <string name="kpatch_feature_overhead_title">Zero Modular Overhead</string>
-    <string name="kpatch_feature_overhead_desc">The hiding logic is compiled directly into the kernel source as a monolithic feature. Completely eliminates modular routing latency and execution delays.</string>
-    <string name="kpatch_feature_stealth_title">Absolute Stealth</string>
-    <string name="kpatch_feature_stealth_desc">Invulnerable to timing attacks on system calls (syscalls). Because it operates natively inside the kernel code rather than as a loaded module (LKM/KPM), it leaves no footprint.</string>
-    <string name="kpatch_feature_stability_title">Monolithic Stability</string>
-    <string name="kpatch_feature_stability_desc">Being compiled as one monolithic unit with the kernel, it is permanent and untouchable. Eliminates runtime synchronization errors or hook decoupling.</string>
-    <string name="kpatch_announcement_optional_note">Note: Switching is completely optional. The standard external kernel module (LKM) will continue to receive updates and function normally. You can switch to the built-in kernel version at your convenience.</string>
-    <string name="kpatch_action_repo">Open Repository</string>
-    <string name="kpatch_action_dismiss">Got it</string>
 </resources>

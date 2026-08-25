@@ -77,6 +77,7 @@ import java.io.File
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenAboutProject: () -> Unit,
     onOpenDiagnosticsDetail: () -> Unit,
     selfNeedsRestart: Boolean,
     modifier: Modifier = Modifier,
@@ -88,6 +89,7 @@ fun SettingsScreen(
     var hideSelf by remember { mutableStateOf(false) }
     var updateCheckEnabled by remember { mutableStateOf(true) }
     var healthCheckEnabled by remember { mutableStateOf(true) }
+    var targetRefreshEnabled by remember { mutableStateOf(true) }
     var selfTestVpnEnabled by remember { mutableStateOf(true) }
     BuiltInUpdateDebugPrefs.initialize(context)
     val builtInDebugUnlocked by BuiltInUpdateDebugPrefs.unlocked.collectAsState()
@@ -103,6 +105,7 @@ fun SettingsScreen(
             hideSelf = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_SELF_HIDE)
             updateCheckEnabled = getUpdateCheckEnabled(context)
             healthCheckEnabled = getHealthCheckEnabled(context)
+            targetRefreshEnabled = getTargetRefreshEnabled(context)
             selfTestVpnEnabled = getSelfTestVpnEnabled(context)
         }
         batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
@@ -310,6 +313,27 @@ fun SettingsScreen(
                     )
                     SettingsRowDivider()
                     SettingsSwitchRow(
+                        title = stringResource(R.string.settings_toggle_target_refresh_title),
+                        subtitle = stringResource(R.string.settings_toggle_target_refresh_desc),
+                        checked = targetRefreshEnabled,
+                        icon = Icons.Default.Schedule,
+                        iconTint = TelOrange,
+                        onCheckedChange = { newValue ->
+                            val previous = targetRefreshEnabled
+                            targetRefreshEnabled = newValue
+                            scope.launch(Dispatchers.IO) {
+                                runCatching { setTargetRefreshEnabled(context, newValue) }
+                                    .onFailure {
+                                        withContext(Dispatchers.Main) {
+                                            targetRefreshEnabled = previous
+                                            Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                            }
+                        },
+                    )
+                    SettingsRowDivider()
+                    SettingsSwitchRow(
                         title = stringResource(R.string.settings_toggle_self_test_vpn_title),
                         subtitle = stringResource(R.string.settings_toggle_self_test_vpn_desc),
                         checked = selfTestVpnEnabled,
@@ -332,8 +356,21 @@ fun SettingsScreen(
                 }
             }
 
+            item(key = "github_repository") {
+                SettingsGroup {
+                    SettingsNavRow(
+                        title = stringResource(R.string.settings_about_project_title),
+                        subtitle = stringResource(R.string.settings_about_project_desc),
+                        icon = Icons.Default.Share,
+                        iconTint = TelBlue,
+                        onClick = onOpenAboutProject,
+                    )
+                }
+            }
+
             item(key = "spacer_bottom") { Spacer(Modifier.height(24.dp)) }
         }
+
     }
 }
 

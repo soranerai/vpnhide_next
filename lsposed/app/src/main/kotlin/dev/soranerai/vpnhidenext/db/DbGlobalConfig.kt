@@ -21,6 +21,7 @@ internal data class DbGlobalConfig(
     val debugLogging: Int = 0,
     val updateCheckEnabled: Boolean = true,
     val healthCheckEnabled: Boolean = true,
+    val targetRefreshEnabled: Boolean = true,
     val selfTestVpnEnabled: Boolean = true,
 )
 
