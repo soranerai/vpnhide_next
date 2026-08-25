@@ -435,7 +435,7 @@
     <string name="settings_about_project_desc">Project philosophy, contacts, and source code</string>
     <string name="settings_about_project_philosophy_title">Project philosophy</string>
     <string name="settings_about_project_philosophy">VPNHide Next is developed without donations or a commercial model. The project prioritizes broad coverage, stability, and performance with minimal impact on the system.</string>
-    <string name="settings_about_project_contacts_title">Contact and source code</string>
+    <string name="settings_about_project_contacts_title">Contact</string>
     <string name="settings_about_project_frontend_title">Frontend: app and LSPosed</string>
     <string name="settings_about_project_frontend_desc">Android app, declarative policy, target management, and LSPosed integration.</string>
     <string name="settings_about_project_frontend_link">github.com/soranerai/vpnhide_next</string>

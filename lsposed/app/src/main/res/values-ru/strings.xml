@@ -383,7 +383,7 @@
     <string name="settings_about_project_desc">Философия проекта, контакты и исходный код</string>
     <string name="settings_about_project_philosophy_title">Философия проекта</string>
     <string name="settings_about_project_philosophy">VPNHide Next развивается без доната и коммерческой модели. Приоритет проекта — максимально широкое покрытие, стабильность и производительность при минимальном влиянии на систему.</string>
-    <string name="settings_about_project_contacts_title">Связь и исходный код</string>
+    <string name="settings_about_project_contacts_title">Связь</string>
     <string name="settings_about_project_frontend_title">Frontend: приложение и LSPosed</string>
     <string name="settings_about_project_frontend_desc">Android-приложение, декларативная политика, управление целями и интеграция с LSPosed.</string>
     <string name="settings_about_project_frontend_link">github.com/soranerai/vpnhide_next</string>
