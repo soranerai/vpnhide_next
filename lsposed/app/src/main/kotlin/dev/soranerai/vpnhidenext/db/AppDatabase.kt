@@ -4,6 +4,7 @@ import android.content.Context
 import android.database.sqlite.SQLiteDatabase
 import android.util.Log
 import dev.soranerai.vpnhidenext.PortProtocol
+import dev.soranerai.vpnhidenext.isEligiblePolicyUid
 import dev.soranerai.vpnhidenext.isValidPortRange
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
@@ -107,7 +108,10 @@ internal fun VpnHideConfig.withProtectionPolicySnapshot(
     apps: List<AppProtection>,
     resetRulesAndOverrides: Boolean,
 ): VpnHideConfig {
-    val appMap = apps.associateBy { it.packageName to it.userId }
+    val appMap =
+        apps
+            .filter { it.uid.isEligiblePolicyUid() }
+            .associateBy { it.packageName to it.userId }
     return if (resetRulesAndOverrides) {
         resetProtectionForListMode(listMode).copy(apps = appMap)
     } else {
@@ -193,14 +197,22 @@ internal class AppDatabase private constructor(
                     }
                 }
 
+                val rejectedCoreKeys =
+                    appsMap
+                        .filterValues { it.uid != 0 && !it.uid.isEligiblePolicyUid() }
+                        .keys
                 config =
                     VpnHideConfig(
                         globalConfig = globalConfig,
-                        apps = appsMap,
-                        portRules = portRulesList,
+                        apps = appsMap - rejectedCoreKeys,
+                        portRules =
+                            portRulesList.filterNot {
+                                (it.packageName to it.userId) in rejectedCoreKeys
+                            },
                         massPortRules = massRulesList,
                         ifacePrefixes = prefixesList,
                     )
+                if (rejectedCoreKeys.isNotEmpty()) saveConfigInternal()
             } catch (e: Exception) {
                 Log.e("VpnHideDb", "Failed to load JSON config, fallback to default", e)
                 config = VpnHideConfig()
@@ -210,6 +222,24 @@ internal class AppDatabase private constructor(
 
     private fun saveConfigInternal() {
         synchronized(lock) {
+            // Package Manager resolution belongs to the app, so reject known
+            // core UIDs before publishing the authoritative JSON. UID 0 is
+            // retained only as a transient unresolved import record and is
+            // healed by TargetsCache before policy apply.
+            val rejectedKeys =
+                config.apps
+                    .filterValues { it.uid != 0 && !it.uid.isEligiblePolicyUid() }
+                    .keys
+            if (rejectedKeys.isNotEmpty()) {
+                config =
+                    config.copy(
+                        apps = config.apps - rejectedKeys,
+                        portRules =
+                            config.portRules.filterNot {
+                                (it.packageName to it.userId) in rejectedKeys
+                            },
+                    )
+            }
             val root =
                 JSONObject().apply {
                     put("schemaVersion", CURRENT_CONFIG_SCHEMA_VERSION)

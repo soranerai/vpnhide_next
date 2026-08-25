@@ -233,10 +233,10 @@ private fun MainScreen(
     // only after MainScreen has rendered.
     LaunchedEffect(selfNeedsRestart) {
         val r = selfNeedsRestart ?: return@LaunchedEffect
+        if (!r) AppListCache.ensureLoaded(scope, context)
         DashboardCache.ensureLoaded(scope, context, r)
         if (!r) {
             DiagnosticsCache.run(scope, context)
-            AppListCache.ensureLoaded(scope, context)
             TargetsCache.ensureLoaded(scope, context)
         }
     }

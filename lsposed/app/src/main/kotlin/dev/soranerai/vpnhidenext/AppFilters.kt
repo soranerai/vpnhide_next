@@ -12,6 +12,45 @@ internal fun AppEntry.isAutomaticallySelectedSystem(listMode: PolicyListMode): B
 internal fun List<AppEntry>.manualSelectionCount(listMode: PolicyListMode): Int =
     count { it.isSelectedForPicker() && !it.isAutomaticallySelectedSystem(listMode) }
 
+internal fun Int.isEligiblePolicyUid(): Boolean = this > 0 && this % 100000 >= 10000
+
+/** Number of distinct eligible UIDs from which at least one VPN layer is hidden. */
+internal fun List<AppEntry>.effectiveTargetUidCount(listMode: PolicyListMode): Int =
+    filter { it.uid.isEligiblePolicyUid() }
+        .groupBy { it.uid }
+        .count { (_, packages) ->
+            val kmodListed = packages.any { it.kmod }
+            val lsposedListed = packages.any { it.lsposed }
+            val portsListed = packages.any { it.portHiding }
+            when (listMode) {
+                PolicyListMode.BLACKLIST -> kmodListed || lsposedListed || portsListed
+                PolicyListMode.ALLOWLIST -> !kmodListed || !lsposedListed || !portsListed
+            }
+        }
+
+internal fun effectiveLayerTargetUidCount(
+    installedApps: List<AppSummary>,
+    configured: List<AppProtection>,
+    listMode: PolicyListMode,
+    selfPackage: String,
+    isListed: (AppProtection) -> Boolean,
+): Int {
+    val configuredByPackage = configured.associateBy { it.packageName to it.userId }
+    val listedByUid = mutableMapOf<Int, Boolean>()
+    for (app in installedApps) {
+        if (app.packageName == selfPackage || !app.uid.isEligiblePolicyUid()) continue
+        val configuredApp = configuredByPackage[app.packageName to app.userId]
+        val listed =
+            configuredApp?.let(isListed)
+                ?: (listMode == PolicyListMode.ALLOWLIST && app.isSystem)
+        listedByUid[app.uid] = listedByUid[app.uid] == true || listed
+    }
+    return when (listMode) {
+        PolicyListMode.BLACKLIST -> listedByUid.values.count { it }
+        PolicyListMode.ALLOWLIST -> listedByUid.values.count { !it }
+    }
+}
+
 internal fun AppEntry.withNormalizedSystemPolicy(
     listMode: PolicyListMode,
 ): AppEntry {

@@ -154,8 +154,8 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                 val actualUid =
                     statusSnapshot.packageUids[app.packageName to app.userId] ?: 0
 
-                if (actualUid == 0) {
-                    // App was uninstalled!
+                if (actualUid == 0 || !actualUid.isEligiblePolicyUid()) {
+                    // Uninstalled and core-UID packages are not policy rows.
                     appDao.deleteAppProtection(app)
                     modified = true
                 } else if (app.uid != actualUid) {

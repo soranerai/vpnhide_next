@@ -133,7 +133,7 @@ internal fun ProtectionScreen(
                         val coreSystemUid = app.isSystem && app.uid % 100000 < 10000
                         val explicit = key in t.systemPolicyExplicitApps && !coreSystemUid
                         val implicitSystemException =
-                            listMode == PolicyListMode.ALLOWLIST && app.isSystem && !explicit
+                            listMode == PolicyListMode.ALLOWLIST && app.isSystem && !coreSystemUid && !explicit
                         AppEntry(
                             packageName = app.packageName,
                             label = app.label,
@@ -301,9 +301,9 @@ internal fun ProtectionScreen(
 
             val selectedCount =
                 if (listMode == PolicyListMode.ALLOWLIST) {
-                    apps.manualSelectionCount(listMode)
+                    apps.effectiveTargetUidCount(listMode)
                 } else {
-                    apps.count { it.isSelectedForPicker() }
+                    apps.effectiveTargetUidCount(listMode)
                 }
             val summaryBackgroundColor =
                 if (isSystemInDarkTheme()) Color(0xFF1B5E20) else Color(0xFFE8F5E9)
@@ -374,11 +374,12 @@ internal fun ProtectionScreen(
                             onClick = {
                                 apps =
                                     apps.map {
+                                        val eligibleSystem = it.isSystem && !it.isCoreSystemUid()
                                         it.copy(
-                                            kmod = selected == PolicyListMode.ALLOWLIST && it.isSystem,
-                                            lsposed = selected == PolicyListMode.ALLOWLIST && it.isSystem,
+                                            kmod = selected == PolicyListMode.ALLOWLIST && eligibleSystem,
+                                            lsposed = selected == PolicyListMode.ALLOWLIST && eligibleSystem,
                                             systemPolicyExplicit = false,
-                                            portHiding = selected == PolicyListMode.ALLOWLIST && it.isSystem,
+                                            portHiding = selected == PolicyListMode.ALLOWLIST && eligibleSystem,
                                             portRules = emptyList(),
                                             kernelHookMask = null,
                                             javaHookMask = null,
@@ -502,7 +503,7 @@ internal fun ProtectionScreen(
                     val existingProtections = appDao.getAllAppProtectionSync()
                     val existingMap = existingProtections.associateBy { it.packageName to it.userId }
                     val protections =
-                        apps.mapNotNull { stagedEntry ->
+                        apps.filter { it.uid.isEligiblePolicyUid() }.mapNotNull { stagedEntry ->
                             // Re-normalize at the commit boundary. UI state is
                             // staged asynchronously, so persistence must not
                             // trust an older explicitness marker.

@@ -93,4 +93,19 @@ class VpnHideConfigResetTest {
             ).isEmpty(),
         )
     }
+
+    @Test
+    fun policySnapshotDropsCoreUidRowsBeforeSerialization() {
+        val eligible = AppProtection("com.example.app", uid = 10042, lsposed = true)
+        val core = AppProtection("com.android.core", uid = 1000, lsposed = true)
+
+        val snapshot =
+            VpnHideConfig().withProtectionPolicySnapshot(
+                listMode = PolicyListMode.ALLOWLIST,
+                apps = listOf(eligible, core),
+                resetRulesAndOverrides = false,
+            )
+
+        assertEquals(listOf(eligible), snapshot.apps.values.toList())
+    }
 }

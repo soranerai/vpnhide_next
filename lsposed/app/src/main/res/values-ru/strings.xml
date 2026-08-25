@@ -19,7 +19,7 @@
     <string name="policy_mode_blacklist_warning">Выбранные приложения снова станут целями сокрытия. При сохранении будут очищены все цели приложений, локальные и глобальные hook overrides, а также локальные и глобальные правила портов.</string>
     <string name="allowlist_add_all_shown">Добавить показанные в исключения</string>
     <string name="policy_mode_blacklist_summary">Скрывать VPN у выбранных · целей: %d</string>
-    <string name="policy_mode_allowlist_summary">Показывать VPN только выбранным · ручных исключений: %d</string>
+    <string name="policy_mode_allowlist_summary">Показывать VPN только выбранным · целей сокрытия: %d</string>
     <string name="policy_help_title">Как работает выбор защиты</string>
     <string name="policy_help_scope_title">1. Режимы защиты</string>
     <string name="policy_help_scope_intro">Выберите, какие приложения должны видеть VPN, а какие — не видеть его.</string>

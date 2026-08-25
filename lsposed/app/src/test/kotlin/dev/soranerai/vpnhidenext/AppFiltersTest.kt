@@ -173,6 +173,42 @@ class AppFiltersTest {
     }
 
     @Test
+    fun effectiveAllowlistCountIsHiddenEligibleUidsNotSerializedExceptions() {
+        val hidden = unselected.copy(uid = 10010)
+        val visible = selected.copy(uid = 10011, kmod = true, portHiding = true)
+        val visibleShared = visible.copy(packageName = "com.example.shared", uid = 10010)
+        val core = system.copy(uid = 1000, kmod = false, lsposed = false, portHiding = false)
+
+        assertEquals(1, listOf(hidden, visible, core).effectiveTargetUidCount(PolicyListMode.ALLOWLIST))
+        assertEquals(0, listOf(hidden, visible, visibleShared, core).effectiveTargetUidCount(PolicyListMode.ALLOWLIST))
+    }
+
+    @Test
+    fun dashboardLayerCountUsesAllowlistComplementAndDeduplicatesUids() {
+        val installed =
+            listOf(
+                AppSummary("com.example.hidden", 0, 10010, "Hidden", null, false),
+                AppSummary("com.example.visible", 0, 10011, "Visible", null, false),
+                AppSummary("com.android.default", 0, 10012, "System", null, true),
+                AppSummary("com.android.core", 0, 1000, "Core", null, true),
+            )
+        val configured =
+            listOf(
+                AppProtection("com.example.visible", uid = 10011, lsposed = true),
+            )
+
+        assertEquals(
+            1,
+            effectiveLayerTargetUidCount(
+                installed,
+                configured,
+                PolicyListMode.ALLOWLIST,
+                "dev.soranerai.vpnhidenext",
+            ) { it.lsposed },
+        )
+    }
+
+    @Test
     fun searchMatchesNamePackageAndUid() {
         fun search(query: String): List<AppEntry> =
             filterAndSortApps(
