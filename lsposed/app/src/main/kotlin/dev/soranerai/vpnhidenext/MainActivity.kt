@@ -232,6 +232,15 @@ private fun MainScreen(
         }
     }
 
+    // Intercept statistics have two consumers: the dashboard summary and the
+    // full Statistics tab. Keep loading ownership here so precomposed pager
+    // pages cannot independently start or coordinate the same cache request.
+    LaunchedEffect(currentTab) {
+        if (currentTab == Tab.Dashboard || currentTab == Tab.Statistics) {
+            InterceptStatsCache.ensureLoaded(scope, context)
+        }
+    }
+
     // Hold the splash screen only until the Root / Startup check completes.
     // Dashboard data will pop in lazily once its suExec finishes.
     val uiReady = selfNeedsRestart != null
@@ -888,7 +897,6 @@ private fun MainScreen(
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }
-
     }
 }
 
