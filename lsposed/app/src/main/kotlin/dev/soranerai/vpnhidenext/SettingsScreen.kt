@@ -88,6 +88,7 @@ fun SettingsScreen(
     var hideSelf by remember { mutableStateOf(false) }
     var updateCheckEnabled by remember { mutableStateOf(true) }
     var healthCheckEnabled by remember { mutableStateOf(true) }
+    var targetRefreshEnabled by remember { mutableStateOf(true) }
     var selfTestVpnEnabled by remember { mutableStateOf(true) }
     BuiltInUpdateDebugPrefs.initialize(context)
     val builtInDebugUnlocked by BuiltInUpdateDebugPrefs.unlocked.collectAsState()
@@ -103,6 +104,7 @@ fun SettingsScreen(
             hideSelf = isJavaHookBitEnabled(context, JAVA_HOOK_BIT_SELF_HIDE)
             updateCheckEnabled = getUpdateCheckEnabled(context)
             healthCheckEnabled = getHealthCheckEnabled(context)
+            targetRefreshEnabled = getTargetRefreshEnabled(context)
             selfTestVpnEnabled = getSelfTestVpnEnabled(context)
         }
         batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
@@ -302,6 +304,27 @@ fun SettingsScreen(
                                     .onFailure {
                                         withContext(Dispatchers.Main) {
                                             healthCheckEnabled = previous
+                                            Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                            }
+                        },
+                    )
+                    SettingsRowDivider()
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_toggle_target_refresh_title),
+                        subtitle = stringResource(R.string.settings_toggle_target_refresh_desc),
+                        checked = targetRefreshEnabled,
+                        icon = Icons.Default.Schedule,
+                        iconTint = TelOrange,
+                        onCheckedChange = { newValue ->
+                            val previous = targetRefreshEnabled
+                            targetRefreshEnabled = newValue
+                            scope.launch(Dispatchers.IO) {
+                                runCatching { setTargetRefreshEnabled(context, newValue) }
+                                    .onFailure {
+                                        withContext(Dispatchers.Main) {
+                                            targetRefreshEnabled = previous
                                             Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
                                         }
                                     }

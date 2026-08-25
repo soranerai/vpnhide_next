@@ -264,6 +264,7 @@ private fun MainScreen(
         withContext(Dispatchers.IO) {
             UpdateCheckScheduler.scheduleIfEnabled(context)
             HealthCheckScheduler.scheduleIfEnabled(context)
+            TargetRefreshScheduler.scheduleIfEnabled(context)
         }
     }
 
