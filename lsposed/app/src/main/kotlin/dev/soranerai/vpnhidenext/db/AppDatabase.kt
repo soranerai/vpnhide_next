@@ -102,6 +102,22 @@ internal fun VpnHideConfig.resetProtectionForListMode(listMode: PolicyListMode):
     )
 }
 
+internal fun VpnHideConfig.withProtectionPolicySnapshot(
+    listMode: PolicyListMode,
+    apps: List<AppProtection>,
+    resetRulesAndOverrides: Boolean,
+): VpnHideConfig {
+    val appMap = apps.associateBy { it.packageName to it.userId }
+    return if (resetRulesAndOverrides) {
+        resetProtectionForListMode(listMode).copy(apps = appMap)
+    } else {
+        copy(
+            globalConfig = globalConfig.copy(listMode = listMode),
+            apps = appMap,
+        )
+    }
+}
+
 internal class AppDatabase private constructor(
     context: Context,
 ) {
@@ -112,6 +128,8 @@ internal class AppDatabase private constructor(
     @Volatile
     private var config = VpnHideConfig()
 
+    // Retained for multi-table settings import. Protection policy commits use
+    // replaceProtectionPolicy(), which publishes no intermediate DAO state.
     private var inTransaction = false
     private val transactionLock = Any()
 
@@ -226,6 +244,33 @@ internal class AppDatabase private constructor(
                 synchronized(transactionLock) {
                     inTransaction = false
                 }
+            }
+        }
+
+    /**
+     * Replaces the complete application policy as one durable snapshot.
+     *
+     * ProtectionScreen stages a full list in memory. Publishing that list via
+     * individual DAO calls used to expose intermediate states to observers;
+     * TargetsCache could then materialize an ALLOWLIST system default over an
+     * explicit deselection before the final JSON write. Keep the database lock
+     * for the whole replacement, write once, and notify only after commit.
+     */
+    suspend fun replaceProtectionPolicy(
+        listMode: PolicyListMode,
+        apps: List<AppProtection>,
+        resetRulesAndOverrides: Boolean,
+    ) =
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                config = config.withProtectionPolicySnapshot(listMode, apps, resetRulesAndOverrides)
+                saveConfigInternal()
+            }
+            DbNotifier.notifyChanged("app_protection")
+            DbNotifier.notifyChanged("global_config")
+            if (resetRulesAndOverrides) {
+                DbNotifier.notifyChanged("port_rules")
+                DbNotifier.notifyChanged("mass_port_rules")
             }
         }
 
