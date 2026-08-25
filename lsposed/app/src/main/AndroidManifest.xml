@@ -45,6 +45,17 @@
             </intent-filter>
         </receiver>
 
+        <receiver
+            android:name=".PackageChangedReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.PACKAGE_ADDED" />
+                <action android:name="android.intent.action.PACKAGE_REMOVED" />
+                <action android:name="android.intent.action.PACKAGE_REPLACED" />
+                <data android:scheme="package" />
+            </intent-filter>
+        </receiver>
+
         <!-- Local-only test tunnel used by Diagnostics' "Test without VPN"
              action — see SelfTestVpnService for why it's safe (TEST-NET-1,
              no default route, auto-stops). -->

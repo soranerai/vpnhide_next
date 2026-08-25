@@ -1,5 +1,6 @@
 package dev.soranerai.vpnhidenext
 
+import dev.soranerai.vpnhidenext.db.AppProtection
 import dev.soranerai.vpnhidenext.db.PolicyListMode
 
 /** Filter the staged rows rendered by the picker, not the last saved snapshot. */
@@ -13,10 +14,12 @@ internal fun List<AppEntry>.manualSelectionCount(listMode: PolicyListMode): Int 
 
 internal fun AppEntry.withNormalizedSystemPolicy(
     listMode: PolicyListMode,
-    kmodAvailable: Boolean,
 ): AppEntry {
     if (!isSystem || isCoreSystemUid()) return this
-    val safeKmod = listMode == PolicyListMode.ALLOWLIST && kmodAvailable
+    // Policy describes intended behavior, not current module availability.
+    // Persist the kernel exception now so installing/re-enabling kmod later
+    // cannot silently invert the default for system applications.
+    val safeKmod = listMode == PolicyListMode.ALLOWLIST
     val safeFramework = listMode == PolicyListMode.ALLOWLIST
     val isSafe = kmod == safeKmod && lsposed == safeFramework && portHiding == safeFramework
     return copy(systemPolicyExplicit = !isSafe)
@@ -44,12 +47,39 @@ internal fun isRiskySystemTransition(
 }
 
 internal fun AppEntry.shouldPersistPolicy(
+    listMode: PolicyListMode,
     kernelHookMask: Long?,
     javaHookMask: Long?,
 ): Boolean {
     val hasExtraPolicy = kernelHookMask != null || javaHookMask != null || portRules.isNotEmpty()
-    if (isSystem && !systemPolicyExplicit) return hasExtraPolicy
+    if (listMode == PolicyListMode.BLACKLIST && isSystem && !systemPolicyExplicit) return hasExtraPolicy
     return kmod || lsposed || portHiding || systemPolicyExplicit || hasExtraPolicy
+}
+
+internal fun missingSystemPolicyDefaults(
+    listMode: PolicyListMode,
+    configured: List<AppProtection>,
+    systemPackages: Set<Pair<String, Int>>,
+    selfPackage: String,
+): List<AppProtection> {
+    if (listMode != PolicyListMode.ALLOWLIST) return emptyList()
+    val configuredUids = configured.map { it.uid }.toMutableSet()
+    return buildList {
+        for ((packageName, uid) in systemPackages.sortedWith(compareBy({ it.second }, { it.first }))) {
+            if (uid % 100000 < 10000 || uid in configuredUids || packageName == selfPackage) continue
+            add(
+                AppProtection(
+                    packageName = packageName,
+                    userId = uid / 100000,
+                    uid = uid,
+                    kmod = true,
+                    lsposed = true,
+                    portHiding = true,
+                ),
+            )
+            configuredUids.add(uid)
+        }
+    }
 }
 
 internal fun filterAndSortApps(

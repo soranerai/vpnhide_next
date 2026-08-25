@@ -12,9 +12,8 @@ internal object DatabaseSync {
             val configFile = AppDatabase.policyConfigFile(context)
             if (!configFile.isFile) return@withContext false
 
-            val selfUid = context.applicationInfo.uid
             val quotedConfig = shellQuote(configFile.absolutePath)
-            val command = "$kmodCtl load $quotedConfig $selfUid"
+            val command = "$kmodCtl load $quotedConfig"
 
             val (exitCode, _) = suExec(command)
             exitCode == 0

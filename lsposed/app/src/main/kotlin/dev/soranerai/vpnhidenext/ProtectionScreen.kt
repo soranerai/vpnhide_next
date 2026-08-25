@@ -77,8 +77,7 @@ internal fun ProtectionScreen(
         }
 
     fun normalizeSystemOverrides(candidate: List<AppEntry>): List<AppEntry> {
-        val kmodAvailable = targets?.kmodModuleInstalled == true
-        return candidate.map { it.withNormalizedSystemPolicy(listMode, kmodAvailable) }
+        return candidate.map { it.withNormalizedSystemPolicy(listMode) }
     }
 
     fun stageApps(candidate: List<AppEntry>) {
@@ -145,7 +144,7 @@ internal fun ProtectionScreen(
                             uid = app.uid,
                             kmod =
                                 if (implicitSystemException) {
-                                    t.kmodModuleInstalled
+                                    true
                                 } else if (app.isSystem && !explicit) {
                                     false
                                 } else {
@@ -374,11 +373,10 @@ internal fun ProtectionScreen(
                         }
                         TextButton(
                             onClick = {
-                                val kmodAvailable = targets?.kmodModuleInstalled == true
                                 apps =
                                     apps.map {
                                         it.copy(
-                                            kmod = selected == PolicyListMode.ALLOWLIST && it.isSystem && kmodAvailable,
+                                            kmod = selected == PolicyListMode.ALLOWLIST && it.isSystem,
                                             lsposed = selected == PolicyListMode.ALLOWLIST && it.isSystem,
                                             systemPolicyExplicit = false,
                                             portHiding = selected == PolicyListMode.ALLOWLIST && it.isSystem,
@@ -503,6 +501,20 @@ internal fun ProtectionScreen(
                     val db = AppDatabase.getInstance(context)
                     if (modeResetPending) {
                         db.resetProtectionConfig(listMode)
+                        val normalizedProtections =
+                            apps.mapNotNull { entry ->
+                                if (!entry.shouldPersistPolicy(listMode, null, null)) return@mapNotNull null
+                                AppProtection(
+                                    packageName = entry.packageName,
+                                    userId = entry.userId,
+                                    uid = entry.uid,
+                                    kmod = entry.kmod,
+                                    lsposed = entry.lsposed,
+                                    portHiding = entry.portHiding,
+                                    systemPolicyExplicit = entry.systemPolicyExplicit,
+                                )
+                            }
+                        db.appDao().insertAppProtections(normalizedProtections)
                     } else {
                         db.withTransaction {
                             val appDao = db.appDao()
@@ -524,7 +536,7 @@ internal fun ProtectionScreen(
                                     val kernelHookMask = existing?.kernelHookMask
                                     val javaHookMask = existing?.javaHookMask
 
-                                    if (!entry.shouldPersistPolicy(kernelHookMask, javaHookMask)) {
+                                    if (!entry.shouldPersistPolicy(listMode, kernelHookMask, javaHookMask)) {
                                         return@mapNotNull null
                                     }
 
