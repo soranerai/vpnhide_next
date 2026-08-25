@@ -81,9 +81,6 @@ internal fun AboutProjectScreen(
                 ProjectIntroCard()
             }
             item {
-                ProjectSectionTitle(stringResource(R.string.settings_about_project_frontend_title))
-            }
-            item {
                 ProjectInfoCard(
                     icon = Icons.Default.Share,
                     tint = TelBlue,
@@ -92,9 +89,6 @@ internal fun AboutProjectScreen(
                     link = stringResource(R.string.settings_about_project_frontend_link),
                     onClick = { openProjectLink(context, FRONTEND_REPOSITORY_URL) },
                 )
-            }
-            item {
-                ProjectSectionTitle(stringResource(R.string.settings_about_project_backend_title))
             }
             item {
                 ProjectInfoCard(
