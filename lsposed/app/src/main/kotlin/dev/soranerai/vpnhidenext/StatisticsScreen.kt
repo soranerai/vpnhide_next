@@ -20,7 +20,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -45,7 +44,6 @@ import kotlinx.coroutines.withContext
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun StatisticsScreen(modifier: Modifier = Modifier) {
-    val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val stats by InterceptStatsCache.stats.collectAsState()
     val statsUnavailable by InterceptStatsCache.unavailable.collectAsState()
@@ -66,10 +64,6 @@ fun StatisticsScreen(modifier: Modifier = Modifier) {
                 modifier = Modifier.fillMaxSize(),
             )
         }
-    }
-
-    LaunchedEffect(Unit) {
-        InterceptStatsCache.ensureLoaded(scope, context)
     }
 
     PullToRefreshBox(

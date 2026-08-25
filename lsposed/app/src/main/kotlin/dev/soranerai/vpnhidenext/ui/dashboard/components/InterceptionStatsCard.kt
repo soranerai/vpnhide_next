@@ -22,13 +22,11 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -47,11 +45,7 @@ private data class GreenSlice(
 
 @Composable
 fun InterceptionStatsCard(onOpenDetails: () -> Unit = {}) {
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
     val stats by InterceptStatsCache.stats.collectAsState()
-
-    LaunchedEffect(Unit) { InterceptStatsCache.ensureLoaded(scope, context) }
 
     val darkTheme = isSystemInDarkTheme()
     val containerColor = if (darkTheme) Color(0xFF1E3E28) else Color(0xFFE8F5E9)
