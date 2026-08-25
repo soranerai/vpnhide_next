@@ -101,9 +101,9 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
 
         var dbPopulatedOrUpdated = false
 
-        // Keep the manager package in the declarative policy with all layers
-        // disabled. In ALLOWLIST it is an ordinary unlisted eligible UID; in
-        // BLACKLIST it remains outside every target list.
+        // Keep the manager package in the declarative policy. In ALLOWLIST it
+        // is an ordinary unlisted eligible UID. In BLACKLIST the native layer
+        // must include it so VPNHide can protect its own process as well.
         val selfPkg = appContext.packageName
         val selfProto = appDao.getAppProtection(selfPkg, 0)
         if (selfProto == null) {
@@ -112,12 +112,16 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                     packageName = selfPkg,
                     userId = 0,
                     uid = appContext.applicationInfo.uid,
+                    kmod = listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
                 ),
             )
             dbPopulatedOrUpdated = true
-        } else if (selfProto.kmod || selfProto.lsposed || selfProto.portHiding) {
-            appDao.insertAppProtection(selfProto.copy(kmod = false, lsposed = false, portHiding = false))
-            dbPopulatedOrUpdated = true
+        } else {
+            val expectedKmod = listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
+            if (selfProto.kmod != expectedKmod) {
+                appDao.insertAppProtection(selfProto.copy(kmod = expectedKmod))
+                dbPopulatedOrUpdated = true
+            }
         }
 
         // Now read from DB to heal and get the actual data

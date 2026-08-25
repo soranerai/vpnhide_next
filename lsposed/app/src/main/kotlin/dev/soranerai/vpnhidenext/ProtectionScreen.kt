@@ -528,13 +528,13 @@ internal fun ProtectionScreen(
                         }.toMutableList()
 
                     // The manager is deliberately absent from the picker but
-                    // remains an explicit all-disabled record in the policy.
+                    // remains an explicit record in the policy. Native self
+                    // protection follows the list mode: a blacklist includes
+                    // VPNHide itself, while an allowlist leaves it unselected.
                     existingProtections.firstOrNull { it.packageName == selfPkg }?.let { self ->
                         protections +=
                             self.copy(
-                                kmod = false,
-                                lsposed = false,
-                                portHiding = false,
+                                kmod = listMode == PolicyListMode.BLACKLIST,
                                 kernelHookMask = if (modeResetPending) null else self.kernelHookMask,
                                 javaHookMask = if (modeResetPending) null else self.javaHookMask,
                             )
