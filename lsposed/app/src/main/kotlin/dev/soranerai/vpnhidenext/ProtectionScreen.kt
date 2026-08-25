@@ -156,7 +156,7 @@ internal fun ProtectionScreen(
                                 } else if (app.isSystem && !explicit) {
                                     false
                                 } else {
-                                    key in t.lsposedTargets
+                                    key in t.lsposedEntries
                                 },
                             systemPolicyExplicit = explicit,
                             portHiding =

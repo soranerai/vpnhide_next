@@ -12,7 +12,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 object HookContext {
     data class TargetUidPolicy(
         val uids: Set<Int>,
-        val excludeMode: Boolean,
+        val showList: Boolean,
     )
 
     const val OWN_PACKAGE_NAME = "dev.soranerai.vpnhidenext"
@@ -180,7 +180,7 @@ object HookContext {
         val policy = systemServerUidPolicy
         if (policy != null) {
             val listed = policy.uids.contains(uid)
-            return if (policy.excludeMode) !listed else listed
+            return if (policy.showList) !listed else listed
         }
         return loadTargetUids().contains(uid)
     }

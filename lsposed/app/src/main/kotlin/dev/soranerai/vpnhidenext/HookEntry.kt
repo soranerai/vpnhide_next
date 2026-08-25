@@ -211,14 +211,14 @@ class HookEntry : IXposedHookLoadPackage {
                         val appJavaHookMasks = mutableMapOf<Int, UInt>()
                         var coverIface: String? = null
                         var statsClearGen: Int? = null
-                        var lsposedExcludeMode = false
+                        var lsposedShowList = false
 
                         while (true) {
                             val line = reader.readLine() ?: break
                             if (line.isEmpty()) {
                                 synchronized(HookContext.uidLock) {
                                     HookContext.systemServerUidPolicy =
-                                        HookContext.TargetUidPolicy(uids.toSet(), lsposedExcludeMode)
+                                        HookContext.TargetUidPolicy(uids.toSet(), lsposedShowList)
                                     HookContext.systemServerIfacePrefixes = prefixes.toList()
                                     HookContext.systemServerActiveVpnIfaces = activeVpnIfaces.toSet()
                                     HookContext.cachedJavaHooksMask = javaHookMask
@@ -242,7 +242,7 @@ class HookEntry : IXposedHookLoadPackage {
                                 javaHookMask = 0xFFFFFFFFu
                                 coverIface = null
                                 statsClearGen = null
-                                lsposedExcludeMode = false
+                                lsposedShowList = false
                                 continue
                             }
 
@@ -264,16 +264,16 @@ class HookEntry : IXposedHookLoadPackage {
                                 javaHookMask = line.substringAfter("java_hook_mask:").trim().toUIntOrNull() ?: 0xFFFFFFFFu
                             } else if (line.startsWith("java_stats_clear_gen:")) {
                                 statsClearGen = line.substringAfter("java_stats_clear_gen:").trim().toIntOrNull()
-                            } else if (line.startsWith("lsposed_targets:")) {
-                                val targetStr = line.substringAfter("lsposed_targets:").trim()
-                                if (targetStr.isNotEmpty()) {
-                                    targetStr.split(" ").forEach { uidStr ->
+                            } else if (line.startsWith("lsposed_uids:")) {
+                                val uidList = line.substringAfter("lsposed_uids:").trim()
+                                if (uidList.isNotEmpty()) {
+                                    uidList.split(" ").forEach { uidStr ->
                                         uidStr.toIntOrNull()?.let { uids.add(it) }
                                     }
                                 }
-                            } else if (line.startsWith("lsposed_match_mode:")) {
-                                lsposedExcludeMode =
-                                    line.substringAfter("lsposed_match_mode:").trim().toIntOrNull() == 1
+                            } else if (line.startsWith("lsposed_list_mode:")) {
+                                lsposedShowList =
+                                    line.substringAfter("lsposed_list_mode:").trim() == "SHOW"
                             } else if (line.startsWith("iface_prefixes:")) {
                                 val prefixStr = line.substringAfter("iface_prefixes:").trim()
                                 if (prefixStr.isNotEmpty()) {
