@@ -10,7 +10,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -32,7 +31,6 @@ internal object InterceptStatsCache : AsyncCache<List<AppInterceptStats>>() {
         context: Context,
     ) {
         launchEnsureLoaded(scope) {
-            AppListCache.apps.first { it != null }
             val repository = DashboardRepository(context.applicationContext)
             load(repository)
         }
@@ -43,7 +41,6 @@ internal object InterceptStatsCache : AsyncCache<List<AppInterceptStats>>() {
         context: Context,
     ) {
         launchReload(scope) {
-            AppListCache.apps.first { it != null }
             val repository = DashboardRepository(context.applicationContext)
             load(repository)
         }
