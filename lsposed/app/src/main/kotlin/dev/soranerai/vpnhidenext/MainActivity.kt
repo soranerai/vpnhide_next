@@ -202,7 +202,6 @@ private fun MainScreen(
     var showAboutProject by remember { mutableStateOf(false) }
     var showDiagnosticsDetail by remember { mutableStateOf(false) }
     var diagnosticsScrollToBottom by remember { mutableStateOf(false) }
-    var showKpatchAnnouncement by remember { mutableStateOf(false) }
     val userNames by AppListCache.userNames.collectAsState()
 
     LaunchedEffect(Unit) {
@@ -214,15 +213,6 @@ private fun MainScreen(
             ?: PolicyListMode.BLACKLIST
     }
 
-    val prefs = remember { context.getSharedPreferences("vpnhide_prefs", android.content.Context.MODE_PRIVATE) }
-    LaunchedEffect(startup.isKmodType) {
-        if (startup.isKmodType) {
-            val shown = prefs.getBoolean("kpatch_announcement_shown_v2_2_0", false)
-            if (!shown) {
-                showKpatchAnnouncement = true
-            }
-        }
-    }
     val refreshRestart = selfNeedsRestart ?: false
     // Kick off both Protection caches lazily — only when the user
     // navigates to Protection. Moved out of here to reduce startup jank.
@@ -899,22 +889,6 @@ private fun MainScreen(
             )
         }
 
-        PredictiveBackOverlay(
-            visible = showKpatchAnnouncement,
-            onBack = {
-                showKpatchAnnouncement = false
-                prefs.edit().putBoolean("kpatch_announcement_shown_v2_2_0", true).apply()
-            },
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            KpatchAnnouncementScreen(
-                onDismiss = {
-                    showKpatchAnnouncement = false
-                    prefs.edit().putBoolean("kpatch_announcement_shown_v2_2_0", true).apply()
-                },
-                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
-            )
-        }
     }
 }
 

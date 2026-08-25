@@ -612,16 +612,4 @@
     <string name="hook_desc_inet6_bind_ll">Блокирует вызовы bind() на адреса IPv6 link-local скрытого VPN-интерфейса для предотвращения сканирования через перебор scope_id.</string>
     <string name="hook_desc_udpv6_sendmsg_ll">Блокирует отправку пакетов (sendto) на адреса IPv6 link-local скрытого VPN-интерфейса для предотвращения детекции VPN-туннеля.</string>
 
-    <!-- Kpatch Announcement -->
-    <string name="kpatch_announcement_title">Built-in режим</string>
-    <string name="kpatch_announcement_subtitle">Монолитная интеграция прямо в код ядра для максимальной скрытности и стабильности</string>
-    <string name="kpatch_feature_overhead_title">Нулевой модульный оверхед</string>
-    <string name="kpatch_feature_overhead_desc">Логика сокрытия вшита непосредственно в исходный код ядра. Полностью исключает задержки маршрутизации вызовов и накладные расходы на выполнение.</string>
-    <string name="kpatch_feature_stealth_title">Абсолютная скрытность</string>
-    <string name="kpatch_feature_stealth_desc">Неуязвимость к timing-атакам на системные вызовы (syscall). Поскольку сокрытие работает нативно в самом ядре, а не как загружаемый модуль (LKM/KPM), оно не оставляет следов.</string>
-    <string name="kpatch_feature_stability_title">Монолитная стабильность</string>
-    <string name="kpatch_feature_stability_desc">Будучи скомпилированным единым целым с ядром, это решение является постоянным и неприкосновенным. Исключает рантайм-ошибки синхронизации или падение хуков.</string>
-    <string name="kpatch_announcement_optional_note">Примечание: Переход полностью добровольный. Стандартный внешний модуль (LKM) продолжит обновляться и поддерживаться в обычном режиме. Вы можете перейти на built-in версию ядра в любое удобное время.</string>
-    <string name="kpatch_action_repo">Открыть репозиторий</string>
-    <string name="kpatch_action_dismiss">Понятно</string>
 </resources>
