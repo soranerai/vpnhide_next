@@ -199,6 +199,7 @@ private fun MainScreen(
     var editingAppSettingsTarget by remember { mutableStateOf<AppEntry?>(null) }
     var showEditingAppSettings by remember { mutableStateOf(false) }
     var showSettings by remember { mutableStateOf(false) }
+    var showAboutProject by remember { mutableStateOf(false) }
     var showDiagnosticsDetail by remember { mutableStateOf(false) }
     var diagnosticsScrollToBottom by remember { mutableStateOf(false) }
     var showKpatchAnnouncement by remember { mutableStateOf(false) }
@@ -864,11 +865,23 @@ private fun MainScreen(
         ) {
             SettingsScreen(
                 onBack = { showSettings = false },
+                onOpenAboutProject = { showAboutProject = true },
                 onOpenDiagnosticsDetail = {
                     diagnosticsScrollToBottom = false
                     showDiagnosticsDetail = true
                 },
                 selfNeedsRestart = refreshRestart,
+                modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
+            )
+        }
+
+        PredictiveBackOverlay(
+            visible = showAboutProject,
+            onBack = { showAboutProject = false },
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            AboutProjectScreen(
+                onBack = { showAboutProject = false },
                 modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background),
             )
         }

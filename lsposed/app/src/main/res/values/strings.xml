@@ -431,6 +431,23 @@
     <string name="settings_battery_optimization_desc">Some OEM firmware (MIUI, EMUI, ColorOS, One UI) delays or kills background checks unless the app is exempt — needed for the checks below to actually run reliably.</string>
     <string name="settings_toggle_self_test_vpn_title">Auto-test without VPN</string>
     <string name="settings_toggle_self_test_vpn_desc">If no VPN is connected, silently raises a local-only test tunnel just long enough to run the full diagnostics battery, then tears it down. Turn off to only run checks with a real VPN connected.</string>
+    <string name="settings_about_project_title">About the project</string>
+    <string name="settings_about_project_desc">Project philosophy, contacts, and source code</string>
+    <string name="settings_about_project_philosophy_title">Project philosophy</string>
+    <string name="settings_about_project_philosophy">VPNHide Next is developed without donations or a commercial model. The project prioritizes broad coverage, stability, and performance with minimal impact on the system.</string>
+    <string name="settings_about_project_contacts_title">Contact and source code</string>
+    <string name="settings_about_project_frontend_title">Frontend: app and LSPosed</string>
+    <string name="settings_about_project_frontend_desc">Android app, declarative policy, target management, and LSPosed integration.</string>
+    <string name="settings_about_project_frontend_link">github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_backend_title">Backend: kmod and kpatch</string>
+    <string name="settings_about_project_backend_desc">Kernel kmod source code and kpatch patches with instructions for manual patch application.</string>
+    <string name="settings_about_project_backend_link">github.com/soranerai/vpnhide_next_private</string>
+    <string name="settings_about_project_compatibility_title">Compatibility and support boundaries</string>
+    <string name="settings_about_project_compatibility">The kpatch patches support 4.19–5.4 kernels and all GKI2 kernels in the 5.10–6.18 range. kmod supports GKI2 only. KPM is intentionally not implemented: stable integration with full coverage is practically infeasible on older kernels, which is why kpatch is used for them.</string>
+    <string name="settings_about_project_telegram_title">Telegram</string>
+    <string name="settings_about_project_open_link">Open link</string>
+    <string name="settings_about_project_repository">Repository: github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_telegram">Telegram: t.me/soranerai</string>
     <string name="settings_save_failed">Could not save this setting. The previous value was restored.</string>
 
     <!-- Update-available notification -->

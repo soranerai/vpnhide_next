@@ -77,6 +77,7 @@ import java.io.File
 @Composable
 fun SettingsScreen(
     onBack: () -> Unit,
+    onOpenAboutProject: () -> Unit,
     onOpenDiagnosticsDetail: () -> Unit,
     selfNeedsRestart: Boolean,
     modifier: Modifier = Modifier,
@@ -355,8 +356,21 @@ fun SettingsScreen(
                 }
             }
 
+            item(key = "github_repository") {
+                SettingsGroup {
+                    SettingsNavRow(
+                        title = stringResource(R.string.settings_about_project_title),
+                        subtitle = stringResource(R.string.settings_about_project_desc),
+                        icon = Icons.Default.Share,
+                        iconTint = TelBlue,
+                        onClick = onOpenAboutProject,
+                    )
+                }
+            }
+
             item(key = "spacer_bottom") { Spacer(Modifier.height(24.dp)) }
         }
+
     }
 }
 

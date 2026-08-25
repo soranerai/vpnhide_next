@@ -379,6 +379,23 @@
     <string name="settings_battery_optimization_desc">Некоторые прошивки (MIUI, EMUI, ColorOS, One UI) откладывают или убивают фоновые проверки, если приложение не в исключениях — это нужно, чтобы проверки ниже действительно работали.</string>
     <string name="settings_toggle_self_test_vpn_title">Автотест без VPN</string>
     <string name="settings_toggle_self_test_vpn_desc">Если VPN не подключён, на время полной диагностики незаметно поднимает локальный тестовый туннель, а затем убирает его. Выключите, чтобы проверки запускались только при реально подключённом VPN.</string>
+    <string name="settings_about_project_title">О проекте</string>
+    <string name="settings_about_project_desc">Философия проекта, контакты и исходный код</string>
+    <string name="settings_about_project_philosophy_title">Философия проекта</string>
+    <string name="settings_about_project_philosophy">VPNHide Next развивается без доната и коммерческой модели. Приоритет проекта — максимально широкое покрытие, стабильность и производительность при минимальном влиянии на систему.</string>
+    <string name="settings_about_project_contacts_title">Связь и исходный код</string>
+    <string name="settings_about_project_frontend_title">Frontend: приложение и LSPosed</string>
+    <string name="settings_about_project_frontend_desc">Android-приложение, декларативная политика, управление целями и интеграция с LSPosed.</string>
+    <string name="settings_about_project_frontend_link">github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_backend_title">Backend: kmod и kpatch</string>
+    <string name="settings_about_project_backend_desc">Исходный код модуля ядра kmod и kpatch-патчей с инструкциями по ручному применению патчей.</string>
+    <string name="settings_about_project_backend_link">github.com/soranerai/vpnhide_next_private</string>
+    <string name="settings_about_project_compatibility_title">Совместимость и границы поддержки</string>
+    <string name="settings_about_project_compatibility">kpatch-патчи поддерживают ядра 4.19–5.4 и все GKI2 в диапазоне 5.10–6.18. kmod поддерживает только GKI2. Реализация KPM отсутствует осознанно: для старых ядер практически невозможно стабильно реализовать интеграцию с полным покрытием, поэтому для них используется kpatch.</string>
+    <string name="settings_about_project_telegram_title">Telegram</string>
+    <string name="settings_about_project_open_link">Открыть ссылку</string>
+    <string name="settings_about_project_repository">Репозиторий: github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_telegram">Telegram: t.me/soranerai</string>
     <string name="settings_save_failed">Не удалось сохранить настройку. Восстановлено предыдущее значение.</string>
 
     <!-- Уведомление о доступном обновлении -->
