@@ -1,3 +1,10 @@
+## v2.5.2
+
+### Fixed
+- Centralize intercept statistics loading to prevent duplicate screen refreshes
+- Offer a kmod update when the installed backend is incompatible with the app
+- Reapply the current policy after an installed app is updated, even when its UID is unchanged.
+
 ## v2.5.1
 
 ### Added
@@ -51,17 +58,3 @@
 - all: Added exclusion of dummy0 from interfaces for spoofing
 - built-in: Fixed wifi/bluetooth disruption on some devices
 - app: Changing between Hide and Show modes now fully clears app targets, per-app and global hook overrides, and local and global port rules on save.
-
-## v2.2.2
-
-### Changed
-- Policy changes are now applied through the atomic JSON API; legacy target-file synchronization was removed, and Hide/Show modes were added.
-- Compatibility is now checked using an explicit component matrix with a runtime fallback for the native version.
-- The Native card shows the version of the running kernel module
-- The number of targets is now unlimited
-- Intercept statistics history is now provided by the daemon and kept for the current session.
-
-### Fixed
-- VPN-app hiding now accounts for the calling app and preserves the manager's own VPN services.
-- LSPosed network hooks now consistently use the physical interface selected by the daemon.
-- Make protection modes and port rules easier to understand, with clearer Hide/Show controls, help text, allowlist port rules, and consistent refresh feedback
