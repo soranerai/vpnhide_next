@@ -6,6 +6,7 @@ data class HookInfo(
     val symbolRes: Int,
     val descriptionRes: Int,
     val indices: List<Int>? = null,
+    val daemonControlled: Boolean = false,
 ) {
     val allIndices: List<Int>
         get() = indices ?: listOf(index)
@@ -123,10 +124,22 @@ val ALL_HOOKS =
         ),
         HookInfo(
             18,
-            R.string.hook_name_enoent_file_hiding,
-            R.string.hook_symbol_enoent_file_hiding,
-            R.string.hook_desc_enoent_file_hiding,
-            indices = listOf(18, 19, 20, 21, 22, 23, 24, 26, 27),
+            R.string.hook_name_susfs_path_hiding,
+            R.string.hook_symbol_susfs_path_hiding,
+            R.string.hook_desc_susfs_path_hiding,
+            daemonControlled = true,
+        ),
+        HookInfo(
+            26,
+            R.string.hook_name_dev_seq_show,
+            R.string.hook_symbol_dev_seq_show,
+            R.string.hook_desc_dev_seq_show,
+        ),
+        HookInfo(
+            27,
+            R.string.hook_name_if6_seq_show,
+            R.string.hook_symbol_if6_seq_show,
+            R.string.hook_desc_if6_seq_show,
         ),
         HookInfo(
             25,

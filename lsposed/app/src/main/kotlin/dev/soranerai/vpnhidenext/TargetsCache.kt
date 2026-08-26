@@ -113,13 +113,24 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
                     userId = 0,
                     uid = appContext.applicationInfo.uid,
                     kmod = listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
+                    lsposed = listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST,
                 ),
             )
             dbPopulatedOrUpdated = true
         } else {
-            val expectedKmod = listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
-            if (selfProto.kmod != expectedKmod) {
-                appDao.insertAppProtection(selfProto.copy(kmod = expectedKmod))
+            val expectedListed = listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
+            val expectedUid = appContext.applicationInfo.uid
+            if (selfProto.kmod != expectedListed ||
+                selfProto.lsposed != expectedListed ||
+                selfProto.uid != expectedUid
+            ) {
+                appDao.insertAppProtection(
+                    selfProto.copy(
+                        kmod = expectedListed,
+                        lsposed = expectedListed,
+                        uid = expectedUid,
+                    ),
+                )
                 dbPopulatedOrUpdated = true
             }
         }

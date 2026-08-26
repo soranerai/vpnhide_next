@@ -224,7 +224,12 @@ internal fun AppSettingsScreen(
                     } else {
                         when (page) {
                             0 -> {
-                                HookPage(app = app, hooks = ALL_HOOKS, isKernel = true, accent = TelBlue)
+                                HookPage(
+                                    app = app,
+                                    hooks = ALL_HOOKS.filter { app == null || !it.daemonControlled },
+                                    isKernel = true,
+                                    accent = TelBlue,
+                                )
                             }
 
                             1 -> {

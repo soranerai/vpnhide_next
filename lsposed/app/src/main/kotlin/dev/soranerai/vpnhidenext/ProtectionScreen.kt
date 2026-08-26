@@ -529,16 +529,29 @@ internal fun ProtectionScreen(
 
                     // The manager is deliberately absent from the picker but
                     // remains an explicit record in the policy. Native self
-                    // protection follows the list mode: a blacklist includes
-                    // VPNHide itself, while an allowlist leaves it unselected.
-                    existingProtections.firstOrNull { it.packageName == selfPkg }?.let { self ->
-                        protections +=
-                            self.copy(
-                                kmod = listMode == PolicyListMode.BLACKLIST,
-                                kernelHookMask = if (modeResetPending) null else self.kernelHookMask,
-                                javaHookMask = if (modeResetPending) null else self.javaHookMask,
-                            )
-                    }
+                    // protection follows the list mode for both native and
+                    // Framework layers: BLACKLIST explicitly includes
+                    // VPNHide, while ALLOWLIST leaves it outside the exception
+                    // list so it remains protected by exclude-mode matching.
+                    // The manager is not shown in the picker, so its record
+                    // must be upserted here. Do not make this conditional on
+                    // a stale/missing DB row: replaceProtectionPolicy() would
+                    // otherwise drop VPNHide itself from BLACKLIST targets.
+                    val selfExisting = existingMap[selfPkg to 0]
+                    protections.removeAll { it.packageName == selfPkg && it.userId == 0 }
+                    protections +=
+                        (selfExisting
+                            ?: AppProtection(
+                                packageName = selfPkg,
+                                userId = 0,
+                                uid = context.applicationInfo.uid,
+                            )).copy(
+                            uid = context.applicationInfo.uid,
+                            kmod = listMode == PolicyListMode.BLACKLIST,
+                            lsposed = listMode == PolicyListMode.BLACKLIST,
+                            kernelHookMask = if (modeResetPending) null else selfExisting?.kernelHookMask,
+                            javaHookMask = if (modeResetPending) null else selfExisting?.javaHookMask,
+                        )
 
                     db.replaceProtectionPolicy(
                         listMode = listMode,

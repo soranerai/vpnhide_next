@@ -105,7 +105,7 @@ private val NATIVE_CHECK_HOOK_BITS: Map<Int, IntArray> =
         R.string.check_proc_dev to intArrayOf(26), // HOOK_DEV_SEQ
         R.string.check_proc_fib_trie to intArrayOf(30), // HOOK_FIB_TRIE
         R.string.check_bpf_iface_map to intArrayOf(17), // HOOK_BPF
-        R.string.check_sys_class_net to intArrayOf(18, 19, 20, 21, 22, 23, 24), // file-hiding hooks
+        R.string.check_sys_class_net to intArrayOf(18), // SUSFS path hiding command (daemon)
         R.string.check_net_iface_enum to intArrayOf(2, 3, 4), // HOOK_RTNL_FILL, HOOK_INET6_FILL, HOOK_INET_FILL
         R.string.check_proc_route_java to intArrayOf(5), // HOOK_FIB_ROUTE
         R.string.check_getsockopt_bind to intArrayOf(11, 12), // HOOK_SETSOCKOPT, HOOK_GETSOCKOPT
@@ -115,7 +115,7 @@ private val NATIVE_CHECK_HOOK_BITS: Map<Int, IntArray> =
         R.string.check_tcp_mss to intArrayOf(12), // HOOK_GETSOCKOPT (spoofs IP_MTU + TCP_MAXSEG)
         R.string.check_udp_pmtu to intArrayOf(11), // HOOK_SETSOCKOPT (changes IP_MTU_DISCOVER→PMTUDISC_DONT)
         R.string.check_netlink_getneigh to intArrayOf(), // RTM_GETNEIGH not hooked; always runs
-        R.string.check_proc_sys_net_conf to intArrayOf(18, 19, 20, 21, 22, 23, 24),
+        R.string.check_proc_sys_net_conf to intArrayOf(18), // SUSFS path hiding command (daemon)
         R.string.check_gso_asymmetry to intArrayOf(11), // HOOK_SETSOCKOPT (zeroes UDP_SEGMENT to block GSO probe)
         R.string.check_ipv6_link_local_bruteforce to intArrayOf(28, 29), // HOOK_INET6_BIND_LL, HOOK_UDPV6_SENDMSG
         R.string.check_uid_route_rules_leak to intArrayOf(8), // HOOK_FIB_RULE_FILL (RTM_GETRULE)
