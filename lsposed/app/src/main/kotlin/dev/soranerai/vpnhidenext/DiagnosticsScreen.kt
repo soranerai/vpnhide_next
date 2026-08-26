@@ -43,10 +43,8 @@ import dev.soranerai.vpnhidenext.checks.checkProcNetTcp
 import dev.soranerai.vpnhidenext.checks.checkProcNetTcp6
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp
 import dev.soranerai.vpnhidenext.checks.checkProcNetUdp6
-import dev.soranerai.vpnhidenext.checks.checkProcSysNetConf
 import dev.soranerai.vpnhidenext.checks.checkQdiscByIfindex
 import dev.soranerai.vpnhidenext.checks.checkRtmGetlinkTrimOracle
-import dev.soranerai.vpnhidenext.checks.checkSysClassNet
 import dev.soranerai.vpnhidenext.checks.checkTcpInfoMss
 import dev.soranerai.vpnhidenext.checks.checkTcpMss
 import dev.soranerai.vpnhidenext.checks.checkTimestampingHw
@@ -105,7 +103,6 @@ private val NATIVE_CHECK_HOOK_BITS: Map<Int, IntArray> =
         R.string.check_proc_dev to intArrayOf(26), // HOOK_DEV_SEQ
         R.string.check_proc_fib_trie to intArrayOf(30), // HOOK_FIB_TRIE
         R.string.check_bpf_iface_map to intArrayOf(17), // HOOK_BPF
-        R.string.check_sys_class_net to intArrayOf(18), // SUSFS path hiding command (daemon)
         R.string.check_net_iface_enum to intArrayOf(2, 3, 4), // HOOK_RTNL_FILL, HOOK_INET6_FILL, HOOK_INET_FILL
         R.string.check_proc_route_java to intArrayOf(5), // HOOK_FIB_ROUTE
         R.string.check_getsockopt_bind to intArrayOf(11, 12), // HOOK_SETSOCKOPT, HOOK_GETSOCKOPT
@@ -115,7 +112,6 @@ private val NATIVE_CHECK_HOOK_BITS: Map<Int, IntArray> =
         R.string.check_tcp_mss to intArrayOf(12), // HOOK_GETSOCKOPT (spoofs IP_MTU + TCP_MAXSEG)
         R.string.check_udp_pmtu to intArrayOf(11), // HOOK_SETSOCKOPT (changes IP_MTU_DISCOVER→PMTUDISC_DONT)
         R.string.check_netlink_getneigh to intArrayOf(), // RTM_GETNEIGH not hooked; always runs
-        R.string.check_proc_sys_net_conf to intArrayOf(18), // SUSFS path hiding command (daemon)
         R.string.check_gso_asymmetry to intArrayOf(11), // HOOK_SETSOCKOPT (zeroes UDP_SEGMENT to block GSO probe)
         R.string.check_ipv6_link_local_bruteforce to intArrayOf(28, 29), // HOOK_INET6_BIND_LL, HOOK_UDPV6_SENDMSG
         R.string.check_uid_route_rules_leak to intArrayOf(8), // HOOK_FIB_RULE_FILL (RTM_GETRULE)
@@ -165,7 +161,6 @@ private val NATIVE_CHECK_TIER: Map<Int, NativeCheckTier> =
         R.string.check_proc_dev to NativeCheckTier.CLASSIC,
         R.string.check_proc_fib_trie to NativeCheckTier.ADVANCED,
         R.string.check_bpf_iface_map to NativeCheckTier.ADVANCED,
-        R.string.check_sys_class_net to NativeCheckTier.CLASSIC,
         R.string.check_net_iface_enum to NativeCheckTier.CLASSIC,
         R.string.check_proc_route_java to NativeCheckTier.CLASSIC,
         R.string.check_getsockopt_bind to NativeCheckTier.ADVANCED,
@@ -175,7 +170,6 @@ private val NATIVE_CHECK_TIER: Map<Int, NativeCheckTier> =
         R.string.check_tcp_mss to NativeCheckTier.ADVANCED,
         R.string.check_udp_pmtu to NativeCheckTier.ADVANCED,
         R.string.check_netlink_getneigh to NativeCheckTier.ADVANCED,
-        R.string.check_proc_sys_net_conf to NativeCheckTier.CLASSIC,
         R.string.check_gso_asymmetry to NativeCheckTier.EXTREME,
         R.string.check_ipv6_link_local_bruteforce to NativeCheckTier.EXTREME,
         R.string.check_uid_route_rules_leak to NativeCheckTier.ADVANCED,
@@ -263,7 +257,6 @@ internal fun getPlaceholderResults(
             R.string.check_proc_dev,
             R.string.check_proc_fib_trie,
             R.string.check_bpf_iface_map,
-            R.string.check_sys_class_net,
             R.string.check_net_iface_enum,
             R.string.check_proc_route_java,
             R.string.check_getsockopt_bind,
@@ -273,7 +266,6 @@ internal fun getPlaceholderResults(
             R.string.check_tcp_mss,
             R.string.check_udp_pmtu,
             R.string.check_netlink_getneigh,
-            R.string.check_proc_sys_net_conf,
             R.string.check_gso_asymmetry,
             R.string.check_ipv6_link_local_bruteforce,
             R.string.check_uid_route_rules_leak,
@@ -363,7 +355,6 @@ internal suspend fun runAllChecks(
                 skipOrRun(R.string.check_proc_dev) { checkProcNetDev() },
                 skipOrRun(R.string.check_proc_fib_trie) { checkProcNetFibTrie() },
                 skipOrRun(R.string.check_bpf_iface_map) { checkBpfIfaceMap() },
-                skipOrRun(R.string.check_sys_class_net) { checkSysClassNet() },
                 skipOrRunFn(R.string.check_net_iface_enum) { checkNetworkInterfaceEnum(it) },
                 skipOrRunFn(R.string.check_proc_route_java) { checkProcNetRouteJava(it) },
                 skipOrRun(R.string.check_getsockopt_bind) { checkGetsockoptBind() },
@@ -373,7 +364,6 @@ internal suspend fun runAllChecks(
                 skipOrRun(R.string.check_tcp_mss) { checkTcpMss() },
                 skipOrRun(R.string.check_udp_pmtu) { checkUdpPmtu() },
                 skipOrRun(R.string.check_netlink_getneigh) { checkNetlinkGetneigh() },
-                skipOrRun(R.string.check_proc_sys_net_conf) { checkProcSysNetConf() },
                 skipOrRun(R.string.check_gso_asymmetry) { checkGsoAsymmetry() },
                 skipOrRun(R.string.check_ipv6_link_local_bruteforce) { checkIpv6LinkLocalBruteforce() },
                 skipOrRun(R.string.check_uid_route_rules_leak) { checkUidRouteRulesLeak() },

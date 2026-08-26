@@ -357,14 +357,12 @@
     <string name="check_proc_dev" translatable="false">/proc/net/dev</string>
     <string name="check_proc_fib_trie" translatable="false">/proc/net/fib_trie</string>
     <string name="check_bpf_iface_map" translatable="false">BPF map netd_iface_index_name_map</string>
-    <string name="check_sys_class_net" translatable="false">/sys/class/net &amp; virtual</string>
     <string name="check_net_iface_enum" translatable="false">NetworkInterface enum</string>
     <string name="check_proc_route_java" translatable="false">/proc/net/route (Java)</string>
     <string name="check_loopback_bind_conflict" translatable="false">bind() loopback conflict</string>
     <string name="check_abstract_unix_sockets" translatable="false">Abstract UNIX socket probe</string>
     <string name="check_traffic_stats" translatable="false">TrafficStats volume anomaly</string>
     <string name="check_system_properties" translatable="false">__system_property_get VPN keys</string>
-    <string name="check_proc_sys_net_conf" translatable="false">/proc/sys/net/... (conf/neigh)</string>
     <string name="check_ioctl_alternative" translatable="false">ioctl alternative queries</string>
     <string name="check_direct_syscall" translatable="false">direct syscall (socket/ioctl)</string>
     <string name="check_traceroute_rtt" translatable="false">traceroute RTT / IP_RECVERR</string>
