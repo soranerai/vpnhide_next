@@ -118,8 +118,9 @@ internal object TargetsCache : AsyncCache<TargetsSnapshot>() {
             dbPopulatedOrUpdated = true
         } else {
             val expectedKmod = listMode == dev.soranerai.vpnhidenext.db.PolicyListMode.BLACKLIST
-            if (selfProto.kmod != expectedKmod) {
-                appDao.insertAppProtection(selfProto.copy(kmod = expectedKmod))
+            val expectedUid = appContext.applicationInfo.uid
+            if (selfProto.kmod != expectedKmod || selfProto.uid != expectedUid) {
+                appDao.insertAppProtection(selfProto.copy(kmod = expectedKmod, uid = expectedUid))
                 dbPopulatedOrUpdated = true
             }
         }
