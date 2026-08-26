@@ -529,8 +529,10 @@ internal fun ProtectionScreen(
 
                     // The manager is deliberately absent from the picker but
                     // remains an explicit record in the policy. Native self
-                    // protection follows the list mode: a blacklist includes
-                    // VPNHide itself, while an allowlist leaves it unselected.
+                    // protection follows the list mode for both native and
+                    // Framework layers: BLACKLIST explicitly includes
+                    // VPNHide, while ALLOWLIST leaves it outside the exception
+                    // list so it remains protected by exclude-mode matching.
                     // The manager is not shown in the picker, so its record
                     // must be upserted here. Do not make this conditional on
                     // a stale/missing DB row: replaceProtectionPolicy() would
@@ -546,6 +548,7 @@ internal fun ProtectionScreen(
                             )).copy(
                             uid = context.applicationInfo.uid,
                             kmod = listMode == PolicyListMode.BLACKLIST,
+                            lsposed = listMode == PolicyListMode.BLACKLIST,
                             kernelHookMask = if (modeResetPending) null else selfExisting?.kernelHookMask,
                             javaHookMask = if (modeResetPending) null else selfExisting?.javaHookMask,
                         )
