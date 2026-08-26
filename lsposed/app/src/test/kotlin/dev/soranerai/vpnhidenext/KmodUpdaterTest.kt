@@ -81,4 +81,10 @@ class KmodUpdaterTest {
         val target = resolveKmodUpdateTarget("v2.2.2", null, "6.1.145+blue-spark")
         assertEquals(KmodUpdateTarget("v2.2.2", "android14-6.1"), target)
     }
+
+    @Test
+    fun `installed older kmod remains eligible for update`() {
+        val target = resolveKmodUpdateTarget("2.5.1", "android14-6.1", "6.1.80-android14-g123")
+        assertEquals(KmodUpdateTarget("2.5.1", "android14-6.1"), target)
+    }
 }

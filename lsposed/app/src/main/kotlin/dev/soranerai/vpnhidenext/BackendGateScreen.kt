@@ -57,11 +57,21 @@ internal fun BackendGateScreen(
                 ?: state.kernelVersion?.let { buildNativeInstallRecommendation(it, "") }
         }
     val allowKmodRepair = state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE
-    val kmodTarget =
-        remember(recommendation, allowKmodRepair) {
-            if (allowKmodRepair) resolveKmodInstallTarget(recommendation?.recommendedGkiVariant) else null
-        }
     val installedNative = state.kmod as? ModuleState.Installed
+    val kmodTarget =
+        remember(state, recommendation, allowKmodRepair) {
+            if (!allowKmodRepair) {
+                null
+            } else if (installedNative?.isKmodType == true) {
+                resolveKmodUpdateTarget(
+                    installedVersion = installedNative.version,
+                    installedKmi = installedNative.gkiVariant ?: state.kmodLoadStatus?.gkiVariant,
+                    unameR = state.kmodLoadStatus?.unameR,
+                )
+            } else {
+                resolveKmodInstallTarget(recommendation?.recommendedGkiVariant)
+            }
+        }
     val bridgeOnlyRepair =
         state.diagnostics.backendKind == BackendKind.BUILT_IN &&
             state.diagnostics.bridge.status != DiagnosticStatus.AVAILABLE
