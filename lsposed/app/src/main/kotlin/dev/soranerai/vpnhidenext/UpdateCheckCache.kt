@@ -27,6 +27,8 @@ import kotlinx.coroutines.withContext
  * cache dies with it and the next launch re-checks as usual.
  */
 internal object UpdateCheckCache {
+    internal enum class Status { NOT_CHECKED, CHECKING, COMPLETE }
+
     /** 6 hours. Arbitrary — roughly matches how often a release cadence
      * is meaningful. Not configurable on purpose; if you want newer,
      * tap Refresh.
@@ -35,6 +37,8 @@ internal object UpdateCheckCache {
 
     private val _info = MutableStateFlow<UpdateInfo?>(null)
     val info: StateFlow<UpdateInfo?> = _info.asStateFlow()
+    private val _status = MutableStateFlow(Status.NOT_CHECKED)
+    val status: StateFlow<Status> = _status.asStateFlow()
 
     // `null` = never checked this session. Timestamps are wall-clock
     // millis; drift doesn't matter — all we need is "was X hours ago".
@@ -51,6 +55,7 @@ internal object UpdateCheckCache {
         val fresh = last != null && System.currentTimeMillis() - last < STALE_MS
         if (fresh || inflight?.isActive == true) return
         val requestGeneration = generation.next()
+        _status.value = Status.CHECKING
         inflight = scope.launch { run(context, currentVersion, requestGeneration) }
     }
 
@@ -61,6 +66,7 @@ internal object UpdateCheckCache {
     ) {
         inflight?.cancel()
         val requestGeneration = generation.next()
+        _status.value = Status.CHECKING
         inflight = scope.launch { run(context, currentVersion, requestGeneration) }
     }
 
@@ -68,12 +74,14 @@ internal object UpdateCheckCache {
         if (enabled) {
             generation.next()
             lastCheckMs = null
+            _status.value = Status.NOT_CHECKED
             return
         }
         generation.next()
         inflight?.cancel()
         _info.value = null
         lastCheckMs = System.currentTimeMillis()
+        _status.value = Status.COMPLETE
     }
 
     private suspend fun run(
@@ -93,5 +101,6 @@ internal object UpdateCheckCache {
         }
         _info.value = result
         lastCheckMs = System.currentTimeMillis()
+        _status.value = Status.COMPLETE
     }
 }

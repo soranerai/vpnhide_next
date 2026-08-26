@@ -93,6 +93,8 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
         var backendState by remember { mutableStateOf<DashboardState?>(null) }
         var gateRefresh by remember { mutableIntStateOf(0) }
         val context = LocalContext.current
+        val appUpdate by UpdateCheckCache.info.collectAsState()
+        val updateCheckComplete by UpdateCheckCache.status.collectAsState()
         LaunchedEffect(Unit) {
             val deContext = if (context.isDeviceProtectedStorage) context else context.createDeviceProtectedStorageContext()
             val hasLegacyDb = deContext.getDatabasePath("vpnhide_database").exists()
@@ -150,6 +152,8 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                     if (dashboard != null && !dashboard.diagnostics.isReady()) {
                         BackendGateScreen(
                             state = dashboard,
+                            appUpdate = appUpdate,
+                            updateCheckComplete = updateCheckComplete == UpdateCheckCache.Status.COMPLETE,
                             scope = rememberCoroutineScope(),
                             context = context,
                             onRefresh = { gateRefresh++ },

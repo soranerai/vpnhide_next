@@ -23,11 +23,16 @@ mkdir -p update-json
 ARTIFACT_DIR="$(mktemp -d)"
 trap 'rm -rf "$ARTIFACT_DIR"' EXIT
 KMOD_KMIS=("android12-5.10" "android13-5.10" "android13-5.15" "android14-5.15" "android14-6.1" "android15-6.6" "android16-6.12")
+FAILED_ARTIFACTS=()
 for kmi in "${KMOD_KMIS[@]}"; do
     ARTIFACT="vpnhide-kmod-${kmi}.zip"
     ZIP_URL="${REPO}/releases/download/v${VERSION}/${ARTIFACT}"
-    curl --fail --location --silent --show-error \
-        "$ZIP_URL" -o "$ARTIFACT_DIR/$ARTIFACT"
+    if ! curl --fail --location --silent --show-error \
+        "$ZIP_URL" -o "$ARTIFACT_DIR/$ARTIFACT"; then
+        echo "  warning: artifact unavailable, keeping existing metadata: $ARTIFACT" >&2
+        FAILED_ARTIFACTS+=("$ARTIFACT")
+        continue
+    fi
     SHA256="$(sha256sum "$ARTIFACT_DIR/$ARTIFACT" | cut -d' ' -f1)"
     cat > "update-json/update-kmod-${kmi}.json" <<EOJSON
 {
@@ -43,11 +48,11 @@ done
 
 BRIDGE_ARTIFACT="vpnhide-bridge.zip"
 BRIDGE_URL="${REPO}/releases/download/v${VERSION}/${BRIDGE_ARTIFACT}"
-curl --fail --location --silent --show-error \
-    "$BRIDGE_URL" -o "$ARTIFACT_DIR/$BRIDGE_ARTIFACT"
-BRIDGE_SHA256="$(sha256sum "$ARTIFACT_DIR/$BRIDGE_ARTIFACT" | cut -d' ' -f1)"
+if curl --fail --location --silent --show-error \
+    "$BRIDGE_URL" -o "$ARTIFACT_DIR/$BRIDGE_ARTIFACT"; then
+    BRIDGE_SHA256="$(sha256sum "$ARTIFACT_DIR/$BRIDGE_ARTIFACT" | cut -d' ' -f1)"
 
-cat > "update-json/update-bridge.json" <<EOJSON
+    cat > "update-json/update-bridge.json" <<EOJSON
 {
   "version": "v${VERSION}",
   "versionCode": ${VERSION_CODE},
@@ -59,5 +64,12 @@ cat > "update-json/update-bridge.json" <<EOJSON
   "changelog": "${RAW}/update-json/changelog.md"
 }
 EOJSON
-echo "  update-json/update-bridge.json"
+    echo "  update-json/update-bridge.json"
+else
+    echo "  warning: artifact unavailable, keeping existing metadata: $BRIDGE_ARTIFACT" >&2
+    FAILED_ARTIFACTS+=("$BRIDGE_ARTIFACT")
+fi
 
+if ((${#FAILED_ARTIFACTS[@]} > 0)); then
+    echo "warning: ${#FAILED_ARTIFACTS[@]} artifact(s) were unavailable; metadata generation continued" >&2
+fi

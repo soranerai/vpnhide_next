@@ -168,6 +168,7 @@ internal fun parseBuiltInUpdateMetadata(
     debugMode: Boolean = false,
     installedBridgeVersion: String? = null,
     forceBridgeRepair: Boolean = false,
+    appVersion: String,
 ): BuiltInUpdateMetadata? {
     val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
     val bridgeVersion = json.optString("version")
@@ -189,6 +190,7 @@ internal fun parseBuiltInUpdateMetadata(
         debugMode,
         installedBridgeVersion,
         forceBridgeRepair,
+        appVersion,
     )
 }
 
@@ -204,6 +206,7 @@ internal fun validateBuiltInUpdateMetadataFields(
     debugMode: Boolean = false,
     installedBridgeVersion: String? = null,
     forceBridgeRepair: Boolean = false,
+    appVersion: String,
 ): BuiltInUpdateMetadata? {
     val versionAllowed =
         forceBridgeRepair ||
@@ -211,6 +214,7 @@ internal fun validateBuiltInUpdateMetadataFields(
             (installedBridgeVersion != null && isNewerVersion(bridgeVersion, installedBridgeVersion)) ||
             (debugMode && baseVersion(kernelVersion) == baseVersion(installedVersion))
     if (!versionAllowed) return null
+    if (!CompatibilityResolver.isBuiltInCompatibleWithApp(appVersion, bridgeVersion, kernelVersion)) return null
     if (bridgeVersionCode < 0 || kernelVersionCode < 0) return null
     if (baseVersion(bridgeVersion) != baseVersion(kernelVersion)) return null
     if (!debugMode && !bridgeSha256.matches(Regex("[0-9a-f]{64}"))) return null
@@ -563,6 +567,7 @@ private fun checkForBuiltInUpdate(target: BuiltInUpdateTarget): BuiltInCheckOutc
                 target.debugMode,
                 target.installedBridgeVersion,
                 target.forceBridgeRepair,
+                BuildConfig.VERSION_NAME,
             )
                 ?: return BuiltInCheckOutcome.None
         val kernelUpdateAvailable =

@@ -76,11 +76,14 @@ fun DashboardScreen(
 
     val state by DashboardCache.state.collectAsState()
     val updateInfo by UpdateCheckCache.info.collectAsState()
+    val updateCheckStatus by UpdateCheckCache.status.collectAsState()
     val kmodUpdateState by KmodUpdateCache.state.collectAsState()
     val builtInUpdateState by BuiltInUpdateCache.state.collectAsState()
     val builtInUpdateDebugEnabled by BuiltInUpdateDebugPrefs.enabled.collectAsState()
+    val nativeUpdatesAllowed = updateCheckStatus == UpdateCheckCache.Status.COMPLETE && updateInfo == null
     val kmodUpdateTarget =
-        remember(state) {
+        remember(state, nativeUpdatesAllowed) {
+            if (!nativeUpdatesAllowed) return@remember null
             val dashboard = state ?: return@remember null
             val installed = dashboard.kmod as? ModuleState.Installed ?: return@remember null
             if (!installed.isKmodType) return@remember null
@@ -91,7 +94,8 @@ fun DashboardScreen(
             )
         }
     val builtInUpdateTarget =
-        remember(state, builtInUpdateDebugEnabled) {
+        remember(state, builtInUpdateDebugEnabled, nativeUpdatesAllowed) {
+            if (!nativeUpdatesAllowed) return@remember null
             val dashboard = state ?: return@remember null
             val installed = dashboard.kmod as? ModuleState.Installed ?: return@remember null
             if (installed.isKmodType) return@remember null
@@ -182,6 +186,7 @@ fun DashboardScreen(
                     s = s,
                     selfNeedsRestart = selfNeedsRestart,
                     updateInfo = updateInfo,
+                    nativeUpdatesAllowed = nativeUpdatesAllowed,
                     kmodUpdateState = kmodUpdateState,
                     builtInUpdateState = builtInUpdateState,
                     scope = scope,
@@ -252,6 +257,7 @@ private fun DashboardContent(
     s: DashboardState,
     selfNeedsRestart: Boolean,
     updateInfo: UpdateInfo?,
+    nativeUpdatesAllowed: Boolean,
     kmodUpdateState: KmodUpdateState,
     builtInUpdateState: BuiltInUpdateState,
     scope: kotlinx.coroutines.CoroutineScope,
@@ -360,11 +366,11 @@ private fun DashboardContent(
             Spacer(Modifier.height(12.dp))
             UpdateAvailableCard(info)
         }
-        if (kmodUpdateState != KmodUpdateState.None) {
+        if (nativeUpdatesAllowed && kmodUpdateState != KmodUpdateState.None) {
             Spacer(Modifier.height(12.dp))
             KmodUpdateCard(kmodUpdateState, scope, context)
         }
-        if (builtInUpdateState != BuiltInUpdateState.None) {
+        if (nativeUpdatesAllowed && builtInUpdateState != BuiltInUpdateState.None) {
             Spacer(Modifier.height(12.dp))
             BuiltInUpdateCard(builtInUpdateState, context)
         }

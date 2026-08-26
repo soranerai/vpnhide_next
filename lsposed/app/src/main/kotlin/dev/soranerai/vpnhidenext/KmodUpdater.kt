@@ -117,6 +117,7 @@ internal fun parseKmodUpdateMetadata(
     raw: String,
     kmi: String,
     installedVersion: String,
+    appVersion: String,
 ): KmodUpdateInfo? {
     if (kmi !in SUPPORTED_KMOD_KMIS) return null
     val json = runCatching { JSONObject(raw) }.getOrNull() ?: return null
@@ -127,6 +128,7 @@ internal fun parseKmodUpdateMetadata(
         sha256 = json.optString("sha256"),
         kmi = kmi,
         installedVersion = installedVersion,
+        appVersion = appVersion,
     )
 }
 
@@ -137,9 +139,11 @@ internal fun validateKmodUpdateFields(
     sha256: String,
     kmi: String,
     installedVersion: String,
+    appVersion: String,
 ): KmodUpdateInfo? {
     if (kmi !in SUPPORTED_KMOD_KMIS || version.isBlank()) return null
     if (!isNewerVersion(version, installedVersion)) return null
+    if (!CompatibilityResolver.isKmodCompatibleWithApp(appVersion, version)) return null
     if (versionCode < 0) return null
     val expectedName = "vpnhide-kmod-$kmi.zip"
     if (!isTrustedKmodDownloadUrl(zipUrl, expectedName)) return null
@@ -239,7 +243,12 @@ private fun checkForKmodUpdate(target: KmodUpdateTarget): KmodUpdateInfo? {
         try {
             if (connection.responseCode != HttpURLConnection.HTTP_OK) return null
             val bytes = connection.inputStream.use { it.readLimited(MAX_METADATA_BYTES) } ?: return null
-            parseKmodUpdateMetadata(bytes.toString(Charsets.UTF_8), target.kmi, target.installedVersion)
+            parseKmodUpdateMetadata(
+                bytes.toString(Charsets.UTF_8),
+                target.kmi,
+                target.installedVersion,
+                BuildConfig.VERSION_NAME,
+            )
         } finally {
             connection.disconnect()
         }

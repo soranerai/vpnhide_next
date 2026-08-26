@@ -15,7 +15,7 @@ class KmodUpdaterTest {
         sha256: String = checksum,
         url: String = "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-kmod-$kmi.zip",
         installedVersion: String = "2.2.2",
-    ): KmodUpdateInfo? = validateKmodUpdateFields("v$version", 20300, url, sha256, kmi, installedVersion)
+    ): KmodUpdateInfo? = validateKmodUpdateFields("v$version", 20300, url, sha256, kmi, installedVersion, version)
 
     @Test
     fun `valid newer metadata is accepted`() {
@@ -86,5 +86,20 @@ class KmodUpdaterTest {
     fun `installed older kmod remains eligible for update`() {
         val target = resolveKmodUpdateTarget("2.5.1", "android14-6.1", "6.1.80-android14-g123")
         assertEquals(KmodUpdateTarget("2.5.1", "android14-6.1"), target)
+    }
+
+    @Test
+    fun `kmod from a newer matrix row is rejected for the current app`() {
+        assertNull(
+            validateKmodUpdateFields(
+                version = "v2.5.2",
+                versionCode = 20502,
+                zipUrl = "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.2/vpnhide-kmod-android14-6.1.zip",
+                sha256 = checksum,
+                kmi = "android14-6.1",
+                installedVersion = "2.5.1",
+                appVersion = "2.5.1",
+            ),
+        )
     }
 }

@@ -1,5 +1,7 @@
 package dev.soranerai.vpnhidenext
 
+import android.content.Intent
+import android.net.Uri
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
@@ -44,6 +46,8 @@ import kotlinx.coroutines.CoroutineScope
 @Composable
 internal fun BackendGateScreen(
     state: DashboardState,
+    appUpdate: UpdateInfo?,
+    updateCheckComplete: Boolean,
     scope: CoroutineScope,
     context: android.content.Context,
     onRefresh: () -> Unit,
@@ -58,9 +62,10 @@ internal fun BackendGateScreen(
         }
     val allowKmodRepair = state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE
     val installedNative = state.kmod as? ModuleState.Installed
+    val nativeUpdatesAllowed = updateCheckComplete && appUpdate == null
     val kmodTarget =
-        remember(state, recommendation, allowKmodRepair) {
-            if (!allowKmodRepair) {
+        remember(state, recommendation, allowKmodRepair, nativeUpdatesAllowed) {
+            if (!allowKmodRepair || !nativeUpdatesAllowed) {
                 null
             } else if (installedNative?.isKmodType == true) {
                 resolveKmodUpdateTarget(
@@ -76,8 +81,11 @@ internal fun BackendGateScreen(
         state.diagnostics.backendKind == BackendKind.BUILT_IN &&
             state.diagnostics.bridge.status != DiagnosticStatus.AVAILABLE
     val builtInTarget =
-        remember(state, recommendation) {
-            if (state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || bridgeOnlyRepair) {
+        remember(state, recommendation, nativeUpdatesAllowed) {
+            if (nativeUpdatesAllowed &&
+                installedNative?.isKmodType != true &&
+                (state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || bridgeOnlyRepair)
+            ) {
                 resolveBuiltInInstallTarget(
                     state.kernelVersion ?: recommendation?.kernelVersion,
                     installedVersion = installedNative?.version ?: "0.0.0",
@@ -93,7 +101,7 @@ internal fun BackendGateScreen(
     LaunchedEffect(builtInTarget) { builtInTarget?.let { BuiltInUpdateCache.ensureFresh(it) } }
 
     val ready = state.diagnostics.isReady()
-    val busy = kmodState.isBusy() || builtInState.isBusy()
+    val busy = kmodState.isBusy() || builtInState.isBusy() || !updateCheckComplete
     val rotation by rememberInfiniteTransition(label = "gate_rotation").animateFloat(
         initialValue = 0f,
         targetValue = 360f,
@@ -157,6 +165,16 @@ internal fun BackendGateScreen(
                         modifier = Modifier.fillMaxWidth().animateContentSize(),
                     ) {
                         Spacer(Modifier.height(18.dp))
+                        appUpdate?.let { info ->
+                            GateActionCard(
+                                title = stringResource(R.string.update_available_title),
+                                subtitle = stringResource(R.string.update_available_subtitle, info.latestVersion),
+                                icon = Icons.Default.SystemUpdate,
+                                onClick = {
+                                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(info.downloadUrl)))
+                                },
+                            )
+                        }
                         val hasRepairChoice = (allowKmodRepair && kmodTarget != null) || builtInTarget != null
                         if (hasRepairChoice) {
                             Text(
@@ -166,7 +184,7 @@ internal fun BackendGateScreen(
                             )
                             Spacer(Modifier.height(10.dp))
                         }
-                        if (allowKmodRepair) {
+                        if (allowKmodRepair && nativeUpdatesAllowed) {
                             when (val s = kmodState) {
                                 is KmodUpdateState.Available -> {
                                     GateActionCard(

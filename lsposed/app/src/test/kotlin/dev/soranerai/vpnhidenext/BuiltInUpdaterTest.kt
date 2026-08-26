@@ -143,6 +143,7 @@ class BuiltInUpdaterTest {
             kernelReleasesApi =
                 "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
             installedVersion = installedVersion,
+            appVersion = "2.3.0",
         )
         val validMetadata = metadata()
         assertEquals("v2.3.0", validMetadata?.kernelVersion)
@@ -165,9 +166,30 @@ class BuiltInUpdaterTest {
                     "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
                 installedVersion = "2.4.0",
                 installedBridgeVersion = "2.3.0",
+                appVersion = "2.4.0",
             )
 
         assertEquals("2.4.0", metadata?.bridgeVersion)
+    }
+
+    @Test
+    fun `built-in metadata from a newer matrix row is rejected for the current app`() {
+        val metadata =
+            validateBuiltInUpdateMetadataFields(
+                bridgeVersion = "2.5.2",
+                bridgeVersionCode = 20502,
+                bridgeZipUrl =
+                    "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.2/vpnhide-bridge.zip",
+                bridgeSha256 = "a".repeat(64),
+                kernelVersion = "2.5.2",
+                kernelVersionCode = 20502,
+                kernelReleasesApi =
+                    "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
+                installedVersion = "2.5.1",
+                appVersion = "2.5.1",
+            )
+
+        assertTrue(metadata == null)
     }
 
     @Test
@@ -185,6 +207,7 @@ class BuiltInUpdaterTest {
                     "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
                 installedVersion = "2.3.0",
                 debugMode = true,
+                appVersion = "2.3.0",
             )
         assertEquals("v2.3.0", metadata?.kernelVersion)
     }

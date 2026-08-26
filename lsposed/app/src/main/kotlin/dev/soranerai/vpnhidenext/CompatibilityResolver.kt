@@ -51,4 +51,19 @@ internal object CompatibilityResolver {
 
     fun expectedForApp(appVersion: String): CompatibleRelease? =
         compatibilityMatrix.firstOrNull { baseVersion(it.lsposed) == baseVersion(appVersion) }
+
+    fun isKmodCompatibleWithApp(
+        appVersion: String,
+        kmodVersion: String,
+    ): Boolean = expectedForApp(appVersion)?.let { baseVersion(it.kmod) == baseVersion(kmodVersion) } == true
+
+    fun isBuiltInCompatibleWithApp(
+        appVersion: String,
+        bridgeVersion: String,
+        builtInVersion: String,
+    ): Boolean =
+        expectedForApp(appVersion)?.let {
+            baseVersion(it.bridge) == baseVersion(bridgeVersion) &&
+                baseVersion(it.builtIn) == baseVersion(builtInVersion)
+        } == true
 }
