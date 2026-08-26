@@ -1,6 +1,37 @@
 {
   "history": [
     {
+      "version": "2.5.2",
+      "sections": [
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Refactor target exchange policy and state synchronization",
+              "ru": "Рефакторинг политики обмена целями и синхронизации состояния"
+            },
+            {
+              "en": "Replace sysfs hooks with SuSFS (SuSFS is now required for filesystem trace hiding)",
+              "ru": "Хуки sysfs заменены на SuSFS (теперь для сокрытия следов из файловой системы требуется SuSFS)"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Centralize intercept statistics loading to prevent duplicate screen refreshes",
+              "ru": "Централизована загрузка статистики перехватов, чтобы экраны не запускали дублирующие обновления"
+            },
+            {
+              "en": "Reapply the current policy after an installed app is updated, even when its UID is unchanged.",
+              "ru": "Повторно применена текущая политика после обновления установленного приложения, даже если его UID не изменился."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.5.1",
       "sections": [
         {
