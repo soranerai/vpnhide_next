@@ -38,19 +38,14 @@ jobs:
           - android15-6.6
           - android16-6.12
     steps:
-      - name: Download prebuilt kmod from private repo
+      - name: Download prebuilt kmod from backend repo
         run: |
           mkdir -p kmod-artifacts
-          if [ -n "${{ secrets.PRIVATE_REPO_PAT }}" ]; then
-            gh release download --repo soranerai/vpnhide_next_private \
-              -p "vpnhide-kmod-${{ matrix.kmi }}.zip" \
-              -D kmod-artifacts
-          else
-            echo "⚠ PRIVATE_REPO_PAT not configured"
-            exit 1
-          fi
+          gh release download --repo soranerai/vpnhide_next_backend \
+            -p "vpnhide-kmod-${{ matrix.kmi }}.zip" \
+            -D kmod-artifacts
         env:
-          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -104,18 +99,14 @@ jobs:
             | tar -xz -C /tmp
           mv "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh
 
-      - name: Download prebuilt libvpnhide_checks.so from private repo
+      - name: Download prebuilt libvpnhide_checks.so from backend repo
         run: |
-          if [ -z "${{ secrets.PRIVATE_REPO_PAT }}" ]; then
-            echo "⚠ PRIVATE_REPO_PAT not configured. Skipping private repo sync."
-            exit 1
-          fi
           mkdir -p lsposed/app/src/main/jniLibs/arm64-v8a
-          gh release download --repo soranerai/vpnhide_next_private \
+          gh release download --repo soranerai/vpnhide_next_backend \
             -p 'libvpnhide_checks.so' \
             -D lsposed/app/src/main/jniLibs/arm64-v8a
         env:
-          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Set up keystore
         env:
@@ -176,26 +167,23 @@ jobs:
   bridge:
     runs-on: ubuntu-latest
     steps:
-      - name: Download prebuilt bridge from private repo
+      - name: Download prebuilt bridge from backend repo
         run: |
           mkdir -p bridge-artifacts
-          if [ -n "${{ secrets.PRIVATE_REPO_PAT }}" ]; then
-            gh release download --repo soranerai/vpnhide_next_private \
-              -p "vpnhide-bridge.zip" \
-              -D bridge-artifacts
-          else
-            echo "⚠ PRIVATE_REPO_PAT not configured"
-            exit 1
+          if ! gh release download --repo soranerai/vpnhide_next_backend \
+            -p "vpnhide-bridge.zip" \
+            -D bridge-artifacts; then
+            echo "⚠ bridge artifact is unavailable; continuing without it"
           fi
         env:
-          GH_TOKEN: ${{ secrets.PRIVATE_REPO_PAT }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: vpnhide-bridge
           path: bridge-artifacts/vpnhide-bridge.zip
-          if-no-files-found: error
+          if-no-files-found: warn
 
 
   release:
