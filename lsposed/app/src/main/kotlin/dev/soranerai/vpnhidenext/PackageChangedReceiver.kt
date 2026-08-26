@@ -3,6 +3,7 @@ package dev.soranerai.vpnhidenext
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import dev.soranerai.vpnhidenext.db.AppDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -26,7 +27,14 @@ internal class PackageChangedReceiver : BroadcastReceiver() {
         val receiverScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
         receiverScope.launch {
             try {
-                TargetsCache.reload(context.applicationContext)
+                val appContext = context.applicationContext
+                try {
+                    TargetsCache.reload(appContext)
+                } finally {
+                    if (intent.action == Intent.ACTION_PACKAGE_REPLACED) {
+                        AppDatabase.getInstance(appContext).resavePolicy()
+                    }
+                }
             } finally {
                 pendingResult.finish()
                 receiverScope.cancel()

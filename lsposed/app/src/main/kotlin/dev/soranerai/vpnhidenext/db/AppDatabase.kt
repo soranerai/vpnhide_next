@@ -261,6 +261,19 @@ internal class AppDatabase private constructor(
         saveConfigInternal()
     }
 
+    /**
+     * Atomically republishes the current policy even when its declarative
+     * contents did not change. Package replacement normally preserves the
+     * UID, but the backend still needs a fresh policy event so it can resolve
+     * the replaced package again.
+     */
+    suspend fun resavePolicy() =
+        withContext(Dispatchers.IO) {
+            synchronized(lock) {
+                saveConfigInternal()
+            }
+        }
+
     suspend fun <R> withTransaction(block: suspend () -> R): R =
         withContext(Dispatchers.IO) {
             synchronized(transactionLock) {
