@@ -499,7 +499,9 @@
     <string name="hook_desc_sys_getsockname_ipv6">Подменяет getsockname для IPv6 сокетов, маскируя локальный IP-адрес интерфейса VPN адресом прикрытия.</string>
     <string name="hook_desc_sys_bind">Перехватывает bind() на loopback: перенаправляет порты на случайные свободные порты (0) для обхода проверок занятости.</string>
     <string name="hook_desc_bpf_stats_spoof">Перехватывает BPF-запросы через sys_bpf, возвращая нулевые счетчики трафика на BPF-картах (iface_stats, tether_stats, stats_map_) для VPN-интерфейсов и целевых UID.</string>
-    <string name="hook_desc_enoent_file_hiding">Блокирует доступ, скрывает и фильтрует пути, связанные с VPN, в /sys/class/net, /proc/net и /proc/sys/net (возвращает ENOENT или удаляет из списков файлов).</string>
+    <string name="hook_desc_susfs_path_hiding">Поручает демону регистрировать активные пути VPN в SUSFS командой add_sus_path. Правила действуют глобально для поддерживаемых процессов приложений и обновляются при пересоздании интерфейсов.</string>
+    <string name="hook_desc_dev_seq_show">Скрывает строки VPN-интерфейсов из /proc/net/dev в ядре.</string>
+    <string name="hook_desc_if6_seq_show">Скрывает строки VPN-интерфейсов из /proc/net/if_inet6 в ядре.</string>
     <string name="hook_desc_udp_sendmsg">Эмулирует ограничения очереди физической сети (EAGAIN) и временные задержки на неблокирующих UDP-сокетах для сокрытия скоростей виртуального интерфейса TUN.</string>
     <string name="hook_desc_fib_trie_seq_show">Фильтрует упоминания VPN-интерфейсов в выводе /proc/net/fib_trie (дерево FIB).</string>
     <string name="hook_desc_tc_fill_qdisc">Фильтрует записи о дисциплинах очереди (qdisc) VPN-интерфейсов из ответов netlink RTM_GETQDISC.</string>
@@ -524,7 +526,12 @@
     <string name="hook_name_sys_getsockname_ipv6">Локальный адрес IPv6 (getsockname)</string>
     <string name="hook_name_sys_bind">Привязка портов loopback (bind)</string>
     <string name="hook_name_bpf_stats_spoof">Статистика трафика (BPF)</string>
-    <string name="hook_name_enoent_file_hiding">Сокрытие файлов (ENOENT) + dev/if6 seq</string>
+    <string name="hook_name_susfs_path_hiding">Сокрытие путей VPN через SUSFS (демон)</string>
+    <string name="hook_name_dev_seq_show">Статистика интерфейсов (/proc/net/dev)</string>
+    <string name="hook_name_if6_seq_show">Список IPv6-интерфейсов (/proc/net/if_inet6)</string>
+    <string name="hook_symbol_susfs_path_hiding" translatable="false">ksu_susfs add_sus_path (демон)</string>
+    <string name="hook_symbol_dev_seq_show" translatable="false">dev_seq_show</string>
+    <string name="hook_symbol_if6_seq_show" translatable="false">if6_seq_show</string>
     <string name="hook_name_udp_sendmsg">Скорость UDP-очереди (udp_sendmsg)</string>
     <string name="hook_name_inet6_bind_ll">Привязка IPv6 link-local (inet6_bind)</string>
     <string name="hook_name_udpv6_sendmsg_ll">Отправка IPv6 link-local (udpv6_sendmsg)</string>
