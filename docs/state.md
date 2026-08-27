@@ -19,10 +19,11 @@ are the root-side readers.
 The file contains `globalConfig`, `apps`, `portRules`, `massPortRules`, and
 `ifacePrefixes`. `globalConfig.listMode` is `BLACKLIST` by default for
 backward compatibility. `globalConfig.useNoMountForFileHiding` defaults to
-`false`, selecting SUSFS; when `true`, a compatible root backend uses NoMount
-to hide VPN-related filesystem traces. An app entry is declarative: its
-package, user, UID hint, and per-layer selections are passed to the backend.
-The backend queries Package Manager and computes effective UID snapshots.
+`false`, selecting SUSFS; when `true`, the root daemon uses an installed
+NoMount module to hide VPN-related filesystem traces. An app entry is
+declarative: its package, user, UID hint, and per-layer selections are passed
+to the backend. The backend queries Package Manager and computes effective UID
+snapshots.
 
 The frontend must never compute the allowlist complement, write UID target
 files, or truncate the effective target set. The backend protects system and

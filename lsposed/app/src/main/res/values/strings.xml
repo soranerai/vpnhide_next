@@ -426,7 +426,7 @@
     <string name="settings_toggle_target_refresh_title">Background target refresh</string>
     <string name="settings_toggle_target_refresh_desc">Periodically checks installed apps, updates UIDs, and synchronizes the current policy with the kernel and LSPosed.</string>
     <string name="settings_toggle_use_nomount_file_hiding_title">Use NoMount for filesystem hiding</string>
-    <string name="settings_toggle_use_nomount_file_hiding_desc">Uses NoMount instead of SUSFS to hide VPN-related filesystem traces. Requires a backend release that supports NoMount.</string>
+    <string name="settings_toggle_use_nomount_file_hiding_desc">Uses NoMount instead of SUSFS to hide VPN-related filesystem traces. NoMount must be installed and active.</string>
     <string name="settings_battery_optimization_title">Disable battery optimization</string>
     <string name="settings_battery_optimization_desc">Some OEM firmware (MIUI, EMUI, ColorOS, One UI) delays or kills background checks unless the app is exempt — needed for the checks below to actually run reliably.</string>
     <string name="settings_toggle_self_test_vpn_title">Auto-test without VPN</string>
