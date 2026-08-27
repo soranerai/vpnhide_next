@@ -375,6 +375,8 @@
     <string name="settings_toggle_health_check_desc">Уведомляет, если модуль ядра или хуки LSPosed не поднялись после перезагрузки, чтобы тихий отказ не остался незамеченным.</string>
     <string name="settings_toggle_target_refresh_title">Фоновая актуализация целей</string>
     <string name="settings_toggle_target_refresh_desc">Периодически проверяет установленные приложения, обновляет UID и синхронизирует актуальную политику с ядром и LSPosed.</string>
+    <string name="settings_toggle_use_nomount_file_hiding_title">Использовать NoMount для сокрытия файловых признаков</string>
+    <string name="settings_toggle_use_nomount_file_hiding_desc">Использует NoMount вместо SUSFS для сокрытия файловых признаков VPN. Требуется версия backend с поддержкой NoMount.</string>
     <string name="settings_battery_optimization_title">Отключить оптимизацию батареи</string>
     <string name="settings_battery_optimization_desc">Некоторые прошивки (MIUI, EMUI, ColorOS, One UI) откладывают или убивают фоновые проверки, если приложение не в исключениях — это нужно, чтобы проверки ниже действительно работали.</string>
     <string name="settings_toggle_self_test_vpn_title">Автотест без VPN</string>

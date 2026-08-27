@@ -94,6 +94,7 @@ internal object SettingsBackupHelper {
             globalObj.put("listMode", config.listMode.name)
             globalObj.put("kernelHookMask", config.kernelHookMask)
             globalObj.put("javaHookMask", config.javaHookMask)
+            globalObj.put("useNoMountForFileHiding", config.useNoMountForFileHiding)
             json.put("global_config", globalObj)
 
             json.toString(4) // Format with 4 spaces indent
@@ -121,6 +122,7 @@ internal object SettingsBackupHelper {
                     if (globalObj != null) {
                         val kernelMask = globalObj.optLong("kernelHookMask", 0xFFFFFFFFL)
                         val javaMask = globalObj.optLong("javaHookMask", 0xFFFFFFFFL)
+                        val useNoMountForFileHiding = globalObj.optBoolean("useNoMountForFileHiding", false)
                         val listMode =
                             runCatching {
                                 PolicyListMode.valueOf(globalObj.optString("listMode", PolicyListMode.BLACKLIST.name))
@@ -130,6 +132,7 @@ internal object SettingsBackupHelper {
                                 listMode = listMode,
                                 kernelHookMask = kernelMask,
                                 javaHookMask = javaMask,
+                                useNoMountForFileHiding = useNoMountForFileHiding,
                             ),
                         )
                     } else {
