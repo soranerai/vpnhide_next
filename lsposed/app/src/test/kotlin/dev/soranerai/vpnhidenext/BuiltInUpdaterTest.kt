@@ -173,6 +173,28 @@ class BuiltInUpdaterTest {
     }
 
     @Test
+    fun `accepts a newer bridge paired with a compatible unchanged built-in kernel`() {
+        val metadata =
+            validateBuiltInUpdateMetadataFields(
+                bridgeVersion = "2.5.4",
+                bridgeVersionCode = 20504,
+                bridgeZipUrl =
+                    "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.4/vpnhide-bridge.zip",
+                bridgeSha256 = "a".repeat(64),
+                kernelVersion = "2.5.3",
+                kernelVersionCode = 20503,
+                kernelReleasesApi =
+                    "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
+                installedVersion = "2.5.3",
+                installedBridgeVersion = "2.5.3",
+                appVersion = "2.5.4",
+            )
+
+        assertEquals("2.5.4", metadata?.bridgeVersion)
+        assertEquals("2.5.3", metadata?.kernelVersion)
+    }
+
+    @Test
     fun `built-in metadata from a newer matrix row is rejected for the current app`() {
         val metadata =
             validateBuiltInUpdateMetadataFields(

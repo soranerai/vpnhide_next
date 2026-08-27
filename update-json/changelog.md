@@ -1,3 +1,11 @@
+## v2.5.4
+
+### Added
+- Added a setting to select NoMount instead of SUSFS for VPN filesystem hiding.
+
+### Changed
+- Bridge updates can now be installed without updating a compatible built-in kernel.
+
 ## v2.5.3
 
 ## v2.5.2
@@ -39,12 +47,3 @@
 ### Fixed
 - Show built-in bridge updates independently when the embedded kernel is already current
 - Avoid exposing incomplete mobile LinkProperties during network handover by reusing the last complete snapshot for the same interface.
-
-## v2.4.0
-
-### Added
-- Add six-hour interception statistics with a dedicated per-app port history screen
-- The app can now download, verify, back up, and install paired VPNHide bridge and built-in kernel updates, with Normal/Bypass image selection and reboot controls.
-
-### Changed
-- System apps can now be selected as protection targets with safe allowlist defaults, clear automatic-selection labels, manual exception counts, an always-visible expressive name/package/UID search bar with embedded actions, compact locked-UID guidance, and a cooler green/blue theme.

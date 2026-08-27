@@ -216,7 +216,6 @@ internal fun validateBuiltInUpdateMetadataFields(
     if (!versionAllowed) return null
     if (!CompatibilityResolver.isBuiltInCompatibleWithApp(appVersion, bridgeVersion, kernelVersion)) return null
     if (bridgeVersionCode < 0 || kernelVersionCode < 0) return null
-    if (baseVersion(bridgeVersion) != baseVersion(kernelVersion)) return null
     if (!debugMode && !bridgeSha256.matches(Regex("[0-9a-f]{64}"))) return null
     if (!isTrustedBridgeUrl(bridgeZipUrl)) return null
     if (kernelReleasesApi != TRUSTED_KERNEL_RELEASES_API) return null

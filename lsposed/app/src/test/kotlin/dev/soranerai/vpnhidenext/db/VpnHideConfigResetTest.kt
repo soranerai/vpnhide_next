@@ -18,6 +18,7 @@ class VpnHideConfigResetTest {
                         javaHookMask = 2L,
                         debugLogging = 1,
                         updateCheckEnabled = false,
+                        useNoMountForFileHiding = true,
                     ),
                 apps =
                     mapOf(
@@ -62,6 +63,7 @@ class VpnHideConfigResetTest {
         assertEquals(listOf("tun", "wg"), reset.ifacePrefixes)
         assertEquals(1, reset.globalConfig.debugLogging)
         assertEquals(false, reset.globalConfig.updateCheckEnabled)
+        assertEquals(true, reset.globalConfig.useNoMountForFileHiding)
     }
 
     @Test

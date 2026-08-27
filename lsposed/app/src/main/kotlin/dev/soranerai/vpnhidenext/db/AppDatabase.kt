@@ -945,6 +945,7 @@ private fun DbGlobalConfig.toJson(): JSONObject =
         put("healthCheckEnabled", healthCheckEnabled)
         put("targetRefreshEnabled", targetRefreshEnabled)
         put("selfTestVpnEnabled", selfTestVpnEnabled)
+        put("useNoMountForFileHiding", useNoMountForFileHiding)
     }
 
 private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
@@ -961,4 +962,5 @@ private fun JSONObject.toDbGlobalConfig(): DbGlobalConfig =
         healthCheckEnabled = optBoolean("healthCheckEnabled", true),
         targetRefreshEnabled = optBoolean("targetRefreshEnabled", true),
         selfTestVpnEnabled = optBoolean("selfTestVpnEnabled", true),
+        useNoMountForFileHiding = optBoolean("useNoMountForFileHiding", false),
     )

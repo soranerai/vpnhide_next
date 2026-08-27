@@ -91,6 +91,7 @@ fun SettingsScreen(
     var healthCheckEnabled by remember { mutableStateOf(true) }
     var targetRefreshEnabled by remember { mutableStateOf(true) }
     var selfTestVpnEnabled by remember { mutableStateOf(true) }
+    var useNoMountForFileHiding by remember { mutableStateOf(false) }
     BuiltInUpdateDebugPrefs.initialize(context)
     val builtInDebugUnlocked by BuiltInUpdateDebugPrefs.unlocked.collectAsState()
     val builtInDebugEnabled by BuiltInUpdateDebugPrefs.enabled.collectAsState()
@@ -107,6 +108,7 @@ fun SettingsScreen(
             healthCheckEnabled = getHealthCheckEnabled(context)
             targetRefreshEnabled = getTargetRefreshEnabled(context)
             selfTestVpnEnabled = getSelfTestVpnEnabled(context)
+            useNoMountForFileHiding = getUseNoMountForFileHiding(context)
         }
         batteryOptimizationIgnored = isIgnoringBatteryOptimizations(context)
     }
@@ -329,6 +331,27 @@ fun SettingsScreen(
                                             Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
                                         }
                                     }
+                            }
+                        },
+                    )
+                    SettingsRowDivider()
+                    SettingsSwitchRow(
+                        title = stringResource(R.string.settings_toggle_use_nomount_file_hiding_title),
+                        subtitle = stringResource(R.string.settings_toggle_use_nomount_file_hiding_desc),
+                        checked = useNoMountForFileHiding,
+                        icon = Icons.Default.VisibilityOff,
+                        iconTint = TelOrange,
+                        onCheckedChange = { newValue ->
+                            val previous = useNoMountForFileHiding
+                            useNoMountForFileHiding = newValue
+                            scope.launch(Dispatchers.IO) {
+                                val success = setUseNoMountForFileHiding(context, newValue)
+                                if (!success) {
+                                    withContext(Dispatchers.Main) {
+                                        useNoMountForFileHiding = previous
+                                        Toast.makeText(context, R.string.settings_save_failed, Toast.LENGTH_LONG).show()
+                                    }
+                                }
                             }
                         },
                     )
