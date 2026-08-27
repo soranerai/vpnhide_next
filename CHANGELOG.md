@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.5.4
+
+### Added
+- Added a setting to select NoMount instead of SUSFS for VPN filesystem hiding.
+
+### Changed
+- Bridge updates can now be installed without updating a compatible built-in kernel.
+
 ## v2.5.3
 
 ## v2.5.2
