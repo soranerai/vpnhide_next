@@ -8,6 +8,8 @@ tooling that follows the AGENTS-convention picks it up automatically.
 
 ## Project layout
 
+- This is the public `vpnhide_next` repository. Its private companion repository,
+  which contains the native implementation, is `vpnhide_next_private/vpnhide_next_backend`.
 - `lsposed/` — LSPosed module + Compose target-picker app
 
 ## Read before touching code
@@ -37,8 +39,9 @@ Single-command builds for both CI and local — the same scripts run in both pla
 
 - **lsposed APK**: `cd lsposed && ./gradlew :app:assembleRelease`.
 
-The private native repository builds the Rust cdylib with the 16 KiB-page
-alignment required by modern Android devices. The public repo consumes the
-resulting prebuilt `.so` from CI; do not add a public native source copy.
+The private `vpnhide_next_private/vpnhide_next_backend` repository builds the Rust cdylib with the
+16 KiB-page alignment required by modern Android devices. This public repo
+consumes the resulting prebuilt `.so` from CI; do not add a public native
+source copy.
 
 ## Design notes
