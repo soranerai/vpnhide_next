@@ -235,6 +235,7 @@
     <string name="gate_recheck">Check again</string>
     <string name="gate_retry">Retry component discovery</string>
     <string name="gate_retry_download">Retry download</string>
+    <string name="gate_enter_anyway">Enter interface anyway</string>
     <string name="dashboard_issue_reboot">LSPosed is configured correctly, but its hooks are not active yet. Reboot the device to activate them.</string>
     <string name="dashboard_issue_lsposed_config_unreadable">Failed to read LSPosed/Vector configuration. Reopen LSPosed/Vector, verify that VPNHide Next is enabled there, and then reopen VPNHide Next.</string>
     <string name="dashboard_issue_lsposed_not_enabled">VPNHide Next is present in LSPosed/Vector, but the module is disabled. Enable VPNHide Next in LSPosed/Vector and keep System Framework in its scope.</string>

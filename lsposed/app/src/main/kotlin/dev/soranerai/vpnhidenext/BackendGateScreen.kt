@@ -51,6 +51,7 @@ internal fun BackendGateScreen(
     scope: CoroutineScope,
     context: android.content.Context,
     onRefresh: () -> Unit,
+    onEnterAnyway: () -> Unit,
 ) {
     val kmodState by KmodUpdateCache.state.collectAsState()
     val builtInState by BuiltInUpdateCache.state.collectAsState()
@@ -271,6 +272,15 @@ internal fun BackendGateScreen(
                         ) {
                             OutlinedButton(onClick = onRefresh) {
                                 Text(stringResource(R.string.gate_retry))
+                            }
+                        }
+                        if (requiredComponent != null) {
+                            Spacer(Modifier.height(8.dp))
+                            OutlinedButton(
+                                onClick = onEnterAnyway,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
+                                Text(stringResource(R.string.gate_enter_anyway))
                             }
                         }
                     }

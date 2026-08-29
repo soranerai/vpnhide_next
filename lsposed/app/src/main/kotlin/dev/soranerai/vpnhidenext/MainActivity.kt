@@ -25,6 +25,7 @@ import androidx.compose.material.icons.automirrored.filled.PlaylistAddCheck
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -92,6 +93,9 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
         var rootState by remember { mutableStateOf<RootState?>(null) }
         var backendState by remember { mutableStateOf<DashboardState?>(null) }
         var gateRefresh by remember { mutableIntStateOf(0) }
+        // This is deliberately not persisted in preferences: a normal new
+        // app launch restores the gate after a version-only diagnostic failure.
+        var versionGateBypassed by rememberSaveable { mutableStateOf(false) }
         val context = LocalContext.current
         val appUpdate by UpdateCheckCache.info.collectAsState()
         val updateCheckComplete by UpdateCheckCache.status.collectAsState()
@@ -149,7 +153,7 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                 val dashboard = backendState
                 Box(Modifier.fillMaxSize()) {
                     MainScreen(startup = (rootState as RootState.Granted).startup, onReady = onReady)
-                    if (dashboard != null && !dashboard.diagnostics.isReady()) {
+                    if (dashboard != null && !dashboard.diagnostics.isReady() && !versionGateBypassed) {
                         BackendGateScreen(
                             state = dashboard,
                             appUpdate = appUpdate,
@@ -157,6 +161,7 @@ fun VpnHideApp(onReady: () -> Unit = {}) {
                             scope = rememberCoroutineScope(),
                             context = context,
                             onRefresh = { gateRefresh++ },
+                            onEnterAnyway = { versionGateBypassed = true },
                         )
                     }
                 }
