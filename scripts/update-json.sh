@@ -92,7 +92,7 @@ echo "Generating update-json: kmod=${KMOD_VERSION:-unchanged} bridge=${BRIDGE_VE
 mkdir -p update-json
 ARTIFACT_DIR="$(mktemp -d)"
 trap 'rm -rf "$ARTIFACT_DIR"' EXIT
-KMOD_KMIS=("android12-5.10" "android13-5.10" "android13-5.15" "android14-5.15" "android14-6.1" "android15-6.6" "android16-6.12")
+KMOD_KMIS=("android12-5.10" "android13-5.10" "android13-5.15" "android14-5.15" "android14-6.1" "android15-6.6" "android16-6.12" "android17-6.18")
 FAILED_ARTIFACTS=()
 if [[ -n "$KMOD_VERSION" ]]; then
     KMOD_VERSION_CODE="$(version_code "$KMOD_VERSION")"

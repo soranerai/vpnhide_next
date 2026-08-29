@@ -36,6 +36,7 @@ internal val SUPPORTED_KMOD_KMIS =
         "android14-6.1",
         "android15-6.6",
         "android16-6.12",
+        "android17-6.18",
     )
 
 internal data class KmodUpdateTarget(
