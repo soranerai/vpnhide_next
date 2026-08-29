@@ -32,6 +32,80 @@ class NormalizeVersionTest {
     }
 }
 
+class AppUpdateReleaseTest {
+    private fun asset(
+        name: String,
+        url: String,
+    ) = GithubReleaseAsset(name, url)
+
+    private fun select(
+        tag: String = "v2.5.4",
+        currentVersion: String = "2.5.0",
+        isDraft: Boolean = false,
+        isPrerelease: Boolean = false,
+        assets: List<GithubReleaseAsset>,
+    ): UpdateInfo? = selectAppUpdateAsset(tag, currentVersion, isDraft, isPrerelease, assets)
+
+    @Test
+    fun `selects only the canonical APK asset for its release tag`() {
+        val url = "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.4/vpnhide.apk"
+        val update =
+            select(
+                assets =
+                    listOf(
+                        asset("debug.apk", "https://example.test/debug.apk"),
+                        asset(APP_RELEASE_ASSET_NAME, url),
+                    ),
+            )
+
+        assertEquals(UpdateInfo("2.5.4", url), update)
+    }
+
+    @Test
+    fun `rejects APK assets from another repository or tag`() {
+        val otherRepo =
+            asset(
+                APP_RELEASE_ASSET_NAME,
+                "https://github.com/attacker/vpnhide_next/releases/download/v2.5.4/vpnhide.apk",
+            )
+        val wrongTag =
+            asset(
+                APP_RELEASE_ASSET_NAME,
+                "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.3/vpnhide.apk",
+            )
+        assertNull(select(assets = listOf(otherRepo)))
+        assertNull(select(assets = listOf(wrongTag)))
+    }
+
+    @Test
+    fun `rejects lookalike APK names and URL decorations`() {
+        val wrongName =
+            asset(
+                "vpnhide-debug.apk",
+                "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.4/vpnhide-debug.apk",
+            )
+        val query =
+            asset(
+                APP_RELEASE_ASSET_NAME,
+                "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.4/vpnhide.apk?source=api",
+            )
+        assertNull(select(assets = listOf(wrongName)))
+        assertNull(select(assets = listOf(query)))
+    }
+
+    @Test
+    fun `does not offer drafts prereleases or non-newer releases`() {
+        val apk =
+            asset(
+                APP_RELEASE_ASSET_NAME,
+                "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.4/vpnhide.apk",
+            )
+        assertNull(select(currentVersion = "2.5.4", assets = listOf(apk)))
+        assertNull(select(tag = "v2.5.5", isPrerelease = true, assets = listOf(apk)))
+        assertNull(select(tag = "v2.5.5", isDraft = true, assets = listOf(apk)))
+    }
+}
+
 class CompatibilityResolverTest {
     @Test
     fun `accepts a known compatible component set`() {
@@ -88,6 +162,32 @@ class CompatibilityResolverTest {
                     bridge = null,
                     builtIn = null,
                     kmod = "2.2.0",
+                ),
+            ),
+        )
+    }
+
+    @Test
+    fun `accepts every compatible matrix row for an independently released component`() {
+        assertTrue(CompatibilityResolver.isKmodCompatibleWithApp("2.5.3", "2.5.3"))
+        assertTrue(CompatibilityResolver.isBuiltInCompatibleWithApp("2.5.3", "2.5.3", "2.5.3"))
+    }
+
+    @Test
+    fun `does not combine bridge and built-in values from separate matrix rows`() {
+        assertFalse(CompatibilityResolver.isBuiltInCompatibleWithApp("2.5.3", "2.5.3", "2.5.1"))
+    }
+
+    @Test
+    fun `requires matrix selected kmod when a new APK leaves an old kmod available`() {
+        assertEquals(
+            CompatibilityResult.Requires("kmod", "2.5.3"),
+            CompatibilityResolver.resolve(
+                InstalledComponentVersions(
+                    lsposed = "2.5.4",
+                    bridge = null,
+                    builtIn = null,
+                    kmod = "2.5.0",
                 ),
             ),
         )

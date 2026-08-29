@@ -60,8 +60,24 @@ internal fun BackendGateScreen(
             state.nativeInstallRecommendation
                 ?: state.kernelVersion?.let { buildNativeInstallRecommendation(it, "") }
         }
-    val allowKmodRepair = state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE
     val installedNative = state.kmod as? ModuleState.Installed
+    val compatibility =
+        remember(state) {
+            installedNative?.let { installed ->
+                val builtInMode = !installed.isKmodType
+                CompatibilityResolver.resolve(
+                    InstalledComponentVersions(
+                        lsposed = BuildConfig.VERSION_NAME,
+                        bridge = installed.bridgeVersion.takeIf { builtInMode },
+                        builtIn = state.kmodLoadStatus?.runtimeVersion.takeIf { builtInMode },
+                        kmod = installed.version.takeIf { !builtInMode },
+                    ),
+                )
+            }
+        }
+    val requiredComponent = (compatibility as? CompatibilityResult.Requires)?.component
+    val allowKmodRepair =
+        state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || requiredComponent == "kmod"
     val nativeUpdatesAllowed = updateCheckComplete && appUpdate == null
     val kmodTarget =
         remember(state, recommendation, allowKmodRepair, nativeUpdatesAllowed) {
@@ -79,12 +95,15 @@ internal fun BackendGateScreen(
         }
     val bridgeOnlyRepair =
         state.diagnostics.backendKind == BackendKind.BUILT_IN &&
-            state.diagnostics.bridge.status != DiagnosticStatus.AVAILABLE
+            (state.diagnostics.bridge.status != DiagnosticStatus.AVAILABLE || requiredComponent == "bridge")
     val builtInTarget =
         remember(state, recommendation, nativeUpdatesAllowed) {
             if (nativeUpdatesAllowed &&
                 installedNative?.isKmodType != true &&
-                (state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || bridgeOnlyRepair)
+                (
+                    state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE ||
+                        bridgeOnlyRepair || requiredComponent == "built-in"
+                )
             ) {
                 resolveBuiltInInstallTarget(
                     state.kernelVersion ?: recommendation?.kernelVersion,

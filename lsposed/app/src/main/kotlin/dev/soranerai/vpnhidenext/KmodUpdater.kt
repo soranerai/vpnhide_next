@@ -16,7 +16,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.URI
 import java.net.URL
 import java.security.MessageDigest
 import java.util.zip.ZipFile
@@ -146,7 +145,7 @@ internal fun validateKmodUpdateFields(
     if (!CompatibilityResolver.isKmodCompatibleWithApp(appVersion, version)) return null
     if (versionCode < 0) return null
     val expectedName = "vpnhide-kmod-$kmi.zip"
-    if (!isTrustedKmodDownloadUrl(zipUrl, expectedName)) return null
+    if (!isTrustedKmodDownloadUrl(zipUrl, expectedName, version)) return null
     val normalizedSha256 = sha256.lowercase()
     if (!normalizedSha256.matches(Regex("[0-9a-f]{64}"))) return null
     return KmodUpdateInfo(version, versionCode, zipUrl, normalizedSha256, kmi)
@@ -155,16 +154,15 @@ internal fun validateKmodUpdateFields(
 internal fun isTrustedKmodDownloadUrl(
     raw: String,
     expectedName: String,
+    expectedVersion: String,
 ): Boolean =
-    runCatching {
-        val uri = URI(raw)
-        uri.scheme == "https" &&
-            uri.host == "github.com" &&
-            uri.rawQuery == null &&
-            uri.rawFragment == null &&
-            uri.path.startsWith("/soranerai/vpnhide_next/releases/download/") &&
-            uri.path.substringAfterLast('/') == expectedName
-    }.getOrDefault(false)
+    isTrustedGithubReleaseAssetUrl(
+        raw,
+        owner = "soranerai",
+        repository = "vpnhide_next",
+        tag = "v${normalizeVersion(expectedVersion)}",
+        expectedName = expectedName,
+    )
 
 internal object KmodUpdateCache {
     private val _state = MutableStateFlow<KmodUpdateState>(KmodUpdateState.None)

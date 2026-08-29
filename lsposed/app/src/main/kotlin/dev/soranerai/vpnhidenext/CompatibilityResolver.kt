@@ -25,23 +25,35 @@ internal sealed interface CompatibilityResult {
 internal object CompatibilityResolver {
     fun resolve(installed: InstalledComponentVersions): CompatibilityResult {
         val lsposed = installed.lsposed ?: return CompatibilityResult.Unknown
-        val matchingApp = compatibilityMatrix.filter { baseVersion(it.lsposed) == baseVersion(lsposed) }
+        val matchingApp = compatibleReleasesForApp(lsposed)
         if (matchingApp.isEmpty()) return CompatibilityResult.Unknown
 
         val bridge = installed.bridge
-        if (bridge != null && matchingApp.none { baseVersion(it.bridge) == baseVersion(bridge) }) {
-            return CompatibilityResult.Requires("bridge", matchingApp.first().bridge)
-        }
-
         val native = installed.kmod ?: installed.builtIn ?: return CompatibilityResult.Unknown
+        val compatible =
+            matchingApp.filter {
+                (bridge == null || baseVersion(it.bridge) == baseVersion(bridge)) &&
+                    nativeMatches(it, installed, native)
+            }
+        if (compatible.isNotEmpty()) return CompatibilityResult.Compatible
+
+        // Keep every valid matrix row in play. If one installed component
+        // identifies a row, request its paired counterpart rather than the
+        // first row for this APK version.
         val nativeMatches =
             matchingApp.filter {
-                baseVersion(it.kmod) == baseVersion(native) ||
-                    baseVersion(it.builtIn) == baseVersion(native)
+                nativeMatches(it, installed, native)
             }
-        if (nativeMatches.isNotEmpty()) return CompatibilityResult.Compatible
+        if (bridge != null && nativeMatches.isNotEmpty()) {
+            return CompatibilityResult.Requires("bridge", nativeMatches.first().bridge)
+        }
 
-        val expected = matchingApp.first()
+        val bridgeMatches =
+            bridge
+                ?.let { value -> matchingApp.filter { baseVersion(it.bridge) == baseVersion(value) } }
+                .orEmpty()
+        val expected = (bridgeMatches.ifEmpty { matchingApp }).first()
+
         return if (installed.kmod != null) {
             CompatibilityResult.Requires("kmod", expected.kmod)
         } else {
@@ -49,21 +61,32 @@ internal object CompatibilityResolver {
         }
     }
 
-    fun expectedForApp(appVersion: String): CompatibleRelease? =
-        compatibilityMatrix.firstOrNull { baseVersion(it.lsposed) == baseVersion(appVersion) }
+    fun compatibleReleasesForApp(appVersion: String): List<CompatibleRelease> =
+        compatibilityMatrix.filter { baseVersion(it.lsposed) == baseVersion(appVersion) }
 
     fun isKmodCompatibleWithApp(
         appVersion: String,
         kmodVersion: String,
-    ): Boolean = expectedForApp(appVersion)?.let { baseVersion(it.kmod) == baseVersion(kmodVersion) } == true
+    ): Boolean = compatibleReleasesForApp(appVersion).any { baseVersion(it.kmod) == baseVersion(kmodVersion) }
 
     fun isBuiltInCompatibleWithApp(
         appVersion: String,
         bridgeVersion: String,
         builtInVersion: String,
     ): Boolean =
-        expectedForApp(appVersion)?.let {
+        compatibleReleasesForApp(appVersion).any {
             baseVersion(it.bridge) == baseVersion(bridgeVersion) &&
                 baseVersion(it.builtIn) == baseVersion(builtInVersion)
-        } == true
+        }
+
+    private fun nativeMatches(
+        release: CompatibleRelease,
+        installed: InstalledComponentVersions,
+        native: String,
+    ): Boolean =
+        if (installed.kmod != null) {
+            baseVersion(release.kmod) == baseVersion(native)
+        } else {
+            baseVersion(release.builtIn) == baseVersion(native)
+        }
 }

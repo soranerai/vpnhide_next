@@ -3,16 +3,23 @@ package dev.soranerai.vpnhidenext
 import android.content.Context
 import org.json.JSONObject
 import java.net.HttpURLConnection
+import java.net.URI
 import java.net.URL
 
 private const val TAG = "VpnHide-Update"
 private const val GITHUB_RELEASES_URL =
     "https://api.github.com/repos/soranerai/vpnhide_next/releases/latest"
+internal const val APP_RELEASE_ASSET_NAME = "vpnhide.apk"
 private const val PREFS_NAME = "vpnhide_prefs"
 private const val KEY_LAST_SEEN_VERSION = "last_seen_version"
 
 data class UpdateInfo(
     val latestVersion: String,
+    val downloadUrl: String,
+)
+
+internal data class GithubReleaseAsset(
+    val name: String,
     val downloadUrl: String,
 )
 
@@ -94,6 +101,78 @@ internal fun compareSemver(
 }
 
 /**
+ * Accept only the exact artifact published for a release in this repository.
+ *
+ * A release page is deliberately not a fallback: the update button promises an
+ * installable APK, and a malformed API response must not turn it into an
+ * arbitrary browser destination.
+ */
+internal fun isTrustedGithubReleaseAssetUrl(
+    raw: String,
+    owner: String,
+    repository: String,
+    tag: String,
+    expectedName: String,
+): Boolean =
+    runCatching {
+        val uri = URI(raw)
+        val prefix = "/$owner/$repository/releases/download/"
+        uri.scheme == "https" && uri.host == "github.com" && uri.rawQuery == null &&
+            uri.rawFragment == null && uri.path.startsWith(prefix) &&
+            uri.path.removePrefix(prefix).substringBefore('/') == tag &&
+            uri.path.substringAfterLast('/') == expectedName
+    }.getOrDefault(false)
+
+internal fun parseAppUpdateRelease(
+    raw: String,
+    currentVersion: String,
+): UpdateInfo? {
+    val release = runCatching { JSONObject(raw) }.getOrNull() ?: return null
+    val tag = release.optString("tag_name").takeIf { it.isNotBlank() } ?: return null
+    val assets = release.optJSONArray("assets") ?: return null
+    return selectAppUpdateAsset(
+        tag = tag,
+        currentVersion = currentVersion,
+        isDraft = release.optBoolean("draft"),
+        isPrerelease = release.optBoolean("prerelease"),
+        assets =
+            (0 until assets.length()).mapNotNull { index ->
+                assets.optJSONObject(index)?.let { asset ->
+                    GithubReleaseAsset(asset.optString("name"), asset.optString("browser_download_url"))
+                }
+            },
+    )
+}
+
+internal fun selectAppUpdateAsset(
+    tag: String,
+    currentVersion: String,
+    isDraft: Boolean,
+    isPrerelease: Boolean,
+    assets: List<GithubReleaseAsset>,
+): UpdateInfo? {
+    if (isDraft || isPrerelease) return null
+    val remoteVersion = normalizeVersion(tag)
+    if (!isNewerVersion(remoteVersion, currentVersion)) return null
+    for (asset in assets) {
+        if (asset.name != APP_RELEASE_ASSET_NAME) continue
+        val url = asset.downloadUrl
+        if (
+            isTrustedGithubReleaseAssetUrl(
+                url,
+                owner = "soranerai",
+                repository = "vpnhide_next",
+                tag = tag,
+                expectedName = APP_RELEASE_ASSET_NAME,
+            )
+        ) {
+            return UpdateInfo(latestVersion = remoteVersion, downloadUrl = url)
+        }
+    }
+    return null
+}
+
+/**
  * Check GitHub Releases for a newer APK version.
  * Returns [UpdateInfo] if a newer version exists, null otherwise.
  * Silently returns null on any error (network, parse, rate limit).
@@ -111,24 +190,13 @@ fun checkForUpdate(currentVersion: String): UpdateInfo? {
                 return null
             }
             val body = conn.inputStream.bufferedReader().readText()
-            val release = JSONObject(body)
-            val remoteVersion = normalizeVersion(release.getString("tag_name"))
-            if (!isNewerVersion(remoteVersion, currentVersion)) {
-                VpnHideLog.d(TAG, "No update: remote=$remoteVersion current=$currentVersion")
+            val update = parseAppUpdateRelease(body, currentVersion)
+            if (update == null) {
+                VpnHideLog.d(TAG, "No valid newer APK: current=$currentVersion")
                 return null
             }
-            val assets = release.getJSONArray("assets")
-            var apkUrl: String? = null
-            for (i in 0 until assets.length()) {
-                val asset = assets.getJSONObject(i)
-                if (asset.getString("name").endsWith(".apk")) {
-                    apkUrl = asset.getString("browser_download_url")
-                    break
-                }
-            }
-            val downloadUrl = apkUrl ?: release.getString("html_url")
-            VpnHideLog.i(TAG, "Update available: $remoteVersion (url=$downloadUrl)")
-            return UpdateInfo(latestVersion = remoteVersion, downloadUrl = downloadUrl)
+            VpnHideLog.i(TAG, "Update available: ${update.latestVersion} (url=${update.downloadUrl})")
+            return update
         } finally {
             conn.disconnect()
         }

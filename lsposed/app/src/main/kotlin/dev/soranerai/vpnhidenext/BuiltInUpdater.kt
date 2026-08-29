@@ -17,7 +17,6 @@ import java.io.File
 import java.io.FileOutputStream
 import java.io.InputStream
 import java.net.HttpURLConnection
-import java.net.URI
 import java.net.URL
 import java.security.MessageDigest
 import java.util.zip.ZipEntry
@@ -217,7 +216,7 @@ internal fun validateBuiltInUpdateMetadataFields(
     if (!CompatibilityResolver.isBuiltInCompatibleWithApp(appVersion, bridgeVersion, kernelVersion)) return null
     if (bridgeVersionCode < 0 || kernelVersionCode < 0) return null
     if (!debugMode && !bridgeSha256.matches(Regex("[0-9a-f]{64}"))) return null
-    if (!isTrustedBridgeUrl(bridgeZipUrl)) return null
+    if (!isTrustedBridgeUrl(bridgeZipUrl, bridgeVersion)) return null
     if (kernelReleasesApi != TRUSTED_KERNEL_RELEASES_API) return null
     return BuiltInUpdateMetadata(
         bridgeVersion = bridgeVersion,
@@ -343,7 +342,17 @@ internal fun versionTagToCode(value: String): Int? {
     return major * 10_000 + minor * 100 + patch
 }
 
-private fun isTrustedBridgeUrl(raw: String): Boolean = trustedGithubReleaseUrl(raw, "soranerai", "vpnhide_next", "vpnhide-bridge.zip")
+private fun isTrustedBridgeUrl(
+    raw: String,
+    bridgeVersion: String,
+): Boolean =
+    trustedGithubReleaseUrl(
+        raw,
+        "soranerai",
+        "vpnhide_next",
+        "vpnhide-bridge.zip",
+        "v${normalizeVersion(bridgeVersion)}",
+    )
 
 private fun isTrustedKernelAssetUrl(
     raw: String,
@@ -356,16 +365,8 @@ private fun trustedGithubReleaseUrl(
     owner: String,
     repo: String,
     expectedName: String,
-    expectedTag: String? = null,
-): Boolean =
-    runCatching {
-        val uri = URI(raw)
-        val prefix = "/$owner/$repo/releases/download/"
-        uri.scheme == "https" && uri.host == "github.com" && uri.rawQuery == null &&
-            uri.rawFragment == null && uri.path.startsWith(prefix) &&
-            uri.path.substringAfterLast('/') == expectedName &&
-            (expectedTag == null || uri.path.removePrefix(prefix).substringBefore('/') == expectedTag)
-    }.getOrDefault(false)
+    expectedTag: String,
+): Boolean = isTrustedGithubReleaseAssetUrl(raw, owner, repo, expectedTag, expectedName)
 
 internal object BuiltInUpdateCache {
     // Installation must outlive the dashboard composable. Cancelling a UI scope while AK3 is

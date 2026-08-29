@@ -45,6 +45,16 @@ components to the positional version.
    ```sh
    ./scripts/update-json.sh
    ```
+   For an independent native release, update only the component that changed:
+   ```sh
+   ./scripts/update-json.sh --kmod-version 2.5.5
+   ./scripts/update-json.sh --kpatch-version 2.5.5
+   # Bridge and KPatch released together, but independently from the APK:
+   ./scripts/update-json.sh --bridge-version 2.5.5 --kpatch-version 2.5.5
+   ```
+   The script preserves the other bridge/KPatch field when only one is
+   specified. The selected values must correspond to a row in
+   `data/compatibility.json` before the APK that depends on them is released.
    The script downloads each published backend kmod artifact and records its SHA-256
    digest in the matching metadata file. The app requires this digest before
    it will offer root-assisted installation.

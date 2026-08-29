@@ -43,18 +43,28 @@ class KmodUpdaterTest {
             isTrustedKmodDownloadUrl(
                 "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-kmod-android14-6.1.zip",
                 "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
             ),
         )
         assertFalse(
             isTrustedKmodDownloadUrl(
                 "https://example.com/vpnhide-kmod-android14-6.1.zip",
                 "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
             ),
         )
         assertFalse(
             isTrustedKmodDownloadUrl(
                 "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-kmod-android15-6.6.zip",
                 "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
+            ),
+        )
+        assertFalse(
+            isTrustedKmodDownloadUrl(
+                "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.1/vpnhide-kmod-android14-6.1.zip",
+                "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
             ),
         )
     }
