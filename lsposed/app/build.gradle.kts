@@ -6,10 +6,19 @@ plugins {
     alias(libs.plugins.kotlin.android)
     alias(libs.plugins.kotlin.atomicfu)
     alias(libs.plugins.compose.compiler)
+    alias(libs.plugins.gobley.cargo)
 }
 
-// Note: libvpnhide_checks.so is built in the private repo (vpnhide_next_private)
-// and downloaded by CI into src/main/jniLibs/arm64-v8a/. No local Rust build here.
+// Build and package libvpnhide_checks.so from this repository's Rust crate.
+// Gobley wires the aarch64 Android cdylib into the APK automatically.
+cargo {
+    packageDirectory = layout.projectDirectory.dir("../native")
+    // JVM tests do not load the Rust library. Disabling their cargo build also
+    // avoids compiling Android-specific ioctl shapes against the host libc.
+    builds.withType(gobley.gradle.cargo.dsl.CargoJvmBuild::class.java).configureEach {
+        androidUnitTest.set(false)
+    }
+}
 
 android {
     namespace = "dev.soranerai.vpnhidenext"
@@ -120,12 +129,9 @@ dependencies {
     // Modern Xposed API — compileOnly so it is provided by LSPosed/Vector.
     compileOnly("io.github.libxposed:api:102.0.0")
 
-    // Runtime deps for the committed uniffi-generated FFI bindings
-    // (checks/vpnhide_checks.*.kt) — normally injected automatically by the
-    // Gobley uniffi plugin, which we don't run here since libvpnhide_checks.so
-    // is prebuilt in the private repo. Versions match what Gobley 0.3.7 pins
-    // Versions match the generated UniFFI bindings used by the private
-    // native library (JNA 5.18.1, atomicfu 0.26.1).
+    // Runtime deps for the committed UniFFI FFI bindings
+    // (checks/vpnhide_checks.*.kt). Their ABI is built from lsposed/native.
+    // Versions match the generated bindings (JNA 5.18.1, atomicfu 0.26.1).
     implementation("net.java.dev.jna:jna:5.18.1@aar")
     implementation("org.jetbrains.kotlinx:atomicfu:0.26.1")
 

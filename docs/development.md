@@ -6,12 +6,15 @@ How to build vpnhide_next from source.
 
 - **JDK 17 or later** — what the CI image installs (`openjdk-17-jdk-headless`); local builds with JDK 21 also work. The `lsposed/app` Gradle build sets `sourceCompatibility = 17` and `jvmTarget = "17"`.
 - **Android SDK** — install `platforms;android-35`, `build-tools;35.0.0`, `platform-tools` (via Android Studio or `cmdline-tools`). Export `ANDROID_HOME`.
+- **Android NDK 27.2.12479018** — export `ANDROID_NDK_ROOT` (or
+  `ANDROID_NDK_HOME`); `scripts/build-app.sh` maps the latter for Gobley.
+- **Rust 1.85 or later** — install the `aarch64-linux-android` target.
+  `cargo-ndk` is needed only for direct Cargo builds; Gradle invokes Gobley.
 - **`adb`** — installing builds on a device.
 
-The diagnostic Rust library and kernel backend are built in the private
-`vpnhide_next_private` repository. The public APK build consumes the
-prebuilt `libvpnhide_checks.so` from CI (or from `scripts/build-app.sh` when
-the private checkout is available); the committed Kotlin FFI bindings remain
+The diagnostic Rust library lives in `lsposed/native` and is compiled for
+Android as part of the APK build. The kernel backend remains in the private
+`vpnhide_next_private` repository. The committed Kotlin FFI bindings remain
 in this repository.
 
 ## Repository layout
@@ -55,8 +58,9 @@ cd lsposed && ./gradlew :app:assembleRelease
 # → lsposed/app/build/outputs/apk/release/app-release.apk
 ```
 
-Kernel modules and KPatch builds are produced in the private backend
-repository. This public repository only consumes their release artifacts.
+The diagnostic library is cross-compiled from `lsposed/native` during this
+build. Kernel modules and KPatch builds are produced in the private backend
+repository; this public repository consumes their release artifacts.
 
 ## Install on device
 

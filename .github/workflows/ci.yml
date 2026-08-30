@@ -99,29 +99,15 @@ jobs:
         with:
           cache-read-only: ${{ github.event_name == 'pull_request' }}
 
-      # ci:latest (.github/docker/ci/Dockerfile) doesn't bake in gh CLI either —
-      # fetch the static binary directly (public repo, no auth needed).
-      - name: Install gh CLI
-        run: |
-          GH_VERSION=2.63.2
-          curl -sSL "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_amd64.tar.gz" \
-            | tar -xz -C /tmp
-          mv "/tmp/gh_${GH_VERSION}_linux_amd64/bin/gh" /usr/local/bin/gh
-
-      - name: Download prebuilt libvpnhide_checks.so from backend repo
-        run: |
-          mkdir -p lsposed/app/src/main/jniLibs/arm64-v8a
-          BACKEND_RELEASE_TAG=()
-          if [ "$GITHUB_REF_TYPE" = tag ]; then
-            # See the kmod job: tagged public releases must consume the
-            # matching immutable private release set, not `latest`.
-            BACKEND_RELEASE_TAG=("$GITHUB_REF_NAME")
-          fi
-          gh release download "${BACKEND_RELEASE_TAG[@]}" --repo soranerai/vpnhide_next_backend \
-            -p 'libvpnhide_checks.so' \
-            -D lsposed/app/src/main/jniLibs/arm64-v8a
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Cache Rust dependencies and Android cdylib
+        uses: actions/cache@v5
+        with:
+          path: |
+            /opt/cargo/registry
+            /opt/cargo/git
+            lsposed/native/target
+          key: cargo-${{ runner.os }}-native-${{ hashFiles('lsposed/native/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-native-
 
       - name: Set up keystore
         env:
@@ -160,6 +146,8 @@ jobs:
       - name: Build APK
         run: |
           cd "$GITHUB_WORKSPACE/lsposed"
+          # The Gobley cargo plugin compiles libvpnhide_checks.so from
+          # ../native and packages it into the APK; no backend download.
           case "$GITHUB_REF" in
             refs/tags/v*)
               ./gradlew assembleRelease

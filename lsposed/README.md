@@ -76,10 +76,10 @@ adb logcat | grep VpnHide
 
 Requires JDK 17 or later. Output: `app/build/outputs/apk/debug/app-debug.apk`.
 
-The diagnostic Rust library is built in the private `vpnhide_next_private`
-repository. CI downloads its prebuilt `libvpnhide_checks.so` into the APK's
-`jniLibs/`; local builds can use `../scripts/build-app.sh` with the private
-checkout available. The committed UniFFI Kotlin bindings stay in this repo.
+The diagnostic Rust library lives in `native/`. Gobley cross-compiles
+`libvpnhide_checks.so` for arm64 and packages it into the APK during every
+Gradle build; no private checkout or prebuilt library is required. The
+committed UniFFI Kotlin bindings stay in this repo.
 
 ## License
 
