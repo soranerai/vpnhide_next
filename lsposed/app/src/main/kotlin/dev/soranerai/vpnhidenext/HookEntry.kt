@@ -377,7 +377,7 @@ class HookEntry : XposedModule() {
                             "binderClass=${binder.javaClass.name} " +
                             "classLoader=${classLoader.javaClass.name}",
                     )
-                    handleServiceHook(name, classLoader)
+                    handleServiceHook(name, binder, classLoader)
                 }
             },
         )
@@ -399,7 +399,7 @@ class HookEntry : XposedModule() {
                             "binderClass=${binder.javaClass.name} " +
                             "classLoader=${classLoader.javaClass.name}",
                     )
-                    handleServiceHook(name, classLoader)
+                    handleServiceHook(name, binder, classLoader)
                 }
             },
         )
@@ -458,7 +458,7 @@ class HookEntry : XposedModule() {
                     "binderClass=${binder.javaClass.name} " +
                     "classLoader=${classLoader.javaClass.name}",
             )
-            handleServiceHook(name, classLoader)
+            handleServiceHook(name, binder, classLoader)
         } catch (t: Throwable) {
             HookLog.e("VpnHide: checkAndHookExistingService($name) failed: ${t::class.java.simpleName}: ${t.message}")
         }
@@ -466,30 +466,34 @@ class HookEntry : XposedModule() {
 
     private fun handleServiceHook(
         name: String,
+        binder: android.os.IBinder,
         classLoader: ClassLoader,
     ) {
         val hookKey = "$name@${System.identityHashCode(classLoader)}"
-        if (!hookedServices.add(hookKey)) return
+        if (hookedServices.contains(hookKey)) return
 
-        when (name) {
-            "connectivity" -> {
-                HookLog.i("VpnHide: Installing APEX Connectivity hooks...")
-                tryHook("ConnectivityService.networkLogic") {
-                    ConnectivityHook.hookConnectivityService(classLoader)
+        try {
+            when (name) {
+                "connectivity" -> {
+                    HookLog.i("VpnHide: Installing APEX Connectivity hooks on ${binder.javaClass.name}...")
+                    // The binder class is the live APEX/OEM ConnectivityService
+                    // class. Do not resolve its name through a delegating loader.
+                    ConnectivityHook.hookConnectivityService(binder.javaClass)
                 }
-            }
 
-            "package" -> {
-                HookLog.i("VpnHide: Installing PackageManager hooks via APEX/ServiceManager loader...")
-                tryHook("PackageManager.queryIntentServices") { hookPackageManager(classLoader) }
-            }
+                "package" -> {
+                    HookLog.i("VpnHide: Installing PackageManager hooks via APEX/ServiceManager loader...")
+                    hookPackageManager(classLoader)
+                }
 
-            "user" -> {
-                HookLog.i("VpnHide: Installing UserManager hooks...")
-                tryHook("UserManagerService.profiles") {
+                "user" -> {
+                    HookLog.i("VpnHide: Installing UserManager hooks...")
                     UserManagerHook.hookUserManagerService(classLoader)
                 }
             }
+            hookedServices.add(hookKey)
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: $name service hook failed: ${t::class.java.simpleName}: ${t.message}")
         }
     }
 

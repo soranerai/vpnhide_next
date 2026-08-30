@@ -75,7 +75,7 @@ object XposedBridge {
     }
 
     fun log(message: String) {
-        ModernHookCompat.requireApi().log(android.util.Log.INFO, "VpnHide", message)
+        ModernHookCompat.requireApi().log(android.util.Log.DEBUG, "VpnHide", message)
     }
 
     private fun hook(
@@ -149,12 +149,12 @@ object XposedHelpers {
     fun getIntField(
         receiver: Any,
         name: String,
-    ): Int = findField(receiver.javaClass, name).getInt(receiver)
+    ): Int = findField(receiver.javaClass, name).getAccessible(receiver) as Int
 
     fun getBooleanField(
         receiver: Any,
         name: String,
-    ): Boolean = findField(receiver.javaClass, name).getBoolean(receiver)
+    ): Boolean = findField(receiver.javaClass, name).getAccessible(receiver) as Boolean
 
     fun setObjectField(
         receiver: Any,
@@ -166,13 +166,13 @@ object XposedHelpers {
         receiver: Any,
         name: String,
         value: Int,
-    ) = findField(receiver.javaClass, name).setInt(receiver, value)
+    ) = findField(receiver.javaClass, name).setAccessible(receiver, value)
 
     fun setBooleanField(
         receiver: Any,
         name: String,
         value: Boolean,
-    ) = findField(receiver.javaClass, name).setBoolean(receiver, value)
+    ) = findField(receiver.javaClass, name).setAccessible(receiver, value)
 
     private fun findMethod(
         clazz: Class<*>,
