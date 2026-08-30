@@ -2,7 +2,6 @@ package dev.soranerai.vpnhidenext.hooks.core
 
 import android.os.Binder
 import android.os.Build
-import de.robv.android.xposed.XposedHelpers
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import java.io.File
@@ -234,9 +233,10 @@ object HookContext {
     }
 
     fun getPackagesForUid(
-        pm: Any,
+        pm: Any?,
         uid: Int,
     ): Array<String>? {
+        if (pm == null) return null
         val token = Binder.clearCallingIdentity()
         try {
             return try {

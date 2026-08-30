@@ -3,11 +3,11 @@ package dev.soranerai.vpnhidenext.hooks.handlers
 import android.content.Intent
 import android.os.Binder
 import android.os.Build
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
+import dev.soranerai.vpnhidenext.hooks.core.XposedBridge
+import dev.soranerai.vpnhidenext.hooks.core.XposedHelpers
+import dev.soranerai.vpnhidenext.hooks.core.MethodHook as XC_MethodHook
 
 object PackageManagerHook {
     private class CallerContext(
@@ -118,10 +118,10 @@ object PackageManagerHook {
     private fun shouldHideVpnPackage(
         caller: CallerContext,
         packageName: String,
-        pmInstance: Any,
+        pmInstance: Any?,
         userId: Int,
     ): Boolean {
-        if (!caller.identityKnown || caller.owns(packageName)) return false
+        if (!caller.identityKnown || caller.owns(packageName) || pmInstance == null) return false
         return isVpnApp(packageName, pmInstance, userId)
     }
 

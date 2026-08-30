@@ -12,7 +12,46 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
-<p align="center"><strong><a href="README.en.md">English version</a></strong></p>
+<p align="center"><strong><a href="README.en.md">English version</a> · <a href="README.zh-CN.md">简体中文</a></strong></p>
+
+## Установка kernel backend
+
+Для полной защиты нужен один из двух вариантов kernel backend. Не устанавливайте
+kmod поверх ядра с kpatch: выберите подходящий вариант для своего устройства.
+
+### kmod (GKI2)
+
+1. Узнайте версию Android и ядра устройства.
+2. В разделе [последнего релиза](https://github.com/soranerai/vpnhide_next/releases/latest)
+   скачайте ZIP, соответствующий Android-ветке и KMI ядра. Например:
+   `vpnhide-kmod-android14-6.1.zip`.
+3. Установите ZIP через KernelSU, Magisk или другой root-менеджер.
+4. Перезагрузите устройство. После перезагрузки модуль должен быть активен.
+
+kmod поддерживает только GKI2. Доступные варианты перечислены в релизах и
+включают Android 12–17 с ядрами 5.10–6.18. Если для вашего ядра нет подходящего
+варианта, проверьте возможность установить подходящее заранее собранное GKI2-ядро
+с kpatch или применить патч вручную.
+
+### kpatch + bridge
+
+Этот вариант предназначен для заранее собранных GKI2-ядер с применённым kpatch.
+Для старых ядер используется ручной патчинг конкретного ядра; инструкции находятся
+в приватном backend-репозитории.
+
+1. Установите ядро с применённым kpatch. Готовые ядра для стандартных GKI2
+   публикуются в репозитории [GKI_KernelSU_SUSFS](https://github.com/soranerai/GKI_KernelSU_SUSFS);
+   для ручного патчинга конкретного ядра используйте инструкции из приватного
+   backend-репозитория [vpnhide_next_private](https://github.com/soranerai/vpnhide_next_private).
+2. В разделе [последнего релиза](https://github.com/soranerai/vpnhide_next/releases/latest)
+   скачайте `vpnhide-bridge.zip` и установите его через root-менеджер.
+3. Перезагрузите устройство. Bridge должен соответствовать версии приложения и
+   встроенного ядра.
+
+После установки kernel backend установите APK VPNHide Next, подключите его к
+**System Framework** в LSPosed и перезагрузите устройство ещё раз, если это ещё
+не было сделано. Приложение покажет в диагностике, какой backend активен и
+загрузился ли bridge.
 
 > [!WARNING]
 > **Требуется интеграция на уровне ядра и системного фреймворка**

@@ -8,6 +8,7 @@ room = "2.6.1"
 ksp = "2.1.20-1.0.31"
 work = "2.10.0"
 coroutines-test = "1.8.1"
+gobley = "0.3.7"
 
 [libraries]
 core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "core-ktx" }
@@ -29,3 +30,4 @@ kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-atomicfu = { id = "org.jetbrains.kotlin.plugin.atomicfu", version.ref = "kotlin" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 ksp = { id = "com.google.devtools.ksp", version.ref = "ksp" }
+gobley-cargo = { id = "dev.gobley.cargo", version.ref = "gobley" }

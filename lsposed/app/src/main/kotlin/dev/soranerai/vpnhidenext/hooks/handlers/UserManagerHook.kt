@@ -1,11 +1,11 @@
 package dev.soranerai.vpnhidenext.hooks.handlers
 
 import android.os.Binder
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
+import dev.soranerai.vpnhidenext.hooks.core.XposedBridge
+import dev.soranerai.vpnhidenext.hooks.core.XposedHelpers
+import dev.soranerai.vpnhidenext.hooks.core.MethodHook as XC_MethodHook
 
 object UserManagerHook {
     fun hookUserManagerService(classLoader: ClassLoader) {
@@ -21,10 +21,10 @@ object UserManagerHook {
             }
 
         fun isManagedProfileInternal(
-            serviceInstance: Any,
+            serviceInstance: Any?,
             userId: Int,
         ): Boolean {
-            if (userId <= 0) return false
+            if (userId <= 0 || serviceInstance == null) return false
             val token = Binder.clearCallingIdentity()
             HookContext.isInternalCheck.set(true)
             try {

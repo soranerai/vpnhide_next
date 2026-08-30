@@ -32,7 +32,8 @@ keep the other versions unchanged. `release.py` validates the source and
 regenerates `CompatibilityMatrix.kt`; it does not assume that every component
 has the release version.
 
-For a public APK tag `vX.Y.Z`, CI downloads native build artifacts from the
+For a public APK tag `vX.Y.Z`, CI builds `libvpnhide_checks.so` from the
+public source in the tag and downloads kernel backend artifacts from the
 private backend release with the same tag. The versions *inside* that release
 set are the ones recorded in `data/compatibility.json`; they may differ from
 `X.Y.Z` (for example, APK 2.5.4 with kmod 2.5.3).

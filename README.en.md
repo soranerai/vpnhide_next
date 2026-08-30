@@ -12,7 +12,44 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue" alt="License"></a>
 </p>
 
-<p align="center"><strong><a href="README.md">Russian version</a></strong></p>
+<p align="center"><strong><a href="README.md">Russian version</a> · <a href="README.zh-CN.md">简体中文</a></strong></p>
+
+## Installing the kernel backend
+
+Full protection requires one of the two kernel backend options. Do not install
+kmod on top of a kernel with kpatch; choose the option that matches your device.
+
+### kmod (GKI2)
+
+1. Check the Android version and kernel version on your device.
+2. From the [latest release](https://github.com/soranerai/vpnhide_next/releases/latest),
+   download the ZIP matching your Android branch and kernel KMI. For example:
+   `vpnhide-kmod-android14-6.1.zip`.
+3. Install the ZIP through KernelSU, Magisk, or another root manager.
+4. Reboot the device. The module must be active after reboot.
+
+kmod supports GKI2 only. The available variants are listed in the releases and
+cover Android 12–17 with kernels 5.10–6.18. If there is no matching variant for
+your kernel, check whether you can install a matching pre-built GKI2 kernel with
+kpatch or apply a patch manually.
+
+### kpatch + bridge
+
+This option is intended for pre-built GKI2 kernels with kpatch already applied.
+Older kernels require manual patching of the specific kernel; instructions are
+available in the private backend repository.
+
+1. Install a kernel with kpatch applied. Pre-built kernels for standard GKI2 are
+   published in the [GKI_KernelSU_SUSFS](https://github.com/soranerai/GKI_KernelSU_SUSFS)
+   repository; for manual patching of a specific kernel, follow the instructions
+   in the private backend repository [vpnhide_next_private](https://github.com/soranerai/vpnhide_next_private).
+2. From the [latest release](https://github.com/soranerai/vpnhide_next/releases/latest),
+   download `vpnhide-bridge.zip` and install it through your root manager.
+3. Reboot the device. The bridge must match the app and built-in kernel versions.
+
+After installing the kernel backend, install the VPNHide Next APK, enable it for
+**System Framework** in LSPosed, and reboot again if you have not already done so.
+The app will show which backend is active and whether the bridge loaded in Diagnostics.
 
 > [!WARNING]
 > **Requires kernel-level and system framework-level integration**

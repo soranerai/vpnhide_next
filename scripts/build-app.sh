@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
-# Build libvpnhide_checks.so in the private repo (vpnhide_next_private,
-# symlinked in at the repo root) and wire it into this repo's lsposed APK.
+# Build the public libvpnhide_checks.so crate and wire it into the APK.
 #
 # Usage: ./scripts/build-app.sh [--release|--debug] [--install]
 #   --release   Rust release profile (LTO/opt-level=z/strip) + APK assembleRelease (default)
@@ -12,7 +11,6 @@ set -euo pipefail
 # 1. Determine script and repo directories
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-PRIVATE_REPO="$REPO_ROOT/vpnhide_next_private"
 
 # Color constants for rich aesthetics in terminal output
 BOLD="\033[1m"
@@ -58,14 +56,7 @@ done
 log_info "Build type: ${BOLD}$BUILD_TYPE${NC}"
 [[ "$INSTALL_APK" == "true" ]] && log_info "Will install APK on device after build"
 
-# 3. Verify the private repo is checked out where we expect it
-if [[ ! -d "$PRIVATE_REPO/lsposed/native" ]]; then
-    log_error "Private repo not found at $PRIVATE_REPO/lsposed/native"
-    log_error "(expected a checkout of vpnhide_next_private, symlinked in at the repo root)"
-    exit 1
-fi
-
-# 4. Gobley's cargo plugin reads ANDROID_NDK_ROOT, not ANDROID_NDK_HOME
+# 3. Gobley's cargo plugin reads ANDROID_NDK_ROOT, not ANDROID_NDK_HOME
 if [[ -z "${ANDROID_NDK_ROOT:-}" ]]; then
     if [[ -n "${ANDROID_NDK_HOME:-}" ]]; then
         export ANDROID_NDK_ROOT="$ANDROID_NDK_HOME"
@@ -75,30 +66,7 @@ if [[ -z "${ANDROID_NDK_ROOT:-}" ]]; then
     fi
 fi
 
-# 5. Build libvpnhide_checks.so via Gradle + Gobley, in the private repo
-CARGO_TASK="cargoBuildAndroidArm64Release"
-[[ "$BUILD_TYPE" == "debug" ]] && CARGO_TASK="cargoBuildAndroidArm64Debug"
-
-log_info "Building libvpnhide_checks.so (${BOLD}$CARGO_TASK${NC}) in private repo..."
-if ! (cd "$PRIVATE_REPO/lsposed" && ./gradlew ":app:$CARGO_TASK"); then
-    log_error "Native library build failed!"
-    exit 1
-fi
-log_success "Native library build completed."
-
-# 6. Locate the built .so and copy it into the public repo's jniLibs
-SO_SRC="$PRIVATE_REPO/lsposed/native/target/aarch64-linux-android/$BUILD_TYPE/libvpnhide_checks.so"
-if [[ ! -f "$SO_SRC" ]]; then
-    log_error "Expected .so not found at: $SO_SRC"
-    exit 1
-fi
-
-JNI_DIR="$REPO_ROOT/lsposed/app/src/main/jniLibs/arm64-v8a"
-mkdir -p "$JNI_DIR"
-cp "$SO_SRC" "$JNI_DIR/libvpnhide_checks.so"
-log_success "Copied $(du -h "$SO_SRC" | cut -f1) .so into ${BOLD}$JNI_DIR${NC}"
-
-# 7. Build the APK in the public repo
+# 4. Build the APK. Gobley compiles and packages libvpnhide_checks.so first.
 APK_TASK="assembleRelease"
 APK_OUT="app/build/outputs/apk/release/app-release.apk"
 if [[ "$BUILD_TYPE" == "debug" ]]; then
@@ -120,7 +88,7 @@ fi
 
 log_success "APK ready: ${BOLD}$APK_PATH${NC}"
 
-# 8. Install on device if requested
+# 5. Install on device if requested
 if [[ "$INSTALL_APK" == "true" ]]; then
     log_info "Checking ADB device connection..."
     if ! adb get-state >/dev/null 2>&1; then

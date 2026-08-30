@@ -1,0 +1,676 @@
+<resources>
+    <string name="app_name">VPNHide Next</string>
+    <string name="module_description">向指定应用隐藏活动 VPN 连接 — NetworkCapabilities、NetworkInfo、NetworkInterface、LinkProperties、/proc/net</string>
+
+    <!-- Navigation -->
+    <string name="tab_dashboard">Dashboard</string>
+    <string name="tab_protection">Protection</string>
+    <string name="tab_statistics">Statistics</string>
+
+    <!-- Protection modes -->
+    <string name="policy_mode_title">Protection mode</string>
+    <string name="policy_mode_blacklist">Hide</string>
+    <string name="policy_mode_allowlist">Show</string>
+    <string name="policy_mode_blacklist_desc">向选中的应用隐藏 VPN interface、port 和已启用的 hook。</string>
+    <string name="policy_mode_allowlist_desc">选中的应用保持可见。System app 默认被选中，但可以手动修改。</string>
+    <string name="policy_mode_change_title">更改 mode 并重置所有 protection？</string>
+    <string name="policy_mode_change_confirm">更改 mode</string>
+    <string name="policy_mode_allowlist_warning">选中的应用将成为 exception，其他符合条件的 third-party app 将被隐藏。保存时会清除所有 app target、local/global hook override 和 local/global port rule。</string>
+    <string name="policy_mode_blacklist_warning">选中的应用将重新成为 hiding target。保存时会清除所有 app target、local/global hook override 和 local/global port rule。</string>
+    <string name="allowlist_add_all_shown">将显示的应用加入 exception</string>
+    <string name="policy_mode_blacklist_summary">向选中的应用隐藏 VPN · %d 个 target</string>
+    <string name="policy_mode_allowlist_summary">仅向选中的应用显示 VPN · %d 个 hidden target</string>
+    <string name="policy_help_title">Protection selection 的工作方式</string>
+    <string name="policy_help_scope_title">1. Protection modes</string>
+    <string name="policy_help_scope_intro">选择哪些应用可以看到 VPN，哪些应用不能看到。</string>
+    <string name="policy_help_layers_title">2. Protection layers</string>
+    <string name="policy_help_ports_title">3. Port rules</string>
+    <string name="policy_help_blacklist_title">Hide — blacklist</string>
+    <string name="policy_help_allowlist_title">Show — whitelist</string>
+    <string name="policy_help_blacklist">选中的应用无法看到 VPN。
+
+已启用的 protection layer 会应用于选中的应用，并向它们隐藏 VPN。其他符合条件的应用不受此 protection 影响。</string>
+    <string name="policy_help_allowlist">选中的应用可以看到 VPN。
+
+已启用的 layer 会成为这些应用的 permission。其他符合条件的应用无法看到 VPN。System app 默认安全地被选中；修改它们可能影响 Android。</string>
+    <string name="policy_help_layers">N = kernel protection，F = Android/LSPosed protection，P = port hiding。
+
+在 Hide mode 中，启用的 chip 会向选中的应用隐藏对应部分的 VPN。
+
+在 Show mode 中，启用的 chip 允许选中的应用看到对应部分的 VPN。check mark 表示 permission 已启用。</string>
+    <string name="policy_help_ports">Port rule 遵循相同逻辑。
+
+在 Hide mode 中，列出的 port 会向选中的应用隐藏。
+
+在 Show mode 中，选中的应用可以看到列出的 port，其他符合条件的应用不能看到。
+
+System app 默认被允许，但可以手动修改。Shared core system UID 始终受到保护。</string>
+    <string name="ok">OK</string>
+    <string name="continue_action">继续</string>
+    <string name="system_app_warning_title">System app protection</string>
+    <string name="system_app_warning_message">向 System app 隐藏 VPN information 可能影响 Android 或个别 system feature。只有在了解后果后才继续。</string>
+    <string name="system_app_core_uid_locked">无法安全地将 shared core system UID 设为 target</string>
+
+    <!-- Port hiding -->
+    <string name="ports_chip" translatable="false">P</string>
+    <string name="ports_hint_safe">适用于 bank、госуслуги、marketplace 和非 browser app。基于 Chromium 的 browser 会使用 localhost 实现 dev/PWA feature — 不要将它们加入 observer。</string>
+    <string name="ports_hint_reboot">每次 Save 都会重新应用 rule。Reboot 后，module 会通过 service.sh 自动恢复。</string>
+    <string name="ports_mode_blacklist_hint">要隐藏的 port：这些 rule 会为选中的 app block 或 conceal 列出的 port。</string>
+    <string name="ports_mode_allowlist_hint">要显示的 port：这些 rule 指定选中的 app 可以继续使用哪些列出的 port。</string>
+    <string name="ports_save_success">已保存 · %1$d 个 observer</string>
+    <string name="ports_count" translatable="false">P: %d</string>
+    <string name="bulk_rules_title">Bulk Rules</string>
+    <string name="bulk_rules_subtitle">应用于所有受保护的应用</string>
+    <string name="no_rules">尚未定义 rule</string>
+    <string name="no_hide_rules_desc">点击 + 添加 rule 以隐藏选中的 port。</string>
+    <string name="no_allow_rules">尚未定义 allowed port</string>
+    <string name="no_allow_rules_desc">点击 + 添加 rule，指定在 Show mode 中继续可见的 port。</string>
+    <string name="back">返回</string>
+    <string name="bulk_btn">Bulk</string>
+    <string name="cancel">取消</string>
+    <string name="cancel_changes">放弃未保存的更改</string>
+    <string name="apply_bulk_btn">应用</string>
+    <string name="new_bulk_rule">新建 Bulk Rule</string>
+    <string name="edit_bulk_rule">编辑 Bulk Rule</string>
+    <string name="label_optional">Label（可选）</string>
+    <string name="port_start">Start Port</string>
+    <string name="port_end">End Port</string>
+    <string name="protocol">Protocol</string>
+    <string name="add_rule">添加 Rule</string>
+    <string name="err_rule_redundant">Redundant：已被“%s”覆盖</string>
+    <string name="err_rule_exists">此 rule 已存在</string>
+    <string name="err_port_range">请输入 1 到 65535 之间的 port。</string>
+    <string name="err_port_start_after_end">Start port 不能大于 end port。</string>
+
+    <!-- Interface Prefixes -->
+    <string name="iface_prefixes_title">Tun Interfaces</string>
+    <string name="iface_prefixes_subtitle">管理用于 VPN hiding 的自定义 network interface prefix</string>
+    <string name="section_system_ifaces">System Protected（Default）</string>
+    <string name="section_custom_ifaces">Custom Rules</string>
+    <string name="no_prefixes">尚未添加 custom rule</string>
+    <string name="new_prefix">新建 Prefix</string>
+    <string name="edit_prefix">编辑 Prefix</string>
+    <string name="prefix_label">Interface prefix（例如 tun、wg）</string>
+
+    <!-- App picker -->
+    <string name="selected_count">已选择 %d 个</string>
+    <string name="btn_save">保存</string>
+    <string name="action_refresh_apps">刷新 app list</string>
+    <string name="search_placeholder">Name、package 或 UID&#8230;</string>
+    <string name="filter_system">System</string>
+    <string name="filter_show_system">显示 System app</string>
+    <string name="filter_russian_only">仅显示 Russian app</string>
+    <string name="protect_all_shown">保护所有显示的 app</string>
+    <string name="bulk_protect_added">已将 %1$d 个 app 加入 protection — 点击 Save 应用</string>
+    <string name="bulk_protect_none_added">所有显示的 app 都已受到保护</string>
+    <string name="filter_only_selected">仅 selected</string>
+    <string name="filter_only_exceptions">仅 exception</string>
+    <string name="filter_only_work_profile">仅 work profile</string>
+    <string name="sort_name_asc">Name（A-Z）</string>
+    <string name="sort_name_desc">Name（Z-A）</string>
+    <string name="sort_selected_first">Selected first</string>
+    <string name="sort_unselected_first">Unselected first</string>
+    <string name="app_badge_system">System</string>
+    <string name="app_badge_auto_selected">Auto-selected</string>
+
+    <!-- Root and kernel status -->
+    <string name="root_error_title">需要 Root access</string>
+    <string name="root_error_message">VPNHide Next 需要 Root access 来管理 target app。请在 root manager（Magisk、KernelSU 等）中授予此 app root permission，然后重新打开 app。</string>
+    <string name="kmod_error_title">需要 Kernel module</string>
+    <string name="kmod_error_message">VPNHide Next 需要已安装并 active 的 kmod kernel module。请在 root manager（Magisk、KernelSU 等）中安装 module，reboot 设备后重试。</string>
+    <string name="save_success">已保存 %d 个 target</string>
+    <string name="save_failed_exit">保存失败（exit code %d）</string>
+    <string name="save_failed_error">保存失败：%s</string>
+    <string name="save_failed_root">保存失败：Root access 被拒绝</string>
+    <string name="migrating_data">正在迁移 data&#8230;</string>
+    <string name="save_header_comment" translatable="false"># Managed by VPNHide Next app</string>
+
+    <!-- Diagnostics -->
+    <string name="summary_format">%1$d/%2$d 通过</string>
+    <string name="btn_export_debug">收集 debug log</string>
+    <string name="btn_export_debug_running">正在收集 debug information&#8230;</string>
+    <string name="btn_save_debug">保存</string>
+    <string name="btn_share_debug">分享</string>
+    <string name="debug_log_export_title">Debug log export</string>
+    <string name="debug_log_export_desc">将 app、kernel 和 LSPosed log 打包为可分享的 zip archive。</string>
+    <string name="diag_debug_logging_title">Debug logging</string>
+    <string name="diag_debug_logging_description">在 logcat 和 dmesg 中记录详细 log。除非必要，请不要启用。</string>
+    <string name="badge_pass">PASS</string>
+    <string name="badge_fail">FAIL</string>
+    <string name="badge_info">INFO</string>
+    <string name="badge_running">RUNNING</string>
+    <string name="badge_skipped">SKIPPED</string>
+    <string name="diag_running_title">正在运行 diagnostics&#8230;</string>
+    <string name="diag_running_desc">Diagnostics check 正在后台运行。展开 details 可实时查看进度。</string>
+    <string name="banner_added_self">已将 VPNHide Next 加入 target list。请 restart VPNHide Next（force-stop 后重新打开）以启用 native-level check — 无需 reboot 设备。</string>
+    <string name="banner_adding_self">正在将此 app 加入 target list&#8230;</string>
+    <string name="banner_network_blocked">此 app 的 network access 已禁用。没有 network access 无法运行 ioctl check（SIOCGIFFLAGS、SIOCGIFMTU、SIOCGIFCONF）。请在 Settings → Apps → VPNHide Next → Mobile data &amp; Wi-Fi 中启用。</string>
+    <string name="section_native">Native（kmod）</string>
+    <string name="section_framework">Framework（LSPosed）</string>
+    <string name="native_tier_classic">Classic</string>
+    <string name="native_tier_advanced">Advanced</string>
+    <string name="native_tier_extreme">Extreme</string>
+    <string name="diag_all_good_title">All Good!</string>
+    <string name="diag_all_good_desc">所有 diagnostics check 均已通过。Protection active 且功能完整。</string>
+    <string name="diag_some_failed_title">Checks Failed</string>
+    <string name="diag_some_failed_desc">部分 diagnostics check 失败。这可能表示 kernel module 未正确加载，或 configuration 需要调整。</string>
+    <string name="diag_btn_show_details">显示 details</string>
+    <string name="diag_btn_hide_details">隐藏 details</string>
+
+    <!-- Dashboard and setup gate -->
+    <string name="dashboard_modules">Modules</string>
+    <string name="dashboard_kmod">Native</string>
+    <string name="dashboard_lsposed_module">Framework</string>
+    <string name="dashboard_not_installed">未安装</string>
+    <string name="dashboard_installed_inactive">已安装，inactive</string>
+    <string name="dashboard_installed_restart_app">已安装，restart VPNHide Next 后 active</string>
+    <string name="dashboard_kmod_broken_wrong_variant">已安装，但 GKI variant 错误</string>
+    <string name="dashboard_kmod_broken_unsupported_kernel">已安装，但 kernel 不受支持</string>
+    <string name="dashboard_kmod_broken_no_kprobes">已安装，但 kernel 没有 kprobes</string>
+    <string name="dashboard_kmod_broken_unknown_variant">已安装，但未加载</string>
+    <string name="dashboard_kmod_broken_ambiguous">已安装，但未加载 — 请尝试另一个 GKI variant</string>
+    <string name="dashboard_active_targets">Active · %d 个 target</string>
+    <string name="dashboard_reboot_needed">需要 Reboot 设备</string>
+    <string name="dashboard_protection">Protection status</string>
+    <string name="dashboard_protection_prefix">Protection：%s</string>
+    <string name="dashboard_native_protection">Native level</string>
+    <string name="dashboard_java_protection">Java API level</string>
+    <string name="dashboard_protection_ok">OK</string>
+    <string name="dashboard_protection_partial">Partial</string>
+    <string name="dashboard_protection_fail">Not working</string>
+    <string name="dashboard_protection_unknown">Not checked</string>
+    <string name="dashboard_protection_no_module">No module</string>
+    <string name="dashboard_protection_hooks_inactive">Hooks inactive</string>
+    <string name="dashboard_protection_checking">Checking&#8230;</string>
+    <string name="dashboard_needs_restart">VPNHide Next 刚刚被加入自己的 target list。请 restart VPNHide Next（force-stop 后重新打开）以检查 protection — 无需 reboot 设备。</string>
+    <string name="dashboard_install_recommendation_title">Installation recommendation</string>
+    <string name="dashboard_install_recommendation_device">Your device：%1$s，kernel %2$s</string>
+    <string name="dashboard_install_recommendation_kmi_note">kernel version 中的“%1$s”是 GKI Kernel Module Interface tag，表示 kernel 与 module 之间的 binary interface，而不是 Android OS release。</string>
+    <string name="dashboard_install_recommendation_kmod">推荐使用 Kernel module。请下载 %1$s。</string>
+    <string name="dashboard_install_recommendation_kmod_ambiguous">推荐使用 Kernel module。无法从 uname -r 判断 kernel 的 GKI branch，请先尝试 %1$s；如果 reboot 后未加载，再安装 %2$s。</string>
+    <string name="dashboard_install_recommendation_kmod_unsupported">Kernel module 不支持此设备。</string>
+    <string name="dashboard_issues">Errors（%d）</string>
+    <string name="dashboard_warnings">Warnings（%d）</string>
+    <string name="diagnostics_components_title">Component diagnostics</string>
+    <string name="diagnostics_root">0. Root access</string>
+    <string name="diagnostics_backend">1. vpnhide_ctrl backend</string>
+    <string name="diagnostics_bridge">2. Bridge</string>
+    <string name="diagnostics_lsposed">3. LSPosed backend</string>
+    <string name="diagnostics_backend_kmod">Available · LKM / kmod</string>
+    <string name="diagnostics_backend_builtin">Available · built-in / kpatch</string>
+    <string name="diagnostics_status_available">Available</string>
+    <string name="diagnostics_status_missing">Not installed</string>
+    <string name="diagnostics_status_inactive">Installed, inactive</string>
+    <string name="diagnostics_status_broken">Installed, invalid</string>
+    <string name="diagnostics_status_blocked">Cannot check yet</string>
+    <string name="diagnostics_status_unknown">Unknown</string>
+    <string name="gate_title">VPNHide Next 需要 setup</string>
+    <string name="gate_desc">App 正在检查 protection 所需的 component。component ready 后，main interface 会解锁。</string>
+    <string name="gate_ready_title">VPNHide Next 已 ready</string>
+    <string name="gate_ready_desc">所有 required component 都 active。</string>
+    <string name="gate_fix_hint">选择要 install 或 repair 的 component：</string>
+    <string name="gate_kmod_option">Install 或 repair kmod</string>
+    <string name="gate_builtin_option">Install 或 repair built-in backend</string>
+    <string name="gate_builtin_subtitle">kpatch bridge + matching kernel</string>
+    <string name="gate_bridge_option">仅 repair bridge</string>
+    <string name="gate_bridge_subtitle">保留 active built-in kernel</string>
+    <string name="gate_builtin_confirm">Review built-in installation</string>
+    <string name="gate_builtin_confirm_title">Install built-in backend？</string>
+    <string name="gate_reboot">Reboot 以应用更改</string>
+    <string name="gate_recheck">再次检查</string>
+    <string name="gate_retry">Retry component discovery</string>
+    <string name="gate_retry_download">Retry download</string>
+    <string name="gate_enter_anyway">仍然进入 interface</string>
+    <string name="dashboard_issue_reboot">LSPosed configuration 正确，但 hooks 尚未 active。请 reboot 设备以 active。</string>
+    <string name="dashboard_issue_lsposed_config_unreadable">无法读取 LSPosed/Vector configuration。重新打开 LSPosed/Vector，确认 VPNHide Next 已启用，然后重新打开 VPNHide Next。</string>
+    <string name="dashboard_issue_lsposed_not_enabled">LSPosed/Vector 中存在 VPNHide Next，但 module disabled。请在 LSPosed/Vector 中启用 VPNHide Next，并在 scope 中保留 System Framework。</string>
+    <string name="dashboard_issue_lsposed_no_system_scope">LSPosed/Vector 中已启用 VPNHide Next，但 scope 缺少 System Framework。请将 System Framework 加入 VPNHide Next 的 LSPosed/Vector scope。</string>
+    <string name="dashboard_issue_no_targets">尚未配置 target app。进入 Protection → Tun 选择 app。</string>
+    <string name="dashboard_running_version">Running version：%s</string>
+
+    <!-- Updates -->
+    <string name="update_available_title">有可用更新</string>
+    <string name="update_available_subtitle">发现 VPNHide Next 的新版本：%1$s</string>
+    <string name="update_download">下载</string>
+    <string name="retry">重试</string>
+    <string name="kmod_update_title">Kernel module update</string>
+    <string name="kmod_update_available">%2$s 有可用版本 %1$s</string>
+    <string name="kmod_update_confirm_title">Install kmod update？</string>
+    <string name="kmod_update_confirm_message">VPNHide Next 将为 %2$s 下载版本 %1$s，验证 SHA-256 checksum 和 package contents，然后通过 root manager stage。Reboot 后新 module 才会 active。</string>
+    <string name="kmod_update_install">Install</string>
+    <string name="kmod_update_downloading">正在下载和验证&#8230;</string>
+    <string name="kmod_update_downloading_progress">正在下载和验证&#8230; %1$d%%</string>
+    <string name="kmod_update_installing">正在通过 root manager 安装&#8230;</string>
+    <string name="kmod_update_awaiting_reboot">版本 %1$s 已安装，reboot 后 active。</string>
+    <string name="kmod_update_reboot">Reboot</string>
+    <string name="kmod_update_error_download">无法下载 update。请检查 connection 后重试。</string>
+    <string name="kmod_update_error_checksum">下载的 file 未通过 checksum verification，已删除。</string>
+    <string name="kmod_update_error_package">下载的 ZIP 不是适用于此 kernel 的有效 kmod package，已删除。</string>
+    <string name="kmod_update_error_root">Root access 被拒绝或 timeout。</string>
+    <string name="kmod_update_error_manager">此 root manager 不支持 automatic installation。</string>
+    <string name="kmod_update_error_install">Root manager 安装 update 失败，当前 module 保持 active。</string>
+    <string name="builtin_update_title">Bridge 和 kernel update</string>
+    <string name="builtin_bridge_update_title">Bridge update</string>
+    <string name="builtin_bridge_update_available">Bridge 版本 %1$s 可用</string>
+    <string name="builtin_update_downloading">正在下载 %1$s&#8230;</string>
+    <string name="builtin_update_downloading_progress">正在下载 %1$s&#8230; %2$d%%</string>
+    <string name="builtin_update_validating">正在验证&#8230;</string>
+    <string name="builtin_update_ready">Update ready</string>
+    <string name="builtin_update_preparing_install">正在准备 installation&#8230;</string>
+    <string name="builtin_update_continue">继续</string>
+    <string name="builtin_update_confirm_title">Update bridge 和 kernel？</string>
+    <string name="builtin_bridge_update_confirm_title">Update bridge？</string>
+    <string name="builtin_update_confirm_message">VPNHide Next 将安装 bridge 和 kernel 版本 %1$s（%2$s）。Flash 前会先备份 active boot image。Flashing kernel 可能导致 bootloop，请准备 external recovery method。</string>
+    <string name="builtin_bridge_update_confirm_message">VPNHide Next 将安装 bridge 版本 %1$s。需要 reboot 才能 active bridge；boot image 不会被修改。</string>
+    <string name="builtin_update_debug_warning">Debug update mode 已启用</string>
+    <string name="builtin_update_mode_normal">Normal</string>
+    <string name="builtin_update_mode_normal_desc">验证 checksum 后安装 update。</string>
+    <string name="builtin_update_mode_bypass">Bypass</string>
+    <string name="builtin_update_mode_bypass_desc">跳过 checksum verification。仅用于 development。</string>
+    <string name="builtin_update_confirm_action">Update</string>
+    <string name="builtin_bridge_update_confirm_action">Update bridge</string>
+    <string name="builtin_update_backing_up">正在备份 boot image&#8230;</string>
+    <string name="builtin_update_installing_bridge">正在安装 bridge&#8230;</string>
+    <string name="builtin_update_flashing_kernel">正在 flashing kernel&#8230;</string>
+    <string name="builtin_update_awaiting_reboot">版本 %1$s 已安装。Reboot 以 active。</string>
+    <string name="builtin_bridge_update_awaiting_reboot">Bridge 版本 %1$s 已安装。Reboot 以 active。</string>
+    <string name="builtin_update_reboot_title">需要 Reboot</string>
+    <string name="builtin_update_reboot_message">Bridge 和 kernel 版本 %1$s 已成功安装。Boot backup：%2$s</string>
+    <string name="builtin_bridge_update_reboot_message">Bridge 版本 %1$s 已成功安装。Reboot 设备以 active。</string>
+    <string name="builtin_update_reboot_now">立即 Reboot</string>
+    <string name="builtin_update_reboot_later">稍后 Reboot</string>
+    <string name="builtin_update_error_metadata">Update metadata 无效。</string>
+    <string name="builtin_update_error_unsupported">此设备不支持 built-in update。</string>
+    <string name="builtin_update_error_no_kernel">未找到 matching kernel。</string>
+    <string name="builtin_update_error_downgrade">不允许 downgrade。</string>
+    <string name="builtin_update_error_download">无法下载 bridge 或 kernel。</string>
+    <string name="builtin_update_error_checksum">下载的 file 未通过 checksum verification。</string>
+    <string name="builtin_update_error_bridge">Bridge archive contents 无效或不符合预期。</string>
+    <string name="builtin_update_error_kernel">Kernel archive 无效或不符合预期。</string>
+    <string name="builtin_update_error_storage">Storage space 不足。</string>
+    <string name="builtin_update_error_root">Root access 被拒绝或 timeout。</string>
+    <string name="builtin_update_error_backup">无法备份 boot image。</string>
+    <string name="builtin_update_error_manager">此 root manager 不支持 automatic installation。</string>
+    <string name="builtin_update_error_bridge_install">Bridge installation 失败。Boot backup 已保留。</string>
+    <string name="builtin_update_error_kernel_install">Kernel installation 失败。Boot backup 已保留。</string>
+    <string name="builtin_update_error_reboot">Reboot 失败。</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="settings_section_diagnostics">Diagnostics</string>
+    <string name="settings_section_statistics">Statistics</string>
+    <string name="settings_section_testing">Testing</string>
+    <string name="settings_section_experimental">Experimental</string>
+    <string name="settings_stats_retention_title">Statistics retention</string>
+    <string name="settings_stats_retention_desc">保留和显示 intercept statistics 的时间。</string>
+    <string name="settings_diagnostics_detail_title">Diagnostics details</string>
+    <string name="settings_diagnostics_detail_desc">显示完整的 network 和 Java check result。</string>
+    <string name="settings_toggle_hide_vpn_apps_title">自动隐藏 VPN app</string>
+    <string name="settings_toggle_hide_vpn_apps_desc">在 runtime 自动向其他受保护 app 隐藏已安装的 VPN app。</string>
+    <string name="settings_toggle_hide_self_title">自动隐藏 VPNHide Next</string>
+    <string name="settings_toggle_hide_self_desc">向受保护 app 隐藏 VPNHide Next package。</string>
+    <string name="settings_toggle_update_check_title">检查 update</string>
+    <string name="settings_toggle_update_check_desc">在 background 和 app 中检查 GitHub Releases。关闭后将完全停止 update check。</string>
+    <string name="settings_builtin_update_debug_title">Unsafe debug update mode</string>
+    <string name="settings_builtin_update_debug_desc">允许在不验证 SHA-256 的情况下重新安装当前 built-in kernel。仅用于 development。</string>
+    <string name="settings_builtin_update_debug_unlocked">Debug update mode 已解锁</string>
+    <string name="settings_toggle_health_check_title">Protection health check</string>
+    <string name="settings_toggle_health_check_desc">如果 kernel module 或 LSPosed hooks 在 reboot 后未 active，则发送 notification，避免 silent failure。</string>
+    <string name="settings_toggle_target_refresh_title">Background target refresh</string>
+    <string name="settings_toggle_target_refresh_desc">定期检查已安装 app、更新 UID，并将当前 policy 同步到 kernel 和 LSPosed。</string>
+    <string name="settings_toggle_use_nomount_file_hiding_title">使用 NoMount 隐藏 file indicator</string>
+    <string name="settings_toggle_use_nomount_file_hiding_desc">使用 NoMount 代替 SUSFS 隐藏 VPN file indicator。NoMount 必须已安装并 active。</string>
+    <string name="settings_battery_optimization_title">关闭 battery optimization</string>
+    <string name="settings_battery_optimization_desc">部分 ROM（MIUI、EMUI、ColorOS、One UI）会延迟或 kill background check；请将 app 加入 exception，确保以下 check 正常运行。</string>
+    <string name="settings_toggle_self_test_vpn_title">无 VPN 时运行 self-test</string>
+    <string name="settings_toggle_self_test_vpn_desc">没有 VPN 时，在完整 diagnostics 期间 temporary 启动 local test tunnel，完成后移除。关闭后仅在实际 VPN active 时运行 check。</string>
+    <string name="settings_about_project_title">About project</string>
+    <string name="settings_about_project_desc">Project philosophy、contacts 和 source code</string>
+    <string name="settings_about_project_philosophy_title">Project philosophy</string>
+    <string name="settings_about_project_philosophy">VPNHide Next 在没有 donation 和 commercial model 的情况下开发。项目优先考虑广泛 coverage、stability 和 performance，并尽量减少对 system 的影响。</string>
+    <string name="settings_about_project_contacts_title">Contacts</string>
+    <string name="settings_about_project_frontend_title">Frontend：app 和 LSPosed</string>
+    <string name="settings_about_project_frontend_desc">Android app、declarative policy、target management 和 LSPosed integration。</string>
+    <string name="settings_about_project_frontend_link">github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_backend_title">Backend：kmod 和 kpatch</string>
+    <string name="settings_about_project_backend_desc">Kernel kmod source code 和 kpatch patch，包含手动应用 patch 的说明。</string>
+    <string name="settings_about_project_backend_link">github.com/soranerai/vpnhide_next_private</string>
+    <string name="settings_about_project_compatibility_title">Compatibility 和 support limits</string>
+    <string name="settings_about_project_compatibility">kpatch patch 支持 4.19–5.4 kernel 以及 5.10–6.18 范围内的所有 GKI2 kernel。kmod 仅支持 GKI2。KPM 未实现是有意为之：在旧 kernel 上实现完整 coverage 的稳定 integration 几乎不可行，因此使用 kpatch。</string>
+    <string name="settings_about_project_telegram_title">Telegram</string>
+    <string name="settings_about_project_open_link">打开 link</string>
+    <string name="settings_about_project_repository">Repository：github.com/soranerai/vpnhide_next</string>
+    <string name="settings_about_project_telegram">Telegram：t.me/soranerai</string>
+    <string name="settings_save_failed">保存 setting 失败，已恢复之前的值。</string>
+
+    <!-- Notifications -->
+    <string name="update_notification_channel_name">App updates</string>
+    <string name="update_notification_title">VPNHide Next：有可用 update</string>
+    <string name="update_notification_text">版本 %1$s 可用。点击下载。</string>
+    <string name="health_notification_channel_name">Protection status</string>
+    <string name="health_notification_kmod_title">VPNHide Next：kernel module 未 active</string>
+    <string name="health_notification_kmod_text">vpnhide_kmod 已安装，但在上次 reboot 后未加载。当前配置的 app 未受到保护。打开 app 查看 details。</string>
+    <string name="health_notification_lsposed_title">VPNHide Next：LSPosed hooks 未 active</string>
+    <string name="health_notification_lsposed_text">LSPosed hooks 在上次 reboot 后未 active。当前配置的 app 未受到保护。打开 app 查看 details。</string>
+
+    <!-- Hook testing and per-app settings -->
+    <string name="hook_testing_title">Hook isolation</string>
+    <string name="hook_testing_kernel_card_title">Isolate crash causes（Kernel）</string>
+    <string name="hook_testing_kernel_card_desc">动态关闭单个 kernel hook，找出导致 reboot 或 app crash 的 function。关闭的 hook 会原样安全地放行 call。</string>
+    <string name="hook_testing_kernel_err_parse">无法解析 hook mask：‘%1$s’</string>
+    <string name="hook_testing_kernel_err_not_active">Kernel module inactive 或不支持 dynamic hook。请确认 kmod 已加载。</string>
+    <string name="hook_testing_kernel_err_set">无法设置 active hook mask</string>
+    <string name="hook_testing_kernel_mask_title">Active kernel hook mask</string>
+    <string name="hook_testing_framework_card_title">Isolate crash causes（Java）</string>
+    <string name="hook_testing_framework_card_desc">动态关闭 system_server 中的单个 Java framework hook。更改立即生效，无需 reboot。</string>
+    <string name="hook_testing_framework_err_parse">无法解析 Java hook mask：‘%1$s’</string>
+    <string name="hook_testing_framework_err_access">无法访问 Java hook mask file。</string>
+    <string name="hook_testing_framework_err_set">无法写入 Java hook mask</string>
+    <string name="hook_testing_framework_mask_title">Active Java hook mask</string>
+    <string name="hook_testing_btn_enable_all">Enable</string>
+    <string name="hook_testing_btn_disable_all">Disable</string>
+    <string name="hook_testing_list_kernel">Kernel hooks list</string>
+    <string name="hook_testing_list_java">Java hooks list</string>
+    <string name="app_hook_isolation_use_global">使用 global settings</string>
+    <string name="app_hook_isolation_use_global_desc">关闭后，此 app 使用自己的 custom hook mask，而不是 Dashboard 中的 global mask。</string>
+    <string name="app_settings_title_global">Global settings</string>
+    <string name="app_settings_port_hiding_off_hint">此 app 当前关闭了 port hiding — 请在 app list 中打开“P” toggle 以应用这些 rule。</string>
+    <string name="app_settings_fab_global_desc">所有 app 的 default hiding rule</string>
+    <string name="app_row_settings_desc">此 app 的 hiding settings</string>
+    <string name="app_row_uid_format" translatable="false">uid: %1$d</string>
+
+    <!-- Backup, statistics and protection levels -->
+    <string name="backup_restore_title">Backup &amp; Restore</string>
+    <string name="backup_restore_description">将 protected app、tunnel interface prefix 和 port hiding rule 导出到 JSON file，或从现有 backup restore。</string>
+    <string name="btn_export">Export</string>
+    <string name="btn_import">Import</string>
+    <string name="export_success">Settings export 成功</string>
+    <string name="export_failed">Export failed：%1$s</string>
+    <string name="import_success">Settings import 并应用成功</string>
+    <string name="import_failed">Import failed：%1$s</string>
+    <string name="dashboard_intercept_statistics">Intercept statistics</string>
+    <string name="dashboard_stats_lifetime_hint_fmt">显示最近 6 小时的 interception</string>
+    <string name="statistics_tab_hooks">Hooks</string>
+    <string name="statistics_tab_ports">Ports</string>
+    <string name="statistics_ports_title">Port access statistics</string>
+    <string name="statistics_ports_empty">最近 6 小时没有记录到 blocked port access。</string>
+    <string name="statistics_unique_ports_fmt">%1$d unique</string>
+    <string name="btn_clear">清除</string>
+    <string name="stats_period_30m">30 分钟</string>
+    <string name="stats_period_1h">1 小时</string>
+    <string name="stats_period_6h">6 小时</string>
+    <string name="stats_period_24h">24 小时</string>
+    <string name="stats_period_unlimited">Unlimited</string>
+    <string name="hook_testing_idx_format">Idx %1$d</string>
+    <string name="dashboard_stats_empty_title">No intercepts recorded</string>
+    <string name="dashboard_stats_empty_desc">Target app 的 active VPN traffic 会在此处实时 monitor、intercept 和 log。</string>
+    <string name="dashboard_stats_unavailable_title">Statistics temporarily unavailable</string>
+    <string name="dashboard_stats_unavailable_desc">Statistics daemon 不可用。请在 kernel module 完成 startup 后重试。</string>
+    <string name="dashboard_stats_history_dropped">由于 in-memory history 达到 retention limit，较早的 interval 已丢弃。</string>
+    <string name="dashboard_stats_framework_title">Framework intercepts</string>
+    <string name="dashboard_stats_native_title">Native intercepts</string>
+    <string name="dashboard_stats_ports_title">Port intercepts</string>
+    <string name="vector_label_ioctl">ioctl SIOCGIF*</string>
+    <string name="vector_label_netlink">netlink RTM_GET*</string>
+    <string name="vector_label_proc">/proc/net &amp; /sys</string>
+    <string name="vector_label_sockopt">setsockopt / getsockopt</string>
+    <string name="vector_label_connect">connect / bind</string>
+    <string name="vector_label_getname">getsockname spoof</string>
+    <string name="vector_label_port">port hiding</string>
+    <string name="dashboard_summary_title">Intercept summary</string>
+    <string name="dashboard_summary_details_btn">Details</string>
+    <string name="dashboard_summary_total_label">Total intercepted</string>
+    <string name="dashboard_summary_native">Native</string>
+    <string name="dashboard_summary_lsposed">Framework</string>
+    <string name="dashboard_summary_ports">Ports</string>
+    <string name="dashboard_summary_top_hooks">Top hooks</string>
+    <string name="dashboard_summary_empty">尚未记录 interception</string>
+    <string name="ports_mass_rules_title">Mass Rules（Global）</string>
+    <string name="ports_local_rules_title">Local Rules</string>
+    <string name="btn_save_back">Save &amp; Back</string>
+    <string name="port_rule_port_format">Port：%1$d</string>
+    <string name="port_rule_range_format">Range：%1$d - %2$d</string>
+    <string name="port_rule_protocol_format">Protocol：%1$s</string>
+    <string name="ports_new_rule_title">New Port Rule</string>
+    <string name="ports_edit_rule_title">Edit Port Rule</string>
+    <string name="ports_label_placeholder">例如 My Server</string>
+    <string name="ports_range_hint">Allowed range：1–65535</string>
+    <string name="ports_range_size_hint">Range contains %1$d port(s)</string>
+    <string name="ports_redundant_rules_removed_warning">将移除 %1$d 个 redundant rule</string>
+    <string name="chip_native">Native</string>
+    <string name="chip_framework">Framework</string>
+    <string name="protocol_both">Both</string>
+    <string name="protection_level_title">Protection Level</string>
+    <string name="protection_level_min">Min</string>
+    <string name="protection_level_avg">Avg</string>
+    <string name="protection_level_max">Max</string>
+    <string name="protection_level_custom">Custom</string>
+    <string name="protection_faq_title">Protection Levels</string>
+    <string name="protection_faq_min_title">Min — Essential Coverage</string>
+    <string name="protection_faq_min_body">从 network enumeration API 隐藏 VPN interface — getifaddrs()、ioctl、netlink 和 kernel routing table。在 bind() 和 connect() 处 interception VPN-assigned port，防止基于 port 的 fingerprinting。
+
+所有 Java-layer check 通过。大部分 native check 通过。
+
+未覆盖：socket-option probe（MTU/MSS、TCP_INFO、SO_BINDTODEVICE）、GSO/PMTU side-channel、eBPF traffic-stat map，以及 /sys/class/net 等 filesystem path。</string>
+    <string name="protection_faq_avg_title">Avg — Full Socket Coverage</string>
+    <string name="protection_faq_avg_body">包含 Min 的全部功能，并增加 setsockopt/getsockopt interception。MTU、MSS、TCP_INFO、SO_BINDTODEVICE 和 SO_TIMESTAMPING value 会 spoof 为与 physical interface 匹配。SO_MARK leak 会被 block。GSO 和 PMTU probe 会被 neutralise。getsockname/getpeername 返回 physical-interface address。
+
+所有 Java 以及几乎所有 native direct-API check 通过。
+
+未覆盖：eBPF traffic statistics、filesystem enumeration（/sys/class/net、/proc/net/dev）和 UDP timing side-channel。</string>
+    <string name="protection_faq_max_title">Max — Complete Coverage</string>
+    <string name="protection_faq_max_body">包含 Avg 的全部功能，并增加：
+
+• /proc/net/dev、/proc/net/if_inet6、/proc/net/fib_trie — 从 proc entry 隐藏 VPN interface
+• /sys/class/net/* — 从 filesystem 隐藏 VPN interface
+• eBPF map — 将 VPN traffic statistics 清零
+• UDP rate-limit timing — neutralise side-channel
+• IPv6 link-local bruteforce — block
+• Traffic shaping（qdisc）— 隐藏 VPN qdisc
+
+覆盖所有已知 direct 和 indirect detection vector。</string>
+    <string name="protection_faq_close">知道了</string>
+    <string name="diag_no_vpn_title">未运行 check</string>
+    <string name="diag_no_vpn_desc">未检测到 active VPN。连接 VPN 后运行 diagnostics check。</string>
+    <string name="self_test_vpn_session_name">VPNHide self-test（no real traffic）</string>
+    <string name="dashboard_protection_vpn_off">-/-</string>
+
+    <!-- Component issues and changelog -->
+    <string name="dashboard_issue_debug_logging_on">Debug logging 已启用。VPNHide Next 正在向 logcat 写入 root user 可读取的详细 log。完成 bug report 后，请在 Diagnostics 中关闭。</string>
+    <string name="dashboard_issue_selinux_permissive">SELinux 处于 Permissive。VPNHide Next 依赖 kernel block 的六个 detection vector（RTM_GETROUTE、/proc/net/{tcp,udp,dev,fib_trie}、/sys/class/net）当前可被 target app 访问。运行 `setenforce 1` 并调查禁用原因。</string>
+    <string name="dashboard_issue_no_native">未安装 native module。请安装 kmod 以获得完整 protection。</string>
+    <string name="dashboard_issue_backend_missing">vpnhide_ctrl backend 不可用。请安装 VPNHide bridge 和匹配的 kernel component。</string>
+    <string name="dashboard_issue_backend_inactive">VPNHide bridge 已找到，但 vpnhide_ctrl 未 active。安装或 update 后请 reboot，并检查 boot diagnostics。</string>
+    <string name="dashboard_issue_bridge_missing">VPNHide bridge 未安装。使用 kernel backend 前，请安装 kmod 或 built-in/kpatch bridge。</string>
+    <string name="dashboard_issue_bridge_broken">VPNHide bridge 已安装，但内容不完整或无效。请从当前 release 重新安装。</string>
+    <string name="dashboard_issue_lsposed_extra_scope">VPNHide Next 在 LSPosed/Vector 中的 scope 只能包含 System Framework。请移除以下 app：%1$s。过滤应改在 VPNHide Next 的 Protection → Tun 中设置。</string>
+    <string name="dashboard_issue_lsposed_field_rename">在 Android SDK %2$s 中检测到 AOSP field rename：%1$s。受影响的 hook 的 Java-layer protection 已降级（安装时跳过，以避免每次 call 的 NoSuchFieldError 造成 logcat spam）。请在 github.com/okhsunrog/vpnhide/issues 提交 issue，并附上此 list。</string>
+    <string name="dashboard_issue_version_mismatch">LSPosed module version mismatch：running %1$s，installed %2$s。请 reboot 设备以应用 update。</string>
+    <string name="dashboard_issue_kmod_version_mismatch">Kernel module version mismatch：module %1$s，app %2$s。打开 KernelSU/Magisk → Modules update module。</string>
+    <string name="dashboard_issue_update_kmod">Kernel module 已过期：running %1$s，latest %2$s。请 update kmod module。</string>
+    <string name="dashboard_issue_update_app_for_kmod">VPNHide Next app 对此 kmod 已过期：module %1$s，app %2$s。请 update app。</string>
+    <string name="dashboard_issue_bridge_version_mismatch">Bridge version mismatch：bridge %1$s，app %2$s。请同时 update bridge 和 built-in kernel。</string>
+    <string name="dashboard_issue_update_bridge">Bridge 已过期：running %1$s，latest %2$s。请 update built-in kernel 以安装匹配的 bridge。</string>
+    <string name="dashboard_issue_update_app_for_bridge">VPNHide Next app 对此 bridge 已过期：bridge %1$s，app %2$s。请 update app。</string>
+    <string name="dashboard_issue_kmod_wrong_variant">Kernel module variant 错误：installed %1$s，kernel 需要 %2$s。卸载当前 kmod，并从最新 release 安装 %3$s。</string>
+    <string name="dashboard_issue_kmod_unknown_variant">Kernel module 已安装但未加载，且 ZIP 未标明其 GKI variant。请从最新 release 重新安装 %1$s，确保与 kernel 匹配。</string>
+    <string name="dashboard_issue_kmod_ambiguous_try_alternative">Kernel module %1$s 在本次 boot 中加载失败。无法从 uname -r 判断 kernel 的 GKI branch，请改为安装 %2$s。</string>
+    <string name="dashboard_issue_kmod_load_failed">Kernel module 加载失败。insmod error：%1$s。使用 Diagnostics → Collect debug log，将完整 boot-time insmod output 附在 bug report 中。</string>
+    <string name="dashboard_issue_kmod_not_supported_kernel">你的 kernel（%1$s）没有匹配的 vpnhide-kmod variant。卸载 kmod module，并改为安装 %2$s。</string>
+    <string name="dashboard_issue_kprobes_missing">此 kernel 构建时未启用 CONFIG_KRETPROBES。VPNHide Next kernel module 无法在此 kernel 上运行。</string>
+    <string name="builtin_update_available">Kernel version %1$s 可用：%2$s</string>
+    <string name="changelog_title">v%1$s 的更新内容</string>
+    <string name="changelog_section_added">Added</string>
+    <string name="changelog_section_changed">Changed</string>
+    <string name="changelog_section_fixed">Fixed</string>
+    <string name="changelog_section_notes">Notes</string>
+    <string name="toast_copied_to_clipboard">已复制到 clipboard</string>
+    <string name="diag_open_details_btn">更多 details</string>
+
+    <!-- Diagnostic check identifiers are technical names and remain unchanged. -->
+    <string name="check_ioctl_flags" translatable="false">ioctl SIOCGIFFLAGS tun0</string>
+    <string name="check_ioctl_mtu" translatable="false">ioctl SIOCGIFMTU tun0</string>
+    <string name="check_ioctl_conf" translatable="false">ioctl SIOCGIFCONF enum</string>
+    <string name="check_getifaddrs" translatable="false">getifaddrs() enum</string>
+    <string name="check_netlink_getlink" translatable="false">netlink RTM_GETLINK</string>
+    <string name="check_netlink_getroute" translatable="false">netlink RTM_GETROUTE</string>
+    <string name="check_netlink_anonymous_route" translatable="false">netlink RTM_GETROUTE (anon)</string>
+    <string name="check_proc_route" translatable="false">/proc/net/route</string>
+    <string name="check_proc_ipv6_route" translatable="false">/proc/net/ipv6_route</string>
+    <string name="check_proc_if_inet6" translatable="false">/proc/net/if_inet6</string>
+    <string name="check_proc_tcp" translatable="false">/proc/net/tcp</string>
+    <string name="check_proc_tcp6" translatable="false">/proc/net/tcp6</string>
+    <string name="check_proc_udp" translatable="false">/proc/net/udp</string>
+    <string name="check_proc_udp6" translatable="false">/proc/net/udp6</string>
+    <string name="check_proc_dev" translatable="false">/proc/net/dev</string>
+    <string name="check_proc_fib_trie" translatable="false">/proc/net/fib_trie</string>
+    <string name="check_bpf_iface_map" translatable="false">BPF map netd_iface_index_name_map</string>
+    <string name="check_net_iface_enum" translatable="false">NetworkInterface enum</string>
+    <string name="check_proc_route_java" translatable="false">/proc/net/route (Java)</string>
+    <string name="check_loopback_bind_conflict" translatable="false">bind() loopback conflict</string>
+    <string name="check_abstract_unix_sockets" translatable="false">Abstract UNIX socket probe</string>
+    <string name="check_traffic_stats" translatable="false">TrafficStats volume anomaly</string>
+    <string name="check_system_properties" translatable="false">__system_property_get VPN keys</string>
+    <string name="check_ioctl_alternative" translatable="false">ioctl alternative queries</string>
+    <string name="check_direct_syscall" translatable="false">direct syscall (socket/ioctl)</string>
+    <string name="check_traceroute_rtt" translatable="false">traceroute RTT / IP_RECVERR</string>
+    <string name="check_arm_timing" translatable="false">ARM CNTVCT timing check</string>
+    <string name="check_udp_queue_pressure" translatable="false">udp_sendmsg sk_sndbuf timing</string>
+    <string name="check_gso_asymmetry" translatable="false">setsockopt UDP_SEGMENT probe</string>
+    <string name="check_ipv6_link_local_bruteforce" translatable="false">IPv6 Link-Local Interface probe</string>
+    <string name="check_tcp_info_mss" translatable="false">getsockopt TCP_INFO MSS</string>
+    <string name="check_qdisc_by_ifindex" translatable="false">RTM_GETQDISC ifindex probe</string>
+    <string name="check_timestamping_hw" translatable="false">SO_TIMESTAMPING hardware bits</string>
+    <string name="check_rtm_getlink_trim_oracle" translatable="false">RTM_GETLINK trim oracle</string>
+    <string name="check_ipv6_multicast_denied" translatable="false">IPv6 Multicast Capability Oracle</string>
+    <string name="check_ipv6_ndp_tunnel" translatable="false">IPv6 NDP Tunnel Oracle</string>
+    <string name="check_ipv6_qdisc_tunnel" translatable="false">IPv6 Hardware Qdisc Pressure</string>
+    <string name="check_uid_route_rules_leak" translatable="false">RTM_GETRULE UID route leak</string>
+    <string name="check_pmtu_cache_poisoning" translatable="false">Global Path MTU Cache Leak</string>
+    <string name="check_underlay_port_conflict" translatable="false">UDP Underlay Port Conflict</string>
+    <string name="check_active_capabilities" translatable="false">Active Network Capabilities</string>
+    <string name="check_active_properties" translatable="false">Active Network LinkProperties</string>
+    <string name="check_all_networks_vpn" translatable="false">getAllNetworks() VPN scan</string>
+    <string name="check_link_properties_dns" translatable="false">LinkProperties dns</string>
+    <string name="check_proxy_host" translatable="false">System proxy properties</string>
+    <string name="check_network_callback" translatable="false">NetworkCallback push model</string>
+    <string name="check_underlying_networks" translatable="false">Underlying networks check</string>
+    <string name="check_getsockopt_bind" translatable="false">getsockopt SO_BINDTODEVICE</string>
+    <string name="check_inet_diag" translatable="false">inet_diag netlink scan</string>
+    <string name="check_getsockname_spoof" translatable="false">getsockname() IP spoofing</string>
+    <string name="check_netlink_getrule" translatable="false">netlink RTM_GETRULE</string>
+    <string name="check_tcp_mss" translatable="false">getsockopt TCP_MAXSEG</string>
+    <string name="check_netlink_getneigh" translatable="false">netlink RTM_GETNEIGH</string>
+    <string name="check_udp_pmtu" translatable="false">setsockopt IP_MTU_DISCOVER</string>
+    <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
+    <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
+    <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
+
+    <!-- Kernel hook names and descriptions -->
+    <string name="hook_name_dev_ioctl">Network interface（ioctl）</string>
+    <string name="hook_name_sock_ioctl">Socket list（ioctl）</string>
+    <string name="hook_name_rtnl_fill_ifinfo">Interface list（Netlink）</string>
+    <string name="hook_name_inet6_fill_ifaddr">IPv6 address（Netlink）</string>
+    <string name="hook_name_inet_fill_ifaddr">IPv4 address（Netlink）</string>
+    <string name="hook_name_fib_route_seq_show">IPv4 routing table（/proc）</string>
+    <string name="hook_name_ipv6_route_seq_show">IPv6 routing table（/proc）</string>
+    <string name="hook_name_fib_dump_info">IPv4 route list（Netlink）</string>
+    <string name="hook_name_fib_nl_fill_rule">Routing rule（Netlink）</string>
+    <string name="hook_name_rt6_fill_node">IPv6 route list（Netlink）</string>
+    <string name="hook_name_rt_fill_info">IPv4 route dump（Netlink）</string>
+    <string name="hook_name_sys_setsockopt">Socket option（setsockopt）</string>
+    <string name="hook_name_sys_getsockopt">Socket option（getsockopt）</string>
+    <string name="hook_name_sys_connect">Loopback connection（connect）</string>
+    <string name="hook_name_sys_getsockname_ipv4">Local IPv4 address（getsockname）</string>
+    <string name="hook_name_sys_getsockname_ipv6">Local IPv6 address（getsockname）</string>
+    <string name="hook_name_sys_bind">Loopback port binding（bind）</string>
+    <string name="hook_name_bpf_stats_spoof">Traffic statistics（BPF）</string>
+    <string name="hook_name_susfs_path_hiding">SUSFS VPN path hiding（daemon）</string>
+    <string name="hook_name_dev_seq_show">Interface statistics（/proc/net/dev）</string>
+    <string name="hook_name_if6_seq_show">IPv6 interface list（/proc/net/if_inet6）</string>
+    <string name="hook_name_udp_sendmsg">UDP queue speed（udp_sendmsg）</string>
+    <string name="hook_name_inet6_bind_ll">IPv6 link-local bind（inet6_bind）</string>
+    <string name="hook_name_udpv6_sendmsg_ll">IPv6 link-local send（udpv6_sendmsg）</string>
+    <string name="hook_name_fib_trie_seq_show">FIB trie proc filter（fib_trie_seq_show）</string>
+    <string name="hook_name_tc_fill_qdisc">Traffic control qdisc filter（tc_fill_qdisc）</string>
+    <string name="hook_desc_dev_ioctl">Intercept general interface IOCTL（例如 SIOCGIFFLAGS、SIOCGIFMTU）以隐藏 VPN interface state。</string>
+    <string name="hook_desc_sock_ioctl">Intercept socket-level IOCTL（例如 SIOCGIFCONF），在 network enumeration 时过滤 VPN interface。</string>
+    <string name="hook_desc_rtnl_fill_ifinfo">从 netlink link-dump（RTM_GETLINK）response 中过滤 VPN network interface。</string>
+    <string name="hook_desc_inet6_fill_ifaddr">从 netlink address-dump（RTM_GETADDR）response 中过滤 VPN IPv6 address。</string>
+    <string name="hook_desc_inet_fill_ifaddr">从 netlink address-dump（RTM_GETADDR）response 中过滤 VPN IPv4 address。</string>
+    <string name="hook_desc_fib_route_seq_show">app 读取 /proc/net/route 中的 IPv4 routing table 时过滤 VPN route。</string>
+    <string name="hook_desc_ipv6_route_seq_show">app 读取 /proc/net/ipv6_route 中的 IPv6 routing table 时过滤 VPN route。</string>
+    <string name="hook_desc_fib_dump_info">在 netlink routing table dump 期间过滤 IPv4 VPN route。</string>
+    <string name="hook_desc_fib_nl_fill_rule">从 netlink rule-dump（RTM_GETRULE）response 中过滤 VPN policy routing rule。</string>
+    <string name="hook_desc_rt6_fill_node">从 netlink route-dump（RTM_GETROUTE）response 中过滤 IPv6 VPN route。</string>
+    <string name="hook_desc_rt_fill_info">从 netlink route-dump（RTM_GETROUTE）response 中过滤 IPv4 VPN route。</string>
+    <string name="hook_desc_sys_setsockopt">Intercept setsockopt call，拒绝 VPN socket binding（SO_BINDTODEVICE/IFINDEX），将 SO_MARK 覆盖为 0，并 spoof MTU discovery。</string>
+    <string name="hook_desc_sys_getsockopt">Intercept getsockopt call，spoof MTU、MSS（TCP_MAXSEG）和 MTU discovery，并隐藏 socket 到 VPN interface 的 binding。</string>
+    <string name="hook_desc_sys_connect">通过 block loopback connection 到 VPN daemon control port 实现 Port Hiding。</string>
+    <string name="hook_desc_sys_getsockname_ipv4">Spoof IPv4 socket 的 getsockname，用 cover interface IP 隐藏 local VPN interface IP。</string>
+    <string name="hook_desc_sys_getsockname_ipv6">Spoof IPv6 socket 的 getsockname，用 cover interface IP 隐藏 local VPN interface IP。</string>
+    <string name="hook_desc_sys_bind">Intercept loopback 上的 bind()：将 protected port redirect 到随机空闲 ephemeral port（0），绕过 conflict check。</string>
+    <string name="hook_desc_bpf_stats_spoof">通过 sys_bpf syscall intercept BPF map lookup，为 VPN interface 和 target UID 的 stats map（iface_stats、tether_stats、stats_map_）返回 zero traffic counter。</string>
+    <string name="hook_desc_susfs_path_hiding">指示 daemon 使用 add_sus_path 向 SUSFS 注册 active VPN path。Rule 全局应用于受支持的 app process，并在 interface recreate 时 refresh。</string>
+    <string name="hook_desc_dev_seq_show">在 kernel 中从 /proc/net/dev 过滤 VPN interface row。</string>
+    <string name="hook_desc_if6_seq_show">在 kernel 中从 /proc/net/if_inet6 过滤 VPN interface row。</string>
+    <string name="hook_desc_udp_sendmsg">在 non-blocking UDP socket 上模拟 physical network queue limit（EAGAIN）和 timing delay，以隐藏 virtual TUN speed。</string>
+    <string name="hook_desc_inet6_bind_ll">Block hidden VPN interface scope 上的 link-local IPv6 bind()，抑制 NDP brute-force interface discovery。</string>
+    <string name="hook_desc_udpv6_sendmsg_ll">Block 发往 hidden VPN interface scope 的 link-local IPv6 sendto() packet，防止 NDP brute-force routing check。</string>
+    <string name="hook_desc_fib_trie_seq_show">从 /proc/net/fib_trie（FIB trie）output 中过滤 VPN interface reference。</string>
+    <string name="hook_desc_tc_fill_qdisc">从 RTM_GETQDISC netlink response 中过滤 VPN interface 的 qdisc（traffic control）entry。</string>
+
+    <!-- Java hook names and symbols -->
+    <string name="hook_name_link_properties">Link properties</string>
+    <string name="hook_name_network_capabilities">Network capabilities</string>
+    <string name="hook_name_network_info">Network status</string>
+    <string name="hook_name_network">Network requests</string>
+    <string name="hook_name_connectivity_service">Active network list</string>
+    <string name="hook_name_package_manager">Hiding VPN app</string>
+    <string name="hook_name_user_manager">Hiding work profile</string>
+    <string name="hook_name_self_hide">Hiding VPNHide Next itself</string>
+    <string name="hook_symbol_link_properties" translatable="false">android.net.LinkProperties</string>
+    <string name="hook_symbol_network_capabilities" translatable="false">android.net.NetworkCapabilities</string>
+    <string name="hook_symbol_network_info" translatable="false">android.net.NetworkInfo</string>
+    <string name="hook_symbol_network" translatable="false">android.net.Network</string>
+    <string name="hook_symbol_connectivity_service" translatable="false">com.android.server.ConnectivityService</string>
+    <string name="hook_symbol_package_manager" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
+    <string name="hook_symbol_user_manager" translatable="false">com.android.server.pm.UserManagerService</string>
+    <string name="hook_symbol_self_hide" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
+    <string name="hook_desc_link_properties">过滤 LinkProperties serialization，移除 VPN interface、route 和 DNS server。</string>
+    <string name="hook_desc_network_capabilities">从 NetworkCapabilities 过滤 VPN transport，将其伪装为 Wi-Fi 或 cellular connection。</string>
+    <string name="hook_desc_network_info">将 VPN connection status 伪装为 standard mobile network status（DISCONNECTED 或 MOBILE），隐藏 active VPN。</string>
+    <string name="hook_desc_network">将 active network request 从 VPN network instance redirect 到可用的最佳 physical network。</string>
+    <string name="hook_desc_connectivity_service">从 global network list 过滤 VPN network，并 block active VPN callback leak。</string>
+    <string name="hook_desc_package_manager">过滤 VpnServices，并向 target app 隐藏 VPN package。</string>
+    <string name="hook_desc_user_manager">过滤 user profile，并 spoof isManagedProfile check 以隐藏 work profile。</string>
+    <string name="hook_desc_self_hide">从 target app 发出的 PackageManager query 结果中隐藏 VPNHide Next package。</string>
+
+    <!-- Kernel symbols are technical names and remain unchanged. -->
+    <string name="hook_symbol_dev_ioctl" translatable="false">dev_ioctl</string>
+    <string name="hook_symbol_sock_ioctl" translatable="false">sock_ioctl</string>
+    <string name="hook_symbol_rtnl_fill_ifinfo" translatable="false">rtnl_fill_ifinfo</string>
+    <string name="hook_symbol_inet6_fill_ifaddr" translatable="false">inet6_fill_ifaddr</string>
+    <string name="hook_symbol_inet_fill_ifaddr" translatable="false">inet_fill_ifaddr</string>
+    <string name="hook_symbol_fib_route_seq_show" translatable="false">fib_route_seq_show</string>
+    <string name="hook_symbol_ipv6_route_seq_show" translatable="false">ipv6_route_seq_show</string>
+    <string name="hook_symbol_fib_dump_info" translatable="false">fib_dump_info</string>
+    <string name="hook_symbol_fib_nl_fill_rule" translatable="false">fib_nl_fill_rule</string>
+    <string name="hook_symbol_rt6_fill_node" translatable="false">rt6_fill_node</string>
+    <string name="hook_symbol_rt_fill_info" translatable="false">rt_fill_info</string>
+    <string name="hook_symbol_sys_setsockopt" translatable="false">__arm64_sys_setsockopt</string>
+    <string name="hook_symbol_sys_getsockopt" translatable="false">__arm64_sys_getsockopt</string>
+    <string name="hook_symbol_sys_connect" translatable="false">__arm64_sys_connect</string>
+    <string name="hook_symbol_sys_getsockname_ipv4" translatable="false">__arm64_sys_getsockname + inet_getname</string>
+    <string name="hook_symbol_sys_getsockname_ipv6" translatable="false">__arm64_sys_getsockname + inet6_getname</string>
+    <string name="hook_symbol_sys_bind" translatable="false">__arm64_sys_bind</string>
+    <string name="hook_symbol_bpf_stats_spoof" translatable="false">__arm64_sys_bpf</string>
+    <string name="hook_symbol_susfs_path_hiding" translatable="false">ksu_susfs add_sus_path (daemon)</string>
+    <string name="hook_symbol_dev_seq_show" translatable="false">dev_seq_show</string>
+    <string name="hook_symbol_if6_seq_show" translatable="false">if6_seq_show</string>
+    <string name="hook_symbol_udp_sendmsg" translatable="false">udp_sendmsg</string>
+    <string name="hook_symbol_inet6_bind_ll" translatable="false">inet6_bind</string>
+    <string name="hook_symbol_udpv6_sendmsg_ll" translatable="false">udpv6_sendmsg</string>
+    <string name="hook_symbol_fib_trie_seq_show" translatable="false">fib_trie_seq_show</string>
+    <string name="hook_symbol_tc_fill_qdisc" translatable="false">tc_fill_qdisc</string>
+</resources>

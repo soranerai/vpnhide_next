@@ -4,11 +4,11 @@ import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.net.RouteInfo
 import android.os.Binder
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
+import dev.soranerai.vpnhidenext.hooks.core.XposedBridge
+import dev.soranerai.vpnhidenext.hooks.core.XposedHelpers
+import dev.soranerai.vpnhidenext.hooks.core.MethodHook as XC_MethodHook
 
 object ConnectivityHook {
     @Volatile
@@ -17,26 +17,15 @@ object ConnectivityHook {
     @Volatile
     private var lastUsablePhysicalIfaceName: String? = null
 
-    fun hookConnectivityService(classLoader: ClassLoader) {
-        val csClass =
-            try {
-                XposedHelpers.findClass(
-                    "android.net.connectivity.com.android.server.ConnectivityService",
-                    classLoader,
-                )
-            } catch (t: Throwable) {
-                try {
-                    XposedHelpers.findClass(
-                        "com.android.server.ConnectivityService",
-                        classLoader,
-                    )
-                } catch (t2: Throwable) {
-                    HookLog.e(
-                        "VpnHide: failed to load ConnectivityService from both repackaged and original classes: ${t2.message}",
-                    )
-                    return
-                }
-            }
+    /**
+     * Attach to the runtime class carried by ServiceManager's live binder.
+     *
+     * Resolving ConnectivityService again through its class loader can select a
+     * parent-loader copy on APEX/OEM builds. Such a hook installs without an
+     * error but never observes calls on the child-loader class that owns the
+     * registered binder.
+     */
+    fun hookConnectivityService(csClass: Class<*>) {
 
         try {
             XposedBridge.hookAllConstructors(
@@ -52,7 +41,11 @@ object ConnectivityHook {
             HookLog.e("VpnHide: failed to hook ConnectivityService constructor: ${t.message}")
         }
 
-        for (method in csClass.declaredMethods) {
+        // On newer framework builds the callback dispatcher can be declared
+        // by a ConnectivityService superclass. Legacy Xposed often resolved
+        // that path implicitly; Modern API hooks the exact Executable, so
+        // walk the hierarchy explicitly.
+        for (method in callbackMethods(csClass)) {
             // 1. ThreadLocal Context Injection
             if (method.name == "callCallbackForRequest" ||
                 method.name == "sendPendingIntentForRequest"
@@ -63,7 +56,14 @@ object ConnectivityHook {
                         object : XC_MethodHook() {
                             override fun beforeHookedMethod(param: MethodHookParam) {
                                 if (!HookContext.isJavaHookActive(4, HookContext.resolveEffectiveUid())) return
-                                val nri = param.args.firstOrNull() ?: return
+                                // Android 16 moved part of the callback queue into
+                                // ConnectivityService$NetworkRequestInfo. Its dispatcher
+                                // carries the NRI as `this`; older dispatcher overloads
+                                // carry it as their first argument.
+                                val nri =
+                                    param.args.firstOrNull { candidate ->
+                                        candidate != null && hasRequestUid(candidate)
+                                    } ?: param.thisObject?.takeIf(::hasRequestUid) ?: return
                                 val uid =
                                     try {
                                         XposedHelpers.getIntField(nri, "mAsUid")
@@ -570,6 +570,48 @@ object ConnectivityHook {
             c = c.superclass
         }
         return null
+    }
+
+    private fun callbackMethods(clazz: Class<*>): Sequence<java.lang.reflect.Method> = sequence {
+        yieldAll(methodsInHierarchy(clazz))
+        yieldAll(nestedMethods(clazz))
+    }.filter { method ->
+        method.name == "callCallbackForRequest" ||
+            method.name == "sendPendingIntentForRequest" ||
+            method.name.contains("DefaultNetworkCapabilities")
+    }
+
+    private fun nestedMethods(clazz: Class<*>): Sequence<java.lang.reflect.Method> = sequence {
+        for (nested in clazz.declaredClasses) {
+            yieldAll(nested.declaredMethods.asSequence())
+            yieldAll(nestedMethods(nested))
+        }
+    }
+
+    private fun hasRequestUid(candidate: Any): Boolean =
+        try {
+            XposedHelpers.getIntField(candidate, "mAsUid")
+            true
+        } catch (_: Throwable) {
+            try {
+                XposedHelpers.getIntField(candidate, "mUid")
+                true
+            } catch (_: Throwable) {
+                try {
+                    XposedHelpers.getIntField(candidate, "uid")
+                    true
+                } catch (_: Throwable) {
+                    false
+                }
+            }
+        }
+
+    private fun methodsInHierarchy(clazz: Class<*>): Sequence<java.lang.reflect.Method> = sequence {
+        var current: Class<*>? = clazz
+        while (current != null && current != Any::class.java) {
+            yieldAll(current.declaredMethods.asSequence())
+            current = current.superclass
+        }
     }
 
     const val TYPE_VPN = 17

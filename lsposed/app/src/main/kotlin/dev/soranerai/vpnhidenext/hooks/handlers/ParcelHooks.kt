@@ -3,10 +3,10 @@ package dev.soranerai.vpnhidenext.hooks.handlers
 import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.net.NetworkInfo
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedHelpers
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
+import dev.soranerai.vpnhidenext.hooks.core.XposedHelpers
+import dev.soranerai.vpnhidenext.hooks.core.MethodHook as XC_MethodHook
 
 object ParcelHooks {
     fun hookNCWriteToParcel() {

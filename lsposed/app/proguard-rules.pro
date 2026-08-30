@@ -1,10 +1,12 @@
-# Keep Xposed entry points — LSPosed loads these by reflection via assets/xposed_init
--keep class dev.soranerai.vpnhidenext.HookEntry { *; }
+# Keep the Modern Xposed entry point — LSPosed loads it via java_init.list.
+-adaptresourcefilecontents META-INF/xposed/java_init.list
+-keep,allowoptimization,allowobfuscation public class * extends io.github.libxposed.api.XposedModule {
+    public <init>();
+}
 -keepnames class dev.soranerai.vpnhidenext.** { *; }
 
-# Keep Xposed API types
--keep class de.robv.android.xposed.** { *; }
--dontwarn de.robv.android.xposed.**
+# Keep Modern Xposed API annotations.
+-dontwarn io.github.libxposed.annotation.**
 
 # JNA — UniFFI Kotlin bindings call Rust via JNA. Native.initIDs looks up
 # com.sun.jna.Pointer.peer via JNI at init time; R8 renaming these classes

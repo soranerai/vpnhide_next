@@ -9,31 +9,29 @@ import android.net.NetworkInfo
 import android.net.RouteInfo
 import android.os.Binder
 import android.os.Build
-import de.robv.android.xposed.IXposedHookLoadPackage
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
-import de.robv.android.xposed.callbacks.XC_LoadPackage
 import dev.soranerai.vpnhidenext.generated.IfaceLists
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
+import dev.soranerai.vpnhidenext.hooks.core.ModernHookCompat
+import dev.soranerai.vpnhidenext.hooks.core.XposedBridge
+import dev.soranerai.vpnhidenext.hooks.core.XposedHelpers
 import dev.soranerai.vpnhidenext.hooks.handlers.ConnectivityHook
 import dev.soranerai.vpnhidenext.hooks.handlers.PackageManagerHook
 import dev.soranerai.vpnhidenext.hooks.handlers.ParcelHooks
 import dev.soranerai.vpnhidenext.hooks.handlers.UserManagerHook
+import io.github.libxposed.api.XposedModule
+import io.github.libxposed.api.XposedModuleInterface
 import java.io.File
 import java.util.concurrent.atomic.AtomicBoolean
+import dev.soranerai.vpnhidenext.hooks.core.MethodHook as XC_MethodHook
 
-class HookEntry : IXposedHookLoadPackage {
+class HookEntry : XposedModule() {
     private val hookInstalled = AtomicBoolean(false)
 
-    override fun handleLoadPackage(lpparam: XC_LoadPackage.LoadPackageParam) {
-        val inSystemServer =
-            hookInstalled.get() ||
-                lpparam.processName == "android" ||
-                android.os.Process.myUid() == 1000
+    override fun onModuleLoaded(param: XposedModuleInterface.ModuleLoadedParam) {
+        ModernHookCompat.install(this)
+    }
 
-        if (!inSystemServer) return
-
+    override fun onSystemServerStarting(param: XposedModuleInterface.SystemServerStartingParam) {
         if (hookInstalled.compareAndSet(false, true)) {
             HookLog.install()
             HookLog.i("VpnHide: system_server detected, installing Binder hooks")
@@ -379,7 +377,7 @@ class HookEntry : IXposedHookLoadPackage {
                             "binderClass=${binder.javaClass.name} " +
                             "classLoader=${classLoader.javaClass.name}",
                     )
-                    handleServiceHook(name, classLoader)
+                    handleServiceHook(name, binder, classLoader)
                 }
             },
         )
@@ -401,7 +399,7 @@ class HookEntry : IXposedHookLoadPackage {
                             "binderClass=${binder.javaClass.name} " +
                             "classLoader=${classLoader.javaClass.name}",
                     )
-                    handleServiceHook(name, classLoader)
+                    handleServiceHook(name, binder, classLoader)
                 }
             },
         )
@@ -460,7 +458,7 @@ class HookEntry : IXposedHookLoadPackage {
                     "binderClass=${binder.javaClass.name} " +
                     "classLoader=${classLoader.javaClass.name}",
             )
-            handleServiceHook(name, classLoader)
+            handleServiceHook(name, binder, classLoader)
         } catch (t: Throwable) {
             HookLog.e("VpnHide: checkAndHookExistingService($name) failed: ${t::class.java.simpleName}: ${t.message}")
         }
@@ -468,30 +466,34 @@ class HookEntry : IXposedHookLoadPackage {
 
     private fun handleServiceHook(
         name: String,
+        binder: android.os.IBinder,
         classLoader: ClassLoader,
     ) {
         val hookKey = "$name@${System.identityHashCode(classLoader)}"
-        if (!hookedServices.add(hookKey)) return
+        if (hookedServices.contains(hookKey)) return
 
-        when (name) {
-            "connectivity" -> {
-                HookLog.i("VpnHide: Installing APEX Connectivity hooks...")
-                tryHook("ConnectivityService.networkLogic") {
-                    ConnectivityHook.hookConnectivityService(classLoader)
+        try {
+            when (name) {
+                "connectivity" -> {
+                    HookLog.i("VpnHide: Installing APEX Connectivity hooks on ${binder.javaClass.name}...")
+                    // The binder class is the live APEX/OEM ConnectivityService
+                    // class. Do not resolve its name through a delegating loader.
+                    ConnectivityHook.hookConnectivityService(binder.javaClass)
                 }
-            }
 
-            "package" -> {
-                HookLog.i("VpnHide: Installing PackageManager hooks via APEX/ServiceManager loader...")
-                tryHook("PackageManager.queryIntentServices") { hookPackageManager(classLoader) }
-            }
+                "package" -> {
+                    HookLog.i("VpnHide: Installing PackageManager hooks via APEX/ServiceManager loader...")
+                    hookPackageManager(classLoader)
+                }
 
-            "user" -> {
-                HookLog.i("VpnHide: Installing UserManager hooks...")
-                tryHook("UserManagerService.profiles") {
+                "user" -> {
+                    HookLog.i("VpnHide: Installing UserManager hooks...")
                     UserManagerHook.hookUserManagerService(classLoader)
                 }
             }
+            hookedServices.add(hookKey)
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: $name service hook failed: ${t::class.java.simpleName}: ${t.message}")
         }
     }
 
