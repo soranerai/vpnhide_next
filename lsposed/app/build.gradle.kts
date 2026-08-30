@@ -117,8 +117,8 @@ android {
 }
 
 dependencies {
-    // Xposed API — compileOnly so it's not bundled into the APK.
-    compileOnly("de.robv.android.xposed:api:82")
+    // Modern Xposed API — compileOnly so it is provided by LSPosed/Vector.
+    compileOnly("io.github.libxposed:api:102.0.0")
 
     // Runtime deps for the committed uniffi-generated FFI bindings
     // (checks/vpnhide_checks.*.kt) — normally injected automatically by the

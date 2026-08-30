@@ -1,6 +1,6 @@
 package dev.soranerai.vpnhidenext
 
-import de.robv.android.xposed.XposedBridge
+import dev.soranerai.vpnhidenext.hooks.core.XposedBridge
 
 /**
  * Logging wrapper for hooks running in system_server.

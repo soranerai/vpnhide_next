@@ -4,11 +4,11 @@ import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.net.RouteInfo
 import android.os.Binder
-import de.robv.android.xposed.XC_MethodHook
-import de.robv.android.xposed.XposedBridge
-import de.robv.android.xposed.XposedHelpers
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
+import dev.soranerai.vpnhidenext.hooks.core.XposedBridge
+import dev.soranerai.vpnhidenext.hooks.core.XposedHelpers
+import dev.soranerai.vpnhidenext.hooks.core.MethodHook as XC_MethodHook
 
 object ConnectivityHook {
     @Volatile
