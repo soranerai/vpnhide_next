@@ -198,6 +198,7 @@
     <string name="gate_recheck">Проверить снова</string>
     <string name="gate_retry">Повторить поиск компонентов</string>
     <string name="gate_retry_download">Повторить загрузку</string>
+    <string name="gate_enter_anyway">Войти в интерфейс принудительно</string>
     <string name="dashboard_issue_reboot">LSPosed настроен правильно, но его хуки ещё не активны. Перезагрузите устройство, чтобы активировать их.</string>
     <string name="dashboard_issue_lsposed_config_unreadable">Не удалось прочитать конфигурацию LSPosed/Vector. Откройте LSPosed/Vector, проверьте что VPNHide Next там включён, затем снова откройте VPNHide Next.</string>
     <string name="dashboard_issue_lsposed_not_enabled">VPNHide Next найден в LSPosed/Vector, но модуль выключен. Включите VPNHide Next в LSPosed/Vector и оставьте в scope System Framework.</string>

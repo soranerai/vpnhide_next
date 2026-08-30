@@ -65,6 +65,10 @@ internal fun buildNativeInstallRecommendation(
                 KmiMatch("android16-6.12", "vpnhide-kmod-android16-6.12.zip")
             }
 
+            "Android 17" to "6.18" -> {
+                KmiMatch("android17-6.18", "vpnhide-kmod-android17-6.18.zip")
+            }
+
             else -> {
                 null
             }
@@ -102,6 +106,10 @@ internal fun buildNativeInstallRecommendation(
 
             "6.12" -> {
                 KmiMatch("android16-6.12", "vpnhide-kmod-android16-6.12.zip") to null
+            }
+
+            "6.18" -> {
+                KmiMatch("android17-6.18", "vpnhide-kmod-android17-6.18.zip") to null
             }
 
             else -> {

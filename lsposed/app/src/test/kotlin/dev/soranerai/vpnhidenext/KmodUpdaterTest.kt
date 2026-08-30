@@ -26,6 +26,18 @@ class KmodUpdaterTest {
     }
 
     @Test
+    fun `Android 17 KMI metadata is accepted`() {
+        val kmi = "android17-6.18"
+        val info =
+            fields(
+                kmi = kmi,
+                url = "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-kmod-$kmi.zip",
+            )
+
+        assertEquals(kmi, info?.kmi)
+    }
+
+    @Test
     fun `same and older releases are ignored`() {
         assertNull(fields(version = "2.3.0", installedVersion = "2.3.0"))
         assertNull(fields(version = "2.2.2", installedVersion = "2.3.0"))
@@ -43,18 +55,28 @@ class KmodUpdaterTest {
             isTrustedKmodDownloadUrl(
                 "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-kmod-android14-6.1.zip",
                 "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
             ),
         )
         assertFalse(
             isTrustedKmodDownloadUrl(
                 "https://example.com/vpnhide-kmod-android14-6.1.zip",
                 "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
             ),
         )
         assertFalse(
             isTrustedKmodDownloadUrl(
                 "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.0/vpnhide-kmod-android15-6.6.zip",
                 "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
+            ),
+        )
+        assertFalse(
+            isTrustedKmodDownloadUrl(
+                "https://github.com/soranerai/vpnhide_next/releases/download/v2.3.1/vpnhide-kmod-android14-6.1.zip",
+                "vpnhide-kmod-android14-6.1.zip",
+                "2.3.0",
             ),
         )
     }

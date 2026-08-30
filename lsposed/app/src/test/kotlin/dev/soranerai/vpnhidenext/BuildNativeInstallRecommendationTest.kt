@@ -50,6 +50,7 @@ class BuildNativeInstallRecommendationTest {
             Case("6.1.25-android14-g123abc", "android14-6.1"),
             Case("6.6.10-android15-g123abc", "android15-6.6"),
             Case("6.12.0-android16-g123abc", "android16-6.12"),
+            Case("6.18.0-android17-g123abc", "android17-6.18"),
         ).forEach { case ->
             val r = buildNativeInstallRecommendation(case.kernel, "Android 14")
             assertEquals("kernel ${case.kernel}", case.expectedKmi, r?.recommendedGkiVariant)
@@ -120,6 +121,14 @@ class BuildNativeInstallRecommendationTest {
         val r = buildNativeInstallRecommendation("6.12.1-custom", "Android 16")!!
         assertFalse(r.variantAmbiguous)
         assertEquals("android16-6.12", r.recommendedGkiVariant)
+    }
+
+    @Test
+    fun `no KMI 6_18 is deterministic`() {
+        val r = buildNativeInstallRecommendation("6.18.1-custom", "Android 17")!!
+        assertFalse(r.variantAmbiguous)
+        assertEquals("android17-6.18", r.recommendedGkiVariant)
+        assertEquals("vpnhide-kmod-android17-6.18.zip", r.recommendedArtifact)
     }
 
     // ── 4. KMI present but combo not shipping → series fallback ────────────

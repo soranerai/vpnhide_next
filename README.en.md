@@ -25,7 +25,7 @@
 The project implements a two-component hiding model that combines low-level system call interception in the kernel with system framework response modification:
 
 1. **Kernel Module (LKM or Built-in)**:
-   * **LKM (Loadable Kernel Module)**: Distributed as a loadable module for Android GKI kernels (Android 12–16, versions 5.10–6.12). Uses `kretprobes` to intercept network-related system calls and filesystem operations.
+   * **LKM (Loadable Kernel Module)**: Distributed as a loadable module for Android GKI kernels (Android 12–17, versions 5.10–6.18). Android 17 / kernel 6.18 is included in release publishing and automatic updates. Uses `kretprobes` to intercept network-related system calls and filesystem operations.
    * **Built-in Mode**: Direct integration of the hiding logic into the monolithic kernel source at build time. Provides zero call overhead, absolute resistance to syscall timing attacks, and maximum stability without depending on runtime module loading. Pre-built builds are available in the following repositories:
      * **Standard GKI2**: [GKI_KernelSU_SUSFS](https://github.com/soranerai/GKI_KernelSU_SUSFS)
 2. **LSPosed Module**:

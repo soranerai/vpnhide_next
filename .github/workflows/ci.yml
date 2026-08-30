@@ -37,11 +37,20 @@ jobs:
           - android14-6.1
           - android15-6.6
           - android16-6.12
+          - android17-6.18
     steps:
       - name: Download prebuilt kmod from backend repo
         run: |
           mkdir -p kmod-artifacts
-          gh release download --repo soranerai/vpnhide_next_backend \
+          BACKEND_RELEASE_TAG=()
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            # A public APK tag and the matching private tag describe one
+            # release set. Component versions inside that set may differ
+            # (for example APK 2.5.4 with kmod 2.5.3), so never substitute
+            # the backend's newest release while cutting a tagged APK.
+            BACKEND_RELEASE_TAG=("$GITHUB_REF_NAME")
+          fi
+          gh release download "${BACKEND_RELEASE_TAG[@]}" --repo soranerai/vpnhide_next_backend \
             -p "vpnhide-kmod-${{ matrix.kmi }}.zip" \
             -D kmod-artifacts
         env:
@@ -102,7 +111,13 @@ jobs:
       - name: Download prebuilt libvpnhide_checks.so from backend repo
         run: |
           mkdir -p lsposed/app/src/main/jniLibs/arm64-v8a
-          gh release download --repo soranerai/vpnhide_next_backend \
+          BACKEND_RELEASE_TAG=()
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            # See the kmod job: tagged public releases must consume the
+            # matching immutable private release set, not `latest`.
+            BACKEND_RELEASE_TAG=("$GITHUB_REF_NAME")
+          fi
+          gh release download "${BACKEND_RELEASE_TAG[@]}" --repo soranerai/vpnhide_next_backend \
             -p 'libvpnhide_checks.so' \
             -D lsposed/app/src/main/jniLibs/arm64-v8a
         env:
@@ -170,7 +185,12 @@ jobs:
       - name: Download prebuilt bridge from backend repo
         run: |
           mkdir -p bridge-artifacts
-          if ! gh release download --repo soranerai/vpnhide_next_backend \
+          BACKEND_RELEASE_TAG=()
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            # The bridge belongs to the same private release set as the APK.
+            BACKEND_RELEASE_TAG=("$GITHUB_REF_NAME")
+          fi
+          if ! gh release download "${BACKEND_RELEASE_TAG[@]}" --repo soranerai/vpnhide_next_backend \
             -p "vpnhide-bridge.zip" \
             -D bridge-artifacts; then
             echo "⚠ bridge artifact is unavailable; continuing without it"

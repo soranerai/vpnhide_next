@@ -32,10 +32,15 @@ keep the other versions unchanged. `release.py` validates the source and
 regenerates `CompatibilityMatrix.kt`; it does not assume that every component
 has the release version.
 
+For a public APK tag `vX.Y.Z`, CI downloads native build artifacts from the
+private backend release with the same tag. The versions *inside* that release
+set are the ones recorded in `data/compatibility.json`; they may differ from
+`X.Y.Z` (for example, APK 2.5.4 with kmod 2.5.3).
+
 The private native repository accepts the corresponding independent versions:
 
 ```sh
-python3 scripts/release.py 2.2.1 --kmod-version 2.1.0 --built-in-version 2.1.0
+python3 scripts/release.py 2.2.1 --kmod-version 2.1.0 --kpatch-version 2.1.0
 ```
 
 Omitting both options retains the legacy behavior and updates both native
@@ -45,6 +50,16 @@ components to the positional version.
    ```sh
    ./scripts/update-json.sh
    ```
+   For an independent native release, update only the component that changed:
+   ```sh
+   ./scripts/update-json.sh --kmod-version 2.5.5
+   ./scripts/update-json.sh --kpatch-version 2.5.5
+   # Bridge and KPatch released together, but independently from the APK:
+   ./scripts/update-json.sh --bridge-version 2.5.5 --kpatch-version 2.5.5
+   ```
+   The script preserves the other bridge/KPatch field when only one is
+   specified. The selected values must correspond to a row in
+   `data/compatibility.json` before the APK that depends on them is released.
    The script downloads each published backend kmod artifact and records its SHA-256
    digest in the matching metadata file. The app requires this digest before
    it will offer root-assisted installation.
