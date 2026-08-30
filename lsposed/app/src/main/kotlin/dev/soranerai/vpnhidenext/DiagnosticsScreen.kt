@@ -431,6 +431,10 @@ private fun nativeCheck(
         val detail = e.message ?: e.javaClass.simpleName
         VpnHideLog.e(TAG, "[$name] $detail", e)
         CheckResult(name, false, detail)
+    } catch (e: LinkageError) {
+        val detail = e.message ?: e.javaClass.simpleName
+        VpnHideLog.e(TAG, "[$name] native diagnostic library is incompatible: $detail", e)
+        CheckResult(name, false, detail)
     }
 
 // ==========================================================================

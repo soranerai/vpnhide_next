@@ -88,6 +88,9 @@ fi
 
 log_success "APK ready: ${BOLD}$APK_PATH${NC}"
 
+log_info "Verifying UniFFI exports packaged in the APK..."
+python3 "$REPO_ROOT/scripts/verify-uniffi-exports.py" "$APK_PATH"
+
 # 5. Install on device if requested
 if [[ "$INSTALL_APK" == "true" ]]; then
     log_info "Checking ADB device connection..."

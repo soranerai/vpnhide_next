@@ -2557,6 +2557,54 @@ pub fn check_arm_timing() -> CheckOutput {
     }
 }
 
+#[uniffi::export]
+pub fn check_udp_queue_pressure() -> CheckOutput {
+    if check_anti_debug() {
+        return CheckOutput::pass("unable to run check".to_string());
+    }
+    unsafe {
+        let fd = libc::socket(libc::AF_INET, libc::SOCK_DGRAM | libc::SOCK_NONBLOCK, 0);
+        if fd < 0 {
+            return CheckOutput::fail("check error");
+        }
+
+        let mut dest: libc::sockaddr_in = std::mem::zeroed();
+        dest.sin_family = libc::AF_INET as libc::sa_family_t;
+        dest.sin_port = 53u16.to_be();
+        dest.sin_addr.s_addr = 0x08080808; // 8.8.8.8
+
+        let payload = [0u8; 32];
+        let mut successful_sends = 0;
+        const ITERATIONS: usize = 1000;
+        for _ in 0..ITERATIONS {
+            if libc::sendto(
+                fd,
+                payload.as_ptr().cast(),
+                payload.len(),
+                0,
+                std::ptr::from_ref(&dest).cast(),
+                std::mem::size_of_val(&dest) as libc::socklen_t,
+            ) >= 0
+            {
+                successful_sends += 1;
+            }
+        }
+        libc::close(fd);
+
+        // The udp_sendmsg hook applies queue pressure to non-blocking UDP
+        // sockets. A nearly unbounded send queue exposes the VPN path.
+        if successful_sends >= 980 {
+            CheckOutput::fail(format!(
+                "VPN detected: {successful_sends}/{ITERATIONS} sends succeeded"
+            ))
+        } else {
+            CheckOutput::pass(format!(
+                "not detected: {successful_sends}/{ITERATIONS} sends succeeded"
+            ))
+        }
+    }
+}
+
 #[repr(C)]
 struct sock_extended_err {
     ee_errno: u32,
@@ -3364,6 +3412,7 @@ pub fn run_all_checks_cli() {
         ("check_tcp_mss", check_tcp_mss),
         ("check_tcp_info_mss", check_tcp_info_mss),
         ("check_udp_pmtu", check_udp_pmtu),
+        ("check_udp_queue_pressure", check_udp_queue_pressure),
         ("check_netlink_getneigh", check_netlink_getneigh),
         ("check_qdisc_by_ifindex", check_qdisc_by_ifindex),
         ("check_loopback_bind_conflict", check_loopback_bind_conflict),

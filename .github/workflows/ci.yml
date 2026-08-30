@@ -158,6 +158,7 @@ jobs:
               cp app/build/outputs/apk/release/app-release.apk "$GITHUB_WORKSPACE/vpnhide.apk"
               ;;
           esac
+          python3 "$GITHUB_WORKSPACE/scripts/verify-uniffi-exports.py" "$GITHUB_WORKSPACE/vpnhide.apk"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7

@@ -20,6 +20,24 @@ cargo {
     }
 }
 
+// Gobley is the sole producer of libvpnhide_checks.so. A leftover manual
+// jniLibs copy takes precedence during Android packaging and can silently pair
+// stale Rust exports with newer generated Kotlin bindings.
+val verifyNoLegacyJniLibs by tasks.registering {
+    doLast {
+        val legacyDir = layout.projectDirectory.dir("src/main/jniLibs").asFile
+        if (legacyDir.exists()) {
+            throw GradleException(
+                "Remove ${legacyDir.relativeTo(projectDir)}: libvpnhide_checks.so is built by Gobley.",
+            )
+        }
+    }
+}
+
+tasks.matching { it.name.startsWith("assemble") }.configureEach {
+    dependsOn(verifyNoLegacyJniLibs)
+}
+
 android {
     namespace = "dev.soranerai.vpnhidenext"
     compileSdk = 35

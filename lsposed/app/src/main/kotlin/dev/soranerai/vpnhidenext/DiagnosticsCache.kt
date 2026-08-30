@@ -230,6 +230,18 @@ internal object DiagnosticsCache {
                     }
                 _state.value = State.Ready(CheckResults(failedNative, failedJava))
                 VpnHideLog.w("VpnHide-Diag", "runAllChecks failed: ${e.message}")
+            } catch (e: LinkageError) {
+                tickerJob.cancel()
+                val failedNative =
+                    currentResults.native.map {
+                        if (it.isRunning) it.copy(passed = false, isRunning = false) else it
+                    }
+                val failedJava =
+                    currentResults.java.map {
+                        if (it.isRunning) it.copy(passed = false, isRunning = false) else it
+                    }
+                _state.value = State.Ready(CheckResults(failedNative, failedJava))
+                VpnHideLog.w("VpnHide-Diag", "native diagnostic library is incompatible: ${e.message}")
             } finally {
                 // Whether checks passed, failed, or threw — the test
                 // tunnel's only job was to get through this run.
