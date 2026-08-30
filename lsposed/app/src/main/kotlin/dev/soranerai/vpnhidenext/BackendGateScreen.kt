@@ -270,7 +270,10 @@ internal fun BackendGateScreen(
                         if ((!allowKmodRepair || kmodTarget == null || kmodState == KmodUpdateState.None) &&
                             (builtInTarget == null || builtInState == BuiltInUpdateState.None)
                         ) {
-                            OutlinedButton(onClick = onRefresh) {
+                            OutlinedButton(
+                                onClick = onRefresh,
+                                modifier = Modifier.fillMaxWidth(),
+                            ) {
                                 Text(stringResource(R.string.gate_retry))
                             }
                         }
