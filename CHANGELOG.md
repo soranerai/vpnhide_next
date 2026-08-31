@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.5.5
+
+### Added
+- Add in-app updates for kmods built for Android 17 and kernel 6.18.
+- Add Simplified Chinese localization to the app.
+
+### Changed
+- Allow the version-mismatch screen to be bypassed once while troubleshooting.
+- Make the backend gate repair controls use the full available width.
+- Migrate the LSPosed module runtime to Modern Xposed API 102.
+
+### Fixed
+- Restore compatible native component versions after an app update.
+- Fix an APK crash caused by mismatched native diagnostic bindings and library exports.
+
 ## v2.5.4
 
 ### Added

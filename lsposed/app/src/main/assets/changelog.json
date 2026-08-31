@@ -1,6 +1,54 @@
 {
   "history": [
     {
+      "version": "2.5.5",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add in-app updates for kmods built for Android 17 and kernel 6.18.",
+              "ru": "Добавлено обновление kmod для Android 17 и ядра 6.18 из приложения."
+            },
+            {
+              "en": "Add Simplified Chinese localization to the app.",
+              "ru": "Добавлена упрощённая китайская локализация приложения."
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Allow the version-mismatch screen to be bypassed once while troubleshooting.",
+              "ru": "Экран несовпадения версий можно один раз пропустить для доступа к интерфейсу во время диагностики."
+            },
+            {
+              "en": "Make the backend gate repair controls use the full available width.",
+              "ru": "Кнопки восстановления на экране проверки backend теперь занимают всю доступную ширину."
+            },
+            {
+              "en": "Migrate the LSPosed module runtime to Modern Xposed API 102.",
+              "ru": "Модуль LSPosed переведён на Modern Xposed API 102."
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Restore compatible native component versions after an app update.",
+              "ru": "После обновления приложения восстанавливать совместимые версии нативных компонентов."
+            },
+            {
+              "en": "Fix an APK crash caused by mismatched native diagnostic bindings and library exports.",
+              "ru": "Устранён сбой APK из-за несовпадения нативных диагностических привязок и экспортов библиотеки."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.5.4",
       "sections": [
         {

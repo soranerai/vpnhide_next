@@ -1,3 +1,18 @@
+## v2.5.5
+
+### Added
+- Add in-app updates for kmods built for Android 17 and kernel 6.18.
+- Add Simplified Chinese localization to the app.
+
+### Changed
+- Allow the version-mismatch screen to be bypassed once while troubleshooting.
+- Make the backend gate repair controls use the full available width.
+- Migrate the LSPosed module runtime to Modern Xposed API 102.
+
+### Fixed
+- Restore compatible native component versions after an app update.
+- Fix an APK crash caused by mismatched native diagnostic bindings and library exports.
+
 ## v2.5.4
 
 ### Added
@@ -31,19 +46,3 @@
 - Treat vpnhide_ctrl presence as active and repair only the missing bridge
 - Prevent the protection picker from reverting newly saved targets after an asynchronous refresh
 - Use an import icon for the backup restore file picker
-
-## v2.5.0
-
-### Changed
-- LSPosed now hides all active VPN interfaces reported by the daemon
-- Optimize LSPosed hook callbacks by reusing effective UID context
-- Recognize ap, Tailscale, HE IPv6, ZeroTier, and short Tailscale interfaces as VPN tunnels
-- Improved port rule editing with strict range validation and inline guidance
-- Disabled CONFIG_USER_NS in built-in build to eliminate indirect kernel modification indicator
-- Optimized eBPF hooks (-3.5% wall -3.3% CPU)
-- Optimized readdir hooks (-3.5% wall -3% CPU)
-- Other minor optimizations
-
-### Fixed
-- Show built-in bridge updates independently when the embedded kernel is already current
-- Avoid exposing incomplete mobile LinkProperties during network handover by reusing the last complete snapshot for the same interface.
