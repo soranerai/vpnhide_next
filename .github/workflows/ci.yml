@@ -196,7 +196,9 @@ jobs:
 
 
   release:
-    needs: [kmod, lsposed, bridge]
+    # Kernel packages are published independently from the APK. Do not let
+    # unavailable backend artifacts block an APK release.
+    needs: lsposed
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     # Only the release job needs write — used by softprops/action-gh-release
