@@ -1,6 +1,38 @@
 {
   "history": [
     {
+      "version": "2.5.6",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Diagnostics now probe whether NAT-T keepalive offload can be admitted on Wi-Fi.",
+              "ru": "Диагностика теперь проверяет, может ли NAT-T keepalive offload быть принят в Wi-Fi-сети."
+            }
+          ]
+        },
+        {
+          "type": "changed",
+          "items": [
+            {
+              "en": "Native diagnostics now report more information",
+              "ru": "Нативная диагностика теперь показывает больше информации"
+            }
+          ]
+        },
+        {
+          "type": "security",
+          "items": [
+            {
+              "en": "Block NAT-T keepalive offload requests from protected apps before they can bypass VPN lockdown.",
+              "ru": "Блокируются запросы NAT-T keepalive offload от защищаемых приложений до обхода VPN lockdown."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.5.5",
       "sections": [
         {
