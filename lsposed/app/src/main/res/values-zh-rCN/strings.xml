@@ -629,6 +629,7 @@
     <string name="hook_name_package_manager">隐藏 VPN 应用</string>
     <string name="hook_name_user_manager">隐藏工作资料</string>
     <string name="hook_name_self_hide">隐藏 VPNHide Next 自身</string>
+    <string name="hook_name_natt_keepalive_guard">NAT-T keepalive 防护</string>
     <string name="hook_symbol_link_properties" translatable="false">android.net.LinkProperties</string>
     <string name="hook_symbol_network_capabilities" translatable="false">android.net.NetworkCapabilities</string>
     <string name="hook_symbol_network_info" translatable="false">android.net.NetworkInfo</string>
@@ -645,6 +646,7 @@
     <string name="hook_desc_package_manager">过滤 VpnServices，并向 target app 隐藏 VPN package。</string>
     <string name="hook_desc_user_manager">过滤 user profile，并 spoof isManagedProfile check 以隐藏 work profile。</string>
     <string name="hook_desc_self_hide">从 target app 发出的 PackageManager query 结果中隐藏 VPNHide Next package。</string>
+    <string name="hook_desc_natt_keepalive_guard">阻止可能在 Wi-Fi 上绕过 VPN 锁定的 NAT-T keepalive offload 请求。</string>
 
     <!-- Kernel symbols are technical names and remain unchanged. -->
     <string name="hook_symbol_dev_ioctl" translatable="false">dev_ioctl</string>

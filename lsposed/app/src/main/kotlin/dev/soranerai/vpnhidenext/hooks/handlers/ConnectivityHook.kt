@@ -3,19 +3,27 @@ package dev.soranerai.vpnhidenext.hooks.handlers
 import android.net.LinkProperties
 import android.net.NetworkCapabilities
 import android.net.RouteInfo
+import android.net.SocketKeepalive
 import android.os.Binder
+import android.os.ParcelFileDescriptor
 import dev.soranerai.vpnhidenext.HookLog
 import dev.soranerai.vpnhidenext.hooks.core.HookContext
 import dev.soranerai.vpnhidenext.hooks.core.XposedBridge
 import dev.soranerai.vpnhidenext.hooks.core.XposedHelpers
 import dev.soranerai.vpnhidenext.hooks.core.MethodHook as XC_MethodHook
+import java.util.concurrent.atomic.AtomicLong
 
 object ConnectivityHook {
+    private const val JAVA_HOOK_BIT_NATT_KEEPALIVE_GUARD = 8
+    private const val NATT_GUARD_LOG_INTERVAL_MS = 60_000L
+
     @Volatile
     private var lastUsablePhysicalLinkProperties: LinkProperties? = null
 
     @Volatile
     private var lastUsablePhysicalIfaceName: String? = null
+
+    private val lastNattGuardLogAt = AtomicLong(0)
 
     /**
      * Attach to the runtime class carried by ServiceManager's live binder.
@@ -153,6 +161,8 @@ object ConnectivityHook {
             HookLog.e("VpnHide: failed to install ConnectivityService network hooks: ${t.message}")
         }
 
+        installNattKeepaliveGuard(csClass)
+
         try {
             val getDefaultProxyMethod =
                 findMethodInHierarchy(
@@ -199,6 +209,105 @@ object ConnectivityHook {
         } catch (t: Throwable) {
             HookLog.e("VpnHide: failed to hook getProxyForNetwork: ${t.message}")
         }
+    }
+
+    /**
+     * Reject NAT-T offload before ConnectivityService gives it to
+     * KeepaliveTracker. The Binder calling UID is still the requesting app at
+     * this point; later transport/HAL stages no longer retain that identity.
+     */
+    private fun installNattKeepaliveGuard(csClass: Class<*>) {
+        val methods =
+            methodsInHierarchy(csClass)
+                .filter { it.name == "startNattKeepaliveWithFd" }
+                .distinct()
+                .toList()
+        if (methods.isEmpty()) {
+            HookLog.i("VpnHide: startNattKeepaliveWithFd is unavailable on ${csClass.name}")
+            return
+        }
+
+        var installed = 0
+        for (method in methods) {
+            try {
+                XposedBridge.hookMethod(
+                    method,
+                    object : XC_MethodHook() {
+                        override fun beforeHookedMethod(param: MethodHookParam) {
+                            // Do not use resolveEffectiveUid here: this is a
+                            // synchronous inbound Binder call and its raw UID
+                            // is the security principal we must enforce.
+                            val uid = Binder.getCallingUid()
+                            if (!HookContext.isTargetUid(uid) ||
+                                !HookContext.isJavaHookActive(JAVA_HOOK_BIT_NATT_KEEPALIVE_GUARD, uid)
+                            ) {
+                                return
+                            }
+
+                            // Suppressing the original method also suppresses
+                            // its finally block, which normally closes the
+                            // Binder-duplicated ParcelFileDescriptor.
+                            closeTransferredParcelFileDescriptor(param.args)
+                            notifyNattKeepaliveUnsupported(param.args)
+                            HookContext.recordIntercept("NattKeepaliveGuard", uid)
+                            logNattKeepaliveDenied(uid)
+                            param.result = null
+                        }
+                    },
+                )
+                installed++
+            } catch (t: Throwable) {
+                HookLog.e("VpnHide: failed to hook ${method.name}: ${t.message}")
+            }
+        }
+        HookLog.i("VpnHide: NAT-T keepalive guard installed on $installed overload(s)")
+    }
+
+    private fun closeTransferredParcelFileDescriptor(args: List<Any?>) {
+        val pfd = args.filterIsInstance<ParcelFileDescriptor>().firstOrNull() ?: return
+        try {
+            pfd.close()
+        } catch (_: Throwable) {
+        }
+    }
+
+    /**
+     * ISocketKeepaliveCallback is hidden from the app compile SDK. Its Binder
+     * proxy nevertheless exposes public onError(int) at runtime, so invoke it
+     * reflectively rather than depending on a hidden framework stub.
+     */
+    private fun notifyNattKeepaliveUnsupported(args: List<Any?>) {
+        val callback =
+            args.firstOrNull { candidate ->
+                candidate != null &&
+                    candidate.javaClass.methods.any { method ->
+                        method.name == "onError" &&
+                            isSingleIntParameter(method)
+                    }
+            } ?: return
+        try {
+            val onError =
+                callback.javaClass.methods.first { method ->
+                    method.name == "onError" &&
+                        isSingleIntParameter(method)
+                }
+            onError.isAccessible = true
+            onError.invoke(callback, SocketKeepalive.ERROR_UNSUPPORTED)
+        } catch (t: Throwable) {
+            HookLog.e("VpnHide: failed to notify NAT-T keepalive rejection: ${t.message}")
+        }
+    }
+
+    private fun isSingleIntParameter(method: java.lang.reflect.Method): Boolean =
+        method.parameterTypes.size == 1 && method.parameterTypes[0] == Int::class.javaPrimitiveType
+
+    private fun logNattKeepaliveDenied(uid: Int) {
+        val now = android.os.SystemClock.elapsedRealtime()
+        val previous = lastNattGuardLogAt.get()
+        if (now - previous < NATT_GUARD_LOG_INTERVAL_MS || !lastNattGuardLogAt.compareAndSet(previous, now)) {
+            return
+        }
+        HookLog.i("VpnHide: denied NAT-T keepalive offload for target UID $uid")
     }
 
     private fun installConnectivityServiceNetworkHooks(csClass: Class<*>) {

@@ -400,6 +400,7 @@
     <string name="check_vpn_callback_suppression" translatable="false">VPN callback suppression</string>
     <string name="check_wifi_info_spoof" translatable="false">WifiInfo redaction bypass</string>
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
+    <string name="check_natt_keepalive_offload" translatable="false">NAT-T keepalive offload</string>
 
     <string name="diag_open_details_btn">More details</string>
 
@@ -505,6 +506,7 @@
     <string name="hook_desc_package_manager">Filters VpnServices and hides VPN packages from targeted apps.</string>
     <string name="hook_desc_user_manager">Filters user profiles and spoof isManagedProfile checks to hide work profiles.</string>
     <string name="hook_desc_self_hide">Hides the VPNHide Next package itself from PackageManager queries made by targeted apps.</string>
+    <string name="hook_desc_natt_keepalive_guard">Blocks NAT-T keepalive offload requests that could bypass VPN lockdown on Wi-Fi.</string>
 
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Backup &amp; Restore</string>
@@ -628,6 +630,7 @@
     <string name="hook_name_package_manager">Hiding VPN apps</string>
     <string name="hook_name_user_manager">Hiding work profiles</string>
     <string name="hook_name_self_hide">Hiding VPNHide Next itself</string>
+    <string name="hook_name_natt_keepalive_guard">NAT-T keepalive guard</string>
 
     <!-- Java Hook Symbols -->
     <string name="hook_symbol_link_properties" translatable="false">android.net.LinkProperties</string>
@@ -638,6 +641,7 @@
     <string name="hook_symbol_package_manager" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
     <string name="hook_symbol_user_manager" translatable="false">com.android.server.pm.UserManagerService</string>
     <string name="hook_symbol_self_hide" translatable="false">com.android.server.pm.PackageManagerService$IPackageManagerImpl</string>
+    <string name="hook_symbol_natt_keepalive_guard" translatable="false">com.android.server.ConnectivityService#startNattKeepaliveWithFd</string>
 
 
     <!-- Intercepts Statistics Dashboard -->

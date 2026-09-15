@@ -223,4 +223,10 @@ val ALL_JAVA_HOOKS =
             R.string.hook_symbol_self_hide,
             R.string.hook_desc_self_hide,
         ),
+        HookInfo(
+            8,
+            R.string.hook_name_natt_keepalive_guard,
+            R.string.hook_symbol_natt_keepalive_guard,
+            R.string.hook_desc_natt_keepalive_guard,
+        ),
     )

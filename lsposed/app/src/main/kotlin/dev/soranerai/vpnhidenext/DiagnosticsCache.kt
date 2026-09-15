@@ -195,7 +195,12 @@ internal object DiagnosticsCache {
             try {
                 val cm = appContext.getSystemService(ConnectivityManager::class.java)
                 val results =
-                    runAllChecks(cm, appContext, hookMask) { updatedResult, isJava ->
+                    runAllChecks(
+                        cm,
+                        appContext,
+                        hookMask,
+                        allowNattKeepaliveProbe = !usingSelfTest,
+                    ) { updatedResult, isJava ->
                         synchronized(lock) {
                             val newNative =
                                 if (isJava) {

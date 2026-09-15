@@ -1,7 +1,9 @@
 package dev.soranerai.vpnhidenext
 
 import android.net.ConnectivityManager
+import android.net.IpSecManager
 import android.net.NetworkCapabilities
+import android.net.SocketKeepalive
 import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
@@ -63,10 +65,16 @@ import kotlinx.coroutines.withContext
 import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
+import java.net.Inet4Address
+import java.net.InetAddress
 import java.net.NetworkInterface
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executor
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
@@ -301,6 +309,7 @@ internal suspend fun runAllChecks(
     cm: ConnectivityManager,
     context: android.content.Context,
     hookMask: UInt = 0xFFFFFFFFu,
+    allowNattKeepaliveProbe: Boolean = true,
     onResult: ((CheckResult, isJava: Boolean) -> Unit)? = null,
 ): CheckResults =
     coroutineScope {
@@ -382,6 +391,14 @@ internal suspend fun runAllChecks(
                 { checkNetworkCallback(cm, res.getString(R.string.check_network_callback)) },
                 { checkVpnCallbackSuppression(cm, res.getString(R.string.check_vpn_callback_suppression)) },
                 { checkGetNetworkForType(cm, res.getString(R.string.check_get_network_for_type)) },
+                {
+                    checkNattKeepaliveOffload(
+                        cm,
+                        context.getSystemService(IpSecManager::class.java),
+                        res.getString(R.string.check_natt_keepalive_offload),
+                        allowNattKeepaliveProbe,
+                    )
+                },
             )
 
         val nativeDeferred =
@@ -825,6 +842,90 @@ private fun checkGetNetworkForType(
         return CheckResult(name, passed, detail)
     } catch (e: Exception) {
         return CheckResult(name, true, "not supported or error: ${e.message}")
+    }
+}
+
+/**
+ * Tests whether this process can have an IPsec NAT-T keepalive admitted for a
+ * physical Wi-Fi network. A successful callback is a risk indicator, not
+ * proof that a packet bypassed VPN lockdown: that requires an AP/router
+ * capture. The probe is deliberately skipped for the local-only self-test
+ * VPN, so an automatic diagnostics run never emits UDP/4500 traffic.
+ */
+private fun checkNattKeepaliveOffload(
+    cm: ConnectivityManager,
+    ipSec: IpSecManager?,
+    name: String,
+    allowProbe: Boolean,
+): CheckResult {
+    if (!allowProbe) {
+        return CheckResult(name, null, "not assessed: local-only self-test VPN")
+    }
+    if (ipSec == null) return CheckResult(name, null, "not assessed: IpSecManager unavailable")
+
+    val network = cm.activeNetwork ?: return CheckResult(name, null, "not assessed: no active network")
+    val caps = cm.getNetworkCapabilities(network)
+    if (caps?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) != true) {
+        return CheckResult(name, null, "not assessed: active network is not Wi-Fi")
+    }
+    val source =
+        cm
+            .getLinkProperties(network)
+            ?.linkAddresses
+            ?.map { it.address }
+            ?.filterIsInstance<Inet4Address>()
+            ?.firstOrNull { !it.isLoopbackAddress && !it.isLinkLocalAddress }
+            ?: return CheckResult(name, null, "not assessed: Wi-Fi has no usable IPv4 address")
+
+    val outcome = AtomicReference<String>()
+    val callbackLatch = CountDownLatch(1)
+    val callback =
+        object : SocketKeepalive.Callback() {
+            override fun onStarted() {
+                outcome.compareAndSet(null, "started")
+                callbackLatch.countDown()
+            }
+
+            override fun onError(error: Int) {
+                outcome.compareAndSet(null, "error $error")
+                callbackLatch.countDown()
+            }
+        }
+    val directExecutor = Executor { command -> command.run() }
+    var socket: IpSecManager.UdpEncapsulationSocket? = null
+    var keepalive: SocketKeepalive? = null
+    try {
+        val nattSocket = ipSec.openUdpEncapsulationSocket()
+        socket = nattSocket
+        // TEST-NET-1 is non-routable. It avoids contacting an application
+        // endpoint. This check stops after admission; it does not claim to
+        // prove a physical packet escaped VPN lockdown.
+        val destination = InetAddress.getByName("192.0.2.1")
+        keepalive = cm.createSocketKeepalive(network, nattSocket, source, destination, directExecutor, callback)
+        keepalive.start(20)
+        callbackLatch.await(5, TimeUnit.SECONDS)
+    } catch (e: Exception) {
+        return CheckResult(name, null, "not assessed: ${e::class.java.simpleName}: ${e.message}")
+    } finally {
+        try {
+            keepalive?.stop()
+        } catch (_: Exception) {
+        }
+        try {
+            socket?.close()
+        } catch (_: Exception) {
+        }
+    }
+
+    return when (val result = outcome.get()) {
+        "started" ->
+            CheckResult(
+                name,
+                false,
+                "risk: NAT-T keepalive offload was admitted; verify physical UDP/4500 with AP/router capture",
+            )
+        null -> CheckResult(name, null, "not assessed: no keepalive callback within 5 seconds")
+        else -> CheckResult(name, null, "not assessed: keepalive rejected ($result)")
     }
 }
 

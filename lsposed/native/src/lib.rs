@@ -276,9 +276,18 @@ pub struct CheckOutput {
 
 impl CheckOutput {
     fn pass(detail: impl Into<String>) -> Self {
+        let detail = detail.into();
+        // Older probes used the same opaque success text everywhere. Keep the
+        // API stable while ensuring every native result tells the user what a
+        // PASS actually means, even for probes that cannot report a count.
+        let detail = if detail == "not detected" {
+            "probe completed; no VPN indicator was exposed".to_string()
+        } else {
+            detail
+        };
         Self {
             status: CheckStatus::Pass,
-            detail: detail.into(),
+            detail,
         }
     }
 
@@ -372,11 +381,16 @@ fn last_os_errno() -> i32 {
     std::io::Error::last_os_error().raw_os_error().unwrap_or(0)
 }
 
-fn format_iface_result(vpn: &[String]) -> CheckOutput {
+fn format_iface_result(surface: &str, inspected: usize, vpn: &[String]) -> CheckOutput {
     if vpn.is_empty() {
-        CheckOutput::pass("not detected")
+        CheckOutput::pass(format!(
+            "{surface}: inspected {inspected} interface record(s); no active VPN interface was visible"
+        ))
     } else {
-        CheckOutput::fail("VPN detected")
+        CheckOutput::fail(format!(
+            "{surface}: exposed active VPN interface(s): {}",
+            vpn.join(", ")
+        ))
     }
 }
 
@@ -514,14 +528,18 @@ fn check_ioctl_siocgifflags() -> CheckOutput {
 
             if ret < 0 {
                 if err == libc::ENODEV || err == libc::ENXIO {
-                    CheckOutput::pass("not detected")
+                    CheckOutput::pass(format!(
+                        "SIOCGIFFLAGS(tun0): interface is absent (errno {err})"
+                    ))
                 } else {
                     CheckOutput::fail("check error")
                 }
             } else {
                 let flags = ifr.ifr_ifru.ifru_flags as u32;
                 if flags & libc::IFF_UP as u32 == 0 {
-                    CheckOutput::pass("not detected")
+                    CheckOutput::pass(format!(
+                        "SIOCGIFFLAGS(tun0): interface is not UP (flags 0x{flags:x})"
+                    ))
                 } else {
                     CheckOutput::fail("VPN detected")
                 }
@@ -543,7 +561,9 @@ fn check_ioctl_siocgifmtu() -> CheckOutput {
 
             if ret < 0 {
                 if err == libc::ENODEV || err == libc::ENXIO {
-                    CheckOutput::pass("not detected")
+                    CheckOutput::pass(format!(
+                        "SIOCGIFMTU(tun0): interface is absent (errno {err})"
+                    ))
                 } else {
                     CheckOutput::fail("check error")
                 }
@@ -554,7 +574,9 @@ fn check_ioctl_siocgifmtu() -> CheckOutput {
                 if libc::ioctl(fd, libc::SIOCGIFFLAGS as _, &mut flags_ifr) == 0 {
                     let flags = flags_ifr.ifr_ifru.ifru_flags as u32;
                     if flags & libc::IFF_UP as u32 == 0 {
-                        return CheckOutput::pass("not detected");
+                        return CheckOutput::pass(format!(
+                            "SIOCGIFMTU(tun0): interface is not UP (flags 0x{flags:x})"
+                        ));
                     }
                 }
                 CheckOutput::fail("VPN detected")
@@ -587,7 +609,7 @@ fn check_ioctl_siocgifconf() -> CheckOutput {
                 }
             }
 
-            format_iface_result(&vpn)
+            format_iface_result("SIOCGIFCONF", count, &vpn)
         })
     }
 }
@@ -601,9 +623,11 @@ fn check_getifaddrs() -> CheckOutput {
         }
 
         let mut vpn: Vec<String> = Vec::new();
+        let mut inspected = 0;
         let mut ifa = addrs;
         while !ifa.is_null() {
             let entry = &*ifa;
+            inspected += 1;
             if !entry.ifa_name.is_null() {
                 let name = cstr_to_str(entry.ifa_name);
                 if is_vpn_iface(&name) && !vpn.contains(&name) {
@@ -617,7 +641,7 @@ fn check_getifaddrs() -> CheckOutput {
         }
         libc::freeifaddrs(addrs);
 
-        format_iface_result(&vpn)
+        format_iface_result("getifaddrs", inspected, &vpn)
     }
 }
 
@@ -625,7 +649,9 @@ fn check_proc_file(path: &str) -> CheckOutput {
     match std::fs::read_to_string(path) {
         Err(e) => {
             if is_selinux_denial(&e) {
-                return CheckOutput::pass("not detected");
+                return CheckOutput::pass(format!(
+                    "{path}: access denied by SELinux; the surface is hidden from this app"
+                ));
             }
             CheckOutput::fail("check error")
         }
@@ -639,7 +665,10 @@ fn check_proc_file(path: &str) -> CheckOutput {
             if has_active_vpn {
                 CheckOutput::fail("VPN detected")
             } else {
-                CheckOutput::pass("not detected")
+                CheckOutput::pass(format!(
+                    "{path}: inspected {} line(s); no active VPN interface reference was visible",
+                    content.lines().count()
+                ))
             }
         }
     }
@@ -683,7 +712,7 @@ fn open_netlink() -> Result<i32, CheckOutput> {
         if fd < 0 {
             let e = std::io::Error::last_os_error();
             return Err(if is_selinux_denial(&e) {
-                CheckOutput::pass("not detected")
+                CheckOutput::pass("netlink socket: access denied by SELinux; no data exposed")
             } else {
                 CheckOutput::fail("check error")
             });
@@ -805,7 +834,9 @@ pub fn check_netlink_getlink() -> CheckOutput {
             let e = std::io::Error::last_os_error();
             libc::close(fd);
             return if is_selinux_denial(&e) {
-                CheckOutput::pass("not detected")
+                CheckOutput::pass(
+                    "RTM_GETLINK: request denied by SELinux; no interface data exposed",
+                )
             } else {
                 CheckOutput::fail("check error")
             };
@@ -813,6 +844,7 @@ pub fn check_netlink_getlink() -> CheckOutput {
 
         let mut buf = [0u8; 32768];
         let mut vpn = Vec::new();
+        let mut inspected = 0;
         let hdr_plus_ifinfo =
             std::mem::size_of::<libc::nlmsghdr>() + std::mem::size_of::<Ifinfomsg>();
 
@@ -826,6 +858,7 @@ pub fn check_netlink_getlink() -> CheckOutput {
                 len as usize,
                 libc::RTM_NEWLINK,
                 |b, offset, msg_len| {
+                    inspected += 1;
                     let data_start = offset + hdr_plus_ifinfo;
                     let msg_end = offset + msg_len;
                     let ifi_ptr = b
@@ -853,7 +886,7 @@ pub fn check_netlink_getlink() -> CheckOutput {
         }
         libc::close(fd);
 
-        format_iface_result(&vpn)
+        format_iface_result("RTM_GETLINK", inspected, &vpn)
     }
 }
 

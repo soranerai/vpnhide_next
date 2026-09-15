@@ -314,6 +314,7 @@
     <string name="diag_debug_logging_description">Подробное логирование в logcat и dmesg. Не включать без необходимости.</string>
 
     <string name="check_get_network_for_type" translatable="false">getNetworkForType() scan</string>
+    <string name="check_natt_keepalive_offload" translatable="false">NAT-T keepalive offload</string>
     <string name="check_arm_timing" translatable="false">Измерение таймингов ARM CNTVCT</string>
     <string name="check_udp_queue_pressure" translatable="false">udp_sendmsg sk_sndbuf timing</string>
     <string name="check_gso_asymmetry" translatable="false">setsockopt UDP_SEGMENT probe</string>
@@ -454,6 +455,7 @@
     <string name="hook_desc_package_manager">Фильтрует VpnServices и скрывает VPN приложения для целевых приложений.</string>
     <string name="hook_desc_user_manager">Фильтрует профили пользователей и подменяет проверки isManagedProfile для сокрытия рабочего профиля.</string>
     <string name="hook_desc_self_hide">Скрывает пакет самого VPNHide Next из результатов PackageManager для целевых приложений.</string>
+    <string name="hook_desc_natt_keepalive_guard">Блокирует запросы NAT-T keepalive offload, способные обойти VPN lockdown в Wi-Fi.</string>
 
     <!-- Backup & Restore -->
     <string name="backup_restore_title">Резервное копирование</string>
@@ -550,6 +552,7 @@
     <string name="hook_name_package_manager">Сокрытие VPN-приложений</string>
     <string name="hook_name_user_manager">Сокрытие рабочего профиля</string>
     <string name="hook_name_self_hide">Сокрытие самого VPNHide Next</string>
+    <string name="hook_name_natt_keepalive_guard">Защита NAT-T keepalive</string>
 
     <!-- Intercepts Statistics Dashboard -->
     <string name="dashboard_stats_empty_title">Перехваты отсутствуют</string>
