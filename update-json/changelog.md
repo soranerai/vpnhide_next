@@ -1,3 +1,5 @@
+## v2.5.7
+
 ## v2.5.6
 
 ### Added
@@ -33,11 +35,3 @@
 - Bridge updates can now be installed without updating a compatible built-in kernel.
 
 ## v2.5.3
-
-## v2.5.2
-
-### Fixed
-- Centralize intercept statistics loading to prevent duplicate screen refreshes
-- Respect compatibility and app-first ordering when offering component updates; continue metadata generation when individual release artifacts are unavailable
-- Offer a kmod update when the installed backend is incompatible with the app
-- Reapply the current policy after an installed app is updated, even when its UID is unchanged.
