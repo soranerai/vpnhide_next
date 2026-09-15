@@ -1,7 +1,7 @@
 {
-  "version": "v2.5.6",
-  "versionCode": 20506,
-  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.6/vpnhide-kmod-android15-6.6.zip",
-  "sha256": "b5ffcb1e972873166e7423515c079253cda922d2808f54669cb2eac3e98d3915",
+  "version": "v2.5.7",
+  "versionCode": 20507,
+  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.7/vpnhide-kmod-android15-6.6.zip",
+  "sha256": "9136dc6d68b51e1d3b2154f858d3ba0cd1ca439407792c09587397486e0e58c9",
   "changelog": "https://raw.githubusercontent.com/soranerai/vpnhide_next/main/update-json/changelog.md"
 }
