@@ -87,8 +87,9 @@ jobs:
             apt-get update && apt-get install -y --no-install-recommends python3
           fi
 
-      - name: Verify generated compatibility matrix
+      - name: Validate compatibility JSON and generated matrix
         run: |
+          python3 -m unittest scripts/test_codegen_compatibility.py
           python3 scripts/codegen-compatibility.py
           git diff --exit-code -- lsposed/app/src/main/kotlin/dev/soranerai/vpnhidenext/generated/CompatibilityMatrix.kt
 

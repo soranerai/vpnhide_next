@@ -61,7 +61,13 @@ internal val compatibilityMatrix: List<CompatibleRelease> =
         CompatibleRelease(
             lsposed = "2.5.3",
             bridge = "2.5.3",
-            builtIn = listOf("2.5.2", "2.5.3"),
+            builtIn = listOf("2.5.2"),
+            kmod = "2.5.3",
+        ),
+        CompatibleRelease(
+            lsposed = "2.5.3",
+            bridge = "2.5.3",
+            builtIn = listOf("2.5.3"),
             kmod = "2.5.3",
         ),
         CompatibleRelease(
@@ -73,7 +79,13 @@ internal val compatibilityMatrix: List<CompatibleRelease> =
         CompatibleRelease(
             lsposed = "2.5.5",
             bridge = "2.5.5",
-            builtIn = listOf("2.5.5", "2.5.3"),
+            builtIn = listOf("2.5.5"),
+            kmod = "2.5.5",
+        ),
+        CompatibleRelease(
+            lsposed = "2.5.5",
+            bridge = "2.5.5",
+            builtIn = listOf("2.5.3"),
             kmod = "2.5.5",
         ),
         CompatibleRelease(
@@ -85,7 +97,19 @@ internal val compatibilityMatrix: List<CompatibleRelease> =
         CompatibleRelease(
             lsposed = "2.5.7",
             bridge = "2.5.7",
-            builtIn = listOf("2.5.3", "2.5.5"),
+            builtIn = listOf("2.5.3"),
             kmod = "2.5.7",
+        ),
+        CompatibleRelease(
+            lsposed = "2.5.7",
+            bridge = "2.5.7",
+            builtIn = listOf("2.5.5"),
+            kmod = "2.5.7",
+        ),
+        CompatibleRelease(
+            lsposed = "2.5.8",
+            bridge = "2.5.8",
+            builtIn = listOf("2.5.3", "2.5.5", "2.5.7", "2.5.8"),
+            kmod = "2.5.8",
         ),
     )
