@@ -1,8 +1,8 @@
 {
-  "version": "v2.5.7",
-  "versionCode": 20507,
-  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.7/vpnhide-bridge.zip",
-  "sha256": "96fa5531f0e2856edd4d1c3da7019dbba6590a08cd406fb751fd029d68d6913e",
+  "version": "v2.5.8",
+  "versionCode": 20508,
+  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.8/vpnhide-bridge.zip",
+  "sha256": "8b772c468d9d83a969255858f2b5020ccfe027a443a080a629e65ee583569ce0",
   "kernelVersion": "v2.5.3",
   "kernelVersionCode": 20503,
   "kernelReleasesApi": "https://api.github.com/repos/soranerai/GKI_KernelSU_SUSFS/releases?per_page=100",
