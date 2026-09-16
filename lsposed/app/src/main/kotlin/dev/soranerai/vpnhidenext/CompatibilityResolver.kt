@@ -57,7 +57,7 @@ internal object CompatibilityResolver {
         return if (installed.kmod != null) {
             CompatibilityResult.Requires("kmod", expected.kmod)
         } else {
-            CompatibilityResult.Requires("built-in", expected.builtIn)
+            CompatibilityResult.Requires("built-in", expected.builtIn.first())
         }
     }
 
@@ -76,7 +76,7 @@ internal object CompatibilityResolver {
     ): Boolean =
         compatibleReleasesForApp(appVersion).any {
             baseVersion(it.bridge) == baseVersion(bridgeVersion) &&
-                baseVersion(it.builtIn) == baseVersion(builtInVersion)
+            it.builtIn.any { version -> baseVersion(version) == baseVersion(builtInVersion) }
         }
 
     private fun nativeMatches(
@@ -87,6 +87,6 @@ internal object CompatibilityResolver {
         if (installed.kmod != null) {
             baseVersion(release.kmod) == baseVersion(native)
         } else {
-            baseVersion(release.builtIn) == baseVersion(native)
+            release.builtIn.any { version -> baseVersion(version) == baseVersion(native) }
         }
 }

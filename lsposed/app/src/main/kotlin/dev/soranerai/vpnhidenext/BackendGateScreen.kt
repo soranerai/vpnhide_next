@@ -77,8 +77,17 @@ internal fun BackendGateScreen(
             }
         }
     val requiredComponent = (compatibility as? CompatibilityResult.Requires)?.component
-    val allowKmodRepair =
-        state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE || requiredComponent == "kmod"
+    val repairPlan =
+        remember(state, requiredComponent) {
+            resolveGateRepairPlan(
+                requiredComponent = requiredComponent,
+                backendStatus = state.diagnostics.backend.status,
+                backendKind = state.diagnostics.backendKind,
+                bridgeStatus = state.diagnostics.bridge.status,
+                installedNativeIsKmod = installedNative?.isKmodType,
+            )
+        }
+    val allowKmodRepair = repairPlan.offerKmod
     val nativeUpdatesAllowed = updateCheckComplete && appUpdate == null
     val kmodTarget =
         remember(state, recommendation, allowKmodRepair, nativeUpdatesAllowed) {
@@ -94,18 +103,10 @@ internal fun BackendGateScreen(
                 resolveKmodInstallTarget(recommendation?.recommendedGkiVariant)
             }
         }
-    val bridgeOnlyRepair =
-        state.diagnostics.backendKind == BackendKind.BUILT_IN &&
-            (state.diagnostics.bridge.status != DiagnosticStatus.AVAILABLE || requiredComponent == "bridge")
+    val bridgeOnlyRepair = repairPlan.bridgeOnly
     val builtInTarget =
         remember(state, recommendation, nativeUpdatesAllowed) {
-            if (nativeUpdatesAllowed &&
-                installedNative?.isKmodType != true &&
-                (
-                    state.diagnostics.backend.status != DiagnosticStatus.AVAILABLE ||
-                        bridgeOnlyRepair || requiredComponent == "built-in"
-                )
-            ) {
+            if (nativeUpdatesAllowed && repairPlan.offerBuiltIn) {
                 resolveBuiltInInstallTarget(
                     state.kernelVersion ?: recommendation?.kernelVersion,
                     installedVersion = installedNative?.version ?: "0.0.0",
@@ -277,14 +278,12 @@ internal fun BackendGateScreen(
                                 Text(stringResource(R.string.gate_retry))
                             }
                         }
-                        if (requiredComponent != null) {
-                            Spacer(Modifier.height(8.dp))
-                            OutlinedButton(
-                                onClick = onEnterAnyway,
-                                modifier = Modifier.fillMaxWidth(),
-                            ) {
-                                Text(stringResource(R.string.gate_enter_anyway))
-                            }
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(
+                            onClick = onEnterAnyway,
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Text(stringResource(R.string.gate_enter_anyway))
                         }
                     }
                 }

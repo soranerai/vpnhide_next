@@ -174,6 +174,12 @@ class CompatibilityResolverTest {
     }
 
     @Test
+    fun `accepts every built-in version in a compact matrix row`() {
+        assertTrue(CompatibilityResolver.isBuiltInCompatibleWithApp("2.5.7", "2.5.7", "2.5.3"))
+        assertTrue(CompatibilityResolver.isBuiltInCompatibleWithApp("2.5.7", "2.5.7", "2.5.5"))
+    }
+
+    @Test
     fun `does not combine bridge and built-in values from separate matrix rows`() {
         assertFalse(CompatibilityResolver.isBuiltInCompatibleWithApp("2.5.3", "2.5.3", "2.5.1"))
     }
