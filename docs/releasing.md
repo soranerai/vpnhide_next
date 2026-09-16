@@ -32,6 +32,11 @@ keep the other versions unchanged. `release.py` validates the source and
 regenerates `CompatibilityMatrix.kt`; it does not assume that every component
 has the release version.
 
+Each compatibility row may use either a single version or a non-empty array
+for `built-in`. Use an array when one APK/bridge/kmod combination supports
+multiple KPatch versions; this replaces duplicate rows while retaining support
+for the legacy single-string form.
+
 For a public APK tag `vX.Y.Z`, CI builds `libvpnhide_checks.so` from the
 public source in the tag and downloads kernel backend artifacts from the
 private backend release with the same tag. The versions *inside* that release
