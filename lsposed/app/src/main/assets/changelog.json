@@ -1,6 +1,20 @@
 {
   "history": [
     {
+      "version": "2.5.8",
+      "sections": [
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Keep the backend-gate bypass available whenever checks have finished, including unclassified diagnostic failures, and route kpatch repairs without offering an unrelated kmod install.",
+              "ru": "Сохранять возможность принудительно войти через gate после завершения проверок, в том числе при нераспознанных диагностических ошибках, и предлагать исправление kpatch без нерелевантной установки kmod."
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.5.7",
       "sections": []
     },

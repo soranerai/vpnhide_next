@@ -49,7 +49,7 @@ android {
         applicationId = "dev.soranerai.vpnhidenext"
         minSdk = 29
         targetSdk = 35
-        versionCode = 20507
+        versionCode = 20508
         versionName = buildVersion
 
         ndk {

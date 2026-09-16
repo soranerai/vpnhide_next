@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## v2.5.8
+
+### Fixed
+- Keep the backend-gate bypass available whenever checks have finished, including unclassified diagnostic failures, and route kpatch repairs without offering an unrelated kmod install.
+
 ## v2.5.7
 
 ## v2.5.6
