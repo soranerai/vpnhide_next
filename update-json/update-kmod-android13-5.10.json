@@ -1,7 +1,7 @@
 {
-  "version": "v2.5.8",
-  "versionCode": 20508,
-  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.8/vpnhide-kmod-android13-5.10.zip",
-  "sha256": "7dd37f1d804e318c2dc91c85b6f7008cec4ea655cb1566ce200e164f613aa943",
+  "version": "v2.5.9",
+  "versionCode": 20509,
+  "zipUrl": "https://github.com/soranerai/vpnhide_next/releases/download/v2.5.9/vpnhide-kmod-android13-5.10.zip",
+  "sha256": "df4435f0c48964aa278fda5f0c8861958831edb517c88eca2cbbcf294fafe42a",
   "changelog": "https://raw.githubusercontent.com/soranerai/vpnhide_next/main/update-json/changelog.md"
 }
