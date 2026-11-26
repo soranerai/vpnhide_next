@@ -32,7 +32,10 @@ internal object CompatibilityResolver {
         val native = installed.kmod ?: installed.builtIn ?: return CompatibilityResult.Unknown
         val compatible =
             matchingApp.filter {
-                (bridge == null || baseVersion(it.bridge) == baseVersion(bridge)) &&
+                (
+                    bridge == null ||
+                        it.bridge.any { version -> baseVersion(version) == baseVersion(bridge) }
+                ) &&
                     nativeMatches(it, installed, native)
             }
         if (compatible.isNotEmpty()) return CompatibilityResult.Compatible
@@ -45,17 +48,21 @@ internal object CompatibilityResolver {
                 nativeMatches(it, installed, native)
             }
         if (bridge != null && nativeMatches.isNotEmpty()) {
-            return CompatibilityResult.Requires("bridge", nativeMatches.first().bridge)
+            return CompatibilityResult.Requires("bridge", nativeMatches.first().bridge.first())
         }
 
         val bridgeMatches =
             bridge
-                ?.let { value -> matchingApp.filter { baseVersion(it.bridge) == baseVersion(value) } }
+                ?.let { value ->
+                    matchingApp.filter { release ->
+                        release.bridge.any { baseVersion(it) == baseVersion(value) }
+                    }
+                }
                 .orEmpty()
         val expected = (bridgeMatches.ifEmpty { matchingApp }).first()
 
         return if (installed.kmod != null) {
-            CompatibilityResult.Requires("kmod", expected.kmod)
+            CompatibilityResult.Requires("kmod", expected.kmod.first())
         } else {
             CompatibilityResult.Requires("built-in", expected.builtIn.first())
         }
@@ -67,7 +74,9 @@ internal object CompatibilityResolver {
     fun isKmodCompatibleWithApp(
         appVersion: String,
         kmodVersion: String,
-    ): Boolean = compatibleReleasesForApp(appVersion).any { baseVersion(it.kmod) == baseVersion(kmodVersion) }
+    ): Boolean = compatibleReleasesForApp(appVersion).any { release ->
+        release.kmod.any { baseVersion(it) == baseVersion(kmodVersion) }
+    }
 
     fun isBuiltInCompatibleWithApp(
         appVersion: String,
@@ -75,7 +84,7 @@ internal object CompatibilityResolver {
         builtInVersion: String,
     ): Boolean =
         compatibleReleasesForApp(appVersion).any {
-            baseVersion(it.bridge) == baseVersion(bridgeVersion) &&
+            it.bridge.any { version -> baseVersion(version) == baseVersion(bridgeVersion) } &&
             it.builtIn.any { version -> baseVersion(version) == baseVersion(builtInVersion) }
         }
 
@@ -85,7 +94,7 @@ internal object CompatibilityResolver {
         native: String,
     ): Boolean =
         if (installed.kmod != null) {
-            baseVersion(release.kmod) == baseVersion(native)
+            release.kmod.any { baseVersion(it) == baseVersion(native) }
         } else {
             release.builtIn.any { version -> baseVersion(version) == baseVersion(native) }
         }

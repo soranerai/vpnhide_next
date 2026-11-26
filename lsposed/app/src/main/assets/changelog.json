@@ -1,6 +1,29 @@
 {
   "history": [
     {
+      "version": "2.5.9",
+      "sections": [
+        {
+          "type": "added",
+          "items": [
+            {
+              "en": "Add support for SukiSU KSUD SUSFS",
+              "ru": "Добавлена поддержка SukiSU KSUD SUSFS"
+            }
+          ]
+        },
+        {
+          "type": "fixed",
+          "items": [
+            {
+              "en": "Fix the kernel module lifecycle",
+              "ru": "Исправлен жизненный цикл модуля ядра"
+            }
+          ]
+        }
+      ]
+    },
+    {
       "version": "2.5.8",
       "sections": [
         {

@@ -1,3 +1,11 @@
+## v2.5.9
+
+### Added
+- Add support for SukiSU KSUD SUSFS
+
+### Fixed
+- Fix the kernel module lifecycle
+
 ## v2.5.8
 
 ### Fixed
@@ -30,11 +38,3 @@
 ### Fixed
 - Restore compatible native component versions after an app update.
 - Fix an APK crash caused by mismatched native diagnostic bindings and library exports.
-
-## v2.5.4
-
-### Added
-- Added a setting to select NoMount instead of SUSFS for VPN filesystem hiding.
-
-### Changed
-- Bridge updates can now be installed without updating a compatible built-in kernel.

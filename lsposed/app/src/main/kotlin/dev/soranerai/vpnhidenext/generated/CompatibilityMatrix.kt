@@ -3,113 +3,17 @@ package dev.soranerai.vpnhidenext.generated
 
 internal data class CompatibleRelease(
     val lsposed: String,
-    val bridge: String,
+    val bridge: List<String>,
     val builtIn: List<String>,
-    val kmod: String,
+    val kmod: List<String>,
 )
 
 internal val compatibilityMatrix: List<CompatibleRelease> =
     listOf(
         CompatibleRelease(
-            lsposed = "2.2.0",
-            bridge = "2.2.0",
-            builtIn = listOf("2.2.0"),
-            kmod = "2.2.0",
-        ),
-        CompatibleRelease(
-            lsposed = "2.2.1",
-            bridge = "2.2.1",
-            builtIn = listOf("2.2.1"),
-            kmod = "2.2.1",
-        ),
-        CompatibleRelease(
-            lsposed = "2.2.2",
-            bridge = "2.2.2",
-            builtIn = listOf("2.2.2"),
-            kmod = "2.2.2",
-        ),
-        CompatibleRelease(
-            lsposed = "2.3.0",
-            bridge = "2.3.0",
-            builtIn = listOf("2.3.0"),
-            kmod = "2.3.0",
-        ),
-        CompatibleRelease(
-            lsposed = "2.4.0",
-            bridge = "2.4.0",
-            builtIn = listOf("2.4.0"),
-            kmod = "2.4.0",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.0",
-            bridge = "2.5.0",
-            builtIn = listOf("2.5.0"),
-            kmod = "2.5.0",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.1",
-            bridge = "2.5.1",
-            builtIn = listOf("2.5.1"),
-            kmod = "2.5.1",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.2",
-            bridge = "2.5.2",
-            builtIn = listOf("2.5.2"),
-            kmod = "2.5.2",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.3",
-            bridge = "2.5.3",
-            builtIn = listOf("2.5.2"),
-            kmod = "2.5.3",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.3",
-            bridge = "2.5.3",
-            builtIn = listOf("2.5.3"),
-            kmod = "2.5.3",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.4",
-            bridge = "2.5.4",
-            builtIn = listOf("2.5.3"),
-            kmod = "2.5.3",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.5",
-            bridge = "2.5.5",
-            builtIn = listOf("2.5.5"),
-            kmod = "2.5.5",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.5",
-            bridge = "2.5.5",
-            builtIn = listOf("2.5.3"),
-            kmod = "2.5.5",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.6",
-            bridge = "2.5.6",
-            builtIn = listOf("2.5.5"),
-            kmod = "2.5.6",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.7",
-            bridge = "2.5.7",
-            builtIn = listOf("2.5.3"),
-            kmod = "2.5.7",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.7",
-            bridge = "2.5.7",
-            builtIn = listOf("2.5.5"),
-            kmod = "2.5.7",
-        ),
-        CompatibleRelease(
-            lsposed = "2.5.8",
-            bridge = "2.5.8",
-            builtIn = listOf("2.5.3", "2.5.5", "2.5.7", "2.5.8"),
-            kmod = "2.5.8",
+            lsposed = "2.5.9",
+            bridge = listOf("2.5.9"),
+            builtIn = listOf("2.5.3", "2.5.5", "2.5.7", "2.5.8", "2.5.9"),
+            kmod = listOf("2.5.9"),
         ),
     )

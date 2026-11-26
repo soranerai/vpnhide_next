@@ -14,16 +14,15 @@ OUTPUT = (
     REPO_ROOT
     / "lsposed/app/src/main/kotlin/dev/soranerai/vpnhidenext/generated/CompatibilityMatrix.kt"
 )
-SCALAR_COMPONENTS = ("lsposed", "bridge", "kmod")
-COMPONENTS = (*SCALAR_COMPONENTS, "built-in")
+COMPONENTS = ("lsposed", "bridge", "built-in", "kmod")
 VERSION_RE = re.compile(r"^v?\d+(?:\.\d+){1,2}(?:[-+][0-9A-Za-z.-]+)?$")
 
 
 class Release(TypedDict):
     lsposed: str
-    bridge: str
+    bridge: list[str]
     built_in: list[str]
-    kmod: str
+    kmod: list[str]
 
 
 def kotlin_string(value: str) -> str:
@@ -37,6 +36,21 @@ def normalize_version(value: object, field: str) -> str:
     if not VERSION_RE.fullmatch(version):
         raise SystemExit(f"error: {field} has invalid version {version!r}")
     return version
+
+
+def normalize_versions(value: object, field: str) -> list[str]:
+    if isinstance(value, str):
+        versions = [normalize_version(value, field)]
+    elif isinstance(value, list) and value:
+        versions = [
+            normalize_version(version, f"{field}[{index}]")
+            for index, version in enumerate(value)
+        ]
+    else:
+        raise SystemExit(f"error: {field} must be a version string or non-empty array")
+    if len(set(versions)) != len(versions):
+        raise SystemExit(f"error: {field} has duplicate versions")
+    return versions
 
 
 def load_releases(source: Path = SOURCE) -> list[Release]:
@@ -56,25 +70,10 @@ def load_releases(source: Path = SOURCE) -> list[Release]:
             raise SystemExit(f"error: releases[{index}] missing {', '.join(missing)}")
         row: Release = {
             "lsposed": normalize_version(release["lsposed"], f"releases[{index}].lsposed"),
-            "bridge": normalize_version(release["bridge"], f"releases[{index}].bridge"),
-            "built_in": [],
-            "kmod": normalize_version(release["kmod"], f"releases[{index}].kmod"),
+            "bridge": normalize_versions(release["bridge"], f"releases[{index}].bridge"),
+            "built_in": normalize_versions(release["built-in"], f"releases[{index}].built-in"),
+            "kmod": normalize_versions(release["kmod"], f"releases[{index}].kmod"),
         }
-        raw_built_in = release["built-in"]
-        if isinstance(raw_built_in, str):
-            built_in = [normalize_version(raw_built_in, f"releases[{index}].built-in")]
-        elif isinstance(raw_built_in, list) and raw_built_in:
-            built_in = [
-                normalize_version(version, f"releases[{index}].built-in[{built_in_index}]")
-                for built_in_index, version in enumerate(raw_built_in)
-            ]
-            if len(set(built_in)) != len(built_in):
-                raise SystemExit(f"error: releases[{index}].built-in has duplicate versions")
-        else:
-            raise SystemExit(
-                f"error: releases[{index}].built-in must be a version string or non-empty array"
-            )
-        row["built_in"] = built_in
         result.append(row)
     return result
 
@@ -90,9 +89,9 @@ def render(releases: list[Release]) -> str:
         "",
         "internal data class CompatibleRelease(",
         "    val lsposed: String,",
-        "    val bridge: String,",
+        "    val bridge: List<String>,",
         "    val builtIn: List<String>,",
-        "    val kmod: String,",
+        "    val kmod: List<String>,",
         ")",
         "",
         "internal val compatibilityMatrix: List<CompatibleRelease> =",
@@ -103,9 +102,9 @@ def render(releases: list[Release]) -> str:
             [
                 "        CompatibleRelease(",
                 f"            lsposed = {kotlin_string(release['lsposed'])},",
-                f"            bridge = {kotlin_string(release['bridge'])},",
+                f"            bridge = {kotlin_strings(release['bridge'])},",
                 f"            builtIn = {kotlin_strings(release['built_in'])},",
-                f"            kmod = {kotlin_string(release['kmod'])},",
+                f"            kmod = {kotlin_strings(release['kmod'])},",
                 "        ),",
             ]
         )
