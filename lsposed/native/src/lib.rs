@@ -1633,8 +1633,7 @@ pub fn check_tcp_info_mss() -> CheckOutput {
         }
 
         let snd = info.tcpi_snd_mss;
-        let rcv = info.tcpi_rcv_mss;
-        let suspicious = (snd > 0 && snd < 1340) || (rcv > 0 && rcv < 1340);
+        let suspicious = snd > 0 && snd < 1340;
 
         if suspicious {
             CheckOutput::fail("VPN detected")
